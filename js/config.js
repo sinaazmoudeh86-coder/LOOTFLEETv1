@@ -233,17 +233,17 @@
   const MULTISHOT_MAX_TARGETS = 10;
 
   // ---------------------------------------------------------------------------
-  // STORE — real-money options (simulated; no real charge in this build)
+  // STORE — speed + offline play are FREE (no real-money purchases in this game)
   // ---------------------------------------------------------------------------
   const SPEED_TIERS = [
-    { mult: 1, label: '1×', price: 0,   priceLabel: 'Free', sku: null },
-    { mult: 2, label: '2×', price: 25,  priceLabel: '$25',  sku: 'speed2' },
-    { mult: 3, label: '3×', price: 50,  priceLabel: '$50',  sku: 'speed3' },
-    { mult: 4, label: '4×', price: 100, priceLabel: '$100', sku: 'speed4' },
-    { mult: 10, label: '10×', price: 100, priceLabel: '$100', sku: 'speed10' },
+    { mult: 1, label: '1×', price: 0, priceLabel: 'Free', sku: null },
+    { mult: 2, label: '2×', price: 0, priceLabel: 'Free', sku: 'speed2' },
+    { mult: 3, label: '3×', price: 0, priceLabel: 'Free', sku: 'speed3' },
+    { mult: 4, label: '4×', price: 0, priceLabel: 'Free', sku: 'speed4' },
+    { mult: 10, label: '10×', price: 0, priceLabel: 'Free', sku: 'speed10' },
   ];
   const STORE = {
-    afk: { sku: 'afk', name: 'AFK Combat Mode', price: 20, priceLabel: '$20',
+    afk: { sku: 'afk', name: 'AFK Combat Mode', price: 0, priceLabel: 'Free',
            blurb: 'Your operator keeps fighting while you\'re offline — real kills, loot, XP and gold. They can also be killed and lose gear, just like live play.' },
   };
 
@@ -267,6 +267,11 @@
     { key:'carrier',     name:'Carrier',        cls:'Carrier',    price:200000000,   reqKills:24000, weapons:2, ammo:2, hull:2, drones:2, mods:{hpPct:25,dmgPct:12},                          tag:'Drone Bay ×2',   desc:'Launches drones that swarm and fire on their own. 2 drone bays.' },
     { key:'supercarrier',name:'Super Carrier',  cls:'Carrier',    price:900000000,   reqKills:39000, weapons:3, ammo:2, hull:3, drones:4, mods:{hpPct:40,dmgPct:24,critChance:8},            tag:'Drone Bay ×4',   desc:'3 weapons, heavy plating, 4 drone bays.' },
     { key:'titan',       name:'Titan Carrier',  cls:'Carrier',    price:4000000000,  reqKills:60000, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'FLAGSHIP',      desc:'The apex hull. 4 weapons, 3 ammo, and 8 drone bays.' },
+    // MOTHERSHIP — the endgame faction Titan Carrier. Bought ONLY with Galaxy
+    // Resources (no gold), priced to be a weeks-long goal. Three extra weapon
+    // hardpoints (7 total), increased natural weapon range, top-tier built-in
+    // modifiers and superior base stats.
+    { key:'mothership',  name:'Mothership',     cls:'Carrier',    price:0, resPrice:{ fuel:500000, iron:200000, plasma:120000 }, reqKills:90000, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:4}, tag:'MOTHERSHIP', desc:'The ultimate faction vessel — 7 weapons, extended weapon range, 12 drone bays and superior base stats. Acquired exclusively with Galaxy Resources.' },
   ];
   const SHIP_BY_KEY = {}; SHIPS.forEach((s, i) => { s.tier = i; SHIP_BY_KEY[s.key] = s; });
   // BLUEPRINTS — a hull's buy option stays locked until you recover its
@@ -283,7 +288,7 @@
 
   // The ordered equipment slots a ship exposes. Extra weapon/ammo/hull slots
   // reuse the base item types (a 'bow' item fits bow2/bow3/bow4, etc.).
-  const WEAP_SLOTS = ['bow','bow2','bow3','bow4'];
+  const WEAP_SLOTS = ['bow','bow2','bow3','bow4','bow5','bow6','bow7'];
   const AMMO_SLOTS = ['arrows','arrows2','arrows3'];
   const HULL_SLOTS = ['armor','armor2','armor3'];
   function shipSlots(shipKey) {

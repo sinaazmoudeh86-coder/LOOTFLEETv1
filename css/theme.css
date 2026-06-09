@@ -149,6 +149,7 @@ html,body{ background:#05070d; }
 }
 .auto-btn.on{ color:var(--good); border-color:rgba(63,197,107,.5); box-shadow:0 0 12px rgba(63,197,107,.25); }
 .auto-btn.on .led{ background:var(--good); box-shadow:0 0 8px var(--good); }
+.bail-btn{ background:linear-gradient(180deg,rgba(226,59,78,.2),rgba(226,59,78,.08)); border-color:rgba(226,59,78,.55); color:#ff7e8c; box-shadow:0 0 12px rgba(226,59,78,.22); }
 .hd-btn{ background:rgba(14,20,32,.82); border:1px solid rgba(95,209,255,.24); color:#dfe8f5; }
 .hd-btn svg{ color:var(--cyan); }
 

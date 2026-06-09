@@ -17,12 +17,22 @@
   const RESPAWN_SEC = 10;         // enemy respawn delay after a kill
   const RESPAWN_SPREAD = 5 * FEET;// respawn within 5 ft of the node
   const PICKUP_RADIUS = 26;       // how close to walk to collect loot
+  const MAGNET_RADIUS = 230;      // LOOT MAGNET attraction range (~5× the old pull) — drops fly to the player
+  const MAGNET_SPEED = 240;       // base px/s a magnetized drop travels (accelerates as it nears you)
   const FIRE_RANGE = 250;         // auto-fire engagement range
   const NODE_COUNT = 9;           // base spawn nodes per zone (scales up — see nodeCount)
   // Zone-scaled feel: deeper zones get a wider world, more spawns, and a more
   // zoomed-out camera (which also makes the player look smaller).
   function worldMul(zone) { return Math.min(3.4, 1.8 + zone * 0.05); }
   function zoomFor(zone) { return Math.max(0.5, 0.92 - zone * 0.012); }
+  // Zone unlocking — you can reach at most 10 zones ahead of your pilot level, so
+  // you can't skip into wildly over-level zones and farm insane loot. Still also
+  // capped to the current 100-block.
+  const ZONE_LOOKAHEAD = 10;
+  function unlockCeil(level) { return level + ZONE_LOOKAHEAD; }
+  // Every 11th Grind Zone (11, 22, 33…) is a WAVE ZONE: 25 escalating waves of
+  // extreme density ending in a boss (30% Super Boss). Classic free-play only.
+  function isWaveZone(zone) { return zone > 0 && zone % 11 === 0; }
   // ---- ZONE BONUSES ----------------------------------------------------------
   // Every 10th zone (10,20,30…): 5× mob density. Every 25th (25,50,75…): 2× loot
   // quality. Every 100th (100,200…): 5× loot quality. Quality bonuses STACK
@@ -41,8 +51,10 @@
     level: 1, xp: 0, gold: 0,
     currentDungeon: 1, highestUnlocked: 1,
     // ---- GALAXY MAP ----
-    currentSystem: '0,0',                 // axial key of the system you're in
-    ownedSystems: { '0,0': true },        // captured systems (home owned at start)
+    currentSystem: null,                  // tile id you're deployed to (null = hangar)
+    ownedSystems: {},                     // tiles you own: { tileId: true }
+    rivalTiles: {},                       // simulated rival owners: { tileId: name }
+    regionCd: {},                         // per-region contest cooldown end times (ms)
     resources: { fuel: 80, iron: 0, plasma: 0 },
     lastResTick: Date.now(),              // for per-hour resource accrual
     ship: 'frigate',        // active hull
@@ -76,6 +88,7 @@
     enemies: [], nodes: [], projectiles: [], particles: [], floats: [], ground: [], drones: [],
     time: 0, last: 0, running: false,
     siege: null,            // active 10-wave siege state when capturing a system
+    realTiles: {},          // shared cross-account tile ownership (Supabase turf war)
     stats: null, dps: 0, dmgWindow: [],
     joy: { x: 0, y: 0, active: false },
     portraitCanvas: null, portraitCtx: null, portW: 0, portH: 0,
@@ -114,6 +127,8 @@
     s.multiShot = Math.min(100, s.multiShot);
     s.maxHp = s.health;
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
+    // weapon range — base engagement range, extended by a hull's rangePct mod
+    s.fireRange = FIRE_RANGE * (1 + (sm.rangePct || 0) / 100);
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
     s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
     return s;
@@ -178,7 +193,7 @@
     rt.archer.hp = rt.stats.maxHp;
     rt.archer.dead = false;
     const cap = C.zoneCap(state.highestDungeonReached);
-    const unlock = Math.min(cap, 1 + Math.floor(state.level / 2));
+    const unlock = Math.min(cap, unlockCeil(state.level));
     if (unlock > state.highestUnlocked) state.highestUnlocked = unlock;
     burst(rt.archer.x, rt.archer.y, '#e6b566', 26, { glow: true, speed: 220, life: 0.9 });
     if (window.UI) { window.UI.onLevelUp(state.level); window.UI.refreshAll(); }
@@ -196,7 +211,7 @@
     rt.nodes = [];
     if (state.currentDungeon < 1) return; // Safe Zone: zero threats, no spawns
     const cx = rt.worldW / 2, cy = rt.worldH / 2;
-    const count = nodeCount(state.currentDungeon);
+    const count = Math.min(55, Math.round(nodeCount(state.currentDungeon) * (rt.tileDensity || 1)));
     for (let i = 0; i < count; i++) {
       let x, y, tries = 0;
       do {
@@ -282,7 +297,7 @@
     const e = p.target;
     if (!e || e.dead) return;
     const killed = e.takeDamage(p.damage);
-    rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(p.damage), { color: p.crit ? '#e07c12' : '#15202e', size: p.crit ? 24 : 16, crit: p.crit }));
+    rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(p.damage), { color: p.crit ? '#e07c12' : '#15202e', size: p.crit ? 48 : 32, crit: p.crit }));
     // IMPACT: directional spray of sparks/blood opposite the bullet + flash ring
     const back = p.angle;
     const col = p.crit ? '#ffd24d' : '#ffcaa0', n = p.crit ? 16 : 9;
@@ -319,31 +334,21 @@
     state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1);
 
     if (e.isBoss) {
-      // BOSS DOWN: 5x loot quality — several drops with boosted rarity
-      rt.boss = null; rt.bossAlive = false; rt.lastBoss = rt.time;
+      const isSuper = !!e.isSuper;
+      rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false; rt.lastBoss = rt.time;
       rt.bossTimer = rt.bossInit = 600 + Math.random() * 300; // reset 10–15 min
-      const drops = 5;
-      for (let i = 0; i < drops; i++) {
-        const base = rollRarityBoosted(state.currentDungeon, qualityMult(state.currentDungeon));
-        const boosted = Math.min(10, base + 3 + ((Math.random() * 2) | 0)); // ~5x quality
-        const item = I.generate(state.currentDungeon, boosted);
-        state.itemsFound++;
-        const a = Math.PI * 2 * (i / drops), r = 26 + Math.random() * 22;
-        rt.ground.push(new E.GroundItem(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, item, false));
-        lootBurst(e.x, e.y, item.rarity);
-        if (window.UI) window.UI.onLoot(item, true);
-      }
+      bossLoot(e, isSuper);
       // BLUEPRINT: this zone's boss may hold the schematics for a hull.
       grantBlueprintFor(state.currentDungeon);
-      if (window.UI) { window.UI.bossEvent('down'); window.UI.syncStatsTab(); }
+      if (window.UI) { window.UI.bossEvent(isSuper ? 'superdown' : 'down'); window.UI.syncStatsTab(); }
       return;
     }
 
     // normal kill: free node + start respawn timer; kills hasten the boss
-    if (e.node) { e.node.enemy = null; e.node.respawnT = RESPAWN_SEC; }
+    if (e.node) { e.node.enemy = null; e.node.respawnT = RESPAWN_SEC / (rt.tileRespawnMult || 1); }
     if (!rt.bossAlive) rt.bossTimer = Math.max(0, rt.bossTimer - 4);
     if (Math.random() < C.dropChance(state.currentDungeon)) {
-      const _q = qualityMult(state.currentDungeon);
+      const _q = lootQ();
       const item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       state.itemsFound++;
       lootBurst(e.x, e.y, item.rarity);
@@ -354,7 +359,8 @@
   }
 
   // ---- BOSS ----------------------------------------------------------------
-  function spawnBoss() {
+  function spawnBoss(opts) {
+    opts = opts || {};
     const pool = allowedEnemies();
     const type = pool[pool.length - 1]; // toughest type available
     const m = 40, side = (Math.random() * 4) | 0;
@@ -363,16 +369,21 @@
     else if (side === 1) { x = rt.worldW - m; y = Math.random() * rt.worldH; }
     else if (side === 2) { x = Math.random() * rt.worldW; y = rt.worldH - m; }
     else { x = m; y = Math.random() * rt.worldH; }
+    // SUPER BOSS: forced via opts.super, else a zone-scaled chance (harder zones
+    // breed Super Bosses more often). A far bigger, red-pulsing premium elite.
+    const isSuper = opts.super != null ? opts.super
+      : (Math.random() < Math.min(0.45, 0.12 + state.currentDungeon * 0.004));
     const b = new E.Enemy(type, state.currentDungeon, x, y);
-    b.isBoss = true;
-    b.maxHp *= 14; b.hp = b.maxHp;
-    b.damage *= 2.3;
-    b.size *= 2.5;
+    b.isBoss = true; b.isSuper = isSuper;
+    b.maxHp *= isSuper ? 30 : 14; b.hp = b.maxHp;
+    b.damage *= isSuper ? 3.0 : 2.3;
+    b.size *= isSuper ? 3.1 : 2.5;
     b.speed *= 0.72;
-    b.name = type.name + ' Alpha';
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true;
-    burst(x, y, '#e23b4e', 50, { speed: 280, life: 1.0, glow: true });
-    if (window.UI) window.UI.bossEvent('spawn');
+    b.name = isSuper ? ('SUPER ' + type.name + ' Prime') : (type.name + ' Alpha');
+    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = isSuper;
+    burst(x, y, isSuper ? '#ff2a4a' : '#e23b4e', isSuper ? 90 : 50, { speed: isSuper ? 360 : 280, life: 1.1, glow: true });
+    if (window.UI) window.UI.bossEvent(isSuper ? 'super' : 'spawn');
+    return b;
   }
   function getBossInfo() {
     if (rt.bossAlive && rt.boss) return { alive: true, hp: rt.boss.hp, max: rt.boss.maxHp, name: rt.boss.name };
@@ -412,6 +423,31 @@
     const col = C.RARITY[rarity].color;
     burst(x, y, col, 10 + rarity * 3, { speed: 120, life: 0.9, glow: rarity >= 2, gravity: -40 });
   }
+  // Boss drop table. A normal boss pays ~5× quality across 5 drops; a SUPER BOSS
+  // rolls the rarity ~25× (keep-best), drops 12 items with a couple guaranteed
+  // Legendary+, and pays out a Galaxy-Resource bounty.
+  function bossLoot(e, isSuper) {
+    const zone = state.currentDungeon;
+    const drops = isSuper ? 12 : 5;
+    const qMul = Math.min(50, qualityMult(zone) * (rt.tileLoot || 1) * (isSuper ? 25 : 1));
+    for (let i = 0; i < drops; i++) {
+      const base = rollRarityBoosted(zone, qMul);
+      let boosted = Math.min(10, base + (isSuper ? 5 : 3) + ((Math.random() * 2) | 0));
+      if (isSuper && i < 2) boosted = Math.max(boosted, 4); // guarantee Legendary+
+      const item = I.generate(zone, boosted);
+      state.itemsFound++;
+      const a = Math.PI * 2 * (i / drops), r = 26 + Math.random() * 26;
+      rt.ground.push(new E.GroundItem(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, item, false));
+      lootBurst(e.x, e.y, item.rarity);
+      if (window.UI) window.UI.onLoot(item, true);
+    }
+    if (isSuper) {
+      if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
+      const fuel = 200 + zone * 30, iron = 80 + zone * 12, plasma = 50 + zone * 10;
+      state.resources.fuel += fuel; state.resources.iron += iron; state.resources.plasma += plasma;
+      if (window.UI) window.UI.unlockToast('Super Boss bounty · +' + formatNum(fuel) + ' fuel · +' + formatNum(iron) + ' iron · +' + formatNum(plasma) + ' plasma');
+    }
+  }
 
   // --------------------------------------------------------------------------
   // MOVEMENT / AI
@@ -427,7 +463,9 @@
   function autopilot(dt) {
     const a = rt.archer, s = rt.stats, sp = s.moveSpeedPx;
     // 1) collect any ground loot first (the "pick everything up" promise)
-    const loot = rt.ground.filter((g) => !g.lost && !g.dead);
+    // distant drops only — anything inside magnet range flies to the ship on
+    // its own, so the operator keeps fighting instead of fetching every pickup.
+    const loot = rt.ground.filter((g) => !g.lost && !g.dead && Math.hypot(g.x - a.x, g.y - a.y) > MAGNET_RADIUS * 0.9);
     if (loot.length) {
       loot.sort((g, h) => ((g.x-a.x)**2+(g.y-a.y)**2)-((h.x-a.x)**2+(h.y-a.y)**2));
       moveToward(loot[0].x, loot[0].y, dt, sp);
@@ -492,6 +530,8 @@
     // spawn nodes / siege waves
     if (rt.siege && rt.siege.active) {
       updateSiege(dt);
+    } else if (rt.waves && rt.waves.active) {
+      updateWaveZone(dt);
     } else {
       updateNodes(dt);
       // boss meter: ticks down; kills hasten it (see onKill). Never more than once
@@ -502,11 +542,16 @@
         else if (rt.bossTimer < 0) rt.bossTimer = 0;
       }
     }
+    // SUPER BOSS aura — pulsing red motes around the elite while it lives.
+    if (rt.superBossAlive && rt.boss && !rt.boss.dying && Math.random() < 0.6) {
+      const b = rt.boss, aa = Math.random() * Math.PI * 2, rr = b.size * (1.1 + Math.random() * 0.5);
+      rt.particles.push(new E.Particle(b.x + Math.cos(aa) * rr, b.y + Math.sin(aa) * rr, { vx: Math.cos(aa) * 30, vy: Math.sin(aa) * 30 - 12, life: 0.5, size: 2 + Math.random() * 2.4, color: '#ff2a4a', glow: true, drag: 0.9 }));
+    }
 
     // auto-fire nearest enemy in range
     a.attackTimer -= dt;
     if (!a.dead && a.attackTimer <= 0) {
-      const tgt = nearestEnemy(FIRE_RANGE);
+      const tgt = nearestEnemy(rt.stats.fireRange || FIRE_RANGE);
       if (tgt) { fire(tgt); a.attackTimer = 1 / Math.max(0.1, rt.stats.attacksPerSec); }
     }
 
@@ -525,9 +570,10 @@
       const killerName = killer ? (killer.isBoss ? killer.name : killer.type.name) : 'the swarm';
       const diedZone = state.currentDungeon;
       const lost = dropOnDeath();
+      if (rt.deepDeath) dropOnDeath(); // deep space: a second item is lost on death
       // a carrier loses one drone when the hull is downed
       if (state.drones > 0) { state.drones--; spawnDrones(); }
-      rt.siege = null; // abort any in-progress siege — the system isn't captured
+      rt.siege = null; rt.waves = null; // abort any in-progress siege / wave gauntlet
       burst(a.x, a.y, '#e23b4e', 30, { speed: 200, life: 0.9 });
       // no respawn menu — redeploy straight to the home hangar
       respawnAt(0);
@@ -538,11 +584,20 @@
     for (const p of rt.projectiles) { p.update(dt); if (p.hit) resolveHit(p); }
     rt.projectiles = rt.projectiles.filter((p) => !p.dead);
 
-    // ground loot pickups (capped so heavy 10× drops don't pile up and lag)
+    // ground loot pickups + LOOT MAGNET: drops within range fly toward the
+    // player (accelerating as they near) and are collected on contact.
     for (const g of rt.ground) {
       g.update(dt);
-      if (!g.lost && !g.picked && !g.dead) {
-        if (Math.hypot(g.x - a.x, g.y - a.y) <= PICKUP_RADIUS && !a.dead) collect(g);
+      if (!g.lost && !g.picked && !g.dead && !a.dead) {
+        const dx = a.x - g.x, dy = a.y - g.y, d = Math.hypot(dx, dy) || 1;
+        if (d <= PICKUP_RADIUS) collect(g);
+        else if (d <= MAGNET_RADIUS) {
+          const k = 1 - d / MAGNET_RADIUS;            // 0 at edge → 1 near player
+          const pull = MAGNET_SPEED * (0.5 + k * 2.5);
+          g.x += (dx / d) * pull * dt;
+          g.y += (dy / d) * pull * dt;
+          g.magnet = true;
+        }
       }
     }
     rt.ground = rt.ground.filter((g) => !g.dead);
@@ -625,6 +680,14 @@
       ctx.font = '600 14px Rajdhani'; ctx.fillStyle = '#ce9b78';
       ctx.fillText('Choose a zone to redeploy', w/2, h/2 + 22);
     }
+    // SUPER BOSS: the whole zone pulses red at the edges while one is loose.
+    if (rt.superBossAlive) {
+      const pa = 0.12 + 0.10 * Math.sin(rt.time * 5);
+      const g = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.28, w/2, h/2, Math.max(w,h)*0.62);
+      g.addColorStop(0, 'rgba(255,42,74,0)');
+      g.addColorStop(1, 'rgba(255,42,74,' + pa.toFixed(3) + ')');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
     drawMinimap(ctx);
     drawPortrait();
     if (window.UI) window.UI.syncHUD(); // once per frame, not per sim-substep
@@ -654,16 +717,28 @@
       const fade = g.lost ? Math.min(1, g.life / 1.5) : (g.life < 5 ? g.life / 5 : 1);
       ctx.globalAlpha = fade;
       ctx.fillStyle = `rgba(0,0,0,0.3)`; ctx.beginPath(); ctx.ellipse(g.x, g.y + 8, 11*sc, 4*sc, 0, 0, 7); ctx.fill();
-      if (!g.lost) { ctx.shadowColor = col; ctx.shadowBlur = 12; }
+      // GLOW scales with rarity. Mythic+ (tier ≥ 5) pulses and throws a halo.
+      const tier = it ? it.rarity : 0;
+      if (!g.lost) {
+        const pulse = tier >= 5 ? (0.7 + 0.3 * Math.sin(rt.time * 6 + g.bob * 2)) : 1;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = (5 + tier * 3.4) * pulse;
+        if (tier >= 5) {
+          const haloR = (12 + tier * 2) * sc * (0.85 + 0.25 * Math.sin(rt.time * 6 + g.bob * 2));
+          ctx.globalAlpha = fade * 0.5;
+          ctx.strokeStyle = col; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(g.x, g.y - 2 + yoff, haloR, 0, 7); ctx.stroke();
+          ctx.globalAlpha = fade;
+        }
+      }
       ctx.fillStyle = g.lost ? 'rgba(140,140,140,0.5)' : col;
-      ctx.beginPath(); ctx.arc(g.x, g.y - 2 + yoff, 7*sc, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(g.x, g.y - 2 + yoff, (6 + tier * 0.5) * sc, 0, 7); ctx.fill();
       ctx.shadowBlur = 0;
-      // beam for rarer drops
-      if (!g.lost && it && it.rarity >= 2) {
-        const bg = ctx.createLinearGradient(g.x, g.y - 40, g.x, g.y);
-        bg.addColorStop(0, R.mix(col, '#000000', 0).replace('rgb','rgba').replace(')', ',0)'));
-        ctx.fillStyle = `${hexToRgba(col, 0.18)}`;
-        ctx.fillRect(g.x - 5*sc, g.y - 38 + yoff, 10*sc, 38);
+      // light beam — taller & brighter the rarer the drop (Rare and up)
+      if (!g.lost && it && tier >= 2) {
+        const bh = 30 + tier * 6, bw = (4 + tier * 0.7) * sc;
+        ctx.fillStyle = hexToRgba(col, 0.10 + tier * 0.025);
+        ctx.fillRect(g.x - bw / 2, g.y - (bh - 8) + yoff, bw, bh);
       }
       if (g.lost) {
         ctx.fillStyle = 'rgba(255,90,90,' + fade + ')'; ctx.font = '700 11px Rajdhani'; ctx.textAlign = 'center';
@@ -753,12 +828,15 @@
   }
   // Add an item's salvage roll into the player's galaxy resources, and (if an
   // accumulator is passed) tally what was gained so the UI can report it.
+  // Galaxy Resource rewards from SELLING items are boosted ×5 (spec).
+  const SELL_RES_MULT = 5;
   function addSalvage(item, acc) {
     const s = C.salvage(item); if (!s) return;
     if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
     for (const k in s) {
-      state.resources[k] = (state.resources[k] || 0) + s[k];
-      if (acc) acc[k] = (acc[k] || 0) + s[k];
+      const amt = s[k] * SELL_RES_MULT;
+      state.resources[k] = (state.resources[k] || 0) + amt;
+      if (acc) acc[k] = (acc[k] || 0) + amt;
     }
   }
   function sell(item) {
@@ -832,7 +910,10 @@
     const prevOwned = ship.tier === 0 || !!state.ownedShips[prev];
     const killsMet = have >= need;
     const unlocked = bp && prevOwned && killsMet;
-    return { key, owned, active, unlocked, affordable: state.gold >= ship.price,
+    const resAfford = ship.resPrice ? canAfford(ship.resPrice) : null;
+    return { key, owned, active, unlocked,
+             affordable: ship.resPrice ? resAfford : state.gold >= ship.price,
+             resPrice: ship.resPrice || null, resAfford,
              hasBlueprint: bp, bpZone: ship.bpZone, prevKey: prev, prevOwned,
              killsHave: have, killsNeed: need, killsMet, price: ship.price };
   }
@@ -840,13 +921,34 @@
     const ship = C.SHIP_BY_KEY[key];
     if (!ship || state.ownedShips[key]) return { ok: false, reason: 'owned' };
     if (!shipUnlocked(key)) return { ok: false, reason: 'locked' };
-    if (state.gold < ship.price) return { ok: false, reason: 'gold' };
-    state.gold -= ship.price;
+    // MOTHERSHIP & any resPrice hull: paid in Galaxy Resources, not gold.
+    if (ship.resPrice) {
+      if (!canAfford(ship.resPrice)) return { ok: false, reason: 'resources' };
+      state.resources.fuel -= ship.resPrice.fuel || 0;
+      state.resources.iron -= ship.resPrice.iron || 0;
+      state.resources.plasma -= ship.resPrice.plasma || 0;
+    } else {
+      if (state.gold < ship.price) return { ok: false, reason: 'gold' };
+      state.gold -= ship.price;
+    }
     state.ownedShips[key] = true;
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
     save();
     if (window.UI) window.UI.refreshAll();
     return { ok: true };
+  }
+  // Directly grant a hull (used by the secret Mothership unlock). Marks it owned,
+  // recovers its blueprint, and seeds its kill counter so it shows as a fully
+  // unlocked, switchable ship in the hangar.
+  function grantShip(key) {
+    const ship = C.SHIP_BY_KEY[key];
+    if (!ship || state.ownedShips[key]) return false;
+    state.ownedShips[key] = true;
+    if (state.shipKills[key] == null) state.shipKills[key] = 0;
+    if (ship.bpZone != null) { if (!state.blueprints) state.blueprints = {}; state.blueprints[key] = true; }
+    save();
+    if (window.UI) window.UI.refreshAll();
+    return true;
   }
   function switchShip(key) {
     if (!state.ownedShips[key] || key === state.ship) return false;
@@ -1030,23 +1132,32 @@
   function selectDungeon(d) {
     if (d > state.highestUnlocked) return;
     state.currentDungeon = d;
-    state.currentSystem = null;   // classic free-play deploy (not a galaxy system)
+    state.currentSystem = null;   // classic free-play deploy (not a galaxy tile)
     rt.siege = null;
+    rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
     // pushing into a new 100-block opens the next block (still level-gated)
     const cap = C.zoneCap(state.highestDungeonReached);
-    const u = Math.min(cap, 1 + Math.floor(state.level / 2));
+    const u = Math.min(cap, unlockCeil(state.level));
     if (u > state.highestUnlocked) state.highestUnlocked = u;
     resetZone();
+    // Deploying to the safe Hangar bay (d=0, e.g. the Bail button) always ends
+    // combat cleanly: revive the ship and top up health so you're never "downed"
+    // while docked.
+    if (d < 1) {
+      rt.awaitingRespawn = false;
+      rt.archer.dead = false; rt.archer.killer = null;
+      rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 2;
+    }
     if (window.UI) window.UI.refreshAll(); save();
   }
-  // Manual respawn: only way back after death. Picks a fresh zone and redeploys.
   function respawnAt(d) {
     if (d > state.highestUnlocked) d = state.highestUnlocked;
     state.currentDungeon = d;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
     rt.awaitingRespawn = false;
     rt.archer.dead = false; rt.archer.killer = null;
+    rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     resetZone();
     // generous safety on redeploy: 4s invulnerability + a spawn grace window so
     // the player is never instantly swarmed after choosing a zone.
@@ -1066,7 +1177,19 @@
       rt.nodes = [];
       rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
       rt.siege.spawnT = 1.0; rt.siege.wave = 1; rt.siege.bossSpawned = false; rt.siege.pendingBoss = false;
+      rt.waves = null;
+    } else if (rt.waves && rt.waves.active) {
+      // pre-configured gauntlet (owned Boss Tile) — keep its config, (re)start it
+      rt.nodes = [];
+      rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
+      rt.waves.wave = 1; rt.waves.bossSpawned = false; rt.waves.pendingBoss = false; rt.waves.super = false; rt.waves.spawnT = rt.waves.spawnT || 1.2;
+    } else if (!state.currentSystem && isWaveZone(state.currentDungeon)) {
+      // WAVE ZONE: 25 escalating waves of extreme density → boss → repeat.
+      rt.nodes = [];
+      rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
+      rt.waves = { active: true, total: 25, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false };
     } else {
+      rt.waves = null;
       buildNodes();
       // stagger initial spawns
       rt.nodes.forEach((n, i) => { n.respawnT = 0.2 + i * 0.25; });
@@ -1081,63 +1204,195 @@
   // GALAXY MAP — warp between systems, capture via 10-wave sieges, own systems
   // for per-hour resources. Difficulty scales with ring distance from home.
   // ==========================================================================
-  function sysAt(k) { const p = GX.parse(k); return GX.systemAt(p.q, p.r); }
+  function sysAt(k) { return GX.tileAt(k); }
   function isOwned(k) { return !!state.ownedSystems[k]; }
-  // A system is on the frontier (warpable) if it isn't owned but borders an owned one.
-  function isFrontier(k) {
-    if (isOwned(k)) return false;
-    const p = GX.parse(k);
-    return GX.neighbors(p.q, p.r).some((n) => isOwned(GX.key(n.q, n.r)));
+  function rivalOf(k) {
+    const real = rt.realTiles && rt.realTiles[k];
+    if (real) {
+      const myUid = (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null;
+      return (myUid && real.ownerId === myUid) ? null : (real.ownerName || 'Operator');
+    }
+    return (state.rivalTiles && state.rivalTiles[k]) || null;
   }
-  // Visible systems = owned ∪ their neighbors (the reveal grows as you capture).
-  function galaxyView() {
-    const seen = {}, list = [];
-    Object.keys(state.ownedSystems).forEach((k) => {
-      const p = GX.parse(k);
-      [{ q: p.q, r: p.r }].concat(GX.neighbors(p.q, p.r)).forEach((c) => {
-        const ck = GX.key(c.q, c.r);
-        if (seen[ck]) return; seen[ck] = 1;
-        const s = GX.systemAt(c.q, c.r);
-        list.push({ key: ck, q: c.q, r: c.r, ring: s.ring, type: s.type, resource: s.resource,
-          rate: s.rate, diff: s.diff, name: s.name, owned: isOwned(ck),
-          active: state.currentSystem === ck, frontier: isFrontier(ck), cost: GX.warpCost(s.ring) });
-      });
-    });
-    return list;
+  // Do I own every tile in a region? (gates the 10× full-region ownership bonus)
+  function regionFull(region) {
+    for (let i = 0; i < GX.TILES_PER_REGION; i++) if (!state.ownedSystems[GX.tileId(region, i)]) return false;
+    return true;
   }
-  function warpCostFor(k) { return GX.warpCost(sysAt(k).ring); }
+  // Seconds left on a region's 15-min contest cooldown (0 = attackable).
+  function regionCooldownLeft(region) {
+    const until = state.regionCd && state.regionCd[region];
+    return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
+  }
+  // Combat multipliers for the tile we're standing in: deep-space (20× density,
+  // 3× spawn rate, 10× loot, lose 2 on death) stacked with the 10× full-region
+  // ownership bonus. Read with `|| 1` fallbacks elsewhere.
+  function applyTileMults(tile) {
+    const R = tile ? GX.REGIONS[tile.region] : null;
+    const full = tile ? regionFull(tile.region) : false;
+    rt.tileDensity = ((R && R.deep) ? GX.DEEP_MULT.density : 1) * (full ? 10 : 1);
+    rt.tileLoot    = ((R && R.deep) ? GX.DEEP_MULT.loot : 1) * (full ? 10 : 1);
+    rt.tileRespawnMult = (R && R.deep) ? GX.DEEP_MULT.rate : 1;
+    rt.deepDeath   = !!(R && R.deep);
+  }
+  // Effective loot-quality roll multiplier for the current tile (capped so the
+  // keep-best rarity roll never loops absurdly).
+  function lootQ() { return Math.min(50, Math.max(1, Math.round(qualityMult(state.currentDungeon) * (rt.tileLoot || 1)))); }
   function canAfford(cost) {
     return state.resources.fuel >= (cost.fuel || 0) && state.resources.iron >= (cost.iron || 0) && state.resources.plasma >= (cost.plasma || 0);
   }
-  // Begin a warp to an unowned frontier system (starts the siege). Returns
-  // {ok} or {ok:false, reason}.
+  // Simulated rival owners (no real multiplayer). Seeded once; higher regions are
+  // more heavily contested. Never overwrites existing ownership/assignments.
+  const RIVAL_NAMES = ['GhostHD','ReaperX','Viper77','HawkOG','WolfPack','RavenTX','SteelRecon','AceMag','FrostByte','DieselK','MakoSix','EchoNine','RazorBravo','BoltActual','TalonVet','IronProto','NyxPrime','OnyxFPS','SaintTac','KriegMk2'];
+  function seedRivals() {
+    if (!state.rivalTiles) state.rivalTiles = {};
+    let seed = 1337;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    GX.REGIONS.forEach((R) => {
+      const p = 0.12 + R.idx * 0.13; // ~12% (Frontier) → ~77% (Omega) of free tiles held
+      for (let i = 0; i < GX.TILES_PER_REGION; i++) {
+        const id = GX.tileId(R.idx, i);
+        if (state.ownedSystems[id] || state.rivalTiles[id]) continue;
+        if (rnd() < p) state.rivalTiles[id] = RIVAL_NAMES[(rnd() * RIVAL_NAMES.length) | 0];
+      }
+    });
+  }
+  // Structured view for the UI: six regions, each with its ten tiles + ownership.
+  function galaxyView() {
+    return GX.REGIONS.map((R) => {
+      const tiles = GX.regionTiles(R.idx).map((t) => Object.assign({}, t, {
+        owned: isOwned(t.id), rival: rivalOf(t.id), active: state.currentSystem === t.id,
+      }));
+      const ownedCount = tiles.filter((t) => t.owned).length;
+      return { region: R, tiles, ownedCount, full: ownedCount === GX.TILES_PER_REGION, cooldown: regionCooldownLeft(R.idx) };
+    });
+  }
+  // ---- LIVING GALAXY: simulated rival turf wars (NOT real PvP) -------------
+  // Rivals periodically claim neutral tiles, seize tiles from each other, and
+  // contest YOUR territory — so the map is fought over and shifts between (and
+  // during) sessions. Catch-up runs on load for the time you were away.
+  function rndRivalName() { return RIVAL_NAMES[(Math.random() * RIVAL_NAMES.length) | 0]; }
+  function galaxyEvent() {
+    const wsum = GX.REGIONS.reduce((a, R) => a + (1 + R.idx), 0); // deeper = more contested
+    let roll = Math.random() * wsum, region = 0;
+    for (const R of GX.REGIONS) { roll -= (1 + R.idx); if (roll <= 0) { region = R.idx; break; } }
+    const ids = []; for (let i = 0; i < GX.TILES_PER_REGION; i++) ids.push(GX.tileId(region, i));
+    const neutral = ids.filter((id) => !state.ownedSystems[id] && !state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]));
+    const rivalHeld = ids.filter((id) => state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]));
+    const mine = ids.filter((id) => state.ownedSystems[id] && id !== GX.HOME && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]));
+    const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+    const r = Math.random();
+    if (r < 0.5 && neutral.length) {
+      const id = pick(neutral), name = rndRivalName();
+      state.rivalTiles[id] = name; return { kind: 'expand', name, tile: id };
+    }
+    if (r < 0.85 && rivalHeld.length) {
+      const id = pick(rivalHeld), from = state.rivalTiles[id]; let name = rndRivalName();
+      if (name === from) name = rndRivalName();
+      state.rivalTiles[id] = name; return { kind: 'war', name, from, tile: id };
+    }
+    // contest one of YOUR tiles (rarer) — never the tile you're on or your home
+    if (mine.length && regionCooldownLeft(region) <= 0) {
+      const id = pick(mine), name = rndRivalName();
+      delete state.ownedSystems[id]; state.rivalTiles[id] = name;
+      return { kind: 'lost', name, tile: id };
+    }
+    return null;
+  }
+  function pushFeed(msg, mine) {
+    if (!state.galaxyFeed) state.galaxyFeed = [];
+    state.galaxyFeed.unshift({ t: Date.now(), msg: msg, mine: !!mine });
+    state.galaxyFeed = state.galaxyFeed.slice(0, 24);
+  }
+  function galaxyTick() {
+    const now = Date.now();
+    if (!state.lastGalaxyTick) state.lastGalaxyTick = now;
+    let events = Math.min(30, Math.floor((now - state.lastGalaxyTick) / 150000)); // ~1 / 2.5 min
+    if (events <= 0) { if (Math.random() < 0.5) events = 1; else return; }
+    state.lastGalaxyTick = now;
+    let lost = null;
+    for (let i = 0; i < events; i++) {
+      const ev = galaxyEvent(); if (!ev) continue;
+      const tn = (GX.tileAt(ev.tile) || {}).name || ev.tile;
+      if (ev.kind === 'expand') pushFeed(ev.name + ' claimed ' + tn);
+      else if (ev.kind === 'war') pushFeed(ev.name + ' seized ' + tn + ' from ' + ev.from);
+      else { pushFeed(ev.name + ' captured your ' + tn, true); lost = lost || { name: ev.name, tn: tn }; }
+    }
+    save();
+    if (window.UI) { if (lost) window.UI.galaxyContestToast(lost.name, lost.tn); window.UI.galaxyChanged(); }
+  }
+  // ---- REAL turf war (Supabase) hybrid layer -------------------------------
+  // When signed into a real account, tile ownership is shared across accounts.
+  // Real ownership overrides the local simulation; simulated rivals only ever
+  // occupy tiles no real player holds, so the map is contested AND never empty.
+  function realMyUid() { return (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null; }
+  function syncRealTiles(map) {
+    rt.realTiles = map || {};
+    const myUid = realMyUid();
+    Object.keys(rt.realTiles).forEach((id) => {
+      const r = rt.realTiles[id];
+      if (myUid && r.ownerId === myUid) state.ownedSystems[id] = true;
+      else if (state.ownedSystems[id]) delete state.ownedSystems[id];
+      if (state.rivalTiles) delete state.rivalTiles[id]; // a real owner overrides any simulated one
+    });
+  }
+  function onRealtimeTile(ev) {
+    if (!rt.realTiles) rt.realTiles = {};
+    const myUid = realMyUid();
+    if (ev.deleted) { delete rt.realTiles[ev.tileId]; }
+    else {
+      rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil };
+      if (myUid && ev.ownerId === myUid) { state.ownedSystems[ev.tileId] = true; }
+      else if (state.ownedSystems[ev.tileId]) {
+        delete state.ownedSystems[ev.tileId];
+        const tn = (GX.tileAt(ev.tileId) || {}).name || ev.tileId;
+        pushFeed(ev.ownerName + ' captured your ' + tn, true);
+        if (window.UI) window.UI.galaxyContestToast(ev.ownerName, tn);
+      }
+      if (state.rivalTiles) delete state.rivalTiles[ev.tileId];
+    }
+    if (window.UI) window.UI.galaxyChanged();
+  }
+  function initTerritory() {
+    if (!(window.TERRITORY && window.TERRITORY.enabled())) return;
+    window.TERRITORY.loadAll().then((map) => { syncRealTiles(map); if (window.UI) window.UI.galaxyChanged(); });
+    window.TERRITORY.subscribe(onRealtimeTile);
+  }
+  // Tap a tile: own → deploy/farm; neutral → capture siege; rival → contest
+  // (starts a 15-min region cooldown). Returns {ok} / {ok:false, reason}.
   function warp(k) {
-    if (isOwned(k)) { enterSystem(k); return { ok: true }; }
-    if (!isFrontier(k)) return { ok: false, reason: 'unreachable' };
-    const cost = warpCostFor(k);
-    if (!canAfford(cost)) return { ok: false, reason: 'resources' };
-    state.resources.fuel -= cost.fuel || 0;
-    state.resources.iron -= cost.iron || 0;
-    state.resources.plasma -= cost.plasma || 0;
-    enterSystem(k);
+    const tile = sysAt(k); if (!tile) return { ok: false, reason: 'invalid' };
+    if (isOwned(k)) { enterTile(k); return { ok: true }; }
+    if (rivalOf(k)) {
+      if (regionCooldownLeft(tile.region) > 0) return { ok: false, reason: 'cooldown' };
+      if (!state.regionCd) state.regionCd = {};
+      state.regionCd[tile.region] = Date.now() + 15 * 60 * 1000; // contest cooldown
+    }
+    enterTile(k);
     save();
     return { ok: true };
   }
-  function enterSystem(k) {
-    const sys = sysAt(k);
+  function enterTile(k) {
+    const tile = sysAt(k); if (!tile) return;
     state.currentSystem = k;
-    state.currentDungeon = sys.diff;
-    if (sys.diff >= 1) {
-      state.highestDungeonReached = Math.max(state.highestDungeonReached, sys.diff);
-      const cap = C.zoneCap(state.highestDungeonReached);
-      const u = Math.min(cap, 1 + Math.floor(state.level / 2));
-      if (u > state.highestUnlocked) state.highestUnlocked = u;
-    }
+    state.currentDungeon = tile.diff;
+    state.highestDungeonReached = Math.max(state.highestDungeonReached, tile.diff);
+    const cap = C.zoneCap(state.highestDungeonReached);
+    const u = Math.min(cap, unlockCeil(state.level));
+    if (u > state.highestUnlocked) state.highestUnlocked = u;
+    applyTileMults(tile);
     const owned = isOwned(k);
-    // home or any owned system = free-roam farm; an unowned system = siege
-    if (sys.type === 'home' || sys.diff < 1) rt.siege = null;
-    else if (owned) rt.siege = null;
-    else rt.siege = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.0, boss: sys.type === 'boss' };
+    if (owned && tile.boss) {
+      // owned Boss Tile → endless gauntlet, a boss every 10 waves (30% Super)
+      rt.siege = null;
+      rt.waves = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false, bossTile: true };
+    } else if (owned) {
+      rt.siege = null; rt.waves = null;
+    } else {
+      // neutral or rival-held → capture siege (Boss Tiles end on a boss wave)
+      rt.siege = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.0, boss: tile.boss };
+      rt.waves = null;
+    }
     rt.awaitingRespawn = false;
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; rt.archer.hp = (rt.stats ? rt.stats.maxHp : 100); rt.archer.invuln = 3; }
     resetZone();
@@ -1154,9 +1409,12 @@
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     rt.enemies.push(e);
   }
-  function spawnWave(n) {
-    const ringN = sysAt(state.currentSystem).ring || 1;
-    const count = Math.min(16, 4 + Math.floor(ringN * 0.7) + Math.floor(n * 0.7));
+  function spawnWave(n, densityMul) {
+    densityMul = densityMul || 1;
+    const t = state.currentSystem ? sysAt(state.currentSystem) : null;
+    const ringN = t ? (t.region + 1) : Math.max(1, Math.ceil(state.currentDungeon / 10));
+    let count = Math.min(16, 4 + Math.floor(ringN * 0.7) + Math.floor(n * 0.7));
+    count = Math.min(34, Math.round(count * densityMul * (rt.tileDensity ? Math.min(2.2, 1 + (rt.tileDensity - 1) * 0.06) : 1)));
     for (let i = 0; i < count; i++) spawnWaveEnemy();
   }
   function spawnSiegeBoss() {
@@ -1186,19 +1444,68 @@
       captureSystem();
     }
   }
+  // WAVE ZONE runner — mirrors the siege engine but loops endlessly for farming:
+  // 25 extreme-density waves → a boss (30% Super) → restart. The boss pays out via
+  // the normal onKill path (Super Boss = premium loot table + resource bounty).
+  function updateWaveZone(dt) {
+    const s = rt.waves; if (!s || !s.active) return;
+    if (s.spawnT > 0) {
+      s.spawnT -= dt;
+      if (s.spawnT <= 0) {
+        if (s.pendingBoss) { spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
+        else spawnWave(s.wave, 1.8); // extreme density
+      }
+      return;
+    }
+    if (rt.enemies.filter((e) => !e.dying).length > 0) return;
+    if (s.bossSpawned) {
+      // gauntlet complete — reset and run it again
+      s.wave = 1; s.bossSpawned = false; s.pendingBoss = false; s.super = false; s.spawnT = 2.2;
+      if (window.UI) window.UI.siegeEvent('wavezone', { kind: 'clear' });
+      return;
+    }
+    if (s.wave < s.total) {
+      s.wave++; s.spawnT = 0.9;
+      if (window.UI && (s.wave % 5 === 0 || s.wave === s.total)) window.UI.siegeEvent('wave', s);
+    } else {
+      s.super = Math.random() < 0.30; // final wave → boss (30% Super)
+      s.pendingBoss = true; s.spawnT = 1.6;
+      if (window.UI) window.UI.siegeEvent('boss', s);
+    }
+  }
+
   function captureSystem() {
-    const k = state.currentSystem, sys = sysAt(k);
-    const wasBoss = sys.type === 'boss';
+    const k = state.currentSystem, tile = sysAt(k);
+    if (!tile) { rt.siege = null; return; }
+    const fromRival = rivalOf(k);
     state.ownedSystems[k] = true;
+    if (state.rivalTiles) delete state.rivalTiles[k];
+    pushFeed(fromRival ? ('You took ' + tile.name + ' from ' + fromRival) : ('You captured ' + tile.name));
+    // REAL turf war: stake the claim on the shared server (server-authoritative).
+    if (window.TERRITORY && window.TERRITORY.enabled()) {
+      window.TERRITORY.claim(k, window.TERRITORY.myName()).then((res) => {
+        if (!rt.realTiles) rt.realTiles = {};
+        if (res.ok && res.row) rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until };
+        if (window.UI) window.UI.galaxyChanged();
+      });
+    }
     rt.siege = null;
-    // boss systems pay out the rare void/eternal loot table
-    if (wasBoss) bossSystemLoot(sys);
-    // convert to a free-roam owned farm now that it's captured
-    buildNodes();
-    rt.nodes.forEach((n, i) => { n.respawnT = 0.4 + i * 0.3; });
-    rt.bossInit = rt.bossTimer = 600 + Math.random() * 300; rt.lastBoss = rt.time - 600;
+    // boss tiles pay out the rare void/eternal loot table on capture
+    if (tile.boss) bossSystemLoot(tile);
+    applyTileMults(tile); // ownership may have just completed the region (10×)
+    const full = regionFull(tile.region);
+    if (tile.boss) {
+      // now an owned Boss Tile → start its endless boss-wave gauntlet
+      rt.waves = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, bossTile: true };
+      resetZone();
+    } else {
+      rt.waves = null;
+      buildNodes();
+      rt.nodes.forEach((n, i) => { n.respawnT = 0.4 + i * 0.3; });
+      rt.bossInit = rt.bossTimer = 600 + Math.random() * 300; rt.lastBoss = rt.time - 600;
+    }
     burst(rt.archer.x, rt.archer.y, '#5bc06b', 40, { speed: 240, life: 1.0, glow: true });
-    if (window.UI) { window.UI.siegeEvent('captured', { sys }); window.UI.refreshAll(); }
+    if (window.UI) { window.UI.siegeEvent('captured', { sys: tile, fromRival: fromRival, full: full }); window.UI.refreshAll(); }
     save();
   }
   // Boss-system loot: 50% Void @~90% level, 10% Eternal @~50%, 1% Eternal @level
@@ -1221,9 +1528,14 @@
   // ---- RESOURCES (per-hour, offline-capped) --------------------------------
   function resourceRates() {
     const r = { fuel: 0, iron: 0, plasma: 0 };
+    const full = {}; GX.REGIONS.forEach((R) => { if (regionFull(R.idx)) full[R.idx] = true; });
     Object.keys(state.ownedSystems).forEach((k) => {
-      const s = sysAt(k);
-      if (s.resource && s.rate) r[s.resource] += s.rate;
+      const t = sysAt(k); if (!t || !t.resource || !t.rate) return;
+      const R = GX.REGIONS[t.region];
+      let mult = 1;
+      if (R && R.deep) mult *= GX.DEEP_MULT.resource; // 25× deep-space yield
+      if (full[t.region]) mult *= 10;                 // full-region ownership bonus
+      r[t.resource] += t.rate * mult;
     });
     return r;
   }
@@ -1244,7 +1556,8 @@
     if (mult === 1 || hasSpeed('speed' + mult)) { state.gameSpeed = mult; save(); return true; }
     return false;
   }
-  function hasSpeed(sku) { return !!state.purchases[sku]; }
+  // Speed tiers + offline play are FREE in this game — no purchases required.
+  function hasSpeed(sku) { return true; }
   function purchase(sku) { state.purchases[sku] = true; save(); if (window.UI) window.UI.refreshAll(); }
 
   // recommend the deepest zone the player can comfortably clear
@@ -1277,10 +1590,9 @@
   function save() { state.lastSave = Date.now(); try { if (window.ACCOUNT) window.ACCOUNT.push(state); else localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
   function load() { try { const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); return true; } catch (e) { return false; } }
 
-  // Rich offline sim — only if AFK Mode purchased. Simulates kills, loot (auto
+  // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
   function computeOffline() {
-    if (!state.purchases.afk) return null;
     const elapsed = Math.min(12 * 3600, (Date.now() - state.lastSave) / 1000);
     if (elapsed < 60) return null;
     refreshStats();
@@ -1368,6 +1680,29 @@
     if (state.shipKills[state.ship] == null) state.shipKills[state.ship] = 0;
     if (!state.blueprints) state.blueprints = {};
     if (state.drones == null) state.drones = 0;
+    // ---- GALAXY v2 migration: infinite hex map → fixed 6-region structure ----
+    if (state.galaxyVer !== 2) {
+      state.ownedSystems = {}; state.ownedSystems[GX.HOME] = true; // keep a starter foothold
+      state.rivalTiles = {}; state.regionCd = {}; state.currentSystem = null;
+      state.galaxyVer = 2;
+    }
+    if (!state.rivalTiles) state.rivalTiles = {};
+    if (!state.regionCd) state.regionCd = {};
+    if (!state.galaxyFeed) state.galaxyFeed = [];
+    // ---- ZONE-CAP: keep exactly 10 zones unlocked beyond the pilot's level (and
+    // within the current 100-block). This both GRANTS the level+10 runway to fresh
+    // pilots and CORRECTS saves from the old, looser unlock curve. Since pilot
+    // level only ever rises, this never revokes legitimately-earned zones.
+    {
+      const ceil = Math.max(1, Math.min(C.zoneCap(state.highestDungeonReached || 1), unlockCeil(state.level || 1)));
+      state.highestUnlocked = ceil;
+      // only clamp classic free-play deploys; galaxy-tile combat is uncapped by design
+      if (!state.currentSystem && state.currentDungeon > state.highestUnlocked) {
+        state.currentDungeon = state.highestUnlocked;
+      }
+    }
+    seedRivals();
+    galaxyTick(); // catch up rival turf wars from time spent away
 
     // ---- ONE-TIME RESCALE migration (steep 1.55 curve → gentle 1.18 curve) ----
     // Compress stored gear/gold so an existing save lines up with the new,
@@ -1409,17 +1744,19 @@
     accrueResources();
 
     // Always start docked at the home hangar on (re)login.
-    state.currentSystem = '0,0'; state.currentDungeon = 0; rt.siege = null; rt.awaitingRespawn = false;
+    state.currentSystem = null; state.currentDungeon = 0; rt.siege = null; rt.awaitingRespawn = false;
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; }
     resetZone();
 
     if (window.UI) { window.UI.init(GAME); window.UI.refreshAll(); if (offline) window.UI.showOffline(offline); }
+    initTerritory(); // load + subscribe to the shared cross-account turf war
 
     setInterval(save, 8000);
     setInterval(() => { accrueResources(); }, 60000); // tick resources every minute
+    setInterval(galaxyTick, 60000); // tick simulated rival turf wars
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) save();
-      else { accrueResources(); const sum = computeOffline(); if (window.UI) { window.UI.refreshAll(); if (sum) window.UI.showOffline(sum); } rt.last = performance.now(); }
+      else { accrueResources(); const sum = computeOffline(); if (window.UI) { window.UI.refreshAll(); if (sum) window.UI.showOffline(sum); } rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); }
     });
     window.addEventListener('beforeunload', save);
 
@@ -1447,15 +1784,16 @@
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, respawnAt,
-    buyShip, switchShip, shipUnlocked, shipBuyState, hasBlueprint,
+    buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
     shipDroneCount, getDrones: () => state.drones, getShipKills: (k) => (state.shipKills[k] || 0),
     skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills,
     getShop, shopTimeLeft, buyShopItem, getBossInfo, shopItemPrice, shopIsUpgrade,
     secondUnlocked: (b) => secondUnlocked(b), equipLayout,
     recommendedZone, zoneAdvice, zoneBonuses, currentWeek,
     // galaxy map
-    galaxyView, warp, warpCostFor, canAfford, sysAt, isOwned, isFrontier,
-    resourceRates, getResources: () => state.resources, getSiege: () => rt.siege,
+    galaxyView, warp, sysAt, isOwned, rivalOf, regionFull, regionCooldownLeft, REGIONS: GX.REGIONS,
+    resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
+    getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatTime,
     getStats: () => rt.stats, getDps: () => rt.dps,
     getHp: () => ({ cur: rt.archer ? rt.archer.hp : 0, max: rt.stats.maxHp, dead: rt.archer && rt.archer.dead, awaiting: rt.awaitingRespawn }),

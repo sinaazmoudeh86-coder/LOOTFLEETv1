@@ -317,7 +317,7 @@
   }
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
-  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, supercarrier:4, titan:5 };
+  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, supercarrier:4, titan:5, mothership:5 };
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';
     const ht = HULL_VIS[key];
@@ -326,7 +326,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','supercarrier','titan'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','supercarrier','titan','mothership'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }

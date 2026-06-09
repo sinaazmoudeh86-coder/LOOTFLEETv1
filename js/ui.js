@@ -12,7 +12,10 @@
                        // then (e.g. offline-sim level-ups) safely no-ops.
   const $ = (id) => document.getElementById(id);
   const el = {};
-  let screen = 'battle', sortMode = 'power', lbTab = 'heat', storeCat = 'ships';
+  let screen = 'battle', sortMode = 'power', lbTab = 'heat', storeCat = 'ships', skillBranch = 'offense';
+  const skillOpen = {}; // skill-tree accordion open-state, keyed by branch:tier
+  let _galaxyTimer = null; // re-render galaxy while a region cooldown ticks
+  let _msTaps = 0;          // SECRET Mothership unlock: ship-portrait tap counter
 
   const ZONE_NAMES = ['The Backyard','Main Street','Riverside Mall','Gas Station','Highway Pileup','Quarantine Zone','Subway Tunnels','Research Lab','Military Depot','Containment Site'];
   function zoneName(d) { return d <= ZONE_NAMES.length ? ZONE_NAMES[d-1] : (d <= 16 ? 'Outer Sector ' + d : 'Hive Sector ' + d); }
@@ -49,8 +52,18 @@
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.screen)));
     buildSpeedRow();
     el['auto-btn'].addEventListener('click', () => { G.setAuto(!G.getAuto()); syncAuto(); });
+    const bailBtn = $('bail-btn');
+    if (bailBtn) bailBtn.addEventListener('click', () => {
+      G.selectDungeon(0);            // drop into the safe Hangar bay, leaving combat
+      showScreen('battle');
+      toast('⏏ Bailed to Hangar — combat ended', '#5b9cff');
+    });
     const zbBtn = $('zone-banner'); if (zbBtn) zbBtn.addEventListener('click', () => showScreen('zones'));
-    document.querySelectorAll('#hangar-dock .hd-btn').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.screen)));
+    // SECRET: click "My Ship" (the hangar Ship dock button) 20× to unlock the Mothership.
+    document.querySelectorAll('#hangar-dock .hd-btn').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.screen === 'hero') tapMyShip();
+      showScreen(b.dataset.screen);
+    }));
     initJoystick();
     syncAuto();
     _inited = true;
@@ -107,13 +120,16 @@
     const show = safe || adv.kind === 'up' || adv.kind === 'down';
     if (a2.textContent !== msg) a2.textContent = msg;
     a2.className = (safe ? 'safe' : adv.kind) + (show ? ' show' : '');
-    // siege wave bar takes priority over the boss meter while a siege is active
+    // siege/wave bar takes priority over the boss meter while a gauntlet is active
     const siege = G.getSiege ? G.getSiege() : null;
+    const waves = G.getWaves ? G.getWaves() : null;
+    const wz = (siege && siege.active) ? siege : (waves && waves.active ? waves : null);
     const sgb = el['siege-bar'], bb = el['boss-bar'];
-    if (siege && siege.active && !safe) {
+    if (wz && !safe) {
       sgb.classList.add('show');
-      const wv = siege.bossSpawned ? 'BOSS' : 'WAVE ' + Math.min(siege.wave, siege.total) + ' / ' + siege.total;
-      el['sg-fill'].style.width = Math.min(100, ((siege.bossSpawned ? siege.total : siege.wave - 1) / siege.total) * 100) + '%';
+      const isSuper = wz.bossSpawned && wz.super;
+      const wv = wz.bossSpawned ? (isSuper ? 'SUPER BOSS' : 'BOSS') : 'WAVE ' + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
+      el['sg-fill'].style.width = Math.min(100, ((wz.bossSpawned ? wz.total : wz.wave - 1) / wz.total) * 100) + '%';
       el['sg-label'].textContent = '⚔ ' + wv;
       bb.classList.remove('show', 'active');
     } else {
@@ -154,12 +170,8 @@
     C.SPEED_TIERS.forEach((tier) => {
       const b = document.createElement('button');
       b.className = 'spd';
-      const owned = tier.mult === 1 || G.hasSpeed(tier.sku);
-      b.innerHTML = `<span>${tier.label}</span>` + (owned ? '' : `<span class="pl">${tier.priceLabel}</span>`);
-      b.addEventListener('click', () => {
-        if (tier.mult === 1 || G.hasSpeed(tier.sku)) { G.setGameSpeed(tier.mult); syncSpeed(); }
-        else openPurchase('speed', tier);
-      });
+      b.innerHTML = `<span>${tier.label}</span>`;
+      b.addEventListener('click', () => { G.setGameSpeed(tier.mult); syncSpeed(); });
       el['speed-row'].appendChild(b);
     });
     syncSpeed();
@@ -167,10 +179,8 @@
   function syncSpeed() {
     const pills = el['speed-row'].querySelectorAll('.spd');
     C.SPEED_TIERS.forEach((tier, i) => {
-      const owned = tier.mult === 1 || G.hasSpeed(tier.sku);
       pills[i].classList.toggle('active', G.state.gameSpeed === tier.mult);
-      pills[i].classList.toggle('locked', !owned);
-      pills[i].innerHTML = `<span>${tier.label}</span>` + (owned ? '' : `<span class="pl">${tier.priceLabel}</span>`);
+      pills[i].innerHTML = `<span>${tier.label}</span>`;
     });
   }
   function syncAuto() {
@@ -207,6 +217,23 @@
   // ==========================================================================
   // HERO
   // ==========================================================================
+  // SECRET: click "My Ship" 20 times in the Hangar to unlock the Mothership.
+  function tapMyShip() {
+    if (G.state.ownedShips && G.state.ownedShips.mothership) return; // already unlocked
+    _msTaps++;
+    const left = 20 - _msTaps;
+    if (left <= 0) {
+      if (G.grantShip('mothership')) {
+        _msTaps = 0;
+        const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
+        t.innerHTML = '✦ MOTHERSHIP UNLOCKED<br><span style="font-size:12px;color:#ffd7f3">Fly it from Hangar → Ships</span>';
+        el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2800);
+        if (screen === 'hero') renderHero();
+      }
+    } else if (_msTaps >= 5) {
+      toast('✦ ' + left + ' more…', '#c77bff'); // whisper as the secret nears
+    }
+  }
   function renderHero() {
     const st = G.getStats();
     // unified Hangar segment header (My Ship active) so Ship + Store share a tab
@@ -342,79 +369,87 @@
     for (let i = 0; i < 6; i++) { const a = (60 * i - 90) * Math.PI / 180; p.push((cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1)); }
     return p.join(' ');
   }
+  function fmtCd(sec) { const m = Math.floor(sec / 60), s = sec % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
   function renderGalaxy() {
     const res = G.getResources(), rates = G.resourceRates();
-    el['galaxy-sub'].textContent = 'Warp outward · claim systems';
+    el['galaxy-sub'].textContent = '6 regions · 60 tiles · conquer & hold';
     let html = '<div class="res-hud">';
     GM.RES_KEYS.forEach((k) => {
       const d = GM.RES[k];
-      html += `<div class="res-pill" style="--rc:${d.color}"><span class="res-g">${d.glyph}</span><b>${G.formatNum(res[k] || 0)}</b><span class="res-rate">+${G.formatNum(rates[k] || 0)}/h</span></div>`;
+      html += `<div class="res-pill" style="--rc:${d.color}"><span class="res-g">${d.glyph}</span><span class="res-txt"><b>${G.formatNum(res[k] || 0)}</b><span class="res-rate">+${G.formatNum(rates[k] || 0)}/h</span></span></div>`;
     });
     html += '</div>';
 
+    const feed = G.getGalaxyFeed ? G.getGalaxyFeed() : [];
+    if (feed.length) {
+      html += '<div class="gx-feed"><div class="gxf-h">⚔ Contested Space · live</div>';
+      feed.slice(0, 5).forEach((f) => { html += `<div class="gxf-row ${f.mine ? 'mine' : ''}">${f.msg}</div>`; });
+      html += '</div>';
+    }
+
     const view = G.galaxyView();
-    const size = 36;
-    const nodes = view.map((s) => { const p = GM.pixel(s.q, s.r, size); return Object.assign({}, s, { x: p.x, y: p.y }); });
-    const byKey = {}; nodes.forEach((n) => byKey[n.key] = n);
-    const pad = size * 1.8;
-    const minX = Math.min.apply(null, nodes.map((n) => n.x)) - pad, maxX = Math.max.apply(null, nodes.map((n) => n.x)) + pad;
-    const minY = Math.min.apply(null, nodes.map((n) => n.y)) - pad, maxY = Math.max.apply(null, nodes.map((n) => n.y)) + pad;
-    const W = Math.max(1, maxX - minX), Hh = Math.max(1, maxY - minY);
-    let svg = `<svg class="galaxy-svg" width="${W.toFixed(0)}" height="${Hh.toFixed(0)}" viewBox="0 0 ${W.toFixed(0)} ${Hh.toFixed(0)}">`;
-    // faint links owned→neighbor
-    nodes.forEach((n) => {
-      if (!n.owned) return;
-      GM.neighbors(n.q, n.r).forEach((c) => {
-        const m = byKey[GM.key(c.q, c.r)]; if (!m) return;
-        svg += `<line class="gx-link" x1="${(n.x-minX).toFixed(1)}" y1="${(n.y-minY).toFixed(1)}" x2="${(m.x-minX).toFixed(1)}" y2="${(m.y-minY).toFixed(1)}"/>`;
+    const size = 30, w = Math.sqrt(3) * size, vert = size * 1.5, pad = 8;
+    const Wd = pad * 2 + 5 * w + w / 2, Hd = pad * 2 + vert + size * 1.1;
+
+    view.forEach((rg) => {
+      const R = rg.region, full = rg.full, cd = rg.cooldown;
+      html += `<div class="rg-card ${R.deep ? 'deep' : ''} ${full ? 'full' : ''}" style="--rc:${R.color}">`;
+      html += `<div class="rg-head"><div class="rg-l"><span class="rg-name">${R.name}</span><span class="rg-lv">Lv ${R.levelMin}–${R.levelMax}</span></div>
+        <div class="rg-r">${R.deep ? '<span class="rg-tag deep">☢ DEEP</span>' : ''}${full ? '<span class="rg-tag fullb">★ FULL ×10</span>' : ''}${cd > 0 ? `<span class="rg-tag cd">◷ ${fmtCd(cd)}</span>` : ''}<span class="rg-own">${rg.ownedCount}/10</span></div></div>`;
+      html += `<div class="rg-blurb">${R.blurb}</div>`;
+      let cards = '<div class="rg-tiles">';
+      rg.tiles.forEach((t) => {
+        const cls = t.active ? 'active' : t.owned ? 'owned' : t.rival ? 'rival' : 'neutral';
+        const accent = t.boss ? '#e23b4e' : (t.owned ? R.color : (t.rival ? '#e8a34a' : (t.resource ? GM.RES[t.resource].color : '#5a6472')));
+        const badge = t.boss ? '<span class="gt-boss">BOSS</span>'
+          : (t.resource ? `<span class="gt-res" style="color:${GM.RES[t.resource].color}">${GM.RES[t.resource].glyph}</span>` : '<span class="gt-res dim">◦</span>');
+        const owner = t.active ? '● HERE' : t.owned ? '✦ Yours' : t.rival ? t.rival : 'Open ›';
+        const ttl = t.rival ? 'Held by ' + t.rival : (t.owned ? 'You hold this tile' : 'Unclaimed — capture it');
+        cards += `<div class="gtile ${cls} ${t.boss ? 'boss' : ''}" data-key="${t.id}" style="--ac:${accent}" title="${ttl}">
+          <div class="gt-top"><span class="gt-lv">${t.boss ? '☠' : 'L' + t.diff}</span>${badge}</div>
+          <div class="gt-own">${owner}</div></div>`;
       });
+      cards += '</div>';
+      html += cards + '</div>';
     });
-    nodes.forEach((n) => {
-      const cx = n.x - minX, cy = n.y - minY;
-      const cls = n.type === 'home' ? 'home' : n.owned ? 'owned' : n.frontier ? 'frontier' : 'far';
-      const afford = n.frontier ? G.canAfford(n.cost) : true;
-      const accent = n.type === 'boss' ? '#e23b4e' : (n.resource ? GM.RES[n.resource].color : (n.owned ? '#5bc06b' : n.frontier ? '#5b9cff' : '#566'));
-      const center = n.type === 'home' ? '⌂' : (n.type === 'boss' ? '☠' : 'L' + n.diff);
-      const tag = n.active ? 'HERE' : n.owned ? 'OWNED' : n.frontier ? (afford ? 'WARP' : 'LOCK') : '';
-      svg += `<g class="gx ${cls} ${n.active ? 'active' : ''} ${afford ? '' : 'poor'}" data-key="${n.key}" style="--ac:${accent}">`;
-      svg += `<polygon points="${hexPts(cx, cy, size - 3)}"/>`;
-      svg += `<text class="gx-c" x="${cx}" y="${(cy + (n.resource ? -3 : 3)).toFixed(1)}">${center}</text>`;
-      if (n.resource) svg += `<text class="gx-r" x="${cx}" y="${(cy + 13).toFixed(1)}" fill="${GM.RES[n.resource].color}">${GM.RES[n.resource].glyph}</text>`;
-      if (tag) svg += `<text class="gx-tag" x="${cx}" y="${(cy + size * 0.74).toFixed(1)}">${tag}</text>`;
-      svg += `</g>`;
-    });
-    svg += '</svg>';
-    html += `<div class="galaxy-wrap">${svg}</div>`;
-    html += '<div class="galaxy-help">Tap an adjacent system to <b>warp</b> &amp; lay siege (10 waves). Captured systems generate resources every hour.</div>';
+    html += '<div class="galaxy-help">Enter <b>any</b> region regardless of level — deeper space is deadlier but far richer. Tap a tile to deploy (yours), capture (neutral) or contest (rival-held). Hold all 10 tiles in a region for a <b>10× bonus</b>.</div>';
     el['galaxy-body'].innerHTML = html;
 
-    const wrap = el['galaxy-body'].querySelector('.galaxy-wrap');
-    const me = nodes.find((n) => n.active) || nodes.find((n) => n.type === 'home');
-    if (wrap && me) { wrap.scrollLeft = (me.x - minX) - wrap.clientWidth / 2; wrap.scrollTop = (me.y - minY) - wrap.clientHeight / 2; }
-    el['galaxy-body'].querySelectorAll('.gx').forEach((g) => g.addEventListener('click', () => {
-      const n = byKey[g.dataset.key]; if (!n) return;
-      if (n.owned) { G.warp(n.key); showScreen('battle'); }
-      else if (n.frontier) openWarp(n);
+    el['galaxy-body'].querySelectorAll('.gtile').forEach((g) => g.addEventListener('click', () => {
+      const id = g.dataset.key, tile = G.sysAt(id); if (!tile) return;
+      try {
+        if (G.isOwned(id)) { G.warp(id); showScreen('battle'); }
+        else openTileAction(id);
+      } catch (e) { toast('Could not open tile', '#e23b4e'); }
     }));
+
+    clearInterval(_galaxyTimer);
+    if (view.some((v) => v.cooldown > 0)) _galaxyTimer = setInterval(() => { if (screen === 'galaxy') renderGalaxy(); else clearInterval(_galaxyTimer); }, 1000);
   }
-  function openWarp(n) {
-    const cost = n.cost, afford = G.canAfford(cost);
-    const costHtml = GM.RES_KEYS.filter((k) => cost[k]).map((k) => `<span style="color:${GM.RES[k].color}">${GM.RES[k].glyph} ${G.formatNum(cost[k])}</span>`).join(' · ') || 'Free';
-    const obj = n.type === 'boss' ? 'Clear 10 waves, then defeat the <b style="color:var(--hp)">BOSS</b>' : 'Clear 10 waves to capture';
-    const reward = n.resource ? `Yields <b style="color:${GM.RES[n.resource].color}">${GM.RES[n.resource].glyph} ${G.formatNum(n.rate)}/h ${GM.RES[n.resource].name}</b> once owned` : 'Strategic territory · opens new systems';
-    const sheet = showSheet(`<div class="sheet-head">Warp · ${n.name}</div><div class="sheet-body">
-      <div class="ip-stat"><span class="ip-sname">Difficulty</span><span class="v">Lv ${n.diff} · ring ${n.ring}</span></div>
+  function openTileAction(id) {
+    const t = G.sysAt(id); if (!t) return;
+    const R = G.REGIONS[t.region], rival = G.rivalOf(id), cd = G.regionCooldownLeft(t.region);
+    const blocked = rival && cd > 0;
+    const obj = t.boss ? 'Clear 10 waves, then defeat the <b style="color:var(--hp)">BOSS</b>' : 'Clear 10 waves to capture';
+    const reward = t.boss ? 'Once held, farms endless boss waves — a boss every 10 waves (30% Super Boss)'
+      : (t.resource ? `Yields <b style="color:${GM.RES[t.resource].color}">${GM.RES[t.resource].glyph} ${G.formatNum(t.rate)}/h ${GM.RES[t.resource].name}</b>${R.deep ? ' ×25 (deep)' : ''} once held` : 'Strategic territory toward the full-region 10× bonus');
+    const head = rival ? `Contest · ${t.name}` : `Capture · ${t.name}`;
+    const sheet = showSheet(`<div class="sheet-head">${head}</div><div class="sheet-body">
+      <div class="ip-stat"><span class="ip-sname">Region</span><span class="v">${R.name} · Lv ${R.levelMin}–${R.levelMax}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Difficulty</span><span class="v">Lv ${t.diff}${t.boss ? ' · BOSS TILE' : ''}</span></div>
+      ${rival ? `<div class="ip-stat"><span class="ip-sname">Held by</span><span class="v" style="color:#e8a34a">${rival}</span></div>` : ''}
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
       <div class="ip-stat"><span class="ip-sname">Reward</span><span class="v">${reward}</span></div>
-      <div class="ip-stat"><span class="ip-sname">Warp cost</span><span class="v">${costHtml}</span></div>
-      ${afford ? '' : '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough resources — capture a generator first.</p>'}
-      <div class="sheet-actions"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok ${afford ? '' : 'disabled'}>Warp</button></div></div>`);
+      ${R.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
+      ${rival && !blocked ? `<p style="font-size:11px;margin-top:6px;color:var(--muted)">Attacking puts <b>${R.name}</b> on a 15-min contest cooldown.</p>` : ''}
+      ${blocked ? `<p style="color:var(--bad);font-size:11px;margin-top:6px">On cooldown — ${fmtCd(cd)} until ${R.name} can be contested again.</p>` : ''}
+      <div class="sheet-actions"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok ${blocked ? 'disabled' : ''}>${rival ? 'Attack' : 'Capture'}</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
-      const r = G.warp(n.key);
-      if (r.ok) { closeSheet(); toast('Warping to ' + n.name, '#5b9cff'); showScreen('battle'); }
-      else toast(r.reason === 'resources' ? 'Not enough resources' : 'Unreachable', '#e23b4e');
+      const r = G.warp(id);
+      if (r.ok) { closeSheet(); toast((rival ? 'Attacking ' : 'Deploying to ') + t.name, '#5b9cff'); showScreen('battle'); }
+      else toast(r.reason === 'cooldown' ? 'Region on cooldown' : 'Cannot deploy', '#e23b4e');
     });
   }
 
@@ -435,17 +470,20 @@
       const locked = d > s.highestUnlocked, active = d === s.currentDungeon;
       const types = C.ENEMIES.filter((e) => d >= e.minDungeon), topType = types[types.length-1];
       const blocked = d > blockCap;
-      const lockLabel = blocked ? '🔒 Clear Zone ' + (Math.floor((d - 1) / C.ZONE_BLOCK) * C.ZONE_BLOCK) : '🔒 Lv ' + (d * 2);
+      const reqLv = Math.max(1, d - 10);
+      const lockLabel = blocked ? '🔒 Clear Zone ' + (Math.floor((d - 1) / C.ZONE_BLOCK) * C.ZONE_BLOCK) : '🔒 Lv ' + reqLv;
       const bz = G.zoneBonuses(d);
-      const bonus = (bz.density>1?`<span class="z-bon dens">⚔ ${bz.density}× density</span>`:'') +
+      const wave = d % 11 === 0;
+      const bonus = (wave?`<span class="z-bon wave">◎ WAVE ZONE · 25 waves → boss</span>`:'') +
+                    (bz.density>1?`<span class="z-bon dens">⚔ ${bz.density}× density</span>`:'') +
                     (bz.quality>1?`<span class="z-bon qual">✦ ${bz.quality}× loot quality</span>`:'');
-      html += `<div class="zone-row ${active?'active':''} ${locked?'locked':''} ${d===rec?'rec':''} ${bz.prismatic?'prismatic':''}" data-d="${d}">
+      html += `<div class="zone-row ${active?'active':''} ${locked?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''}" data-d="${d}">
         <div class="z-num">${d}</div>
-        <div class="z-meta"><div class="z-name">${zoneName(d)}</div>
+        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}</div>
           <div class="z-sub">Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
           ${bonus?`<div class="z-bons">${bonus}</div>`:''}
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
-        <div class="z-go">${locked ? lockLabel : active ? '● HERE' : (d===rec ? '★ DEPLOY' : 'DEPLOY')}</div></div>`;
+        <div class="z-go">${locked ? lockLabel : active ? '● HERE' : (wave ? '◎ ENTER' : (d===rec ? '★ DEPLOY' : 'DEPLOY'))}</div></div>`;
     }
     el['zones-body'].innerHTML = html;
     el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => { G.selectDungeon(+row.dataset.d); showScreen('battle'); }));
@@ -474,20 +512,26 @@
   function storeHead(ico, title, right) { return `<div class="sec-head"><span class="sec-ic">${ico}</span><h3>${title}</h3>${right?`<span class="sec-right">${right}</span>`:''}</div>`; }
   // Unified Hangar segment header — shared by the "My Ship" (hero) view and the
   // store categories, so Ship + Store live under one tab.
-  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['upgrades','Upgrades'],['cosmetics','Cosmetics']];
+  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['cosmetics','Cosmetics']];
   function hangarTabsHTML(active) {
     return `<div class="store-cats">${HANGAR_TABS.map(([k,l]) => `<button class="store-cat ${active===k?'active':''}" data-hangtab="${k}">${l}</button>`).join('')}</div>`;
   }
   function wireHangarTabs(root) {
     root.querySelectorAll('[data-hangtab]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.hangtab;
-      if (k === 'ship') showScreen('hero');
+      if (k === 'ship') { tapMyShip(); showScreen('hero'); }
       else { storeCat = k; showScreen('store'); }
     }));
   }
   function modSummary(m) {
     if (!m) return '';
     return Object.keys(m).map((k) => `<span class="mod-chip">+${m[k]}% ${MOD_LABEL[k] || k}</span>`).join('');
+  }
+  function resCostChips(rp) {
+    return GM.RES_KEYS.filter((k) => rp[k]).map((k) => {
+      const r = GM.RES[k];
+      return `<span style="color:${r.color}">${r.glyph} ${G.formatNum(rp[k])}</span>`;
+    }).join(' ');
   }
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key], st = G.shipBuyState(key);
@@ -498,10 +542,10 @@
     let action = '', lock = '';
     if (st.active) action = `<span class="ship-badge active">● ACTIVE</span>`;
     else if (st.owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
-    else if (st.unlocked) action = `<button class="ship-btn buy" data-ship-buy="${key}"><span class="coin">$</span> ${G.formatNum(ship.price)}</button>`;
+    else if (st.unlocked) action = ship.resPrice
+      ? `<button class="ship-btn buy res" data-ship-buy="${key}">${resCostChips(ship.resPrice)}</button>`
+      : `<button class="ship-btn buy" data-ship-buy="${key}"><span class="coin">$</span> ${G.formatNum(ship.price)}</button>`;
     else action = `<span class="ship-badge locked">🔒</span>`;
-    const SHIP_USD = { interceptor:5, cruiser:10, heavycruiser:20, destroyer:40, battleship:75, dreadnought:150, carrier:300, supercarrier:600, titan:1000 };
-    const money = (!st.owned && SHIP_USD[key]) ? `<button class="ship-btn money" data-ship-money="${key}">$${SHIP_USD[key]}</button>` : '';
     if (!st.owned && !st.unlocked) {
       if (!st.hasBlueprint) {
         const z = st.bpZone, reach = z <= G.state.highestUnlocked;
@@ -522,7 +566,7 @@
         <div class="ship-meta"><div class="ship-name">${ship.name} ${bpChip}</div>
           <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
           <div class="ship-layout">${layout}</div></div>
-        <div class="ship-act">${action}${money}</div>
+        <div class="ship-act">${action}</div>
       </div>
       <div class="ship-desc">${ship.desc}</div>
       ${mods?`<div class="ship-mods">${mods}</div>`:''}
@@ -558,20 +602,6 @@
       html += '</div>';
     }
 
-    if (storeCat === 'upgrades') {
-      html += `<div class="store-sec">${storeHead(STORE_ICONS.speed, 'Dungeon Speed')}<div class="sec-blurb">Fast-forward all combat, forever. One-time unlock.</div>`;
-      C.SPEED_TIERS.filter((t) => t.sku).forEach((t) => {
-        const owned = G.hasSpeed(t.sku);
-        html += storeCard(t.label, `${t.label} Game Speed`, `Run combat ${t.mult}× faster — kills, loot & XP all scale up.`, owned ? null : t.priceLabel, owned);
-      });
-      html += '</div>';
-      const afk = C.STORE.afk, afkOwned = G.hasSpeed('afk');
-      html += `<div class="store-sec">${storeHead(STORE_ICONS.offline, 'Offline Play')}<div class="sec-blurb">${afk.blurb}</div>`;
-      html += storeCard('AFK', afk.name, 'Keep earning while the app is closed.', afkOwned ? null : afk.priceLabel, afkOwned, 'afk');
-      html += '</div>';
-      html += '<div class="store-note">Demo build — dollar purchases are simulated and you are never charged. Ships are bought with in-game gold.</div>';
-    }
-
     if (storeCat === 'cosmetics') {
       html += `<div class="store-sec">${storeHead(STORE_ICONS.cosmetics, 'Cosmetics')}<div class="store-empty">Skins, hull finishes &amp; emotes — coming soon.</div></div>`;
     }
@@ -586,12 +616,6 @@
       const gear = key === G.state.ship ? G.state.equipped : (G.state.fittings[key] || {});
       R.drawHullPortrait(cx, key, gear, W, H);
     });
-    // dollar (simulated) purchases
-    el['store-body'].querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => {
-      const sku = b.dataset.buy;
-      if (sku === 'afk') openPurchase('afk', { sku: 'afk', priceLabel: C.STORE.afk.priceLabel, name: C.STORE.afk.name });
-      else { const t = C.SPEED_TIERS.find((x) => x.sku === sku); openPurchase('speed', t); }
-    }));
     // black-market gold buys
     el['store-body'].querySelectorAll('[data-shop]').forEach((b) => b.addEventListener('click', () => {
       const i = +b.dataset.shop; const it = G.getShop().items[i];
@@ -599,7 +623,6 @@
     }));
     // ship buy / switch / blueprint-hunt
     el['store-body'].querySelectorAll('[data-ship-buy]').forEach((b) => b.addEventListener('click', () => openShipBuy(b.dataset.shipBuy)));
-    el['store-body'].querySelectorAll('[data-ship-money]').forEach((b) => b.addEventListener('click', () => openShipMoney(b.dataset.shipMoney)));
     el['store-body'].querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
     }));
@@ -610,38 +633,24 @@
     // hangar segment tabs (My Ship / store categories)
     wireHangarTabs(el['store-body']);
   }
-  // confirm sheet for a REAL-MONEY ship unlock (alternate to the gold/blueprint path)
-  function openShipMoney(key) {
-    const ship = C.SHIP_BY_KEY[key];
-    const USD = { interceptor:5, cruiser:10, heavycruiser:20, destroyer:40, battleship:75, dreadnought:150, carrier:300, supercarrier:600, titan:1000 };
-    const price = USD[key] || 0;
-    const sheet = showSheet(`<div class="sheet-head">Unlock ${ship.name}</div><div class="sheet-body">
-      <p>Add the <b>${ship.name}</b> straight to your fleet — no blueprint hunt, no kill grind. Skip the grind and fly it now.</p>
-      <div class="buy-price">$${price}.00</div>
-      <div class="ip-stat"><span class="ip-sname">Hardpoints</span><span class="v">⚔ ${ship.weapons} · ⊕ ${ship.ammo} · ⛨ ${ship.hull}${ship.drones?` · ◎ ${ship.drones}`:''}</span></div>
-      <p class="buy-fine">Prototype build — payment is simulated. No real charge is made.</p>
-      <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
-        <button class="btn money" data-ok>Buy $${price}</button></div></div>`);
-    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
-    const ok = sheet.querySelector('[data-ok]');
-    if (ok) ok.addEventListener('click', () => {
-      G.state.ownedShips[key] = true;
-      G.state.purchases['ship_' + key] = true;
-      if (G.state.shipKills[key] == null) G.state.shipKills[key] = 0;
-      G.save();
-      closeSheet(); toast('Unlocked ' + ship.name + '!', '#caa033'); renderStore();
-    });
-  }
   // confirm sheet for a gold ship purchase
   function openShipBuy(key) {
     const ship = C.SHIP_BY_KEY[key], st = G.shipBuyState(key);
     const afford = st.affordable;
+    let priceRows;
+    if (st.resPrice) {
+      const res = G.getResources();
+      priceRows = `<div class="ip-stat"><span class="ip-sname">Cost</span><span class="v">${resCostChips(st.resPrice)}</span></div>
+        <div class="ip-stat"><span class="ip-sname">Your resources</span><span class="v">${GM.RES_KEYS.filter((k)=>st.resPrice[k]).map((k)=>`<span style="color:${GM.RES[k].color}">${GM.RES[k].glyph} ${G.formatNum(res[k]||0)}</span>`).join(' ')}</span></div>`;
+    } else {
+      priceRows = `<div class="ip-stat"><span class="ip-sname">Price</span><span class="v" style="color:${afford?'var(--gold)':'var(--bad)'}"><span class="coin">$</span> ${G.formatNum(ship.price)}</span></div>
+        <div class="ip-stat"><span class="ip-sname">Your gold</span><span class="v">${G.formatNum(G.state.gold)}</span></div>`;
+    }
     const sheet = showSheet(`<div class="sheet-head">Acquire ${ship.name}</div><div class="sheet-body">
       <p style="margin-bottom:8px">${ship.desc}</p>
       <div class="ip-stat"><span class="ip-sname">Hardpoints</span><span class="v">⚔ ${ship.weapons} · ⊕ ${ship.ammo} · ⛨ ${ship.hull}${ship.drones?` · ◎ ${ship.drones}`:''}</span></div>
-      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v" style="color:${afford?'var(--gold)':'var(--bad)'}"><span class="coin">$</span> ${G.formatNum(ship.price)}</span></div>
-      <div class="ip-stat"><span class="ip-sname">Your gold</span><span class="v">${G.formatNum(G.state.gold)}</span></div>
-      ${afford?'':'<p style="font-size:11px;color:var(--bad);margin-top:6px">Not enough gold yet.</p>'}
+      ${priceRows}
+      ${afford?'':`<p style="font-size:11px;color:var(--bad);margin-top:6px">Not enough ${st.resPrice?'Galaxy Resources':'gold'} yet.</p>`}
       <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
         <button class="btn gold" data-ok ${afford?'':'disabled'}>Buy</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
@@ -649,31 +658,9 @@
     if (ok) ok.addEventListener('click', () => {
       const res = G.buyShip(key);
       if (res.ok) { closeSheet(); toast('Acquired ' + ship.name + '!', '#5bc06b'); renderStore(); }
-      else { toast(res.reason === 'gold' ? 'Not enough gold' : 'Locked', '#e23b4e'); }
+      else { toast(res.reason === 'resources' ? 'Not enough Galaxy Resources' : res.reason === 'gold' ? 'Not enough gold' : 'Locked', '#e23b4e'); }
     });
   }
-  function storeCard(ico, name, desc, price, owned, sku) {
-    sku = sku || ('speed' + (name.match(/(\d+)/) ? name.match(/(\d+)/)[1] : ''));
-    return `<div class="store-card"><div class="sc-ico">${ico}</div>
-      <div class="sc-main"><div class="sc-name">${name}</div><div class="sc-desc">${desc}</div></div>
-      ${owned ? '<button class="buy-btn owned">Owned</button>' : `<button class="buy-btn" data-buy="${sku}">${price}</button>`}</div>`;
-  }
-
-  // purchase confirm sheet
-  function openPurchase(kind, tier) {
-    const price = tier.priceLabel, name = kind === 'speed' ? `${tier.label} Game Speed` : tier.name;
-    const sheet = showSheet(`<div class="sheet-head">Confirm Purchase</div><div class="sheet-body">
-      <p>Unlock <b>${name}</b> for <b style="color:var(--gold)">${price}</b>?</p>
-      <p style="font-size:11px;color:var(--muted-2)">Demo build — this is simulated and your card will not be charged.</p>
-      <div class="sheet-actions"><button class="btn" data-x>Cancel</button><button class="btn gold" data-ok>Buy ${price}</button></div></div>`);
-    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
-    sheet.querySelector('[data-ok]').addEventListener('click', () => {
-      G.purchase(tier.sku);
-      if (kind === 'speed') { G.setGameSpeed(tier.mult); buildSpeedRow(); }
-      closeSheet(); toast(`Unlocked ${name}!`, '#5bc06b'); refreshAll();
-    });
-  }
-
   // ==========================================================================
   // LEADERBOARD
   // ==========================================================================
@@ -766,26 +753,92 @@
   function renderSkills() {
     const sp = G.state.skillPoints || 0;
     el['skills-sub'].textContent = sp + ' pts';
-    let html = `<div class="skill-top"><span class="pts">Skill Points: <b>${sp}</b></span><button class="reset" id="sk-reset">Reset</button></div>`;
-    C.SKILLS.branches.forEach((br) => {
-      const spent = G.branchSpent(br.key);
-      html += `<div class="branch"><div class="branch-h"><span class="bdot" style="background:${br.color}"></span>${br.name}<span class="bspent">${spent} pts spent</span></div>`;
-      C.SKILLS.nodes.filter((n) => n.br === br.key).forEach((n) => {
-        const rank = G.skillRank(n.id), met = G.skillReqMet(n), able = G.canInvest(n), maxed = rank >= n.max;
-        let pips = ''; for (let i = 0; i < n.max; i++) pips += `<div class="sn-pip ${i < rank ? 'on' : ''}"></div>`;
-        let reqTxt = '';
-        if (!met) { if (n.reqBranch != null && spent < n.reqBranch) reqTxt = `Requires ${n.reqBranch} pts in ${br.name}`; else if (n.reqNode) reqTxt = `Requires ${C.SKILLS.nodes.find(x=>x.id===n.reqNode.id).name} ${n.reqNode.rank}`; }
-        const btn = maxed ? `<button class="sn-buy maxed" disabled>MAX</button>` : `<button class="sn-buy ${able?'able':''}" data-sk="${n.id}" ${able?'':'disabled'}>+</button>`;
-        html += `<div class="skill-node ${met?'':'locked'} ${n.cap?'cap':''}" style="border-left-color:${br.color}">
-          <div class="sn-main"><div class="sn-name">${n.name}${n.cap?'<span class="capm">CAPSTONE</span>':''}</div>
-            <div class="sn-desc">${n.desc} · ${rank}/${n.max}${n.cost>1?' · '+n.cost+' pts':''}</div>
-            ${reqTxt?`<div class="sn-req">${reqTxt}</div>`:''}
-            <div class="sn-pips">${pips}</div></div>${btn}</div>`;
-      });
+    const branches = C.SKILLS.branches;
+    if (!branches.find((b) => b.key === skillBranch)) skillBranch = branches[0].key;
+    const br = branches.find((b) => b.key === skillBranch);
+    const spent = G.branchSpent(br.key);
+
+    let html = `<div class="skill-top"><span class="pts">Skill Points <b>${sp}</b></span><button class="reset" id="sk-reset">\u21ba Reset</button></div>`;
+
+    // ---- branch selector (segmented) ----------------------------------------
+    html += '<div class="skill-tabs">';
+    branches.forEach((b) => {
+      const investable = C.SKILLS.nodes.some((n) => n.br === b.key && G.canInvest(n));
+      html += `<button class="sk-tab ${b.key===skillBranch?'on':''}" data-br="${b.key}" style="--bc:${b.color}">
+        <span class="skt-name">${b.name}</span><span class="skt-sub">${G.branchSpent(b.key)} pts</span>
+        ${investable?'<span class="skt-dot"></span>':''}</button>`;
+    });
+    html += '</div>';
+
+    // ---- active-branch progress --------------------------------------------
+    const caps = C.SKILLS.nodes.filter((n) => n.br === br.key && n.cap);
+    const capsUnlocked = caps.filter((n) => G.skillReqMet(n)).length;
+    html += `<div class="sk-prog" style="--bc:${br.color}">
+      <div class="skp-row"><span class="skp-name">${br.name}</span><span class="skp-meta">${spent} invested \u00b7 ${capsUnlocked}/${caps.length} capstones</span></div>
+      <div class="skp-bar"><div class="skp-fill" style="width:${caps.length?Math.min(100,capsUnlocked/caps.length*100):0}%"></div></div></div>`;
+
+    // ---- group nodes into tiers (by reqBranch) ------------------------------
+    const tiers = [], byReq = {};
+    C.SKILLS.nodes.filter((n) => n.br === br.key).forEach((n) => {
+      const r = n.reqBranch || 0;
+      if (!byReq[r]) { byReq[r] = { req: r, cost: n.cost, nodes: [] }; tiers.push(byReq[r]); }
+      byReq[r].nodes.push(n);
+    });
+    tiers.sort((a, b2) => a.req - b2.req);
+
+    // Only surface tiers that are UNLOCKED, plus the single next-unlockable one.
+    let shownNext = false, hiddenTiers = 0;
+    tiers.forEach((tier, idx) => {
+      const unlocked = spent >= tier.req;
+      const isNext = !unlocked && !shownNext;
+      if (!unlocked && !isNext) { hiddenTiers++; return; }
+      if (isNext) shownNext = true;
+      const tnum = idx + 1;
+      const investable = tier.nodes.some((n) => G.canInvest(n));
+      const allMax = tier.nodes.every((n) => G.skillRank(n.id) >= n.max);
+      const isCap = tier.nodes.some((n) => n.cap);
+      const okey = br.key + ':' + tier.req;
+      let open = skillOpen[okey]; if (open == null) open = unlocked && investable;
+      let status, scls;
+      if (allMax) { status = '\u2713 Maxed'; scls = 'max'; }
+      else if (isNext) { status = `\u25cb ${tier.req - spent} more pts`; scls = 'lock'; }
+      else if (investable) { status = 'Points available'; scls = 'avail'; }
+      else { status = 'Owned'; scls = ''; }
+      const ranks = tier.nodes.reduce((a, n) => a + G.skillRank(n.id), 0);
+      const maxR = tier.nodes.reduce((a, n) => a + n.max, 0);
+      html += `<div class="sk-tier ${open&&!isNext?'open':''} ${isNext?'next':''} ${isCap?'iscap':''}" data-tk="${okey}" style="--bc:${br.color}">
+        <button class="skt-head" data-acc="${okey}" ${isNext?'disabled':''}>
+          <span class="skt-hl"><span class="skt-no">${isCap?'\u2605':'T'+tnum}</span>
+            <span class="skt-hn">${isCap?'Capstone Tier':'Tier '+tnum}<span class="skt-cost">${tier.cost} pt${tier.cost>1?'s':''}/rank</span></span></span>
+          <span class="skt-hr"><span class="skt-status ${scls}">${status}</span><span class="skt-ct">${ranks}/${maxR}</span><span class="skt-caret">\u203a</span></span>
+        </button>`;
+      if (open && !isNext) {
+        html += '<div class="skt-body">';
+        tier.nodes.forEach((n) => {
+          const rank = G.skillRank(n.id), able = G.canInvest(n), maxed = rank >= n.max;
+          let pips = ''; for (let i = 0; i < n.max; i++) pips += `<div class="sn-pip ${i < rank ? 'on' : ''}"></div>`;
+          const btn = maxed ? `<button class="sn-buy maxed" disabled>MAX</button>` : `<button class="sn-buy ${able?'able':''}" data-sk="${n.id}" ${able?'':'disabled'}>+</button>`;
+          html += `<div class="skill-node ${maxed?'done':''} ${n.cap?'cap':''}" style="border-left-color:${br.color}">
+            <div class="sn-main"><div class="sn-name">${n.name}${n.cap?'<span class="capm">CAPSTONE</span>':''}</div>
+              <div class="sn-desc">${n.desc}</div>
+              <div class="sn-pips">${pips}<span class="sn-rk">${rank}/${n.max}</span></div></div>${btn}</div>`;
+        });
+        html += '</div>';
+      } else if (isNext) {
+        html += `<div class="skt-locked">Invest <b>${tier.req - spent}</b> more point${tier.req-spent>1?'s':''} in ${br.name} to unlock ${tier.nodes.length} ${isCap?'capstone ':''}skill${tier.nodes.length>1?'s':''}.</div>`;
+      }
       html += '</div>';
     });
+    if (hiddenTiers > 0) html += `<div class="sk-more">\u25be ${hiddenTiers} deeper tier${hiddenTiers>1?'s':''} reveal as you invest in ${br.name}</div>`;
+
     el['skills-body'].innerHTML = html;
     const rb = $('sk-reset'); if (rb) rb.addEventListener('click', openReset);
+    el['skills-body'].querySelectorAll('.sk-tab').forEach((b) => b.addEventListener('click', () => { skillBranch = b.dataset.br; renderSkills(); }));
+    el['skills-body'].querySelectorAll('[data-acc]').forEach((b) => b.addEventListener('click', () => {
+      const tier = b.closest('.sk-tier');
+      skillOpen[b.dataset.acc] = !(tier && tier.classList.contains('open'));
+      renderSkills();
+    }));
     el['skills-body'].querySelectorAll('[data-sk]').forEach((b) => b.addEventListener('click', () => { if (G.investSkill(b.dataset.sk)) renderSkills(); }));
   }
   function openReset() {
@@ -859,11 +912,20 @@
     if (kind === 'spawn') {
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '24px';
       t.textContent = '☠ BOSS INCOMING'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700);
+    } else if (kind === 'super') {
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff2a4a'; t.style.fontSize = '26px';
+      t.innerHTML = '⚠ SUPER BOSS<br><span style="font-size:12px;color:#ffd0d6">Premium loot · clear it for the big drops</span>';
+      el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2400);
+    } else if (kind === 'superdown') {
+      toast('⚠ SUPER BOSS DOWN — premium loot dropped!', '#ff6a78');
     } else { toast('☠ Boss down — elite loot dropped!', '#e07c12'); }
   }
+  function galaxyChanged() { if (_inited && screen === 'galaxy') renderGalaxy(); }
+  function galaxyContestToast(name, tile) { if (_inited) toast('⚔ ' + name + ' captured your ' + tile + ' — retake it!', '#e8a34a'); }
   function siegeEvent(kind, s) {
     if (!_inited) return;
     if (kind === 'start') { toast('⚔ Siege begun — clear 10 waves', '#5b9cff'); }
+    else if (kind === 'wavezone') { toast('★ Wave Zone cleared — the gauntlet resets', '#5bc06b'); }
     else if (kind === 'wave') { toast('Wave ' + s.wave + ' / ' + s.total, '#9ec5ff'); }
     else if (kind === 'boss') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '22px'; t.textContent = '☠ BOSS WAVE'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700); }
     else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(sys.rate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
@@ -897,5 +959,5 @@
     sheet.querySelector('[data-x]').addEventListener('click', () => { closeSheet(); refreshAll(); });
   }
 
-  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, onCollect, onLevelUp, onDeathReturn, showOffline, unlockToast, bossEvent, blueprintEvent, siegeEvent };
+  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, onCollect, onLevelUp, onDeathReturn, showOffline, unlockToast, bossEvent, blueprintEvent, siegeEvent, galaxyChanged, galaxyContestToast };
 })();

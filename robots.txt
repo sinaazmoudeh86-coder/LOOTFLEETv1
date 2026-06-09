@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /supabase/
+
+Sitemap: https://lootfleet.com/sitemap.xml

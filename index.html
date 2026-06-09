@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#05070d">
+<title>Loot Fleet — Idle Space ARPG</title>
+<meta name="description" content="Loot Fleet is a free idle space-ARPG. Farm infinite loot, evolve your fleet from frigate to titan carrier, and conquer a living galaxy. Play in your browser at lootfleet.com.">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Loot Fleet">
+<meta property="og:title" content="Loot Fleet — Idle Space ARPG">
+<meta property="og:description" content="Farm the galaxy, evolve your fleet, climb the leaderboard. Play free in your browser.">
+<meta property="og:url" content="https://lootfleet.com">
+<meta property="og:image" content="https://lootfleet.com/icon-512.png">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05070d; --bg-2:#0b1018; --panel:#141d2b; --panel-2:#1a2435;
+    --line:#26324a; --line-2:#37475f;
+    --gold:#f2b24b; --gold-2:#ffd07a; --cyan:#5fd1ff;
+    --text:#eaf0fa; --muted:#93a2ba; --muted-2:#647189;
+    --c-common:#9aa7b8;--c-uncommon:#46d27a;--c-rare:#4fa6ff;--c-epic:#b87bff;--c-legendary:#ffa838;--c-mythic:#ff5168;--c-ancient:#23d8c6;--c-divine:#ffd450;--c-cosmic:#ff62d2;--c-void:#9a6bff;--c-eternal:#8e9dff;--c-primordial:#ffd070;
+    --disp:'Orbitron','Rajdhani',sans-serif; --ui:'Rajdhani','Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:var(--ui); color:var(--text); background:var(--bg);
+    -webkit-font-smoothing:antialiased; line-height:1.5; overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 22px;}
+  .amber{color:var(--gold);}
+
+  /* ambient starfield + glow */
+  .space-bg{position:fixed;inset:0;z-index:-1;background:
+    radial-gradient(110% 70% at 50% -10%, #16203a 0%, #0a0f1b 45%, #05070d 100%);}
+  .space-bg::before{content:'';position:absolute;inset:0;background:
+    radial-gradient(1.6px 1.6px at 18% 24%, rgba(190,210,255,.5), transparent 60%),
+    radial-gradient(1.4px 1.4px at 72% 16%, rgba(190,210,255,.4), transparent 60%),
+    radial-gradient(1.5px 1.5px at 58% 62%, rgba(190,210,255,.35), transparent 60%),
+    radial-gradient(1.2px 1.2px at 33% 78%, rgba(190,210,255,.3), transparent 60%),
+    radial-gradient(1.3px 1.3px at 86% 70%, rgba(190,210,255,.3), transparent 60%),
+    radial-gradient(1.2px 1.2px at 8% 56%, rgba(190,210,255,.25), transparent 60%);}
+  .space-bg::after{content:'';position:absolute;left:50%;top:-10%;transform:translateX(-50%);
+    width:680px;height:680px;border-radius:50%;
+    background:radial-gradient(circle, rgba(242,178,75,.16), transparent 62%);filter:blur(6px);}
+
+  /* nav */
+  header.nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);
+    background:linear-gradient(180deg, rgba(5,7,13,.86), rgba(5,7,13,.5));
+    border-bottom:1px solid var(--line);}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:62px;}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:700;
+    letter-spacing:.14em;font-size:15px;}
+  .brand svg{width:26px;height:26px;filter:drop-shadow(0 0 8px rgba(242,178,75,.5));}
+  .nav-cta{display:flex;align-items:center;gap:18px;}
+  .nav-link{color:var(--muted);font-weight:600;font-size:14px;letter-spacing:.02em;}
+  .nav-link:hover{color:var(--text);}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--ui);font-weight:700;
+    border-radius:11px;cursor:pointer;border:1px solid transparent;letter-spacing:.03em;
+    transition:transform .12s, box-shadow .18s, filter .18s;}
+  .btn:active{transform:translateY(1px) scale(.99);}
+  .btn-primary{background:linear-gradient(180deg,var(--gold-2),var(--gold));color:#1c1206;
+    padding:11px 20px;font-size:15px;box-shadow:0 8px 26px rgba(242,178,75,.28), inset 0 1px 0 rgba(255,255,255,.4);}
+  .btn-primary:hover{filter:brightness(1.06);}
+  .btn-ghost{background:rgba(255,255,255,.04);border-color:var(--line-2);color:var(--text);
+    padding:11px 20px;font-size:15px;}
+  .btn-ghost:hover{border-color:var(--gold-2);}
+  .btn-sm{padding:9px 16px;font-size:14px;}
+
+  /* hero */
+  .hero{padding:72px 0 40px;}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--gold);
+    background:rgba(242,178,75,.08);border:1px solid rgba(242,178,75,.28);
+    padding:6px 12px;border-radius:999px;margin-bottom:20px;}
+  .eyebrow .pip{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);}
+  h1.hero-title{font-family:var(--disp);font-weight:900;line-height:1.04;letter-spacing:.01em;
+    font-size:clamp(40px,6vw,68px);margin-bottom:18px;}
+  h1.hero-title .g{background:linear-gradient(180deg,#fff,#cdd7e6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  h1.hero-title .a{color:var(--gold);text-shadow:0 0 34px rgba(242,178,75,.45);}
+  .hero-sub{font-size:18px;color:var(--muted);max-width:30em;margin-bottom:28px;}
+  .hero-actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+  .trust{margin-top:22px;display:flex;gap:22px;flex-wrap:wrap;color:var(--muted-2);font-size:13px;font-weight:600;}
+  .trust span{display:inline-flex;align-items:center;gap:7px;}
+  .trust .dot{width:6px;height:6px;border-radius:50%;background:var(--c-uncommon);box-shadow:0 0 7px var(--c-uncommon);}
+
+  /* app preview mock */
+  .device{position:relative;width:300px;max-width:100%;margin:0 auto;
+    aspect-ratio:300/600;border-radius:34px;padding:12px;
+    background:linear-gradient(155deg,#28303f,#141a25 60%,#0f141d);
+    border:1px solid #2c3445;
+    box-shadow:0 50px 110px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+    animation:float 6s ease-in-out infinite;}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  .screen{position:absolute;inset:12px;border-radius:24px;overflow:hidden;
+    background:linear-gradient(180deg,#0c1320,#070b13);display:flex;flex-direction:column;}
+  .scr-hud{padding:10px 12px 8px;background:linear-gradient(180deg,#121a28,#0e1421);border-bottom:1px solid #1d2940;}
+  .hud-row{display:flex;align-items:center;gap:8px;}
+  .hud-badge{width:34px;height:34px;border-radius:9px;background:linear-gradient(180deg,#222d40,#141b28);
+    border:1px solid #36435c;display:grid;place-items:center;font-family:var(--disp);font-weight:700;color:var(--gold);font-size:14px;}
+  .hud-pow{flex:1;text-align:center;line-height:1;}
+  .hud-pow .l{font-size:8px;letter-spacing:.22em;color:var(--gold);opacity:.8;font-weight:700;}
+  .hud-pow .v{font-family:var(--disp);font-weight:900;font-size:26px;color:var(--gold);text-shadow:0 0 18px rgba(242,178,75,.5);}
+  .hud-coin{padding:5px 9px;border-radius:8px;background:#141b27;border:1px solid #36435c;font-weight:700;font-size:11px;color:var(--text);}
+  .hud-bars{margin-top:8px;display:flex;flex-direction:column;gap:5px;}
+  .bar{height:11px;border-radius:6px;background:#0a0f18;border:1px solid #1d2940;overflow:hidden;position:relative;}
+  .bar i{position:absolute;inset:0;border-radius:6px;}
+  .bar .xp{width:62%;background:linear-gradient(90deg,#2f6fc4,#4fa6ff);}
+  .bar .hp{width:100%;background:linear-gradient(90deg,#a01f30,#ff495f);}
+  .scr-arena{flex:1;position:relative;overflow:hidden;
+    background:radial-gradient(80% 60% at 50% 40%,#11183a,#070b16 70%);}
+  .scr-arena .star{position:absolute;width:2px;height:2px;border-radius:50%;background:#cdd9ff;opacity:.6;}
+  .ship{position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);}
+  .ring{position:absolute;left:50%;top:54%;width:96px;height:96px;transform:translate(-50%,-50%);
+    border:1px solid rgba(242,178,75,.4);border-radius:50%;animation:spin 9s linear infinite;}
+  @keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+  .enemy{position:absolute;width:14px;height:14px;border-radius:4px;}
+  .float{position:absolute;font-family:var(--ui);font-weight:800;font-size:12px;color:var(--gold);text-shadow:0 1px 2px #000;}
+  .scr-nav{display:flex;background:linear-gradient(180deg,#121a27,#0b1019);border-top:1px solid #1d2940;padding:8px 0;}
+  .scr-nav span{flex:1;text-align:center;font-size:8px;font-weight:700;letter-spacing:.06em;color:#647189;text-transform:uppercase;}
+  .scr-nav span.on{color:var(--gold);}
+
+  /* rarity strip */
+  .rarity{padding:30px 0 8px;}
+  .rarity-head{text-align:center;color:var(--muted-2);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;margin-bottom:16px;}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;
+    background:rgba(255,255,255,.02);border:1px solid var(--line);font-weight:700;font-size:12.5px;letter-spacing:.02em;}
+  .chip .d{width:9px;height:9px;border-radius:3px;box-shadow:0 0 8px currentColor;}
+
+  /* sections */
+  section.block{padding:64px 0;}
+  .sec-eyebrow{text-align:center;color:var(--cyan);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px;}
+  h2.sec-title{text-align:center;font-family:var(--disp);font-weight:700;font-size:clamp(26px,3.6vw,38px);letter-spacing:.02em;margin-bottom:14px;}
+  .sec-lead{text-align:center;color:var(--muted);max-width:36em;margin:0 auto 44px;font-size:16px;}
+
+  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .feat{background:linear-gradient(180deg,#131c2b,#0e1521);border:1px solid var(--line);border-radius:16px;padding:24px;
+    transition:transform .15s, border-color .15s, box-shadow .15s;}
+  .feat:hover{transform:translateY(-3px);border-color:var(--line-2);box-shadow:0 18px 40px rgba(0,0,0,.4);}
+  .feat .ic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;margin-bottom:16px;
+    background:linear-gradient(180deg,#1d2839,#141c2a);border:1px solid var(--line-2);color:var(--gold);}
+  .feat .ic svg{width:24px;height:24px;}
+  .feat h3{font-family:var(--disp);font-size:18px;font-weight:700;margin-bottom:8px;letter-spacing:.02em;}
+  .feat p{color:var(--muted);font-size:14.5px;}
+
+  /* loop steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:s;}
+  .step{position:relative;background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:16px;padding:24px;}
+  .step::before{counter-increment:s;content:counter(s);position:absolute;top:18px;right:20px;
+    font-family:var(--disp);font-weight:900;font-size:40px;color:rgba(242,178,75,.16);line-height:1;}
+  .step h3{font-family:var(--disp);font-size:17px;font-weight:700;margin-bottom:8px;color:var(--gold);}
+  .step p{color:var(--muted);font-size:14.5px;}
+
+  /* cta band */
+  .cta-band{margin:20px auto 0;max-width:920px;text-align:center;
+    background:radial-gradient(120% 160% at 50% 0%, rgba(242,178,75,.12), transparent 62%),linear-gradient(180deg,#141d2b,#0e1521);
+    border:1px solid rgba(242,178,75,.25);border-radius:22px;padding:48px 28px;}
+  .cta-band h2{font-family:var(--disp);font-weight:900;font-size:clamp(28px,4vw,42px);margin-bottom:12px;}
+  .cta-band p{color:var(--muted);margin-bottom:26px;font-size:16px;}
+
+  footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0;color:var(--muted-2);}
+  .foot-in{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13px;}
+  .foot-links{display:flex;gap:20px;flex-wrap:wrap;}
+  .foot-links a:hover{color:var(--text);}
+
+  /* ---- brand wordmark + hero emblem ---- */
+  .brand-mark{width:30px;height:30px;object-fit:contain;flex:none;filter:drop-shadow(0 0 8px rgba(242,178,75,.45));}
+  .wm{font-family:var(--disp);font-style:italic;font-weight:900;letter-spacing:.02em;display:inline-flex;gap:.16em;}
+  .wm-l{color:var(--gold);text-shadow:0 0 14px rgba(242,178,75,.45);}
+  .wm-f{color:var(--cyan);text-shadow:0 0 14px rgba(95,209,255,.45);}
+  .hero-logo-wrap{position:relative;display:grid;place-items:center;}
+  .hero-glow{position:absolute;width:78%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle, rgba(242,178,75,.22), rgba(95,209,255,.10) 45%, transparent 68%);filter:blur(8px);}
+  .hero-logo{position:relative;width:min(480px,94%);height:auto;
+    filter:drop-shadow(0 26px 60px rgba(0,0,0,.55)) drop-shadow(0 0 34px rgba(242,178,75,.16));
+    animation:float 6s ease-in-out infinite;}
+
+  #heroCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .brand-lg .wm{font-size:25px;letter-spacing:.03em;}
+
+  .ships-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+  .ship-tile{position:relative;background:linear-gradient(180deg,#131c2b,#0e1521);border:1px solid var(--line);border-radius:14px;padding:14px 10px 12px;text-align:center;transition:transform .15s,border-color .15s,box-shadow .15s;}
+  .ship-tile:hover{transform:translateY(-4px);border-color:var(--tc);box-shadow:0 16px 34px rgba(0,0,0,.45);}
+  .ship-tile img{width:88px;height:88px;object-fit:cover;border-radius:11px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));}
+  .ship-tile .tn{font-family:var(--disp);font-weight:700;font-size:12.5px;margin-top:9px;color:var(--text);letter-spacing:.01em;}
+  .ship-tile .tt{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--tc);margin-top:3px;}
+  .ship-tile .tnum{position:absolute;top:9px;left:11px;font-family:var(--disp);font-weight:900;font-size:13px;color:var(--tc);opacity:.55;}
+  @media(max-width:680px){.ships-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(min-width:681px) and (max-width:980px){.ships-grid{grid-template-columns:repeat(3,1fr);}}
+
+  @media (max-width:860px){
+    .hero-grid{grid-template-columns:1fr;gap:36px;}
+    .hero{padding:48px 0 20px;text-align:center;}
+    .eyebrow{margin-inline:auto;}
+    .hero-sub{margin-inline:auto;}
+    .hero-actions,.trust{justify-content:center;}
+    .features,.steps{grid-template-columns:1fr;}
+    .nav-link{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="space-bg"></div>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand brand-lg" href="#top">
+      <span class="wm"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
+    </a>
+    <div class="nav-cta">
+      <a class="nav-link" href="#features">Features</a>
+      <a class="nav-link" href="#how">How it works</a>
+      <a class="btn btn-primary btn-sm" href="game.html">Play Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow"><span class="pip"></span>Free · Browser · No download</span>
+        <h1 class="hero-title"><span class="g">Farm the galaxy.</span><br><span class="a">Build the fleet.</span></h1>
+        <p class="hero-sub">An idle space-ARPG where the loot never stops. Auto-battle through endless zones, chase 11 tiers of gear, and evolve a single frigate into a titan carrier that conquers a living galaxy — even while you're away.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="game.html">▸ Play Now</a>
+          <a class="btn btn-ghost" href="game.html">Sign in</a>
+        </div>
+        <div class="trust">
+          <span><span class="dot"></span>Saves to your account</span>
+          <span><span class="dot"></span>Plays offline</span>
+          <span><span class="dot"></span>Idle &amp; AFK rewards</span>
+        </div>
+      </div>
+
+      <!-- animated game preview (phone) -->
+      <div class="device" aria-hidden="true">
+        <div class="screen">
+          <div class="scr-hud">
+            <div class="hud-row">
+              <div class="hud-badge">28</div>
+              <div class="hud-pow"><div class="l">⚡ HERO POWER</div><div class="v" id="heroPow">1.57K</div></div>
+              <div class="hud-coin">◎ 10K</div>
+            </div>
+            <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+          </div>
+          <div class="scr-arena"><canvas id="heroCanvas"></canvas></div>
+          <div class="scr-nav"><span class="on">Battle</span><span>Galaxy</span><span>Loot</span><span>Hangar</span><span>Rank</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RARITY STRIP -->
+  <section class="rarity">
+    <div class="wrap">
+      <div class="rarity-head">Eleven rarity tiers — from Common to Primordial</div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </section>
+
+  <!-- SHIP CLASSES -->
+  <section class="block" id="ships" style="padding-top:40px;">
+    <div class="wrap">
+      <div class="sec-eyebrow">Command the fleet</div>
+      <h2 class="sec-title">Ten ship classes to master</h2>
+      <p class="sec-lead">Evolve from a scrappy Frigate to a galaxy-dominating Titan Carrier — every hull adds weapons, plating, and drone bays.</p>
+      <div class="ships-grid" id="shipsGrid"></div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="block" id="features">
+    <div class="wrap">
+      <div class="sec-eyebrow">Why you'll stay</div>
+      <h2 class="sec-title">A loot loop that never lets go</h2>
+      <p class="sec-lead">Every kill can drop an upgrade. Every upgrade pushes you a zone deeper. Every zone drops something rarer.</p>
+      <div class="features">
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.3L18 20l-6-3-6 3 1.5-6.8L3 8.9 9 8z"/></svg></div>
+          <h3>Infinite Loot</h3>
+          <p>Procedural gear across 11 glowing rarities and six slots, with rare life-steal and multi-shot rolls. The chase scales forever.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l7 4v6c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="M12 7v8M8.5 11h7"/></svg></div>
+          <h3>Evolve Your Fleet</h3>
+          <p>Earn blueprints from zone bosses and grow from a nimble frigate to a drone-launching titan carrier — ten hulls, each with its own fit.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
+          <h3>Conquer the Galaxy</h3>
+          <p>Warp an infinite hex map, siege systems in 10-wave battles, and hold them for hourly fuel, iron, and plasma.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg></div>
+          <h3>Idle &amp; AFK</h3>
+          <p>Auto-pilot does the fighting. Close the tab and your operator keeps farming kills, loot, and XP — collect the haul when you return.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+          <h3>Skill Trees</h3>
+          <p>Spend every level across three deep branches — Offense, Defense, Tactics — with capstones that reshape your build.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M6 6H3v2a3 3 0 0 0 3 3M18 6h3v2a3 3 0 0 1-3 3"/></svg></div>
+          <h3>Weekly Heats</h3>
+          <p>Every account joins a weekly leaderboard heat. Climb the ranks against operators who started the same week as you.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="block" id="how">
+    <div class="wrap">
+      <div class="sec-eyebrow">The core loop</div>
+      <h2 class="sec-title">Drop in, gear up, push deeper</h2>
+      <div class="steps">
+        <div class="step"><h3>Auto-battle</h3><p>Deploy to a zone and your fleet fights on its own. Tune speed up to 10× and let the kills — and loot — pour in.</p></div>
+        <div class="step"><h3>Equip the best</h3><p>Auto-equip upgrades, auto-sell the junk, and watch your Hero Power climb. Bigger numbers, deeper zones.</p></div>
+        <div class="step"><h3>Push the frontier</h3><p>Beat bosses for blueprints, warp to new systems, and chase the rarities that only the deepest zones can drop.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="block" style="padding-top:8px;">
+    <div class="wrap">
+      <div class="cta-band">
+        <h2>Your fleet is waiting.</h2>
+        <p>Create a free account and your progress follows you to every device. Or jump in as a guest — no signup required.</p>
+        <div class="hero-actions" style="justify-content:center;">
+          <a class="btn btn-primary" href="game.html">▸ Launch Loot Fleet</a>
+          <a class="btn btn-ghost" href="game.html">Continue as guest</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <a class="brand" href="#top" style="font-size:13px;">
+      <img class="brand-mark" src="logo.png" alt="" style="width:24px;height:24px;">
+      <span class="wm" style="font-size:13px;"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
+    </a>
+    <div class="foot-links">
+      <a href="game.html">Play</a>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+    </div>
+    <div>© <span id="yr"></span> Loot Fleet · lootfleet.com</div>
+  </div>
+</footer>
+
+<script>
+  // rarity chips
+  (function(){
+    const R=[['Common','--c-common'],['Uncommon','--c-uncommon'],['Rare','--c-rare'],['Epic','--c-epic'],['Legendary','--c-legendary'],['Mythic','--c-mythic'],['Ancient','--c-ancient'],['Divine','--c-divine'],['Cosmic','--c-cosmic'],['Void','--c-void'],['Eternal','--c-eternal'],['Primordial','--c-primordial']];
+    const root=getComputedStyle(document.documentElement);
+    const el=document.getElementById('chips');
+    el.innerHTML=R.map(([n,v])=>{const c=root.getPropertyValue(v).trim();return '<span class="chip" style="color:'+c+'"><span class="d" style="background:'+c+'"></span>'+n+'</span>';}).join('');
+    const SHP=[['frigate','Frigate','#7ed957'],['interceptor','Interceptor','#4db8ff'],['cruiser','Cruiser','#36d6c6'],['heavycruiser','Heavy Cruiser','#a06bff'],['destroyer','Destroyer','#ffc23c'],['battleship','Battleship','#ff9a3c'],['dreadnought','Dreadnought','#ff5168'],['carrier','Carrier','#e06bff'],['supercarrier','Super Carrier','#c479ff'],['titan','Titan Carrier','#5fb0ff']];
+    const sg=document.getElementById('shipsGrid');
+    if(sg) sg.innerHTML=SHP.map((s,i)=>'<div class="ship-tile" style="--tc:'+s[2]+'"><span class="tnum">'+(i+1)+'</span><img src="ships/ship-'+s[0]+'.png" alt="'+s[1]+'"><div class="tn">'+s[1]+'</div><div class="tt">Tier '+(i+1)+'</div></div>').join('');
+    document.getElementById('yr').textContent=new Date().getFullYear();
+  })();
+
+  // animated game preview on the phone canvas
+  (function(){
+    const cv=document.getElementById('heroCanvas'); if(!cv) return;
+    const ctx=cv.getContext('2d'); let W=0,H=0; const dpr=Math.min(2,window.devicePixelRatio||1);
+    function size(){ const r=cv.getBoundingClientRect(); if(!r.width) return; W=r.width;H=r.height; cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    size(); window.addEventListener('resize',size);
+    const stars=[...Array(42)].map(()=>({x:Math.random(),y:Math.random(),s:Math.random()*1.4+.3,sp:Math.random()*0.5+0.15}));
+    const COLS=['#46d27a','#b87bff','#4fa6ff','#ff5168','#23d8c6'];
+    const enemies=[],bullets=[],parts=[],floats=[]; let t=0,fire=0,pow=1570; const pl={x:0,y:0};
+    function num(n){ if(n<1000)return n|0; const u=['','K','M','B'];let i=0,v=n;while(v>=1000&&i<3){v/=1000;i++;}return (v>=100?v.toFixed(0):v.toFixed(1))+u[i]; }
+    function spawn(){ enemies.push({x:20+Math.random()*(W-40),y:-14,r:8+Math.random()*5,hp:2,col:COLS[Math.random()*COLS.length|0],flash:0}); }
+    function nearest(){ let b=null,bd=1e9; for(const e of enemies){const d=(e.x-pl.x)**2+(e.y-pl.y)**2; if(d<bd){bd=d;b=e;}} return b; }
+    let last=performance.now();
+    function loop(now){
+      if(!W){ size(); }
+      const dt=Math.min(.05,(now-last)/1000); last=now; t+=dt;
+      pl.x=W/2; pl.y=H*0.72;
+      ctx.clearRect(0,0,W,H);
+      const g=ctx.createRadialGradient(W/2,H*.4,8,W/2,H*.5,Math.max(W,H)*.85);
+      g.addColorStop(0,'#121a3c'); g.addColorStop(1,'#070b16'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+      for(const s of stars){ s.y+=s.sp*dt; if(s.y>1)s.y=0; ctx.globalAlpha=.45+.45*Math.sin(t*2+s.x*9); ctx.fillStyle='#cdd9ff'; ctx.fillRect(s.x*W,s.y*H,s.s,s.s);} ctx.globalAlpha=1;
+      if(enemies.length<6 && Math.random()<dt*2.4) spawn();
+      for(const e of enemies){ const dx=pl.x-e.x,dy=pl.y-e.y,d=Math.hypot(dx,dy)||1; e.x+=dx/d*20*dt; e.y+=dy/d*20*dt; if(e.flash>0)e.flash-=dt*4;
+        ctx.save(); ctx.translate(e.x,e.y); ctx.shadowColor=e.col; ctx.shadowBlur=8; ctx.fillStyle=e.flash>0?'#fff':e.col;
+        ctx.beginPath(); ctx.arc(0,0,e.r,0,7); ctx.fill(); ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(-e.r*.3,-e.r*.3,e.r*.35,0,7); ctx.fill(); ctx.restore(); }
+      fire-=dt; if(fire<=0){ const tg=nearest(); if(tg){ const a=Math.atan2(tg.y-pl.y,tg.x-pl.x); bullets.push({x:pl.x,y:pl.y-12,vx:Math.cos(a)*330,vy:Math.sin(a)*330}); fire=0.2; } }
+      for(const b of bullets){ b.x+=b.vx*dt; b.y+=b.vy*dt; ctx.fillStyle='#ffd27a'; ctx.shadowColor='#ffb43c'; ctx.shadowBlur=6; ctx.beginPath(); ctx.arc(b.x,b.y,2.3,0,7); ctx.fill(); ctx.shadowBlur=0;
+        for(const e of enemies){ if(!e.dead && Math.hypot(e.x-b.x,e.y-b.y)<e.r+2){ b.dead=true; e.flash=1; e.hp--;
+          const crit=Math.random()<.28, dmg=(crit?9000:2600)+Math.random()*8000;
+          floats.push({x:e.x,y:e.y-e.r,txt:(crit?'CRIT ':'')+num(dmg),col:crit?'#5fd1ff':'#ffd27a',life:1,crit});
+          if(e.hp<=0){ e.dead=true; pow+=dmg*0.5;
+            for(let i=0;i<11;i++){const a=Math.random()*7,sp=40+Math.random()*130; parts.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.6,max:.6,col:e.col,r:1.4+Math.random()*2});}
+            if(Math.random()<.55) parts.push({loot:true,x:e.x,y:e.y,vx:0,vy:-18,life:1.3,max:1.3,col:'#ffd450',r:4});
+          } break; } } }
+      for(const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; if(!p.loot){p.vx*=.9;p.vy*=.9;} p.life-=dt; ctx.globalAlpha=Math.max(0,p.life/p.max);
+        if(p.loot){ctx.shadowColor=p.col;ctx.shadowBlur=10;} ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=1; }
+      for(const f of floats){ f.y-=34*dt; f.life-=dt; ctx.globalAlpha=Math.max(0,f.life); ctx.font=(f.crit?'800 13':'700 11')+'px Rajdhani,sans-serif'; ctx.textAlign='center'; ctx.lineWidth=2.5; ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.strokeText(f.txt,f.x,f.y); ctx.fillStyle=f.col; ctx.fillText(f.txt,f.x,f.y); ctx.globalAlpha=1; }
+      ctx.save(); ctx.translate(pl.x,pl.y);
+      ctx.strokeStyle='rgba(242,178,75,.32)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(0,0,30+Math.sin(t*3)*2,0,7); ctx.stroke();
+      ctx.fillStyle='rgba(255,180,60,.9)'; ctx.shadowColor='#ffae3c'; ctx.shadowBlur=8; const fl=5+Math.sin(t*30)*3; ctx.beginPath(); ctx.moveTo(-4,9); ctx.lineTo(0,9+fl); ctx.lineTo(4,9); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+      const hg=ctx.createLinearGradient(-9,0,9,0); hg.addColorStop(0,'#b23048'); hg.addColorStop(.5,'#e3553f'); hg.addColorStop(1,'#ff7a5c');
+      ctx.fillStyle=hg; ctx.strokeStyle='#5a1620'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,-14); ctx.quadraticCurveTo(9,-2,8,9); ctx.quadraticCurveTo(0,12,-8,9); ctx.quadraticCurveTo(-9,-2,0,-14); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#bfe6ff'; ctx.beginPath(); ctx.ellipse(0,-3,3,4,0,0,7); ctx.fill(); ctx.restore();
+      for(let i=enemies.length-1;i>=0;i--) if(enemies[i].dead||enemies[i].y>H+20) enemies.splice(i,1);
+      for(let i=bullets.length-1;i>=0;i--){const b=bullets[i]; if(b.dead||b.x<-10||b.x>W+10||b.y<-10||b.y>H+10) bullets.splice(i,1);}
+      for(let i=parts.length-1;i>=0;i--) if(parts[i].life<=0) parts.splice(i,1);
+      for(let i=floats.length-1;i>=0;i--) if(floats[i].life<=0) floats.splice(i,1);
+      const pe=document.getElementById('heroPow'); if(pe) pe.textContent=num(pow);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "Loot Fleet — Idle Space ARPG",
+  "short_name": "Loot Fleet",
+  "description": "Farm the galaxy, evolve your fleet, and climb the leaderboard. An idle space-ARPG.",
+  "start_url": "game.html",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05070d",
+  "theme_color": "#0b1018",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

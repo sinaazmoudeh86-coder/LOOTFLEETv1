@@ -1,0 +1,119 @@
+/* =============================================================================
+   web.css — hostable web-app shell
+   Removes the phone-mockup bezel and turns the build into a real responsive
+   site: full-bleed on mobile (with safe-area insets), a centered app column on
+   desktop. Loaded LAST so it wins over style.css / theme.css. Also repurposes
+   the fake status bar into a real top app bar with the signed-in account.
+   ============================================================================= */
+
+html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:none; }
+#stage{ padding:0; }
+#notch{ display:none !important; }
+
+/* the old #phone bezel becomes the app shell */
+#phone{
+  width:100vw; height:100vh; height:100dvh;
+  max-width:none; max-height:none;
+  background:none; border:none; border-radius:0; padding:0;
+  box-shadow:none; transform:none !important;
+}
+#app{
+  position:absolute; inset:0; width:100%; height:100%;
+  border-radius:inherit; overflow:hidden;
+}
+
+/* desktop & tablets: present as a centered, framed app column */
+@media (min-width:560px){
+  #stage{ padding:20px; }
+  #phone{
+    width:min(440px, 96vw);
+    height:min(940px, 94vh);
+    border-radius:30px; overflow:hidden;
+    border:1px solid #2c3445;
+    box-shadow:0 44px 100px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+}
+
+/* ---- top app bar (was the fake phone status bar) ---- */
+#statusbar{
+  height:auto; min-height:34px; flex:none;
+  padding:7px 16px;
+  padding-top:calc(7px + env(safe-area-inset-top));
+  background:linear-gradient(180deg,#0e1622,#0b1018);
+  border-bottom:1px solid var(--line);
+  color:var(--text); position:relative; z-index:7;
+}
+@media (min-width:560px){ #statusbar{ padding-top:8px; } }
+#statusbar .dots{ display:none; }            /* hide fake 5G / signal */
+#clock{ color:var(--muted-2); font-weight:700; font-size:11.5px; letter-spacing:.05em; }
+
+.acct-btn{
+  display:inline-flex; align-items:center; gap:7px;
+  background:#141d2b; border:1px solid var(--line-2); color:var(--text);
+  font-family:var(--font-ui); font-weight:700; font-size:11.5px;
+  border-radius:9px; padding:4px 10px; cursor:pointer; letter-spacing:.02em;
+  transition:transform .1s, border-color .12s, box-shadow .12s;
+}
+.acct-btn:hover{ border-color:var(--gold-dim); }
+.acct-btn:active{ transform:scale(.96); }
+.acct-btn .dot{ width:6px; height:6px; border-radius:50%; background:var(--good); box-shadow:0 0 7px var(--good); flex:none; }
+.acct-btn .who{ color:var(--gold); max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.acct-btn .pw{ color:var(--muted-2); font-size:13px; line-height:1; }
+
+/* safe-area breathing room for the bottom nav on notched phones */
+#nav{ padding-bottom:env(safe-area-inset-bottom); height:calc(60px + env(safe-area-inset-bottom)); }
+
+/* login gate fills the real viewport too */
+#login{ border-radius:inherit; }
+
+/* ---- branding: sci-fi display font + real logo ---- */
+:root{ --font-display:'Orbitron','Rajdhani',sans-serif; }
+.scr-title,.lg-title,.lvl-badge .num,.power-block .pb-val,.z-num,.lb-rank,
+.sheet-head,.skill-top .pts,.ship-name,.sec-head h3,.store-sec h3,.death-title,
+.branch-h,.lvl-toast{ font-family:var(--font-display); }
+/* tighten Orbitron (it's wider than Cinzel) so big numbers still fit */
+.power-block .pb-val{ font-size:28px; letter-spacing:-.01em; }
+.lvl-badge .num{ font-size:16px; }
+.scr-title{ font-size:14px; letter-spacing:.14em; }
+
+.lg-logo{ width:auto; height:auto; background:none; border:none; box-shadow:none; margin-bottom:6px; }
+.lg-mark{ width:min(248px,76%); height:auto; display:block; filter:drop-shadow(0 10px 34px rgba(242,178,75,.28)); }
+.lg-title{
+  font-weight:900; font-style:italic; font-size:0; line-height:0;   /* logo carries the wordmark */
+  height:0; margin:0; overflow:hidden;
+}
+.lg-tag{ margin-top:8px; }
+
+/* ---- ship art icons + real-money purchase ---- */
+.ship-ic{ overflow:hidden; }
+.ship-ic .ship-img{ width:100%; height:100%; object-fit:cover; display:block; }
+.ship-act{ display:flex; flex-direction:column; gap:6px; align-items:stretch; }
+.ship-btn.money,.btn.money{
+  background:linear-gradient(180deg,#34b465,#1d8a48) !important;
+  border:1px solid #3fc56b !important; color:#04140a !important; font-weight:800;
+  box-shadow:0 3px 12px rgba(45,160,90,.3), inset 0 1px 0 rgba(255,255,255,.25) !important;
+  white-space:nowrap;
+}
+.buy-price{ font-family:var(--font-display); font-weight:900; font-size:32px; color:var(--good);
+  text-align:center; margin:10px 0 4px; text-shadow:0 0 18px rgba(63,197,107,.35); }
+.buy-fine{ font-size:11px; color:var(--muted-2); text-align:center; margin-top:8px; }
+
+/* ---- prismatic bonus zones (every 10th / 25th / 100th) ---- */
+.z-bons{ display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.z-bon{ font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:2px 7px; border-radius:6px; white-space:nowrap; }
+.z-bon.dens{ color:#ffd07a; background:rgba(242,178,75,.12); border:1px solid rgba(242,178,75,.42); }
+.z-bon.qual{ color:#c79bff; background:rgba(155,107,255,.14); border:1px solid rgba(155,107,255,.5); }
+.zone-row.prismatic{
+  border:1.6px solid transparent !important;
+  background:
+    linear-gradient(180deg,#161f2e,#101725) padding-box,
+    linear-gradient(120deg,#ff5168,#ffd450,#46d27a,#4fa6ff,#b87bff,#ff62d2,#ff5168) border-box !important;
+  background-size:auto, 320% 100% !important;
+  animation:prismBorder 5s linear infinite;
+  box-shadow:0 0 16px rgba(150,110,255,.18) !important;
+}
+@keyframes prismBorder{ to{ background-position:0 0, 320% 0; } }
+.zone-row.prismatic .z-num{ color:#e6c6ff; }
+
+
+

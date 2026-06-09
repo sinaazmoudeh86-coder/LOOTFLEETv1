@@ -15,7 +15,7 @@
   let screen = 'battle', sortMode = 'power', lbTab = 'heat', storeCat = 'ships', skillBranch = 'offense';
   const skillOpen = {}; // skill-tree accordion open-state, keyed by branch:tier
   let _galaxyTimer = null; // re-render galaxy while a region cooldown ticks
-  let _msTaps = 0;          // SECRET Mothership unlock: ship-portrait tap counter
+  let _msTaps = 0;          // SECRET Mothership unlock: CONSECUTIVE "My Ship" click streak
 
   const ZONE_NAMES = ['The Backyard','Main Street','Riverside Mall','Gas Station','Highway Pileup','Quarantine Zone','Subway Tunnels','Research Lab','Military Depot','Containment Site'];
   function zoneName(d) { return d <= ZONE_NAMES.length ? ZONE_NAMES[d-1] : (d <= 16 ? 'Outer Sector ' + d : 'Hive Sector ' + d); }
@@ -59,7 +59,13 @@
       toast('⏏ Bailed to Hangar — combat ended', '#5b9cff');
     });
     const zbBtn = $('zone-banner'); if (zbBtn) zbBtn.addEventListener('click', () => showScreen('zones'));
-    // SECRET: click "My Ship" (the hangar Ship dock button) 20× to unlock the Mothership.
+    // SECRET: click "My Ship" 20 times IN A ROW to unlock the Mothership.
+    // Any click that isn't a "My Ship" trigger breaks the streak (capture phase
+    // runs before the trigger's own handler, so a real My Ship click re-counts).
+    document.addEventListener('click', (e) => {
+      const onMyShip = e.target.closest && e.target.closest('[data-hangtab="ship"], #hangar-dock .hd-btn[data-screen="hero"]');
+      if (!onMyShip && _msTaps > 0) _msTaps = 0;
+    }, true);
     document.querySelectorAll('#hangar-dock .hd-btn').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.screen === 'hero') tapMyShip();
       showScreen(b.dataset.screen);
@@ -217,7 +223,9 @@
   // ==========================================================================
   // HERO
   // ==========================================================================
-  // SECRET: click "My Ship" 20 times in the Hangar to unlock the Mothership.
+  // SECRET: click "My Ship" 20 times IN A ROW in the Hangar to unlock the
+  // Mothership. The streak resets on any other click (see the capture-phase
+  // document listener in init).
   function tapMyShip() {
     if (G.state.ownedShips && G.state.ownedShips.mothership) return; // already unlocked
     _msTaps++;
@@ -230,8 +238,8 @@
         el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2800);
         if (screen === 'hero') renderHero();
       }
-    } else if (_msTaps >= 5) {
-      toast('✦ ' + left + ' more…', '#c77bff'); // whisper as the secret nears
+    } else if (_msTaps >= 8) {
+      toast('✦ ' + left + ' more…', '#c77bff'); // whisper only once the streak is well underway
     }
   }
   function renderHero() {

@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v80';
+const CACHE = 'lootfleet-v85';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
@@ -15,7 +15,7 @@ const CORE = [
   'css/style.css', 'css/theme.css', 'css/web.css',
   'js/config.js', 'js/items.js', 'js/entities.js', 'js/render.js',
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.public.js',
-  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments.js', 'js/game.js', 'js/ui.js', 'js/auth.js',
+  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments.js', 'js/game.js', 'js/ui.js', 'js/coach.js', 'js/auth.js',
   'js/showcase.js',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
   'ships/ship-heavycruiser.png', 'ships/ship-destroyer.png', 'ships/ship-battleship.png',
@@ -25,7 +25,9 @@ const CORE = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()).catch(() => {}));
+  // cache:'reload' forces every precache entry to come from the NETWORK —
+  // never the HTTP cache — so a new release can't snapshot stale files.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()).catch(() => {}));
 });
 
 self.addEventListener('activate', (e) => {

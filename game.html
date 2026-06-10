@@ -26,9 +26,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=80">
-<link rel="stylesheet" href="css/theme.css?v=80">
-<link rel="stylesheet" href="css/web.css?v=80">
+<link rel="stylesheet" href="css/style.css?v=85">
+<link rel="stylesheet" href="css/theme.css?v=85">
+<link rel="stylesheet" href="css/web.css?v=85">
 </head>
 <body>
 <div id="stage">
@@ -210,27 +210,28 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config.js?v=80"></script>
-<script src="js/items.js?v=80"></script>
-<script src="js/entities.js?v=80"></script>
-<script src="js/render.js?v=80"></script>
-<script src="js/galaxy.js?v=80"></script>
-<script src="js/leaderboard.js?v=80"></script>
+<script src="js/config.js?v=85"></script>
+<script src="js/items.js?v=85"></script>
+<script src="js/entities.js?v=85"></script>
+<script src="js/render.js?v=85"></script>
+<script src="js/galaxy.js?v=85"></script>
+<script src="js/leaderboard.js?v=85"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.public.js?v=80"></script>
-<script src="js/cloud.js?v=80"></script>
-<script src="js/account.js?v=80"></script>
-<script src="js/territory.js?v=80"></script>
-<script src="js/payments.js?v=80"></script>
-<script src="js/game.js?v=80"></script>
-<script src="js/ui.js?v=80"></script>
-<script src="js/auth.js?v=80"></script>
+<script src="js/config.public.js?v=85"></script>
+<script src="js/cloud.js?v=85"></script>
+<script src="js/account.js?v=85"></script>
+<script src="js/territory.js?v=85"></script>
+<script src="js/payments.js?v=85"></script>
+<script src="js/game.js?v=85"></script>
+<script src="js/ui.js?v=85"></script>
+<script src="js/coach.js?v=85"></script>
+<script src="js/auth.js?v=85"></script>
 <script>
   (function(){
     // Boot is gated on a signed-in (or guest) session so each account loads its
     // OWN save. Returning sessions boot immediately; new logins boot via auth.js.
     let booted=false;
-    function boot(){ if(booted) return; booted=true; window.GAME.init(); if(window.ACCOUNT) window.ACCOUNT.refreshBar(); }
+    function boot(){ if(booted) return; booted=true; window.GAME.init(); if(window.ACCOUNT) window.ACCOUNT.refreshBar(); if(window.COACH) window.COACH.init(window.GAME); }
     window.__bootGame = boot;
     function tryBoot(){ if(window.__cloudPending) return; if(!window.ACCOUNT || window.ACCOUNT.current()) boot(); }
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>requestAnimationFrame(tryBoot));

@@ -1519,6 +1519,7 @@
   let _scrapT = 0;
   function lootScrapped(item) {
     if (!_inited || !item) return;
+    if (window.COACH) window.COACH.notify('bagfull');
     const now = Date.now();
     if (now - _scrapT < 1500) return;
     _scrapT = now;

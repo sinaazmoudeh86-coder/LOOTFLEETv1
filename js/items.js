@@ -69,9 +69,111 @@
       ['EOTech EXPS3', 'Trijicon ACOG', 'Aimpoint CompM5', 'Nightforce ATACR'],
     ],
   };
+  // ---------------------------------------------------------------------------
+  // WEAPON CLASSES — every primary weapon belongs to one of five classes. Each
+  // class has its own arsenal of names, a guaranteed signature benefit, and a
+  // distinct projectile visual (see render.js). Tooltips explain the benefit.
+  // ---------------------------------------------------------------------------
+  const WEAPON_CLASSES = [
+    { key: 'laser',   name: 'Pulse Laser',      glyph: '⌶', color: '#5fd1ff',
+      bonus: '+Attack Speed',
+      blurb: 'Coherent-beam energy weapon. Light has no recoil — beams cycle faster than any slug-thrower.' },
+    { key: 'gatling', name: 'Gatling Cannon',   glyph: '✢', color: '#ffd24d',
+      bonus: '+1 Multi-Shot',
+      blurb: 'Rotary kinetic cannon. The wall of tracers naturally sprays into extra targets.' },
+    { key: 'missile', name: 'Missile Rack',     glyph: '➳', color: '#ff8a5c',
+      bonus: '+20% Damage',
+      blurb: 'Self-propelled heavy ordnance. Each warhead hits far harder than an energy bolt.' },
+    { key: 'rail',    name: 'Railgun',          glyph: '⫷', color: '#b87bff',
+      bonus: '+Crit Damage',
+      blurb: 'Electromagnetic mass driver. Hypervelocity slugs turn critical hits devastating.' },
+    { key: 'plasma',  name: 'Plasma Projector', glyph: '✺', color: '#46d27a',
+      bonus: '+Life Steal',
+      blurb: 'Magnetically-bottled starfire. Ionized impacts siphon energy back to your hull.' },
+    { key: 'support', name: 'Warden Array',     glyph: '✚', color: '#7ce0a0',
+      bonus: 'Fleet Heal & Buffs',
+      blurb: 'Support emitter array. Projects a fleet-wide aura: extra Multi-Shot, hull recovery, damage reduction and weapon range. Mounts ONLY on the Aegis support hull.' },
+  ];
+  const WCLASS_BY_KEY = {}; WEAPON_CLASSES.forEach((w) => WCLASS_BY_KEY[w.key] = w);
+  // class arsenals: name pools per quality bucket (budget → mid → high → elite)
+  const WCLASS_NAMES = {
+    laser: [
+      ['VX-1 Pulse Emitter', 'Photon Sidearm', 'Glimmer Lance', 'Arc-Beam Mk I'],
+      ['Helios Beamcaster', 'Prism Lance Mk II', 'Aurora Pulse Array', 'Star Cutter'],
+      ['Solaris Beam X', 'Gamma Lance Prime', 'Spectral Cutter', 'Radiant Phase Lance'],
+      ['Nova Coherence Engine', 'Dawnbreaker Beam', 'Archlight Prime', 'Quasar Lance Omega'],
+    ],
+    gatling: [
+      ['Scrap Rotary Gun', 'Twin-Barrel Pepperbox', 'Junker Gatling', 'RT-4 Spinner'],
+      ['Vulcan Rotary Mk II', 'Hailstorm Gatling', 'Cyclone Repeater', 'Storm-6 Rotary'],
+      ['Tempest Minigun X', 'Maelstrom Rotary', 'Hurricane Suppressor', 'Vortex Chaingun'],
+      ['Galehammer Shredder', 'Omega Cyclone Array', 'Supercell Rotary', 'Tempest Engine Zero'],
+    ],
+    missile: [
+      ['Surplus Rocket Pod', 'Mule Missile Rack', 'SR-2 Launcher', 'Bottle Battery'],
+      ['Javelin Missile Rack', 'Hammerfall Pod', 'Comet Battery Mk II', 'Striker Salvo'],
+      ['Starfall Ordnance Rack', 'Meteor Storm Battery', 'Devastator Pod', 'Longbow Cruise Rack'],
+      ['Extinction Salvo Array', 'Nova Rain Skyburier', 'Apocalypse Ordnance', 'Cataclysm Omega'],
+    ],
+    rail: [
+      ['Scrap Coil Slugger', 'Gauss Pipe', 'Magnet Rifle', 'RG-1 Slinger'],
+      ['Gauss Driver Mk II', 'Ion Rail Carbine', 'Hypervel Slugcaster', 'Linear Driver-7'],
+      ['Hypervelocity Rail X', 'Quake Driver Prime', 'Penetrator Gauss', 'Stormrail Lance'],
+      ['Starpiercer Driver', 'Relativistic Omega', 'Singular Rail Prime', 'Event Horizon Driver'],
+    ],
+    plasma: [
+      ['Leaky Plasma Torch', 'Ember Projector', 'Slagcaster', 'PL-3 Spitter'],
+      ['Plasma Projector Mk II', 'Sunspot Caster', 'Fusion Lobber', 'Starfire Projector'],
+      ['Solar Flare X', 'Corona Caster Prime', 'Fusion Storm Array', 'Helion Projector'],
+      ['Starcore Annihilator', 'Heart-of-Star', 'Helion Prime Array', 'Supergiant Omega'],
+    ],
+    support: [
+      ['Field Mender Rig', 'Patchbeam Emitter', 'WD-1 Warden Coil', 'Tinker Aura Pod'],
+      ['Warden Array Mk II', 'Guardian Halo Rig', 'Aegis Lattice', 'Bulwark Emitter'],
+      ['Sanctuary Array X', 'Warden Prime Lattice', 'Bastion Halo', 'Custodian Field Rig'],
+      ['Archangel Lattice', 'Eternal Warden Array', 'Sovereign Halo Prime', 'Pantheon Field Omega'],
+    ],
+  };
+  // Resolve an item's weapon class. New drops carry `wclass`; legacy weapons
+  // (incl. old firearm-named saves) map deterministically from their id so the
+  // same item always shows — and fires — the same class.
+  function weaponClassOf(item) {
+    if (item && item.wclass && WCLASS_BY_KEY[item.wclass]) return WCLASS_BY_KEY[item.wclass];
+    const h = item ? ((item.id || 0) * 7 + (item.name ? item.name.length : 0)) : 0;
+    return WEAPON_CLASSES[h % WEAPON_CLASSES.length];
+  }
+
+  // Fleet-support aura projected by an equipped Warden Array, scaled by rarity.
+  // Read at stat-compute time (game.js); DOUBLED while flying an Aegis hull.
+  function supportAura(item) {
+    if (!item || item.slot !== 'bow') return null;
+    if (weaponClassOf(item).key !== 'support') return null;
+    const r = item.rarity || 0;
+    return {
+      multiShot: 1,                                        // extra fleet volley
+      regen: Math.round((0.4 + 0.12 * r) * 10) / 10,       // % max hull / sec
+      reduce: Math.min(30, 3 + r),                         // % damage reduction
+      rangePct: Math.round(5 + r * 1.5),                   // % weapon range
+    };
+  }
+
+  // Weighted class roll — near-even odds, with Plasma Projectors slightly rarer.
+  const WCLASS_WEIGHTS = { laser: 1, gatling: 1, missile: 1, rail: 1, plasma: 0.75, support: 1 };
+  function pickWeaponClass() {
+    const total = WEAPON_CLASSES.reduce((a, w) => a + (WCLASS_WEIGHTS[w.key] || 1), 0);
+    let roll = Math.random() * total;
+    for (const w of WEAPON_CLASSES) { roll -= (WCLASS_WEIGHTS[w.key] || 1); if (roll <= 0) return w; }
+    return WEAPON_CLASSES[0];
+  }
+
   function bucketFor(tier) { return tier <= 1 ? 0 : tier <= 3 ? 1 : tier <= 5 ? 2 : 3; }
   function pickName(slotKey, tier) {
     const buckets = NAMES[slotKey];
+    const b = buckets[Math.min(buckets.length - 1, bucketFor(tier))];
+    return b[(Math.random() * b.length) | 0];
+  }
+  function pickWeaponName(wkey, tier) {
+    const buckets = WCLASS_NAMES[wkey];
     const b = buckets[Math.min(buckets.length - 1, bucketFor(tier))];
     return b[(Math.random() * b.length) | 0];
   }
@@ -118,9 +220,27 @@
       if (Math.random() < chance) stats[sp.key] = sp.roll();
     });
 
+    // ---- WEAPON CLASS: primaries get a class, class name + signature bonus ----
+    let wclass = null, name;
+    if (slotKey === 'bow') {
+      const wc = pickWeaponClass();
+      wclass = wc.key;
+      name = pickWeaponName(wc.key, rarityIdx);
+      if (wc.key === 'laser')        stats.attackSpeed = Math.round((((stats.attackSpeed || 0)) + 2 + rarityIdx * 0.8) * 10) / 10;
+      else if (wc.key === 'gatling') stats.multiShot = (stats.multiShot || 0) + 1;
+      else if (wc.key === 'missile') { if (stats.attackDamage) stats.attackDamage = Math.round(stats.attackDamage * 1.2); }
+      else if (wc.key === 'rail')    stats.critDamage = Math.round(((stats.critDamage || 0) + 15 + rarityIdx * 3) * 10) / 10;
+      else if (wc.key === 'plasma')  stats.lifeSteal = Math.round((((stats.lifeSteal || 0)) + 1 + (rarityIdx >= 4 ? 1 : 0)) * 10) / 10;
+      // 'support' (Warden Array) carries no extra item stat — its power is the
+      // fleet aura, computed at runtime from rarity (see supportAura).
+    } else {
+      name = pickName(slotKey, rarityIdx);
+    }
+
     return {
       id: _idSeq++,
-      name: pickName(slotKey, rarityIdx),
+      name,
+      wclass,
       slot: slotKey,
       rarity: rarityIdx,
       dungeon,
@@ -134,6 +254,30 @@
   // zone-scaled flat stats (damage / health) dominate ranking, with offense and
   // specials valued in sensible, comparable units (not so heavy that a single
   // special line makes a weak item outrank a strong one).
+  // CLASS-FAIR RANKING — weapon classes are SIDE-grades by design (a missile
+  // really hits harder, a laser really cycles faster). But auto-equip and
+  // sorting rank by this power score, so if a class's signature bonus inflates
+  // it, that class crowds out every hardpoint. Strip the known class-bonus
+  // contribution from the score (new-format weapons only — legacy items never
+  // received bonuses), and credit Warden arrays for their uncounted aura.
+  function classAdjustPower(item, p) {
+    if (item.slot !== 'bow' || !item.wclass) return p;
+    const r = item.rarity || 0;
+    switch (item.wclass) {
+      case 'laser':   return p - 0.9 * (2 + 0.8 * r);                 // attackSpeed bonus
+      case 'gatling': return p - 0.8;                                  // +1 multiShot
+      case 'rail':    return p - 0.28 * (15 + 3 * r);                  // critDamage bonus
+      case 'plasma':  return p - 1.4 * (1 + (r >= 4 ? 1 : 0));         // lifeSteal bonus
+      case 'missile': {                                                // ×1.2 attackDamage
+        const ad = item.stats.attackDamage || 0;
+        const base = (C.STATS.attackDamage && C.STATS.attackDamage.base) || 14;
+        return p - (ad * (0.2 / 1.2) / base) * 2.2;
+      }
+      case 'support': return p + 2 + r;                                // fleet aura credit
+    }
+    return p;
+  }
+
   function itemPower(item) {
     let p = 0;
     for (const k in item.stats) {
@@ -152,6 +296,7 @@
         default:             p += v * 0.5;
       }
     }
+    p = classAdjustPower(item, p);
     p *= 1 + item.rarity * 0.05; // mild rarity nudge for ties
     return p;
   }
@@ -183,5 +328,5 @@
     return weights.map((w) => w / total);
   }
 
-  window.ITEMS = { generate, rollRarity, rarityChances, itemPower, compare };
+  window.ITEMS = { generate, rollRarity, rarityChances, itemPower, compare, weaponClassOf, supportAura, WEAPON_CLASSES };
 })();

@@ -36,11 +36,18 @@
     } catch (e) { return {}; }
   }
 
-  // Claim/contest a tile through the server-authoritative RPC.
-  async function claim(tileId, ownerName) {
+  // Claim/contest a tile through the server-authoritative RPC. Atomic: when
+  // several players race for the same tile, the FIRST completed claim wins and
+  // later ones reject with 'tile protected'. p_protect_minutes: 15 normal,
+  // 1440 (24 h) for citadels. Falls back to the legacy 2-arg RPC if the SQL
+  // hasn't been updated yet.
+  async function claim(tileId, ownerName, protectMinutes) {
     const cl = client(); if (!cl || !myId()) return { ok: false, reason: 'offline' };
     try {
-      const { data, error } = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName() });
+      let { data, error } = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15 });
+      if (error && /p_protect_minutes|function/i.test(error.message || '')) {
+        ({ data, error } = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName() }));
+      }
       if (error) return { ok: false, reason: error.message || 'error' };
       return { ok: true, row: data };
     } catch (e) { return { ok: false, reason: 'error' }; }

@@ -26,9 +26,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/web.css">
+<link rel="stylesheet" href="css/style.css?v=60">
+<link rel="stylesheet" href="css/theme.css?v=60">
+<link rel="stylesheet" href="css/web.css?v=60">
 </head>
 <body>
 <div id="stage">
@@ -38,8 +38,12 @@
 
       <!-- status bar -->
       <div id="statusbar">
-        <span id="clock">9:41</span>
-        <span class="dots"><i></i><i></i><i></i><i style="opacity:.4"></i><b style="margin-left:6px;font-size:11px;">5G</b></span>
+        <div class="wallet">
+          <div class="gold-chip"><span class="coin">$</span><span id="hud-gold">0</span></div>
+          <div class="res-chip" style="--rc:#5bc0ff"><span class="rg">⬢</span><span id="hud-fuel">0</span><span class="rr" id="hud-fuel-rate"></span></div>
+          <div class="res-chip" style="--rc:#d0a060"><span class="rg">◆</span><span id="hud-iron">0</span><span class="rr" id="hud-iron-rate"></span></div>
+          <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
+        </div>
       </div>
 
       <!-- HUD -->
@@ -47,10 +51,10 @@
         <div class="hud-top">
           <div class="lvl-badge"><span class="lab">LVL</span><span class="num" id="hud-level">1</span></div>
           <div class="power-block">
-            <div class="pb-label">⚡ HERO POWER</div>
+            <img id="pb-ship" src="ships/ship-frigate.png" alt="">
+            <div class="pb-label">⚡ SHIP SCORE</div>
             <div class="pb-val" id="hud-power">0</div>
           </div>
-          <div class="gold-chip"><span class="coin">$</span><span id="hud-gold">0</span></div>
         </div>
         <div class="hud-bars">
           <div class="bar-wrap"><div class="bar-fill xp" id="xp-fill" style="width:0%"></div><div class="bar-label" id="xp-label">0 / 100 XP</div></div>
@@ -104,6 +108,7 @@
           <div class="scr-head"><span class="scr-title">Hangar</span><span class="scr-sub" id="hero-sub"></span></div>
           <div class="scr-body">
             <div id="char-portrait"><canvas id="portrait-canvas"></canvas><div id="char-power">Power <b>—</b></div></div>
+            <div id="fleet-panel"></div>
             <div class="equip-grid" id="equip-grid"></div>
             <div class="stat-list" id="stat-list"></div>
           </div>
@@ -153,19 +158,19 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
           <span class="nl">Battle</span>
         </button>
+        <button class="nav-btn" data-screen="zones">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+          <span class="nl">Zone Grind</span>
+        </button>
         <button class="nav-btn" data-screen="galaxy">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg>
           <span class="nl">My Galaxy</span>
-        </button>
-        <button class="nav-btn" data-screen="zones">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
-          <span class="nl">Loot Grind</span>
         </button>
         <button class="nav-btn" data-screen="bag">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 8h12a0 0 0 0 1 0 0v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
           <span class="nl">Loot</span><span class="badge" id="bag-badge" style="display:none">0</span>
         </button>
-        <button class="nav-btn" data-screen="store">
+        <button class="nav-btn" data-screen="hero">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 9.5V20h14V9.5"/><path d="M12 20v-5c0-2 .8-3.5 0-3.5s0 1.5 0 3.5"/><path d="M9 13l3-1.6 3 1.6"/></svg>
           <span class="nl">Hangar</span>
         </button>
@@ -202,20 +207,20 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config.js"></script>
-<script src="js/items.js"></script>
-<script src="js/entities.js"></script>
-<script src="js/render.js"></script>
-<script src="js/galaxy.js"></script>
-<script src="js/leaderboard.js"></script>
+<script src="js/config.js?v=60"></script>
+<script src="js/items.js?v=60"></script>
+<script src="js/entities.js?v=60"></script>
+<script src="js/render.js?v=60"></script>
+<script src="js/galaxy.js?v=60"></script>
+<script src="js/leaderboard.js?v=60"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.public.js"></script>
-<script src="js/cloud.js"></script>
-<script src="js/account.js"></script>
-<script src="js/territory.js"></script>
-<script src="js/game.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/auth.js"></script>
+<script src="js/config.public.js?v=60"></script>
+<script src="js/cloud.js?v=60"></script>
+<script src="js/account.js?v=60"></script>
+<script src="js/territory.js?v=60"></script>
+<script src="js/game.js?v=60"></script>
+<script src="js/ui.js?v=60"></script>
+<script src="js/auth.js?v=60"></script>
 <script>
   (function(){
     // Boot is gated on a signed-in (or guest) session so each account loads its
@@ -227,9 +232,6 @@
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>requestAnimationFrame(tryBoot));
     window.addEventListener('load',()=>setTimeout(tryBoot,80));
     setTimeout(tryBoot,1500);
-    // live clock in the top app bar
-    function clock(){ const c=document.getElementById('clock'); if(c) c.textContent=new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); }
-    clock(); setInterval(clock,30000);
     // offline / installable PWA (only on a real https host)
     if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
       window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));

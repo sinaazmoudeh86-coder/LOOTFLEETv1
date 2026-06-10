@@ -30,9 +30,13 @@ create policy "territory_read" on public.territory for select using (true);
 -- Capture / contest a tile. Server-authoritative:
 --   • requires a signed-in user
 --   • owner is ALWAYS the caller's auth.uid() (cannot be spoofed)
---   • rejects a claim while the tile is in another owner's 15-min protected window
---   • on success, (re)stamps owner + a fresh 15-min protected window
-create or replace function public.claim_tile(p_tile_id text, p_owner_name text)
+--   • RACE SEMANTICS: the row lock + protected-window check make claims atomic
+--     — when several players besiege the same tile, whoever completes the
+--     capture FIRST wins; everyone else's claim is rejected until the window ends
+--   • protected window: 15 min for normal tiles, up to 24 h for citadels
+--     (p_protect_minutes is clamped server-side to 15–1440)
+drop function if exists public.claim_tile(text, text);
+create or replace function public.claim_tile(p_tile_id text, p_owner_name text, p_protect_minutes integer default 15)
 returns public.territory
 language plpgsql
 security definer
@@ -41,6 +45,7 @@ as $$
 declare
   existing public.territory;
   result   public.territory;
+  mins     integer := greatest(15, least(1440, coalesce(p_protect_minutes, 15)));
 begin
   if auth.uid() is null then
     raise exception 'not authenticated';
@@ -54,7 +59,7 @@ begin
 
   insert into public.territory (tile_id, owner_id, owner_name, captured_at, cooldown_until)
   values (p_tile_id, auth.uid(), coalesce(nullif(p_owner_name, ''), 'Operator'),
-          now(), now() + interval '15 minutes')
+          now(), now() + make_interval(mins => mins))
   on conflict (tile_id) do update
     set owner_id       = excluded.owner_id,
         owner_name     = excluded.owner_name,
@@ -66,7 +71,7 @@ begin
 end;
 $$;
 
-grant execute on function public.claim_tile(text, text) to authenticated;
+grant execute on function public.claim_tile(text, text, integer) to authenticated;
 
 -- Stream live changes to all clients (the map updates the moment anyone captures).
 do $$

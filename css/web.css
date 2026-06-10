@@ -221,5 +221,179 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 .gxf-row{ font-size:10.5px; color:var(--muted); line-height:1.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gxf-row.mine{ color:#ff9aa6; font-weight:700; }
 
+/* ===== THE GALAXY — unified hex map ===== */
+.gx-map-wrap{ position:relative; border:1px solid var(--line-2); border-radius:13px; overflow:hidden;
+  height:380px; background:#070b14; margin-bottom:9px; }
+#gx-canvas{ width:100%; height:100%; display:block; cursor:grab; touch-action:none; }
+#gx-canvas:active{ cursor:grabbing; }
+.gx-ctl{ position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:5px; }
+.gxc{ width:32px; height:32px; border-radius:9px; border:1px solid var(--line-2); cursor:pointer;
+  background:rgba(13,19,30,.88); color:var(--text); font-size:16px; font-weight:800; line-height:1;
+  display:grid; place-items:center; }
+.gxc:active{ transform:translateY(1px); }
+.gx-hud{ position:absolute; left:10px; top:9px; font-family:var(--font-display); font-size:10px;
+  font-weight:700; letter-spacing:.08em; color:#9fc2ff; background:rgba(10,15,24,.75);
+  border:1px solid var(--line-2); border-radius:99px; padding:3px 10px; pointer-events:none; }
+.gx-legend{ display:flex; flex-wrap:wrap; gap:6px 12px; font-size:10px; color:var(--muted);
+  border:1px dashed var(--line-2); border-radius:9px; padding:7px 10px; margin-bottom:11px; }
+.gxl{ display:flex; align-items:center; gap:5px; }
+.gxl i{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+
+/* hero-power pill: the ship that power belongs to */
+.power-block{ position:relative; }
+#pb-ship{
+  position:absolute; left:9px; top:50%; transform:translateY(-50%);
+  width:36px; height:36px; object-fit:contain; pointer-events:none;
+  filter:drop-shadow(0 0 9px rgba(95,209,255,.55));
+}
+
+/* galaxy value chips + legend */
+.rg-vals{ margin-top:7px; }
+.gx-legend{
+  font-size:10px; line-height:1.55; color:var(--muted-2);
+  border:1px dashed var(--line-2); border-radius:9px; padding:7px 10px; margin-bottom:11px;
+}
+.gx-legend b{ color:var(--muted); }
+
+/* weapon-class line in the item tooltip */
+.ip-wclass{ font-size:12.5px; font-weight:700; letter-spacing:.02em; margin:3px 0 1px; }
+.ip-wclass b{ font-weight:800; }
+.ip-wdesc{ font-size:10.5px; color:var(--muted); line-height:1.5; margin-bottom:6px; }
+.ip-waura{ font-size:10.5px; color:var(--muted); line-height:1.6; background:rgba(124,224,160,.07);
+  border:1px solid rgba(124,224,160,.3); border-radius:8px; padding:6px 9px; margin-bottom:7px; }
+.ip-waura b{ color:#7ce0a0; }
+.ip-waura-x2{ display:inline-block; margin-left:4px; font-size:9px; font-weight:800; letter-spacing:.04em;
+  color:#04140a; background:#7ce0a0; border-radius:99px; padding:1px 6px; vertical-align:1px; }
+
+/* ===== FLEET PANEL — flagship + escort slots ===== */
+#fleet-panel{ margin:0 12px 12px; }
+.fp-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; }
+.fp-title{ font-family:var(--font-display); font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--gold); }
+.fp-sub{ font-size:10px; color:var(--muted); }
+.fp-locked{
+  font-size:11px; color:var(--muted); line-height:1.55;
+  border:1px dashed var(--line-2); border-radius:11px; padding:10px 12px;
+  background:linear-gradient(180deg,#141d2c,#10172333);
+}
+.fp-locked b{ color:var(--gold); }
+.fp-slots{ display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.fp-slot{
+  position:relative; display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:8px 3px 7px; border-radius:10px; border:1px solid var(--line-2); min-width:0;
+  background:linear-gradient(180deg,#161f2d,#10172333);
+}
+.fp-slot img{ width:34px; height:34px; object-fit:contain; filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+.fp-slot .fps-add{ width:34px; height:34px; display:grid; place-items:center; font-size:17px; color:var(--muted-2); }
+.fps-n{ font-size:8.5px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.fps-tag{ font-size:7.5px; font-weight:800; letter-spacing:.05em; color:var(--muted-2); }
+.fp-slot.flag{ border-color:rgba(242,178,75,.5); background:linear-gradient(180deg,rgba(242,178,75,.1),#10172333); }
+.fp-slot.flag .fps-tag.star{ color:var(--gold); }
+.fp-slot.filled{ border-color:rgba(124,224,160,.45); cursor:pointer; }
+.fp-slot.filled .fps-tag.on{ color:#7ce0a0; }
+.fp-slot.empty{ border-style:dashed; cursor:pointer; }
+.fp-slot.empty:active,.fp-slot.filled:active{ transform:translateY(1px); }
+.fp-slot.locked{ opacity:.55; }
+.fp-slot.locked .fps-n{ color:var(--muted); }
+
+/* fleet picker rows */
+.fp-pick{
+  display:flex; align-items:center; gap:10px; padding:8px 10px; margin-bottom:6px;
+  border:1px solid var(--line-2); border-radius:10px; cursor:pointer;
+  background:linear-gradient(180deg,#161f2d,#10172333);
+}
+.fp-pick:active{ transform:translateY(1px); }
+.fp-pick img{ width:30px; height:30px; object-fit:contain; flex:none; }
+.fpp-m{ flex:1; min-width:0; }
+.fpp-n{ font-size:12px; font-weight:700; color:var(--text); }
+.fpp-d{ font-size:9.5px; color:var(--muted); }
+.fpp-go{ font-size:9.5px; font-weight:800; letter-spacing:.05em; color:#7ce0a0; }
+.fp-pick.rm{ border-color:rgba(255,73,95,.4); }
+
+/* ===== top-bar wallet — gold + all Galaxy Resources (lives in the status bar) ===== */
+.wallet{ display:flex; flex:1; align-items:center; justify-content:flex-start; gap:6px; min-width:0; margin:0 8px 0 2px; overflow:hidden; }
+.wallet .gold-chip{ margin:0; height:20px; display:flex; align-items:center; }
+.wallet .res-chip{
+  display:flex; align-items:center; gap:3px; height:20px; padding:0 8px; border-radius:99px; flex:none;
+  background:rgba(10,14,22,.72); border:1px solid color-mix(in srgb, var(--rc) 35%, transparent);
+  font-size:10px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums;
+}
+.wallet .res-chip .rg{ color:var(--rc); font-size:9.5px; }
+.wallet .res-chip .rr{ font-size:7.5px; font-weight:800; color:#7ce0a0; letter-spacing:.02em; margin-left:3px; }
+#statusbar{ padding-right:14px !important; }
+#statusbar .acct-btn{ max-width:104px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:none; }
+
+/* ===== Citadel Siege zone rows ===== */
+.z-bon.cit{ color:#ffb088; background:rgba(255,122,60,.13); border:1px solid rgba(255,140,80,.5); box-shadow:0 0 10px rgba(255,122,60,.2); }
+.z-bon.citcd{ color:#ffcf7a; background:rgba(242,178,75,.1); border:1px solid rgba(242,178,75,.45); }
+.z-ctag{ font-size:9px; font-weight:800; letter-spacing:.08em; color:#1e0a04; background:#ff9a50;
+  padding:1px 5px; border-radius:4px; vertical-align:2px; margin-left:5px; box-shadow:0 0 8px rgba(255,154,80,.5); }
+.zone-row.citzone .z-go{ color:#ffb088; }
+
+/* ===== leaderboard fleet icons + loadout fleet strip ===== */
+.lb-fleet{ display:flex; gap:3px; margin-top:3px; }
+.lb-fleet .lbf{ width:18px; height:18px; object-fit:contain; filter:drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+.lo-fleet{ display:flex; gap:7px; margin-bottom:12px; flex-wrap:wrap; }
+.lo-ship{
+  flex:1; min-width:64px; max-width:96px; display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:7px 4px 6px; border-radius:10px; border:1px solid var(--line-2);
+  background:linear-gradient(180deg,#161f2d,#10172333);
+}
+.lo-ship.flag{ border-color:rgba(242,178,75,.5); background:linear-gradient(180deg,rgba(242,178,75,.1),#10172333); }
+.lo-ship img{ width:30px; height:30px; object-fit:contain; }
+.lo-ship .lo-sn{ font-size:8.5px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.lo-ship .lo-st{ font-size:7.5px; font-weight:800; letter-spacing:.05em; color:var(--muted-2); }
+.lo-ship.flag .lo-st{ color:var(--gold); }
+.lo-sect{ font-family:var(--font-display); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+
+/* per-ship loadout cards — which ship is running which items */
+.fl-title{ font-family:var(--font-display); font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:12px 0 6px; }
+.fl-card{ border:1px solid var(--line-2); border-radius:11px; padding:9px 10px; margin-bottom:7px;
+  background:linear-gradient(180deg,#161f2d,#10172333); }
+.fl-card.flag{ border-color:rgba(242,178,75,.4); }
+.fl-head{ display:flex; align-items:center; gap:9px; margin-bottom:7px; }
+.fl-head img{ width:30px; height:30px; object-fit:contain; flex:none; filter:drop-shadow(0 2px 5px rgba(0,0,0,.5)); }
+.fl-name{ font-size:12.5px; font-weight:700; color:var(--text); }
+.fl-role{ font-size:9px; font-weight:800; letter-spacing:.05em; color:#7ce0a0; }
+.fl-role.flag{ color:var(--gold); }
+.fl-chips{ display:flex; flex-wrap:wrap; gap:4px; }
+.flc{ display:inline-flex; align-items:center; gap:4px; max-width:100%;
+  border:1px solid var(--line-2); border-radius:7px; padding:2.5px 7px 2.5px 5px; cursor:pointer;
+  background:#0f1623; }
+.flc:active{ transform:translateY(1px); }
+.flc-ic{ font-size:10px; opacity:.8; flex:none; }
+.flc-n{ font-size:9.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:118px; }
+.flc.empty{ border-style:dashed; cursor:default; opacity:.55; }
+.flc.empty .flc-n{ color:var(--muted-2); font-weight:600; }
+.fl-hint{ margin-top:6px; font-size:9.5px; color:var(--muted-2); }
+
+/* cargo hold — capacity meter + expansion */
+.cargo-row{ display:flex; align-items:center; gap:10px; padding:9px 11px; margin-bottom:9px;
+  border:1px solid var(--line-2); border-radius:11px;
+  background:linear-gradient(180deg,#161f2d,#10172333); }
+.cargo-row.full{ border-color:rgba(255,73,95,.5); }
+.cargo-l{ flex:1; min-width:0; }
+.cargo-t{ font-size:11px; color:var(--muted); margin-bottom:5px; }
+.cargo-t b{ color:var(--text); font-variant-numeric:tabular-nums; }
+.cargo-warn{ color:#ff8a96; font-weight:700; font-size:10px; }
+.cargo-bar{ height:5px; border-radius:99px; background:#0e1623; border:1px solid var(--line-2); overflow:hidden; }
+.cargo-fill{ height:100%; border-radius:99px; background:linear-gradient(90deg,#3f8df2,#5fd1ff); transition:width .3s ease; }
+.cargo-row.full .cargo-fill{ background:linear-gradient(90deg,#b3303c,#ff495f); }
+.cargo-buy{ flex:none; display:flex; flex-direction:column; align-items:center; gap:1px;
+  padding:7px 11px; border-radius:9px; cursor:pointer; font-weight:800; font-size:10.5px;
+  background:linear-gradient(180deg,#3f8df2,#2061c8); border:1px solid #2061c8; color:#fff; }
+.cargo-buy .cargo-cost{ font-size:9px; font-weight:700; opacity:.85; }
+.cargo-buy.cant{ filter:saturate(.35) brightness(.75); }
+.cargo-buy:active{ transform:translateY(1px); }
+
+/* pickup filter + auto-sell-on-pickup */
+.filter-row{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:5px; }
+.fr-item{ display:flex; align-items:center; gap:7px; padding:7px 9px;
+  border:1px solid var(--line-2); border-radius:10px;
+  background:linear-gradient(180deg,#161f2d,#10172333); }
+.fr-l{ font-size:10px; font-weight:800; letter-spacing:.03em; color:var(--muted); white-space:nowrap; }
+.fr-item select{ flex:1; min-width:0; font-size:11px; padding:4px 6px; border-radius:7px;
+  background:var(--panel-3); border:1px solid var(--line-2); color:var(--text); }
+.fr-hint{ font-size:9.5px; color:var(--muted-2); line-height:1.5; margin-bottom:9px; padding:0 2px; }
+
 
 

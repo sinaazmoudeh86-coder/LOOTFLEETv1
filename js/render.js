@@ -52,11 +52,11 @@
   }
   const GALAXY = {
     dock:    { a:'#10131c', b:'#070910', neb:'120,150,210', star:'#cfe0ff', feat:'station' },
-    azure:   { a:'#0d1830', b:'#060a16', neb:'70,130,230',  star:'#dcd9ff', feat:'planet' },
-    verdant: { a:'#0a2018', b:'#04100c', neb:'60,200,150',  star:'#dffff0', feat:'planet' },
-    ember:   { a:'#241008', b:'#120604', neb:'240,120,50',  star:'#ffe6cf', feat:'blackhole' },
-    violet:  { a:'#1a0f2e', b:'#0c0718', neb:'160,90,240',   star:'#f0dcff', feat:'planet' },
-    void:    { a:'#160a22', b:'#05030a', neb:'210,70,180',   star:'#ffd6f4', feat:'blackhole' },
+    azure:   { a:'#0e1c40', b:'#060a18', neb:'80,140,255',  star:'#dcd9ff', feat:'planet' },
+    verdant: { a:'#082818', b:'#04120c', neb:'52,224,150',  star:'#dffff0', feat:'planet' },
+    ember:   { a:'#2e1206', b:'#140704', neb:'255,122,40',  star:'#ffe6cf', feat:'blackhole' },
+    violet:  { a:'#22103c', b:'#0d081c', neb:'176,92,255',  star:'#f0dcff', feat:'planet' },
+    void:    { a:'#1c0826', b:'#06030c', neb:'235,64,200',  star:'#ffd6f4', feat:'blackhole' },
   };
   const GAL_PROPS = ['asteroid', 'asteroid', 'debris', 'crystal'];
 
@@ -69,7 +69,7 @@
     const r = rng((zone + 7) * 9301 + 49297);
     // stars
     _stars = [];
-    const sc = Math.min(420, Math.round((w * h) / 1700));
+    const sc = Math.min(280, Math.round((w * h) / 2400));
     for (let i = 0; i < sc; i++) _stars.push({ x: r() * w, y: r() * h, s: 0.4 + r() * 1.6, tw: r() * 6.28, br: 0.3 + r() * 0.7 });
     // asteroids / debris
     _props = [];
@@ -113,63 +113,126 @@
       const ag = ctx.createRadialGradient(x, y, 4, x, y, R * 1.6);
       ag.addColorStop(0, rgba('#ffffff', 0)); ag.addColorStop(0.5, `rgba(${gal.neb},0.25)`); ag.addColorStop(1, `rgba(${gal.neb},0)`);
       ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(x, y, R*1.6, 0, 7); ctx.fill();
-      // accretion ring
+      // accretion disc — two counter-rotating rings + hot inner edge
       ctx.save(); ctx.translate(x, y); ctx.rotate(t * 0.25); ctx.scale(1, 0.4);
       ctx.strokeStyle = `rgba(${gal.neb},0.8)`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke();
       ctx.strokeStyle = 'rgba(255,240,220,0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, R*0.78, 0, 7); ctx.stroke();
       ctx.restore();
+      ctx.save(); ctx.translate(x, y); ctx.rotate(-t * 0.14); ctx.scale(1, 0.34);
+      ctx.strokeStyle = `rgba(${gal.neb},0.35)`; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(0, 0, R*1.22, 0, 7); ctx.stroke();
+      ctx.restore();
+      // gravitational lensing arc over the top
+      ctx.strokeStyle = 'rgba(255,250,240,0.5)'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(x, y, R*0.62, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
       // event horizon
       ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, R*0.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = `rgba(${gal.neb},0.9)`; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, R*0.5, 0, 7); ctx.stroke();
     } else if (gal.feat === 'planet') {
       const R = 52 * s;
-      const g = ctx.createRadialGradient(x - R*0.3, y - R*0.3, 2, x, y, R);
-      g.addColorStop(0, lighten(`rgb(${gal.neb})`, 0.3)); g.addColorStop(1, darken(`rgb(${gal.neb})`, 0.55));
+      // body with deep day→night shading
+      const g = ctx.createRadialGradient(x - R*0.42, y - R*0.42, 2, x, y, R*1.25);
+      g.addColorStop(0, lighten(`rgb(${gal.neb})`, 0.45)); g.addColorStop(0.55, `rgb(${gal.neb})`); g.addColorStop(1, darken(`rgb(${gal.neb})`, 0.78));
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
-      // ring
+      // latitude bands
+      ctx.save(); ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.clip();
+      ctx.globalAlpha = 0.16; ctx.fillStyle = darken(`rgb(${gal.neb})`, 0.3);
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.ellipse(x, y + i * R * 0.34, R, R * 0.11, -0.18, 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1; ctx.restore();
+      // terminator shadow (night side crescent)
+      ctx.save(); ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.clip();
+      ctx.fillStyle = 'rgba(2,4,10,0.55)';
+      ctx.beginPath(); ctx.arc(x + R*0.5, y + R*0.4, R*1.05, 0, 7); ctx.fill();
+      ctx.restore();
+      // atmosphere rim light
+      ctx.strokeStyle = rgba(lighten(`rgb(${gal.neb})`, 0.5), 0.55); ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(x, y, R + 1, 0, 7); ctx.stroke();
+      // ring (behind handled cheaply: draw full, body overlap acceptable at distance)
       ctx.save(); ctx.translate(x, y); ctx.rotate(-0.4); ctx.scale(1, 0.32);
-      ctx.strokeStyle = `rgba(${gal.neb},0.6)`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, R*1.5, 0, 7); ctx.stroke(); ctx.restore();
+      ctx.strokeStyle = `rgba(${gal.neb},0.55)`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, R*1.5, 0, 7); ctx.stroke();
+      ctx.strokeStyle = `rgba(${gal.neb},0.25)`; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(0, 0, R*1.72, 0, 7); ctx.stroke();
+      ctx.restore();
+      // a small moon in slow orbit
+      const ma = t * 0.18, mx = x + Math.cos(ma) * R * 1.9, my = y + Math.sin(ma) * R * 0.55;
+      ctx.fillStyle = '#9aa3b5'; ctx.beginPath(); ctx.arc(mx, my, R * 0.12, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(2,4,10,0.45)'; ctx.beginPath(); ctx.arc(mx + R*0.04, my + R*0.03, R * 0.12, 0, 7); ctx.fill();
+      ctx.fillStyle = '#c6cdd9'; ctx.beginPath(); ctx.arc(mx - R*0.03, my - R*0.03, R * 0.07, 0, 7); ctx.fill();
     } else { // station (dock)
       const R = 30 * s;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(t * 0.1);
       ctx.strokeStyle = 'rgba(150,180,230,0.5)'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.stroke();
-      ctx.fillStyle = 'rgba(120,150,210,0.4)'; ctx.beginPath(); ctx.arc(x, y, R*0.35, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke();
+      ctx.strokeStyle = 'rgba(150,180,230,0.25)'; ctx.lineWidth = 1.4;
+      for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; ctx.beginPath(); ctx.moveTo(Math.cos(a)*R*0.35, Math.sin(a)*R*0.35); ctx.lineTo(Math.cos(a)*R, Math.sin(a)*R); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(120,150,210,0.4)'; ctx.beginPath(); ctx.arc(0, 0, R*0.35, 0, 7); ctx.fill();
+      // blinking nav lights
+      const bl = (Math.sin(t * 3) + 1) / 2;
+      ctx.fillStyle = `rgba(255,120,120,${0.4 + bl * 0.6})`; ctx.beginPath(); ctx.arc(R, 0, 2, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(120,255,180,${1 - bl * 0.6})`; ctx.beginPath(); ctx.arc(-R, 0, 2, 0, 7); ctx.fill();
+      ctx.restore();
     }
   }
 
   // =========================================================================
-  // ARENA (deep space)
+  // ARENA (deep space) — the static layer (bg gradient, nebula, props,
+  // vignette) is rendered ONCE per zone/size into an offscreen canvas; only
+  // stars (twinkle/parallax) and the major feature animate per frame.
   // =========================================================================
+  let _bgCacheKey = '', _bgCache = null;
   function drawArena(ctx, w, h, t, zone) {
     zone = zone || 0;
     const gal = GALAXY[biomeOf(zone)];
     spaceFor(zone, w, h);
-    // deep-space gradient
-    const bg = ctx.createRadialGradient(w/2, h/2, 30, w/2, h/2, Math.max(w,h)*0.75);
-    bg.addColorStop(0, gal.a); bg.addColorStop(1, gal.b);
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-    // nebula clouds
-    const nr = rng((zone+3)*2654435761 >>> 0);
-    for (let i = 0; i < 3; i++) {
-      const cx = nr() * w, cy = nr() * h, R = (180 + nr() * 220);
-      const ng = ctx.createRadialGradient(cx, cy, 10, cx, cy, R);
-      ng.addColorStop(0, `rgba(${gal.neb},0.14)`); ng.addColorStop(1, `rgba(${gal.neb},0)`);
-      ctx.fillStyle = ng; ctx.fillRect(cx - R, cy - R, R*2, R*2);
+    const key = zone + 'x' + (w | 0) + 'x' + (h | 0);
+    if (key !== _bgCacheKey || !_bgCache) {
+      _bgCacheKey = key;
+      _bgCache = document.createElement('canvas');
+      _bgCache.width = Math.max(1, w | 0); _bgCache.height = Math.max(1, h | 0);
+      const b = _bgCache.getContext('2d');
+      const bg = b.createRadialGradient(w/2, h/2, 30, w/2, h/2, Math.max(w,h)*0.75);
+      bg.addColorStop(0, gal.a); bg.addColorStop(1, gal.b);
+      b.fillStyle = bg; b.fillRect(0, 0, w, h);
+      // nebula clouds
+      const nr = rng((zone+3)*2654435761 >>> 0);
+      for (let i = 0; i < 3; i++) {
+        const cx = nr() * w, cy = nr() * h, R = (180 + nr() * 220);
+        const ng = b.createRadialGradient(cx, cy, 10, cx, cy, R);
+        ng.addColorStop(0, `rgba(${gal.neb},0.14)`); ng.addColorStop(1, `rgba(${gal.neb},0)`);
+        b.fillStyle = ng; b.fillRect(cx - R, cy - R, R*2, R*2);
+      }
+      // drifting debris/asteroids (baked — their slow spin is imperceptible)
+      for (const p of _props) drawProp(b, p, 0);
+      // soft vignette
+      const v = b.createRadialGradient(w/2, h/2, h*0.35, w/2, h/2, h*0.85);
+      v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+      b.fillStyle = v; b.fillRect(0, 0, w, h);
     }
-    // starfield (twinkle)
-    for (const st of _stars) {
-      const a = st.br * (0.55 + 0.45 * Math.sin(t * 2 + st.tw));
-      ctx.globalAlpha = a; ctx.fillStyle = gal.star;
-      ctx.beginPath(); ctx.arc(st.x, st.y, st.s, 0, 7); ctx.fill();
+    ctx.drawImage(_bgCache, 0, 0);
+    // starfield — 3 parallax depth bands drifting past (cheap rects, batched)
+    ctx.fillStyle = gal.star;
+    for (let i = 0; i < _stars.length; i++) {
+      const st = _stars[i];
+      const depth = i % 3;
+      const yy = (st.y + t * (3 + depth * 7)) % h;
+      ctx.globalAlpha = st.br * (0.45 + 0.45 * Math.sin(t * 2 + st.tw)) * (0.55 + depth * 0.22);
+      const s2 = st.s * (0.75 + depth * 0.2);
+      ctx.fillRect(st.x, yy, s2, s2);
     }
     ctx.globalAlpha = 1;
-    // major feature
+    // occasional shooting star (one brief streak every ~8s, deterministic)
+    {
+      const cycle = 8, ph = (t % cycle) / cycle;
+      if (ph < 0.16) {
+        const sr2 = rng(((t / cycle) | 0) * 977 + zone * 31 + 5);
+        const sx = sr2() * w * 0.8, sy = sr2() * h * 0.5, k = ph / 0.16;
+        const px = sx + k * 170, py = sy + k * 64;
+        ctx.strokeStyle = `rgba(220,235,255,${0.7 * (1 - k)})`;
+        ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(px - 40, py - 15); ctx.lineTo(px, py); ctx.stroke();
+      }
+    }
+    // major feature (planet / black hole / station) stays live — one per scene
     drawFeature(ctx, gal, t);
-    // drifting debris/asteroids
-    for (const p of _props) drawProp(ctx, p, t);
-    // soft vignette
-    const v = ctx.createRadialGradient(w/2, h/2, h*0.35, w/2, h/2, h*0.85);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
   }
 
   // =========================================================================
@@ -179,6 +242,7 @@
   function fc(color, flash) { return flash > 0 ? mix(color, '#ffffff', flash * 0.85) : color; }
 
   function drawEnemy(ctx, e) {
+    if (e.isCitadel) return drawCitadel(ctx, e);
     const scale = e.dying ? (1 - e.deathT) : (0.35 + 0.65 * easeOut(e.spawnT));
     const alpha = e.dying ? (1 - e.deathT) : 1;
     const lunge = e.attackLunge > 0 ? Math.sin(e.attackLunge * Math.PI) * 4 : 0;
@@ -196,6 +260,14 @@
     ctx.restore();
 
     if (!e.dying && e.hp < e.maxHp) {
+      // impact shockwave — a quick expanding ring right after a hit lands
+      if (e.hitFlash > 0) {
+        const k = 1 - e.hitFlash;
+        ctx.globalAlpha = e.hitFlash * 0.75;
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.6 * e.hitFlash;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.size * (0.85 + k * 1.1), 0, 7); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       const bw = Math.max(26, e.size * 2.1), bh = 5;
       const bx = e.x - bw/2, by = e.y - e.size - 16;
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(ctx, bx-1.5, by-1.5, bw+3, bh+3, 3); ctx.fill();
@@ -240,9 +312,12 @@
     ctx.closePath(); ctx.fill(); ctx.stroke();
     // plating ridge
     ctx.strokeStyle = darken(skin, 0.32); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0,-s*hl*0.8); ctx.lineTo(0,s*0.7); ctx.stroke();
-    // glowing core / eye
-    ctx.shadowColor = '#ffe14d'; ctx.shadowBlur = 7; ctx.fillStyle = bulky ? '#ff6a3a' : '#7fe0ff';
-    ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.18, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    // glowing core / eye — cheap layered glow (no shadowBlur in per-enemy path)
+    const eyeCol = bulky ? '#ff6a3a' : '#7fe0ff';
+    ctx.globalAlpha = 0.45; ctx.fillStyle = eyeCol;
+    ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.3, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = eyeCol;
+    ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.18, 0, 7); ctx.fill();
     ctx.fillStyle = '#0a0c10'; ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.08, 0, 7); ctx.fill();
     // spikes for stinger/alien
     if (k === 'alien' || k === 'mutant') {
@@ -252,25 +327,95 @@
   }
 
   // =========================================================================
-  // LASER BOLT
+  // PROJECTILES — visuals branch on the weapon CLASS that fired them
+  // (p.wtype: laser / gatling / missile / rail / plasma; drones override)
   // =========================================================================
+  const WSTYLE = {
+    laser:   { trail: '95,209,255',  trailW: 1.6 },
+    gatling: { trail: '255,210,80',  trailW: 1.6 },
+    missile: { trail: '170,170,170', trailW: 2.6 },
+    rail:    { trail: '184,123,255', trailW: 2.2 },
+    plasma:  { trail: '70,210,122',  trailW: 2.4 },
+    support: { trail: '124,224,160', trailW: 2.0 },
+    drone:   { trail: '130,255,205', trailW: 1.6 },
+  };
   function drawArrow(ctx, p) {
-    const dr = p.drone;
-    const trailCol = p.crit ? '255,210,80' : (dr ? '130,255,205' : '120,210,255');
+    const wt = p.drone ? 'drone' : (WSTYLE[p.wtype] ? p.wtype : 'gatling');
+    const st = WSTYLE[wt];
+    const tnow = performance.now() / 1000;
+    // trail (missiles leave smoke; energy weapons leave light)
+    const tCol = p.crit ? '255,210,80' : st.trail;
     for (let i = 1; i < p.trail.length; i++) {
-      const a = (i / p.trail.length) * (p.crit ? 0.85 : 0.6);
-      ctx.strokeStyle = `rgba(${trailCol},${a})`;
-      ctx.lineWidth = (p.crit ? 3.6 : (dr ? 1.9 : 2.4)) * (i / p.trail.length) + 0.5;
+      const k = i / p.trail.length;
+      const a = k * (p.crit ? 0.85 : (wt === 'missile' ? 0.4 : 0.6));
+      ctx.strokeStyle = `rgba(${tCol},${a})`;
+      ctx.lineWidth = (p.crit ? 3.4 : st.trailW) * k + 0.5;
       ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
     }
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
-    ctx.shadowColor = p.crit ? 'rgba(255,200,60,0.95)' : (dr ? 'rgba(130,255,205,0.9)' : 'rgba(120,200,255,0.9)'); ctx.shadowBlur = p.crit ? 12 : 8;
-    ctx.fillStyle = p.crit ? '#fff0b0' : (dr ? '#daffe9' : '#dff4ff');
-    ctx.beginPath(); ctx.ellipse(0, 0, p.crit ? 6 : (dr ? 3.6 : 4.5), p.crit ? 2.2 : (dr ? 1.4 : 1.7), 0, 0, 7); ctx.fill();
-    ctx.fillStyle = p.crit ? '#ffd24d' : (dr ? '#5bffb0' : '#5bc0ff');
-    ctx.beginPath(); ctx.ellipse(2, 0, p.crit ? 2.6 : 2, p.crit ? 1.3 : 1.1, 0, 0, 7); ctx.fill();
-    ctx.restore(); ctx.shadowBlur = 0;
+    const cs = (p.crit ? 1.45 : 1) * 1.3;            // crits read bigger; all shots beefed up
+    // (all projectile styles below use layered alpha shapes — NO shadowBlur,
+    // no per-bolt gradients: these run hundreds of times per frame)
+    if (wt === 'laser') {
+      // a searing light lance — dim wide pass + white-hot core
+      const L = 26 * cs;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = p.crit ? 'rgba(255,210,80,0.35)' : 'rgba(95,209,255,0.35)';
+      ctx.lineWidth = 5 * cs;
+      ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(4, 0); ctx.stroke();
+      ctx.strokeStyle = p.crit ? '#ffe9b0' : '#dff4ff'; ctx.lineWidth = 1.8 * cs;
+      ctx.beginPath(); ctx.moveTo(-L * 0.7, 0); ctx.lineTo(4, 0); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(4, 0, 1.6 * cs, 0, 7); ctx.fill();
+    } else if (wt === 'missile') {
+      // a real rocket — capsule body, tinted nose, fins, flickering exhaust
+      const fl = 0.6 + 0.4 * Math.sin(tnow * 40 + p.x);
+      ctx.fillStyle = `rgba(255,170,80,${0.7 * fl})`;
+      ctx.beginPath(); ctx.moveTo(-5 * cs, 0); ctx.lineTo(-11 * cs * (0.7 + fl * 0.5), 1.7); ctx.lineTo(-11 * cs * (0.7 + fl * 0.5), -1.7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#c8ccd4';
+      rr(ctx, -5 * cs, -1.9 * cs, 8.4 * cs, 3.8 * cs, 1.8 * cs); ctx.fill();
+      ctx.fillStyle = p.crit ? '#ffd24d' : '#ff6a4a';
+      ctx.beginPath(); ctx.moveTo(3.4 * cs, -1.9 * cs); ctx.quadraticCurveTo(7.2 * cs, 0, 3.4 * cs, 1.9 * cs); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#7d828c';
+      ctx.beginPath(); ctx.moveTo(-5 * cs, -1.9 * cs); ctx.lineTo(-7.6 * cs, -3.4 * cs); ctx.lineTo(-4 * cs, -1.9 * cs); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-5 * cs, 1.9 * cs); ctx.lineTo(-7.6 * cs, 3.4 * cs); ctx.lineTo(-4 * cs, 1.9 * cs); ctx.closePath(); ctx.fill();
+    } else if (wt === 'rail') {
+      // hypervelocity slug wrapped in electromagnetic crackle
+      ctx.globalAlpha = 0.4; ctx.fillStyle = '#b87bff';
+      ctx.beginPath(); ctx.ellipse(0, 0, 9 * cs, 3 * cs, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = p.crit ? '#ffe9b0' : '#efe2ff';
+      ctx.beginPath(); ctx.ellipse(0, 0, 6.5 * cs, 1.6 * cs, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(184,123,255,0.85)'; ctx.lineWidth = 1;
+      const j = Math.sin(tnow * 60 + p.y) * 2.4;
+      ctx.beginPath(); ctx.moveTo(-4, -2 - j); ctx.lineTo(0, 2 + j); ctx.lineTo(4, -2 - j); ctx.stroke();
+    } else if (wt === 'support') {
+      // Warden bolt — a mending charge: green diamond with a white cross
+      ctx.globalAlpha = 0.4; ctx.fillStyle = '#7ce0a0';
+      ctx.beginPath(); ctx.arc(0, 0, 6 * cs, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = p.crit ? '#eaffe9' : 'rgba(124,224,160,0.9)';
+      ctx.save(); ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-3.4 * cs, -3.4 * cs, 6.8 * cs, 6.8 * cs);
+      ctx.restore();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-0.8, -3 * cs, 1.6, 6 * cs); ctx.fillRect(-3 * cs, -0.8, 6 * cs, 1.6);
+    } else if (wt === 'plasma') {
+      // unstable bottled starfire — a pulsing orb
+      const pr = (1 + 0.25 * Math.sin(tnow * 26 + p.x)) * cs;
+      ctx.globalAlpha = 0.5; ctx.fillStyle = '#46d27a';
+      ctx.beginPath(); ctx.arc(0, 0, 5.6 * pr, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = p.crit ? '#fff3c0' : '#d8ffe8';
+      ctx.beginPath(); ctx.arc(0, 0, 2.8 * pr, 0, 7); ctx.fill();
+    } else {
+      // gatling tracer (also drones, in teal) — short hot dash
+      const col = wt === 'drone' ? '#5bffb0' : (p.crit ? '#ffd24d' : '#ffe9a8');
+      ctx.globalAlpha = 0.4; ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, (wt === 'drone' ? 5.4 : 7.4) * cs, 2.6 * cs, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, (wt === 'drone' ? 3.6 : 5) * cs, 1.4 * cs, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(2 * cs, 0, 1.8 * cs, 1 * cs, 0, 0, 7); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // small autonomous combat drone — orbits the player, fires teal bolts
@@ -286,18 +431,237 @@
     // body: small dart
     ctx.fillStyle = '#2b3744'; ctx.strokeStyle = '#0d1318'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.2, 4.5); ctx.lineTo(0, 2.4); ctx.lineTo(-4.2, 4.5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    // core light
-    ctx.fillStyle = '#7fffcb'; ctx.shadowColor = '#7fffcb'; ctx.shadowBlur = 6;
-    ctx.beginPath(); ctx.arc(0, -0.5, 1.7, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    // core light (cheap glow)
+    ctx.globalAlpha = 0.5; ctx.fillStyle = '#7fffcb';
+    ctx.beginPath(); ctx.arc(0, -0.5, 3.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#7fffcb'; ctx.beginPath(); ctx.arc(0, -0.5, 1.7, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  // FLEET ESCORT — an owned hull flying formation with the flagship. Sprite
+  // art + engine glow at reduced scale; healPulse shows the Aegis repair ring.
+  function drawEscort(ctx, key, x, y, t, healPulse) {
+    const tier = HULL_VIS[key] != null ? HULL_VIS[key] : 0;
+    const im = shipImg(key);
+    const ds = 26 + tier * 2.4;
+    const bob = Math.sin(t * 2 + x * 0.07) * 1.6;
+    ctx.save();
+    ctx.translate(x, y + bob);
+    // engine glow
+    const eg = ctx.createRadialGradient(0, ds * 0.34, 1, 0, ds * 0.34, ds * 0.36);
+    eg.addColorStop(0, 'rgba(120,200,255,0.4)'); eg.addColorStop(1, 'rgba(120,200,255,0)');
+    ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, ds * 0.34, ds * 0.36, 0, 7); ctx.fill();
+    if (im) ctx.drawImage(im, -ds / 2, -ds / 2, ds, ds);
+    else { ctx.fillStyle = '#9fb4d6'; ctx.beginPath(); ctx.moveTo(0, -ds * 0.4); ctx.lineTo(ds * 0.3, ds * 0.3); ctx.lineTo(-ds * 0.3, ds * 0.3); ctx.closePath(); ctx.fill(); }
+    // Aegis repair pulse — expanding green ring
+    if (healPulse > 0) {
+      const k = 1 - healPulse / 0.8;
+      ctx.globalAlpha = Math.max(0, healPulse) * 0.9;
+      ctx.strokeStyle = '#7ce0a0'; ctx.lineWidth = 2 * (1 - k) + 0.6;
+      ctx.beginPath(); ctx.arc(0, 0, ds * (0.5 + k * 1.6), 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  // ENEMY BOLT — hostile standoff fire: red-cored dart in the shooter's tint
+  // THE VOID CITADEL — massive static fortress with progressive damage states:
+  // 100–75% pristine · <75% burning · <50% falling apart · <25% critical (about
+  // to blow). Ember/smoke particles are emitted by the game loop; this draws
+  // the structure itself. All effects are cheap (one shadowBlur, no per-frame
+  // allocations beyond gradients).
+  // THE VOID CITADEL — the player-supplied fortress art, dressed with heavy
+  // glow work. Damage states: 100–75% pristine (cool blue running lights) ·
+  // <75% burning (flame points ignite across the hull) · <50% breaking up
+  // (judder, more fires, arc-flash sparks) · <25% critical (red strobe, violent
+  // shaking). Ember/smoke particles come from the game loop.
+  const citadelImg = new Image(); citadelImg.src = 'ships/ship-citadel.png';
+  // flame anchor points as fractions of the sprite half-size
+  const CIT_FIRES = [[-0.52, 0.22], [0.44, 0.3], [-0.18, -0.28], [0.3, -0.18], [0, 0.42], [-0.4, -0.05], [0.55, 0.05], [0.1, 0.12]];
+  function drawCitadel(ctx, e) {
+    if (!citadelImg.complete || !citadelImg.naturalWidth) return drawCitadelProc(ctx, e);
+    const t = performance.now() / 1000;
+    const f = Math.max(0, e.hp / e.maxHp);
+    const dyingK = e.dying ? e.deathT : 0;
+    const s = e.size * (0.55 + 0.45 * easeOut(e.spawnT)) * (1 + dyingK * 0.3);
+    const burning = f < 0.75, breaking = f < 0.5, critical = f < 0.25;
+    const jx = critical ? Math.sin(t * 47) * 3 : (breaking ? Math.sin(t * 23) * 1.4 : 0);
+    const jy = critical ? Math.cos(t * 53) * 2.6 : 0;
+    const dw = s * 3.05, dh = dw * (citadelImg.naturalHeight / citadelImg.naturalWidth);
+    const pulse = 0.5 + 0.5 * Math.sin(t * (critical ? 9 : breaking ? 5 : 2.2));
+    ctx.save();
+    ctx.translate(e.x + jx, e.y + jy);
+    ctx.globalAlpha = 1 - dyingK;
+    // threat aura — a huge soft bloom under the whole station, blue → orange → red
+    const auraCol = critical ? '255,42,74' : burning ? '255,130,60' : '90,190,255';
+    const ag = ctx.createRadialGradient(0, 0, dw * 0.12, 0, 0, dw * 0.72);
+    ag.addColorStop(0, `rgba(${auraCol},${0.28 + 0.16 * pulse})`);
+    ag.addColorStop(0.6, `rgba(${auraCol},${0.10 + 0.08 * pulse})`);
+    ag.addColorStop(1, `rgba(${auraCol},0)`);
+    ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(0, 0, dw * 0.72, 0, 7); ctx.fill();
+    // the fortress itself
+    ctx.drawImage(citadelImg, -dw / 2, -dh / 2, dw, dh);
+    // hit flash — additive re-draw brightens the whole hull
+    if (e.hitFlash > 0) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (1 - dyingK) * e.hitFlash * 0.55;
+      ctx.drawImage(citadelImg, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+    }
+    // reactor crown glow — additive pulse over the spire and core ring
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const coreCol = critical ? '255,60,90' : '110,210,255';
+    const cg = ctx.createRadialGradient(-dw * 0.04, -dh * 0.16, 2, -dw * 0.04, -dh * 0.16, dw * 0.2);
+    cg.addColorStop(0, `rgba(${coreCol},${0.5 + 0.4 * pulse})`); cg.addColorStop(1, `rgba(${coreCol},0)`);
+    ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(-dw * 0.04, -dh * 0.16, dw * 0.2, 0, 7); ctx.fill();
+    // damage fires — ignite point by point as integrity falls
+    const lit = Math.min(CIT_FIRES.length, Math.floor((1 - f) * (CIT_FIRES.length + 2)));
+    for (let i = 0; i < lit; i++) {
+      const fp = CIT_FIRES[i];
+      const fl = 0.55 + 0.45 * Math.sin(t * (9 + i * 1.7) + i * 9);
+      const fx = fp[0] * dw * 0.5, fy = fp[1] * dh * 0.5;
+      const fg = ctx.createRadialGradient(fx, fy, 1, fx, fy, s * (0.26 + 0.1 * fl));
+      fg.addColorStop(0, `rgba(255,210,120,${0.75 * fl})`);
+      fg.addColorStop(0.45, `rgba(255,120,40,${0.45 * fl})`);
+      fg.addColorStop(1, 'rgba(255,60,20,0)');
+      ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy, s * (0.26 + 0.1 * fl), 0, 7); ctx.fill();
+    }
+    // breaking up: white arc-flash sparks crawl across the hull
+    if (breaking && Math.sin(t * 17) > 0.78) {
+      const ax = (Math.sin(t * 31) * 0.4) * dw * 0.5, ay = (Math.cos(t * 27) * 0.35) * dh * 0.5;
+      ctx.strokeStyle = 'rgba(220,240,255,0.85)'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(ax - 12, ay + 6); ctx.lineTo(ax - 3, ay - 5); ctx.lineTo(ax + 5, ay + 4); ctx.lineTo(ax + 13, ay - 7); ctx.stroke();
+    }
+    ctx.restore(); // end additive
+    // critical: red strobe ring around the whole station
+    if (critical) {
+      ctx.globalAlpha = (1 - dyingK) * (0.25 + 0.45 * pulse);
+      ctx.strokeStyle = '#ff2a4a'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, dw * (0.5 + 0.04 * pulse), 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1 - dyingK;
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    // nameplate + integrity bar
+    const bw = Math.min(dw * 0.85, 260), bx = e.x - bw / 2, by = e.y - dh / 2 - 18;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 10);
+    ctx.fillStyle = '#3a0e12'; ctx.fillRect(bx, by, bw, 6);
+    ctx.fillStyle = critical ? '#ff2a4a' : burning ? '#ff9a50' : '#5fd1ff';
+    ctx.fillRect(bx, by, bw * f, 6);
+    ctx.font = '800 11px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 2.8; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    const label = '⛴ VOID CITADEL' + (critical ? ' · CRITICAL' : breaking ? ' · BREAKING UP' : burning ? ' · BURNING' : '');
+    ctx.strokeText(label, e.x, by - 6); ctx.fillStyle = '#dff2ff'; ctx.fillText(label, e.x, by - 6);
+  }
+  // procedural fallback (pre-image-load only)
+  function drawCitadelProc(ctx, e) {
+    const t = performance.now() / 1000;
+    const f = Math.max(0, e.hp / e.maxHp);
+    const dyingK = e.dying ? e.deathT : 0;
+    const s = e.size * (0.55 + 0.45 * easeOut(e.spawnT)) * (1 + dyingK * 0.3);
+    const burning = f < 0.75, breaking = f < 0.5, critical = f < 0.25;
+    // critical: the whole structure judders
+    const jx = critical ? Math.sin(t * 47) * 2.4 : (breaking ? Math.sin(t * 23) * 1 : 0);
+    const jy = critical ? Math.cos(t * 53) * 2 : 0;
+    ctx.save();
+    ctx.translate(e.x + jx, e.y + jy);
+    ctx.globalAlpha = 1 - dyingK;
+    // threat aura — gold when healthy, deepening red as it burns
+    const pulse = 0.5 + 0.5 * Math.sin(t * (critical ? 9 : breaking ? 5 : 2.4));
+    const auraCol = critical ? '255,42,74' : burning ? '255,122,60' : '255,180,90';
+    const ag = ctx.createRadialGradient(0, 0, s * 0.4, 0, 0, s * 1.7);
+    ag.addColorStop(0, `rgba(${auraCol},${0.16 + 0.12 * pulse})`); ag.addColorStop(1, `rgba(${auraCol},0)`);
+    ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(0, 0, s * 1.7, 0, 7); ctx.fill();
+    // outer defense ring (rotating) with 4 pylons — pylons shear off as it breaks
+    ctx.save(); ctx.rotate(t * 0.18);
+    ctx.strokeStyle = breaking ? 'rgba(160,150,150,0.5)' : 'rgba(170,190,220,0.65)';
+    ctx.lineWidth = 2.4; ctx.setLineDash([s * 0.34, s * 0.14]);
+    ctx.beginPath(); ctx.arc(0, 0, s * 1.08, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    for (let i = 0; i < 4; i++) {
+      const pa = (i / 4) * Math.PI * 2;
+      const gone = (breaking && i === 1) || (critical && i === 3); // sheared pylons
+      if (gone) continue;
+      const tilt = breaking ? Math.sin(i * 7) * 0.3 : 0;
+      ctx.save(); ctx.rotate(pa + tilt); ctx.translate(s * 1.08, 0);
+      ctx.fillStyle = e.hitFlash > 0 ? '#fff' : (breaking ? '#6a6f7a' : '#8a97ad');
+      ctx.fillRect(-s * 0.09, -s * 0.2, s * 0.18, s * 0.4);
+      ctx.fillStyle = critical ? '#ff2a4a' : '#ffd24d';
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.05 + pulse * 1.2, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+    // main hull — hexagonal bastion
+    const flash = e.hitFlash > 0 ? e.hitFlash : 0;
+    const hg = ctx.createLinearGradient(-s, -s, s, s);
+    hg.addColorStop(0, mix(breaking ? '#3a3540' : '#4a5468', '#ffffff', flash * 0.8));
+    hg.addColorStop(0.5, mix(breaking ? '#252230' : '#2e3548', '#ffffff', flash * 0.8));
+    hg.addColorStop(1, mix('#181b26', '#ffffff', flash * 0.8));
+    ctx.fillStyle = hg;
+    ctx.strokeStyle = critical ? '#ff5a6e' : burning ? '#d08a5a' : '#9fb2d0';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - Math.PI / 2; const px = Math.cos(a) * s * 0.66, py = Math.sin(a) * s * 0.66; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // structural cracks once it's falling apart
+    if (breaking) {
+      ctx.strokeStyle = 'rgba(10,8,14,0.85)'; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(-s * 0.5, -s * 0.1); ctx.lineTo(-s * 0.16, 0); ctx.lineTo(-s * 0.3, s * 0.3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s * 0.42, -s * 0.3); ctx.lineTo(s * 0.18, -s * 0.05); ctx.lineTo(s * 0.38, s * 0.12); ctx.stroke();
+      if (critical) { ctx.beginPath(); ctx.moveTo(0, -s * 0.6); ctx.lineTo(-s * 0.08, -s * 0.2); ctx.lineTo(s * 0.1, s * 0.05); ctx.lineTo(0, s * 0.55); ctx.stroke(); }
+    }
+    // window lights — banks go dark (or flicker orange) as systems fail
+    for (let i = 0; i < 8; i++) {
+      const wa = (i / 8) * Math.PI * 2 + 0.4;
+      const wx = Math.cos(wa) * s * 0.38, wy = Math.sin(wa) * s * 0.38;
+      const dead = (1 - f) * 8 > i + 0.5;
+      const flick = dead && Math.sin(t * 13 + i * 5) > 0.55;
+      ctx.fillStyle = dead ? (flick ? '#ff9a50' : '#1c1f2a') : 'rgba(190,220,255,0.85)';
+      ctx.fillRect(wx - 1.6, wy - 1.6, 3.2, 3.2);
+    }
+    // reactor eye — gold heart that reddens and races as the end nears
+    const eyeCol = critical ? '#ff2a4a' : burning ? '#ff9a50' : '#ffd24d';
+    ctx.shadowColor = eyeCol; ctx.shadowBlur = 10 + 10 * pulse;
+    ctx.fillStyle = eyeCol;
+    ctx.beginPath(); ctx.arc(0, 0, s * (0.13 + 0.03 * pulse), 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#10070c';
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.055, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    // nameplate + integrity bar
+    const bw = s * 2.1, bx = e.x - bw / 2, by = e.y - s * 1.55;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 9);
+    ctx.fillStyle = '#3a0e12'; ctx.fillRect(bx, by, bw, 5);
+    ctx.fillStyle = critical ? '#ff2a4a' : burning ? '#ff9a50' : '#ffd24d';
+    ctx.fillRect(bx, by, bw * f, 5);
+    ctx.font = '800 10px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 2.6; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    const label = '⛴ VOID CITADEL' + (critical ? ' · CRITICAL' : breaking ? ' · BREAKING UP' : burning ? ' · BURNING' : '');
+    ctx.strokeText(label, e.x, by - 5); ctx.fillStyle = '#ffd9c4'; ctx.fillText(label, e.x, by - 5);
+  }
+
+  function drawEnemyBolt(ctx, b) {
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.ang);
+    const tg = ctx.createLinearGradient(-14, 0, 4, 0);
+    tg.addColorStop(0, 'rgba(255,60,90,0)'); tg.addColorStop(1, 'rgba(255,90,110,0.8)');
+    ctx.strokeStyle = tg; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(2, 0); ctx.stroke();
+    ctx.shadowColor = b.tint || '#ff5a6e'; ctx.shadowBlur = 8;
+    ctx.fillStyle = b.tint || '#ff8a5c';
+    ctx.beginPath(); ctx.ellipse(0, 0, 5, 2, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffdade';
+    ctx.beginPath(); ctx.arc(1.6, 0, 1.5, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
   function drawParticle(ctx, p) {
     const a = Math.max(0, p.life / p.maxLife);
     ctx.globalAlpha = a;
-    if (p.glow) { ctx.shadowColor = p.color; ctx.shadowBlur = 9; }
-    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.4 + a * 0.6), 0, 7); ctx.fill();
-    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    ctx.fillStyle = p.color;
+    const r2 = p.size * (0.4 + a * 0.6);
+    if (p.glow) { ctx.globalAlpha = a * 0.4; ctx.beginPath(); ctx.arc(p.x, p.y, r2 * 2, 0, 7); ctx.fill(); ctx.globalAlpha = a; }
+    ctx.beginPath(); ctx.arc(p.x, p.y, r2, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
   }
   function drawFloat(ctx, f) {
     const a = Math.max(0, f.life / f.maxLife);
@@ -317,7 +681,7 @@
   }
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
-  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, supercarrier:4, titan:5, mothership:5 };
+  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5 };
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';
     const ht = HULL_VIS[key];
@@ -326,7 +690,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','supercarrier','titan','mothership'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }
@@ -363,6 +727,20 @@
       const eg = ctx.createRadialGradient(0, ds * 0.36, 1, 0, ds * 0.36, ds * 0.42);
       eg.addColorStop(0, 'rgba(120,200,255,0.45)'); eg.addColorStop(1, 'rgba(120,200,255,0)');
       ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, ds * 0.36, ds * 0.42, 0, 7); ctx.fill();
+      // animated engine plume — flickering twin thruster flames behind the hull
+      {
+        const flick = 0.62 + 0.38 * Math.sin(t * 17) + 0.12 * Math.sin(t * 41);
+        for (let pi = 0; pi < 2; pi++) {
+          const ex = (pi === 0 ? -1 : 1) * ds * 0.13;
+          const fl = ds * (0.18 + flick * 0.16);
+          const fg = ctx.createLinearGradient(0, ds * 0.34, 0, ds * 0.34 + fl);
+          fg.addColorStop(0, 'rgba(170,225,255,0.85)'); fg.addColorStop(0.5, 'rgba(110,190,255,0.4)'); fg.addColorStop(1, 'rgba(110,190,255,0)');
+          ctx.fillStyle = fg;
+          ctx.beginPath(); ctx.moveTo(ex - ds * 0.045, ds * 0.34); ctx.lineTo(ex + ds * 0.045, ds * 0.34); ctx.lineTo(ex, ds * 0.34 + fl); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = 'rgba(225,245,255,0.95)';
+          ctx.beginPath(); ctx.arc(ex, ds * 0.355, ds * 0.028 + flick * 0.7, 0, 7); ctx.fill();
+        }
+      }
       ctx.drawImage(_im, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
       if (muzzle > 0) {
         const mx = Math.cos(facing) * ds * 0.34, my = Math.sin(facing) * ds * 0.34 - ds * 0.12;
@@ -495,7 +873,7 @@
   // drone bays are driven by the ship's real loadout. Rendered to a canvas so
   // it reads as artwork, not a flat glyph.
   // =========================================================================
-  const SHIP_ACCENT = { Frigate:'#5b9cff', Cruiser:'#46d07a', Battleship:'#f0972a', Carrier:'#b15cff' };
+  const SHIP_ACCENT = { Frigate:'#5b9cff', Cruiser:'#46d07a', Battleship:'#f0972a', Carrier:'#b15cff', Aegis:'#7ce0a0' };
   function drawShipIcon(ctx, ship, cw, ch) {
     const cls = ship.cls;
     const accent = SHIP_ACCENT[cls] || '#5b9cff';
@@ -736,7 +1114,7 @@
   }
 
   window.RENDER = {
-    drawArena, drawEnemy, drawArrow, drawParticle, drawFloat, drawArcher, drawHangar, drawDrone, drawShipIcon,
+    drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon,
     gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES,
   };
 })();

@@ -207,6 +207,34 @@
     .features,.steps{grid-template-columns:1fr;}
     .nav-link{display:none;}
   }
+
+  /* ===== ART UPLIFT — motion & light layer ===== */
+  /* the nebula glow behind everything slowly breathes and drifts */
+  @keyframes nebDrift{0%,100%{transform:translateX(-50%) translateY(0) scale(1);opacity:.9;}50%{transform:translateX(-52%) translateY(2.5%) scale(1.08);opacity:1;}}
+  .space-bg::after{animation:nebDrift 16s ease-in-out infinite;}
+  /* the gold word in the title carries a slow shine sweep */
+  @keyframes shineSweep{0%,72%{background-position:200% 0;}100%{background-position:-80% 0;}}
+  h1.hero-title .a{
+    background:linear-gradient(110deg,var(--gold) 42%,#fff3d2 50%,var(--gold) 58%);
+    background-size:240% 100%;-webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;text-shadow:none;
+    filter:drop-shadow(0 0 28px rgba(242,178,75,.4));
+    animation:shineSweep 6s ease-in-out infinite;
+  }
+  /* primary CTA gets a glass shine pass */
+  .btn-primary{position:relative;overflow:hidden;}
+  .btn-primary::after{content:'';position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(110deg,transparent 38%,rgba(255,255,255,.45) 50%,transparent 62%);
+    background-size:260% 100%;animation:shineSweep 5.2s ease-in-out infinite;}
+  /* rarity chips + cards respond to the cursor */
+  .chip{transition:transform .16s ease, border-color .16s ease, box-shadow .2s ease;}
+  .chip:hover{transform:translateY(-2px);border-color:currentColor;box-shadow:0 8px 20px rgba(0,0,0,.45);}
+  /* the device mock sits in a cool rim of engine light */
+  .device{box-shadow:0 50px 110px rgba(0,0,0,.65), 0 0 80px -16px rgba(95,209,255,.3), inset 0 1px 0 rgba(255,255,255,.06);}
+  /* honor reduced motion */
+  @media (prefers-reduced-motion:reduce){
+    .space-bg::after,.btn-primary::after,h1.hero-title .a,.device,.ring{animation:none !important;}
+  }
 </style>
 </head>
 <body>
@@ -378,7 +406,7 @@
   })();
 
 </script>
-<script src="js/showcase.js"></script>
+<script src="js/showcase.js?v=60"></script>
 
 </body>
 </html>

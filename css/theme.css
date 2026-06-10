@@ -335,3 +335,80 @@ html,body{ background:#05070d; }
 }
 @keyframes deckGlow{0%,100%{box-shadow:0 0 0 1px var(--good) inset,0 0 12px rgba(63,197,107,.3);}50%{box-shadow:0 0 0 1px var(--good) inset,0 0 26px rgba(63,197,107,.6);}}
 .zone-row.rec{ animation:deckGlow 2s ease-in-out infinite; }
+
+/* ============================================================ AAA POLISH -- */
+/* screen transitions — every menu glides in instead of snapping */
+@keyframes scrIn{ from{ opacity:0; transform:translateY(10px) scale(.992); } to{ opacity:1; transform:none; } }
+.screen.active{ animation:scrIn .26s cubic-bezier(.22,1,.36,1); }
+
+/* modal entrances — sheet springs up over a fading backdrop */
+@keyframes sheetIn{ from{ opacity:0; transform:translateY(26px) scale(.97); } to{ opacity:1; transform:none; } }
+.sheet{ animation:sheetIn .3s cubic-bezier(.22,1,.36,1); }
+@keyframes bdIn{ from{ opacity:0; } to{ opacity:1; } }
+.backdrop{ animation:bdIn .22s ease; }
+
+/* HP/XP bars — smooth fill motion + a slow premium sheen
+   (NOTE: no position override — the base rule positions the fill absolutely,
+   which is what gives it height; absolute also already contains the ::after) */
+.bar-fill{ transition:width .35s cubic-bezier(.22,1,.36,1); overflow:hidden; }
+.bar-fill::after{
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(110deg, transparent 32%, rgba(255,255,255,.25) 50%, transparent 68%);
+  background-size:230% 100%; animation:sheen 3.4s linear infinite;
+}
+@keyframes sheen{ from{ background-position:210% 0; } to{ background-position:-70% 0; } }
+
+/* toasts pop with a soft spring */
+@keyframes toastPop{ 0%{ opacity:0; transform:translateY(10px) scale(.88); } 62%{ opacity:1; transform:translateY(-2px) scale(1.05); } 100%{ opacity:1; transform:none; } }
+.lvl-toast{ animation:toastPop .42s cubic-bezier(.18,1.4,.4,1); }
+
+/* nav icon pops when it becomes active */
+@keyframes navPop{ from{ transform:scale(.8); } to{ transform:scale(1); } }
+.nav-btn.active svg{ animation:navPop .26s cubic-bezier(.18,1.6,.4,1); }
+
+/* tile cards lift slightly on hover (pointer devices) */
+@media (hover:hover){
+  .gtile:hover,.sk-tier:hover,.ship-card:hover{ border-color:var(--line-2); box-shadow:0 6px 18px rgba(0,0,0,.45); }
+}
+
+/* accessibility — visible keyboard focus + slightly stronger tertiary text */
+button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible{
+  outline:2px solid var(--cyan); outline-offset:2px;
+}
+:root{ --muted-2:#6f7f99; }
+
+/* reduced motion — honor the OS setting: kill decorative animation, keep state */
+@media (prefers-reduced-motion: reduce){
+  .screen.active,.sheet,.backdrop,.lvl-toast,.nav-btn.active svg{ animation:none !important; }
+  .bar-fill{ transition:none; }
+  .bar-fill::after{ display:none; }
+  .zone-row.rec{ animation:none !important; }
+  .skt-caret{ transition:none; }
+  #login::before,.lg-title{ animation:none !important; }
+}
+
+/* ===== CINEMATIC LOGIN — drifting starfield + shine-swept title =====
+   (must NOT override the base #login positioning: it's an absolute overlay) */
+#login::before{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background-image:
+    radial-gradient(1.6px 1.6px at 18% 12%, rgba(190,210,255,.55), transparent 60%),
+    radial-gradient(1.3px 1.3px at 71% 8%,  rgba(190,210,255,.4),  transparent 60%),
+    radial-gradient(1.5px 1.5px at 42% 30%, rgba(190,210,255,.45), transparent 60%),
+    radial-gradient(1.2px 1.2px at 88% 26%, rgba(190,210,255,.32), transparent 60%),
+    radial-gradient(1.4px 1.4px at 9% 41%,  rgba(190,210,255,.38), transparent 60%),
+    radial-gradient(1.5px 1.5px at 30% 62%, rgba(190,210,255,.42), transparent 60%),
+    radial-gradient(1.2px 1.2px at 79% 68%, rgba(190,210,255,.3),  transparent 60%),
+    radial-gradient(1.4px 1.4px at 50% 82%, rgba(190,210,255,.36), transparent 60%);
+  background-size:280px 280px; background-repeat:repeat;
+  animation:loginStars 60s linear infinite;
+}
+@keyframes loginStars{ to{ background-position:0 280px; } }
+@keyframes lgShine{ 0%,72%{ background-position:200% 0; } 100%{ background-position:-80% 0; } }
+.lg-title{
+  background:linear-gradient(110deg, var(--gold) 42%, #fff3d2 50%, var(--gold) 58%);
+  background-size:240% 100%;
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  text-shadow:none; filter:drop-shadow(0 0 26px rgba(242,178,75,.35));
+  animation:lgShine 6s ease-in-out infinite;
+}

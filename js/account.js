@@ -35,21 +35,32 @@
   function saveLocal(state) { try { localStorage.setItem(key(), JSON.stringify(state)); } catch (e) {} }
 
   // ---- cloud push (debounced; inert unless a cloud user is signed in) --------
-  let pending = null, timer = 0;
+  // Local saves are instant; CLOUD writes are batched to at most ~1 per 30s so
+  // the backend isn't hammered. A final flush fires when the tab hides/closes.
+  let pending = null, timer = 0, lastSent = '';
   function push(state) {
     saveLocal(state);
     if (!cloudOn()) return;
     const s = session();
     if (!s || !s.id) return;            // only signed-in cloud users sync
     pending = state;
-    clearTimeout(timer);
-    timer = setTimeout(flush, 2500);
+    if (!timer) timer = setTimeout(flush, 30000);
   }
   async function flush() {
+    clearTimeout(timer); timer = 0;
     if (!cloudOn() || !pending) return;
     const s = session(); const data = pending; pending = null;
-    if (s && s.id) await window.CLOUD.push(s.id, data);
+    if (!s || !s.id) return;
+    // DIRTY CHECK — idle players (tab open, nothing changing) write NOTHING.
+    let ser = '';
+    try { ser = JSON.stringify(data); } catch (e) {}
+    if (ser && ser === lastSent) return;
+    lastSent = ser;
+    await window.CLOUD.push(s.id, data);
   }
+  // don't lose the last batch when the player leaves
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
   // pull the authoritative cloud save into the local namespaced slot
   async function pull() {
     if (!cloudOn()) return null;

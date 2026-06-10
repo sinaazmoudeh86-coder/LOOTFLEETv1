@@ -15,6 +15,7 @@
   let screen = 'battle', sortMode = 'power', lbTab = 'heat', storeCat = 'ships', skillBranch = 'offense';
   const skillOpen = {}; // skill-tree accordion open-state, keyed by branch:tier
   let _galaxyTimer = null; // re-render galaxy while a region cooldown ticks
+  let _boardTimer = null;  // live leaderboard refresh while the board is open
   let _msTaps = 0;          // SECRET Mothership unlock: CONSECUTIVE "My Ship" click streak
 
   const ZONE_NAMES = ['The Backyard','Main Street','Riverside Mall','Gas Station','Highway Pileup','Quarantine Zone','Subway Tunnels','Research Lab','Military Depot','Containment Site'];
@@ -46,7 +47,7 @@
      'zb-name','zb-sub','advice','loot-feed','toast-layer','joystick','speed-row','auto-btn','auto-lbl',
      'hero-sub','char-power','equip-grid','stat-list','bag-sub','bag-body','zones-sub','zones-body','galaxy-sub','galaxy-body',
      'store-body','board-sub','board-body','modal-root','bag-badge',
-     'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power',
+     'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power','pb-ship','hud-fuel','hud-iron','hud-plasma','hud-fuel-rate','hud-iron-rate','hud-plasma-rate',
      'siege-bar','sg-fill','sg-label'].forEach((id) => el[id] = $(id));
 
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.screen)));
@@ -107,9 +108,37 @@
     const hp = G.getHp();
     el['hp-fill'].style.width = (hp.max > 0 ? Math.max(0, hp.cur / hp.max * 100) : 0) + '%';
     el['hp-label'].textContent = hp.dead ? 'DOWN' : `${G.formatNum(hp.cur)} / ${G.formatNum(hp.max)}`;
-    el['hud-gold'].textContent = G.formatNum(s.gold);
+    el['hud-gold'].textContent = (G.formatNumRaw || G.formatNum)(s.gold);
+    // wallet: live Galaxy Resources next to gold (+ hourly farm rate, cached 5s)
+    {
+      const res = G.getResources ? G.getResources() : null;
+      if (res) {
+        if (el['hud-fuel']) el['hud-fuel'].textContent = G.formatNum(res.fuel || 0);
+        if (el['hud-iron']) el['hud-iron'].textContent = G.formatNum(res.iron || 0);
+        if (el['hud-plasma']) el['hud-plasma'].textContent = G.formatNum(res.plasma || 0);
+        if (!syncHUD._rT || Date.now() - syncHUD._rT > 5000) { syncHUD._rT = Date.now(); syncHUD._rates = G.resourceRates(); }
+        const rr = syncHUD._rates || {};
+        const setR = (id2, v2) => { if (el[id2]) { const s2 = v2 > 0 ? '+' + G.formatNum(v2) + '/h' : ''; if (el[id2].textContent !== s2) el[id2].textContent = s2; } };
+        setR('hud-fuel-rate', rr.fuel || 0);
+        setR('hud-iron-rate', rr.iron || 0);
+        setR('hud-plasma-rate', rr.plasma || 0);
+      }
+    }
     el['hud-dps'].textContent = G.formatNum(G.getDps());
-    const st0 = G.getStats(); if (st0) el['hud-power'].textContent = G.formatNum(Math.floor(st0.theoryDps + st0.maxHp * 0.5));
+    const st0 = G.getStats(); if (st0) el['hud-power'].textContent = (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st0.theoryDps + st0.maxHp * 0.5));
+    // hero-power pill shows THE ship that power belongs to
+    if (el['pb-ship']) {
+      const sk = s.ship || 'frigate';
+      if (el['pb-ship'].dataset.k !== sk) { el['pb-ship'].src = 'ships/ship-' + sk + '.png'; el['pb-ship'].dataset.k = sk; }
+    }
+    // SHIP SCORE → FLEET SCORE once escorts are flying
+    {
+      const pbl = document.querySelector('.pb-label');
+      if (pbl) {
+        const want = (G.fleetShips && G.fleetShips().length > 0) ? '⚡ FLEET SCORE' : '⚡ SHIP SCORE';
+        if (pbl.textContent !== want) pbl.textContent = want;
+      }
+    }
     el['hud-kills'].textContent = G.formatNum(s.totalKills) + ' kills';
     const safe = s.currentDungeon < 1;
     const aw = el['arena-wrap'] || (el['arena-wrap'] = document.getElementById('arena-wrap'));
@@ -134,8 +163,10 @@
     if (wz && !safe) {
       sgb.classList.add('show');
       const isSuper = wz.bossSpawned && wz.super;
-      const wv = wz.bossSpawned ? (isSuper ? 'SUPER BOSS' : 'BOSS') : 'WAVE ' + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
-      el['sg-fill'].style.width = Math.min(100, ((wz.bossSpawned ? wz.total : wz.wave - 1) / wz.total) * 100) + '%';
+      const cit = wz.citadel;
+      const citE = cit && wz.bossSpawned && G.getCitadel ? G.getCitadel() : null;
+      const wv = wz.bossSpawned ? (isSuper ? 'SUPER BOSS' : cit ? '⛴ RAZE THE CITADEL' : 'BOSS') : (cit ? 'ASSAULT ' : 'WAVE ') + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
+      el['sg-fill'].style.width = (citE ? Math.max(0, citE.hp / citE.maxHp * 100) : Math.min(100, ((wz.bossSpawned ? wz.total : wz.wave - 1) / wz.total) * 100)) + '%';
       el['sg-label'].textContent = '⚔ ' + wv;
       bb.classList.remove('show', 'active');
     } else {
@@ -171,11 +202,12 @@
   // ==========================================================================
   // BATTLE controls
   // ==========================================================================
+  function visibleSpeedTiers() { return C.SPEED_TIERS.filter((t2) => !t2.secret || (G.state && G.state.secretSpeed)); }
   function buildSpeedRow() {
     el['speed-row'].innerHTML = '';
-    C.SPEED_TIERS.forEach((tier) => {
+    visibleSpeedTiers().forEach((tier) => {
       const b = document.createElement('button');
-      b.className = 'spd';
+      b.className = 'spd' + (tier.secret ? ' secret' : '');
       b.innerHTML = `<span>${tier.label}</span>`;
       b.addEventListener('click', () => { G.setGameSpeed(tier.mult); syncSpeed(); });
       el['speed-row'].appendChild(b);
@@ -184,7 +216,8 @@
   }
   function syncSpeed() {
     const pills = el['speed-row'].querySelectorAll('.spd');
-    C.SPEED_TIERS.forEach((tier, i) => {
+    visibleSpeedTiers().forEach((tier, i) => {
+      if (!pills[i]) return;
       pills[i].classList.toggle('active', G.state.gameSpeed === tier.mult);
       pills[i].innerHTML = `<span>${tier.label}</span>`;
     });
@@ -227,17 +260,22 @@
   // Mothership. The streak resets on any other click (see the capture-phase
   // document listener in init).
   function tapMyShip() {
-    if (G.state.ownedShips && G.state.ownedShips.mothership) return; // already unlocked
+    const haveShip = G.state.ownedShips && G.state.ownedShips.mothership;
+    if (haveShip && G.state.secretSpeed) return; // every secret already claimed
     _msTaps++;
     const left = 20 - _msTaps;
     if (left <= 0) {
-      if (G.grantShip('mothership')) {
-        _msTaps = 0;
-        const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
-        t.innerHTML = '✦ MOTHERSHIP UNLOCKED<br><span style="font-size:12px;color:#ffd7f3">Fly it from Hangar → Ships</span>';
-        el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2800);
-        if (screen === 'hero') renderHero();
-      }
+      _msTaps = 0;
+      const gotShip = !haveShip && G.grantShip('mothership');
+      // the SAME trick is the only road to 10× speed
+      const gotSpeed = !G.state.secretSpeed;
+      if (gotSpeed) { G.state.secretSpeed = true; G.setGameSpeed(10); buildSpeedRow(); }
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
+      t.innerHTML = (gotShip ? '✦ MOTHERSHIP UNLOCKED<br>' : '') +
+        (gotSpeed ? '<span style="color:#ffd24d">⚡ 10× SPEED UNLOCKED</span><br>' : '') +
+        '<span style="font-size:12px;color:#ffd7f3">' + (gotShip ? 'Fly it from Hangar → Ships · ' : '') + '10× is live on the speed row</span>';
+      el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 3200);
+      if (screen === 'hero') renderHero();
     } else if (_msTaps >= 8) {
       toast('✦ ' + left + ' more…', '#c77bff'); // whisper only once the streak is well underway
     }
@@ -250,7 +288,7 @@
     heroBody.insertAdjacentHTML('afterbegin', hangarTabsHTML('ship'));
     wireHangarTabs(heroBody);
     el['hero-sub'].textContent = (window.AUTH ? window.AUTH.name() : 'Operator') + ' · Lv ' + G.state.level;
-    el['char-power'].innerHTML = 'Power <b>' + G.formatNum(Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>';
+    el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>';
     // equipment — driven by the current ship's actual slot layout
     el['equip-grid'].innerHTML = '';
     G.equipLayout().forEach(({ key, label, icon, item: it }) => {
@@ -261,7 +299,94 @@
       if (it) d.addEventListener('click', () => openItem(it, 'equipped'));
       el['equip-grid'].appendChild(d);
     });
+    renderFleet();
     renderHeroStats();
+  }
+  // ==========================================================================
+  // FLEET PANEL — flagship + escort slots; matches the hangar-bay visual
+  // ==========================================================================
+  function renderFleet() {
+    const panel = $('fleet-panel'); if (!panel) return;
+    const lvl = G.state.level, slots = G.fleetSlots();
+    const fleet = G.getFleet();
+    const flag = C.SHIP_BY_KEY[G.state.ship];
+    if (lvl < 100) {
+      panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">5 ships max</span></div>
+        <div class="fp-locked">🔒 Fleet command unlocks at <b>Lv 100</b> — then +1 escort slot every 100 levels. Your other hulls fly <b>with</b> you in battle and add their strength to your Fleet Score.</div>`;
+      return;
+    }
+    let cells = `<div class="fp-slot flag"><img src="ships/ship-${flag.key}.png" alt=""><div class="fps-n">${flag.name}</div><div class="fps-tag star">★ FLAGSHIP</div></div>`;
+    C.FLEET.slotLevels.forEach((lv, i) => {
+      if (i < slots) {
+        const k = fleet[i];
+        if (k && G.state.ownedShips[k] && k !== G.state.ship) {
+          const sh = C.SHIP_BY_KEY[k];
+          cells += `<div class="fp-slot filled" data-fp="${i}"><img src="ships/ship-${k}.png" alt=""><div class="fps-n">${sh.name}</div><div class="fps-tag on">● ESCORT</div></div>`;
+        } else {
+          cells += `<div class="fp-slot empty" data-fp="${i}"><div class="fps-add">+</div><div class="fps-n">Add ship</div><div class="fps-tag">OPEN</div></div>`;
+        }
+      } else {
+        cells += `<div class="fp-slot locked"><div class="fps-add">🔒</div><div class="fps-n">Lv ${lv}</div><div class="fps-tag">LOCKED</div></div>`;
+      }
+    });
+    const n = G.fleetShips().length;
+    panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">${n + 1}/${1 + slots} flying · ${n > 0 ? 'Fleet Score active' : 'deploy escorts to boost your score'}</span></div><div class="fp-slots">${cells}</div>${fleetLoadoutsHTML()}`;
+    panel.querySelectorAll('[data-fp]').forEach((d) => d.addEventListener('click', () => openFleetPicker(+d.dataset.fp)));
+    // loadout chips open the item card
+    panel.querySelectorAll('[data-fli]').forEach((d) => d.addEventListener('click', () => {
+      const [k, sk] = d.dataset.fli.split(':');
+      const fit = k === G.state.ship ? G.state.equipped : (G.state.fittings ? G.state.fittings[k] : null);
+      const it = fit && fit[sk];
+      if (it) openItem(it, 'equipped');
+    }));
+  }
+  // Per-ship LOADOUTS — every flying hull with its icon and exactly what it has
+  // equipped, so you can tell at a glance which ship is running which items.
+  function fleetLoadoutsHTML() {
+    const ships = [{ key: G.state.ship, role: '★ FLAGSHIP', fit: G.state.equipped }]
+      .concat(G.fleetShips().map((s) => ({ key: s.key, role: '● ESCORT', fit: (G.state.fittings || {})[s.key] || null })));
+    if (ships.length < 2) return ''; // solo flagship — the equip grid below covers it
+    let html = '<div class="fl-title">Loadouts</div>';
+    ships.forEach(({ key, role, fit }) => {
+      const sh = C.SHIP_BY_KEY[key]; if (!sh) return;
+      let chips = '', fitted = 0;
+      C.shipSlots(key).forEach((sk) => {
+        const slotDef = C.SLOTS[C.slotBase(sk)];
+        const it = fit ? fit[sk] : null;
+        if (it) {
+          fitted++;
+          const col = C.RARITY[it.rarity].color;
+          chips += `<div class="flc" data-fli="${key}:${sk}" style="border-color:${col}55"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n" style="color:${col}">${it.name}</span></div>`;
+        } else {
+          chips += `<div class="flc empty"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n">empty</span></div>`;
+        }
+      });
+      const isFlag = key === G.state.ship;
+      html += `<div class="fl-card ${isFlag ? 'flag' : ''}">
+        <div class="fl-head"><img src="ships/ship-${key}.png" alt="">
+          <div class="fl-meta"><div class="fl-name">${sh.name}</div><div class="fl-role ${isFlag ? 'flag' : ''}">${role} · ${fitted}/${C.shipSlots(key).length} fitted</div></div></div>
+        <div class="fl-chips">${chips}</div>
+        ${(!fit || !fitted) && !isFlag ? '<div class="fl-hint">No gear stowed — switch to this hull once to fit it out.</div>' : ''}</div>`;
+    });
+    return html;
+  }
+  function openFleetPicker(i) {
+    const fleet = G.getFleet();
+    const cur = fleet[i];
+    const avail = C.SHIPS.filter((s) => G.state.ownedShips[s.key] && s.key !== G.state.ship && !fleet.includes(s.key));
+    let rows = avail.map((s) => `<div class="fp-pick" data-k="${s.key}"><img src="ships/ship-${s.key}.png" alt=""><div class="fpp-m"><div class="fpp-n">${s.name}</div><div class="fpp-d">${s.tag || s.cls}</div></div><span class="fpp-go">DEPLOY</span></div>`).join('');
+    if (!rows && !cur) rows = '<p style="color:var(--muted);font-size:11.5px;line-height:1.5">No other hulls owned yet — buy ships in Hangar → Ships, then deploy them here as escorts.</p>';
+    const sheet = showSheet(`<div class="sheet-head">Escort Slot</div><div class="sheet-body">
+      ${cur ? `<div class="fp-pick rm" data-rm><div class="fpp-m"><div class="fpp-n">Remove ${C.SHIP_BY_KEY[cur] ? C.SHIP_BY_KEY[cur].name : cur}</div><div class="fpp-d">free this slot</div></div><span class="fpp-go" style="color:var(--bad)">✕</span></div>` : ''}
+      ${rows}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const rm = sheet.querySelector('[data-rm]'); if (rm) rm.addEventListener('click', () => { G.setFleetSlot(i, null); closeSheet(); renderHero(); });
+    sheet.querySelectorAll('[data-k]').forEach((d) => d.addEventListener('click', () => {
+      const r = G.setFleetSlot(i, d.dataset.k);
+      if (r.ok) { toast('✓ ' + C.SHIP_BY_KEY[d.dataset.k].name + ' joins the fleet', '#7ce0a0'); closeSheet(); renderHero(); }
+      else toast('Cannot deploy (' + r.reason + ')', '#e23b4e');
+    }));
   }
   function renderHeroStats() {
     const st = G.getStats();
@@ -287,10 +412,29 @@
   function renderBag() {
     const inv = G.state.inventory.slice();
     sortInv(inv);
-    el['bag-sub'].textContent = inv.length + ' items';
+    el['bag-sub'].textContent = inv.length + ' / ' + (G.invCap ? G.invCap() : 100) + ' slots';
     const recZone = Math.max(1, G.recommendedZone());
     const chances = G.rarityChances(recZone);
-    let html = `<div class="legend"><div class="legend-title">Rarity <span class="legend-note">· drop odds at Zone ${recZone}</span></div><div class="legend-grid">`;
+    // CARGO HOLD — capacity meter + exponentially-priced expansion
+    const cap = G.invCap ? G.invCap() : 100;
+    const cost = G.invSlotCost ? G.invSlotCost() : 0;
+    const pct = Math.min(100, inv.length / cap * 100);
+    const afford = G.state.gold >= cost;
+    let html = `<div class="cargo-row ${inv.length >= cap ? 'full' : ''}">
+      <div class="cargo-l"><div class="cargo-t">▤ Cargo Hold <b>${inv.length} / ${cap}</b>${inv.length >= cap ? ' · <span class="cargo-warn">FULL — new loot auto-scraps</span>' : ''}</div>
+        <div class="cargo-bar"><div class="cargo-fill" style="width:${pct}%"></div></div></div>
+      <button class="cargo-buy ${afford ? '' : 'cant'}" id="cargo-buy">+100 slots<span class="cargo-cost">$ ${(G.formatNumRaw || G.formatNum)(cost)}</span></button></div>`;
+    // pickup filter + auto-sell-on-pickup controls
+    {
+      const PF = G.state.pickupFilter || 0;
+      const AST = G.state.autoSellTier == null ? -1 : G.state.autoSellTier;
+      html += `<div class="filter-row">
+        <div class="fr-item"><span class="fr-l">▼ Pick up</span><select id="pickup-sel">${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === PF ? 'selected' : ''}>${i === 0 ? 'Everything' : r.name + ' +'}</option>`).join('')}</select></div>
+        <div class="fr-item"><span class="fr-l">$ Auto-sell</span><select id="autosell-pickup-sel"><option value="-1" ${AST < 0 ? 'selected' : ''}>Off</option>${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === AST ? 'selected' : ''}>≤ ${r.name}</option>`).join('')}</select></div>
+      </div>
+      <div class="fr-hint">Below pick-up level: scrapped to resources on contact · Auto-sell: sold for gold on pickup — upgrades are always kept</div>`;
+    }
+    html += `<div class="legend"><div class="legend-title">Rarity <span class="legend-note">· drop odds at Zone ${recZone}</span></div><div class="legend-grid">`;
     C.RARITY.forEach((r) => {
       html += `<div class="legend-chip ${rc(r.tier)}"><span class="legend-dot" style="background:${r.color};color:${r.color}"></span><span class="legend-nm">${r.name}</span><span class="legend-pct">${fmtChance(chances[r.tier])}</span></div>`;
     });
@@ -317,6 +461,19 @@
     if (!inv.length) html += '<div class="empty-note">No loot in your bag.<br>Run over drops to collect them.</div>';
     else html += inv.map(itemCard).join('');
     el['bag-body'].innerHTML = html;
+    const cb = $('cargo-buy'); if (cb) cb.addEventListener('click', () => {
+      const r = G.buyInvSlots();
+      if (r.ok) { toast('▦ Cargo hold expanded to ' + r.cap + ' slots', '#5bc06b'); renderBag(); }
+      else toast('Not enough gold — next expansion costs $' + (G.formatNumRaw || G.formatNum)(G.invSlotCost()), '#e23b4e');
+    });
+    const ps = $('pickup-sel'); if (ps) ps.addEventListener('change', () => {
+      G.setPickupFilter(+ps.value);
+      toast(+ps.value === 0 ? 'Picking up everything' : '▼ Picking up ' + C.RARITY[+ps.value].name + ' and better — rest is scrapped', '#9ec5ff');
+    });
+    const asp = $('autosell-pickup-sel'); if (asp) asp.addEventListener('change', () => {
+      G.setAutoSellTier(+asp.value);
+      toast(+asp.value < 0 ? 'Auto-sell off' : '$ Auto-selling ' + C.RARITY[+asp.value].name + ' and below on pickup', '#e6b566');
+    });
     const sel = $('sort-sel'); sel.value = sortMode; sel.addEventListener('change', () => { sortMode = sel.value; renderBag(); });
     $('auto-equip').addEventListener('click', () => { const n = G.autoEquip(); toast(n ? 'Equipped best gear' : 'Already optimal', n ? '#2f9e4f' : '#9c8d78'); });
     $('auto-always').addEventListener('click', () => { G.state.autoEquipAlways = !G.state.autoEquipAlways; if (G.state.autoEquipAlways) G.autoEquip(); G.save(); renderBag(); });
@@ -378,86 +535,265 @@
     return p.join(' ');
   }
   function fmtCd(sec) { const m = Math.floor(sec / 60), s = sec % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
+  // ==========================================================================
+  // THE GALAXY — one massive unified hex grid (~25 rings ≈ 1,950 tiles).
+  // Canvas-rendered with pan / pinchless zoom (buttons + wheel) / tap tiles.
+  // Center = neutral HOME CITADEL. Color code: blue available · red rival ·
+  // gold yours · gray locked · ⛴ citadel siege zone · ◷ cooldown.
+  // ==========================================================================
+  const gxCam = { x: 0, y: 0, z: 1 };       // persistent across re-renders
+  let _gxCv = null, _gxNeedsDraw = false;
+  const gxCitImg = new Image(); gxCitImg.src = 'ships/ship-citadel.png';
+  const GX_HEX = 26;                         // base hex size at zoom 1
   function renderGalaxy() {
     const res = G.getResources(), rates = G.resourceRates();
-    el['galaxy-sub'].textContent = '6 regions · 60 tiles · conquer & hold';
+    el['galaxy-sub'].textContent = 'one galaxy · ' + GM.tileCount() + ' tiles · conquer & hold';
     let html = '<div class="res-hud">';
     GM.RES_KEYS.forEach((k) => {
       const d = GM.RES[k];
       html += `<div class="res-pill" style="--rc:${d.color}"><span class="res-g">${d.glyph}</span><span class="res-txt"><b>${G.formatNum(res[k] || 0)}</b><span class="res-rate">+${G.formatNum(rates[k] || 0)}/h</span></span></div>`;
     });
     html += '</div>';
-
     const feed = G.getGalaxyFeed ? G.getGalaxyFeed() : [];
     if (feed.length) {
       html += '<div class="gx-feed"><div class="gxf-h">⚔ Contested Space · live</div>';
-      feed.slice(0, 5).forEach((f) => { html += `<div class="gxf-row ${f.mine ? 'mine' : ''}">${f.msg}</div>`; });
+      feed.slice(0, 3).forEach((f) => { html += `<div class="gxf-row ${f.mine ? 'mine' : ''}">${f.msg}</div>`; });
       html += '</div>';
     }
-
-    const view = G.galaxyView();
-    const size = 30, w = Math.sqrt(3) * size, vert = size * 1.5, pad = 8;
-    const Wd = pad * 2 + 5 * w + w / 2, Hd = pad * 2 + vert + size * 1.1;
-
-    view.forEach((rg) => {
-      const R = rg.region, full = rg.full, cd = rg.cooldown;
-      html += `<div class="rg-card ${R.deep ? 'deep' : ''} ${full ? 'full' : ''}" style="--rc:${R.color}">`;
-      html += `<div class="rg-head"><div class="rg-l"><span class="rg-name">${R.name}</span><span class="rg-lv">Lv ${R.levelMin}–${R.levelMax}</span></div>
-        <div class="rg-r">${R.deep ? '<span class="rg-tag deep">☢ DEEP</span>' : ''}${full ? '<span class="rg-tag fullb">★ FULL ×10</span>' : ''}${cd > 0 ? `<span class="rg-tag cd">◷ ${fmtCd(cd)}</span>` : ''}<span class="rg-own">${rg.ownedCount}/10</span></div></div>`;
-      html += `<div class="rg-blurb">${R.blurb}</div>`;
-      let cards = '<div class="rg-tiles">';
-      rg.tiles.forEach((t) => {
-        const cls = t.active ? 'active' : t.owned ? 'owned' : t.rival ? 'rival' : 'neutral';
-        const accent = t.boss ? '#e23b4e' : (t.owned ? R.color : (t.rival ? '#e8a34a' : (t.resource ? GM.RES[t.resource].color : '#5a6472')));
-        const badge = t.boss ? '<span class="gt-boss">BOSS</span>'
-          : (t.resource ? `<span class="gt-res" style="color:${GM.RES[t.resource].color}">${GM.RES[t.resource].glyph}</span>` : '<span class="gt-res dim">◦</span>');
-        const owner = t.active ? '● HERE' : t.owned ? '✦ Yours' : t.rival ? t.rival : 'Open ›';
-        const ttl = t.rival ? 'Held by ' + t.rival : (t.owned ? 'You hold this tile' : 'Unclaimed — capture it');
-        cards += `<div class="gtile ${cls} ${t.boss ? 'boss' : ''}" data-key="${t.id}" style="--ac:${accent}" title="${ttl}">
-          <div class="gt-top"><span class="gt-lv">${t.boss ? '☠' : 'L' + t.diff}</span>${badge}</div>
-          <div class="gt-own">${owner}</div></div>`;
-      });
-      cards += '</div>';
-      html += cards + '</div>';
-    });
-    html += '<div class="galaxy-help">Enter <b>any</b> region regardless of level — deeper space is deadlier but far richer. Tap a tile to deploy (yours), capture (neutral) or contest (rival-held). Hold all 10 tiles in a region for a <b>10× bonus</b>.</div>';
+    html += `<div class="gx-map-wrap">
+      <canvas id="gx-canvas"></canvas>
+      <div class="gx-ctl">
+        <button class="gxc" data-gx="in">+</button>
+        <button class="gxc" data-gx="out">−</button>
+        <button class="gxc" data-gx="home">⌂</button>
+      </div>
+      <div class="gx-hud" id="gx-ringlab"></div>
+    </div>`;
+    html += `<div class="gx-legend"><span class="gxl"><i style="background:#2e6fe0"></i>Available</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#f2b24b"></i>Yours</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl">⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
-
-    el['galaxy-body'].querySelectorAll('.gtile').forEach((g) => g.addEventListener('click', () => {
-      const id = g.dataset.key, tile = G.sysAt(id); if (!tile) return;
-      try {
-        if (G.isOwned(id)) { G.warp(id); showScreen('battle'); }
-        else openTileAction(id);
-      } catch (e) { toast('Could not open tile', '#e23b4e'); }
-    }));
-
+    bindGalaxyMap();
+    drawGalaxyMap();
     clearInterval(_galaxyTimer);
-    if (view.some((v) => v.cooldown > 0)) _galaxyTimer = setInterval(() => { if (screen === 'galaxy') renderGalaxy(); else clearInterval(_galaxyTimer); }, 1000);
+    _galaxyTimer = setInterval(() => { if (screen === 'galaxy') drawGalaxyMap(); else clearInterval(_galaxyTimer); }, 1000);
+  }
+  function bindGalaxyMap() {
+    const cv = document.getElementById('gx-canvas'); if (!cv) return;
+    _gxCv = cv;
+    const wrap = cv.parentElement;
+    const fit = () => {
+      const r = wrap.getBoundingClientRect();
+      const dpr2 = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = r.width * dpr2; cv.height = r.height * dpr2;
+      cv._dpr = dpr2; cv._w = r.width; cv._h = r.height;
+      drawGalaxyMap();
+    };
+    fit(); requestAnimationFrame(fit);   // immediate size + a settle pass
+    // pan + tap
+    let down = null, moved = false;
+    cv.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, cx: gxCam.x, cy: gxCam.y }; moved = false; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointermove', (e) => {
+      if (!down) return;
+      const dx = e.clientX - down.x, dy = e.clientY - down.y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+      gxCam.x = down.cx - dx / gxCam.z; gxCam.y = down.cy - dy / gxCam.z;
+      drawGalaxyMap();
+    });
+    cv.addEventListener('pointerup', (e) => {
+      if (down && !moved) {
+        const r = cv.getBoundingClientRect();
+        const wx = (e.clientX - r.left - cv._w / 2) / gxCam.z + gxCam.x;
+        const wy = (e.clientY - r.top - cv._h / 2) / gxCam.z + gxCam.y;
+        const c = GM.unpixel(wx, wy, GX_HEX);
+        const id = GM.tileId(c.q, c.r);
+        if (GM.tileAt(id)) openTileAction(id);
+      }
+      down = null;
+    });
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); zoomGalaxy(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+    el['galaxy-body'].querySelectorAll('[data-gx]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.dataset.gx;
+      if (k === 'in') zoomGalaxy(1.3);
+      else if (k === 'out') zoomGalaxy(1 / 1.3);
+      else { gxCam.x = 0; gxCam.y = 0; gxCam.z = 1; drawGalaxyMap(); }
+    }));
+  }
+  function zoomGalaxy(f) { gxCam.z = Math.max(0.16, Math.min(2.6, gxCam.z * f)); drawGalaxyMap(); }
+  function drawGalaxyMap() {
+    const cv = _gxCv; if (!cv || !cv._w || screen !== 'galaxy') return;
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(cv._dpr, 0, 0, cv._dpr, 0, 0);
+    const w = cv._w, h = cv._h, z = gxCam.z;
+    // deep-space backdrop
+    const bg = ctx.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, Math.max(w, h) * 0.8);
+    bg.addColorStop(0, '#101a2c'); bg.addColorStop(1, '#070b14');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(w / 2, h / 2); ctx.scale(z, z); ctx.translate(-gxCam.x, -gxCam.y);
+    // visible ring bound (cull cheaply by distance)
+    const half = Math.hypot(w, h) / 2 / z;
+    const maxPix = Math.hypot(gxCam.x, gxCam.y) + half + GX_HEX * 2;
+    const maxRing = Math.min(GM.RINGS, Math.ceil(maxPix / (GX_HEX * 1.5)));
+    const myUid = null;
+    const lvl = G.state.level;
+    const showText = z >= 0.55;
+    const sq3 = Math.sqrt(3);
+    let homeDraw = null;
+    for (let ring = 0; ring <= maxRing; ring++) {
+      const coords = GM.ringCoords(ring);
+      for (const c of coords) {
+        const p = GM.pixel(c.q, c.r, GX_HEX);
+        // viewport cull
+        if (Math.abs(p.x - gxCam.x) > half + GX_HEX || Math.abs(p.y - gxCam.y) > half + GX_HEX) continue;
+        const id = GM.tileId(c.q, c.r);
+        const t = GM.tileAt(id); if (!t) continue;
+        const owned = G.isOwned(id), rival = !owned && G.rivalOf(id);
+        const locked = !owned && !t.home && t.level > lvl + 10;
+        const active = G.state.currentSystem === id;
+        const cd = (t.citadel || rival || owned) ? G.tileCooldownLeft(id) : 0;
+        // fill by state
+        let fill, edge;
+        if (t.home) { fill = '#2a2438'; edge = '#f2b24b'; }
+        else if (owned) { fill = 'rgba(242,178,75,0.30)'; edge = '#f2b24b'; }
+        else if (rival) { fill = 'rgba(210,59,78,0.30)'; edge = '#d23b4e'; }
+        else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
+        else { fill = 'rgba(46,111,224,0.22)'; edge = '#2e6fe0'; }
+        // hex path
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = Math.PI / 3 * i + Math.PI / 6;
+          const px = p.x + Math.cos(a) * (GX_HEX - 1.5), py = p.y + Math.sin(a) * (GX_HEX - 1.5);
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill();
+        if (t.citadel) {
+          // PRISMATIC edge — slow color-cycling sheen, phase-offset per tile
+          const hue = (Date.now() / 30 + (c.q * 47 + c.r * 31)) % 360;
+          const pg = ctx.createLinearGradient(p.x - GX_HEX, p.y - GX_HEX, p.x + GX_HEX, p.y + GX_HEX);
+          pg.addColorStop(0, 'hsl(' + hue + ',90%,62%)');
+          pg.addColorStop(0.5, 'hsl(' + ((hue + 90) % 360) + ',90%,68%)');
+          pg.addColorStop(1, 'hsl(' + ((hue + 180) % 360) + ',90%,62%)');
+          ctx.lineWidth = active ? 3.2 : 2.4;
+          ctx.strokeStyle = pg; ctx.stroke();
+        } else {
+          ctx.lineWidth = active ? 3 : 1.1;
+          ctx.strokeStyle = active ? '#ffffff' : edge;
+          ctx.stroke();
+        }
+        if (t.home) { homeDraw = p; continue; }   // the hub is drawn LAST, on top
+        if (!showText) {
+          // zoomed out: just mark specials
+          if (t.citadel) {
+            const hue2 = (Date.now() / 25 + ring * 30) % 360;
+            ctx.fillStyle = 'hsl(' + hue2 + ',90%,65%)';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, 7); ctx.fill();
+          }
+          continue;
+        }
+        // icon + level
+        ctx.textAlign = 'center';
+        {
+          if (t.citadel && gxCitImg.complete && gxCitImg.naturalWidth) {
+            // real citadel art seated in the hex
+            const dw = GX_HEX * 1.5, dh = dw * (gxCitImg.naturalHeight / gxCitImg.naturalWidth);
+            ctx.drawImage(gxCitImg, p.x - dw / 2, p.y - dh / 2 - 3, dw, dh);
+          } else {
+            const icon = t.citadel ? '⛴' : t.boss ? '☠' : (t.resource ? GM.RES[t.resource].glyph : '');
+            if (icon) { ctx.font = '800 10px Rajdhani, sans-serif'; ctx.fillStyle = t.citadel ? '#ffb088' : t.boss ? '#ff6a78' : (t.resource ? GM.RES[t.resource].color : '#9fb2d0'); ctx.fillText(icon, p.x, p.y - 3); }
+          }
+          ctx.font = '800 8px Rajdhani, sans-serif';
+          ctx.fillStyle = locked ? '#5a6270' : '#dfe9ff';
+          ctx.fillText('L' + t.level, p.x, p.y + (t.citadel ? GX_HEX * 0.62 : (t.boss || t.resource) ? 9 : 3));
+          if (cd > 0) { ctx.font = '800 8px Rajdhani, sans-serif'; ctx.fillStyle = '#ffcf7a'; ctx.fillText('◷', p.x + GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
+          if (owned) { ctx.fillStyle = '#7ce0a0'; ctx.font = '800 7px Rajdhani, sans-serif'; ctx.fillText('★', p.x - GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
+        }
+      }
+    }
+    // —— the HOME CITADEL hub: real fortress art + breathing golden halo ——
+    if (homeDraw) {
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 600);
+      const ag = ctx.createRadialGradient(homeDraw.x, homeDraw.y, 4, homeDraw.x, homeDraw.y, GX_HEX * 3.2);
+      ag.addColorStop(0, 'rgba(255,200,110,' + (0.30 + 0.16 * pulse).toFixed(3) + ')');
+      ag.addColorStop(0.6, 'rgba(255,170,70,' + (0.10 + 0.08 * pulse).toFixed(3) + ')');
+      ag.addColorStop(1, 'rgba(255,170,70,0)');
+      ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(homeDraw.x, homeDraw.y, GX_HEX * 3.2, 0, 7); ctx.fill();
+      if (gxCitImg.complete && gxCitImg.naturalWidth) {
+        const dw = GX_HEX * 2.8, dh = dw * (gxCitImg.naturalHeight / gxCitImg.naturalWidth);
+        ctx.drawImage(gxCitImg, homeDraw.x - dw / 2, homeDraw.y - dh / 2, dw, dh);
+      } else {
+        ctx.font = '800 18px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffd9a0'; ctx.fillText('⌂', homeDraw.x, homeDraw.y + 4);
+      }
+      if (showText) {
+        ctx.font = '800 8px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 2.4; ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.strokeText('HOME CITADEL', homeDraw.x, homeDraw.y + GX_HEX * 1.5);
+        ctx.fillStyle = '#ffd9a0'; ctx.fillText('HOME CITADEL', homeDraw.x, homeDraw.y + GX_HEX * 1.5);
+      }
+    }
+    ctx.restore();
+    // ring label — which ring band is at the center of the view?
+    const cring = Math.round(Math.hypot(gxCam.x, gxCam.y) / (GX_HEX * 1.55));
+    const lab = document.getElementById('gx-ringlab');
+    if (lab) lab.textContent = cring <= 0 ? 'CORE · Home Citadel' : 'RING ' + Math.min(GM.RINGS, cring) + ' · Lv ' + GM.ringLevel(Math.min(GM.RINGS, Math.max(1, cring)));
   }
   function openTileAction(id) {
-    const t = G.sysAt(id); if (!t) return;
-    const R = G.REGIONS[t.region], rival = G.rivalOf(id), cd = G.regionCooldownLeft(t.region);
-    const blocked = rival && cd > 0;
-    const obj = t.boss ? 'Clear 10 waves, then defeat the <b style="color:var(--hp)">BOSS</b>' : 'Clear 10 waves to capture';
-    const reward = t.boss ? 'Once held, farms endless boss waves — a boss every 10 waves (30% Super Boss)'
-      : (t.resource ? `Yields <b style="color:${GM.RES[t.resource].color}">${GM.RES[t.resource].glyph} ${G.formatNum(t.rate)}/h ${GM.RES[t.resource].name}</b>${R.deep ? ' ×25 (deep)' : ''} once held` : 'Strategic territory toward the full-region 10× bonus');
-    const head = rival ? `Contest · ${t.name}` : `Capture · ${t.name}`;
-    const sheet = showSheet(`<div class="sheet-head">${head}</div><div class="sheet-body">
-      <div class="ip-stat"><span class="ip-sname">Region</span><span class="v">${R.name} · Lv ${R.levelMin}–${R.levelMax}</span></div>
-      <div class="ip-stat"><span class="ip-sname">Difficulty</span><span class="v">Lv ${t.diff}${t.boss ? ' · BOSS TILE' : ''}</span></div>
-      ${rival ? `<div class="ip-stat"><span class="ip-sname">Held by</span><span class="v" style="color:#e8a34a">${rival}</span></div>` : ''}
+    const t = G.tileInfo(id); if (!t) return;
+    if (t.home) {
+      // YOUR GATHERING OPERATION — everything the galaxy is paying you
+      const rates = G.resourceRates();
+      const owned = Object.keys(G.state.ownedSystems || {});
+      let citN = 0, deepN = 0, bossN = 0;
+      owned.forEach((k2) => { const tt = GM.tileAt(k2); if (!tt) return; if (tt.citadel) citN++; if (tt.deep) deepN++; if (tt.boss) bossN++; });
+      const rows = GM.RES_KEYS.map((k2) => {
+        const d = GM.RES[k2];
+        return `<div class="ip-stat"><span class="ip-sname" style="color:${d.color}">${d.glyph} ${d.name}</span><span class="v">+${G.formatNum(rates[k2] || 0)}/h</span></div>`;
+      }).join('');
+      const sheet = showSheet(`<div class="sheet-head">⌂ Home Citadel</div><div class="sheet-body">
+        <p style="margin-bottom:8px">The neutral heart of the Galaxy — every operator's safe harbor. It cannot be conquered.</p>
+        <div class="lo-sect">Your gathering operation</div>
+        ${rows}
+        <div class="ip-stat"><span class="ip-sname">Territory held</span><span class="v">${owned.length} tile${owned.length === 1 ? '' : 's'}${citN ? ` · ⛴ ${citN} citadel${citN > 1 ? 's' : ''}` : ''}${bossN ? ` · ☠ ${bossN}` : ''}${deepN ? ` · ☢ ${deepN} deep` : ''}</span></div>
+        ${owned.length === 0 ? '<p style="font-size:11px;color:var(--muted);margin-top:6px">Claim tiles on the map to start generating Galaxy Resources every hour — citadels pay 100×.</p>' : ''}
+        <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn primary" data-ok>⌂ Dock</button></div></div>`);
+      sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+      sheet.querySelector('[data-ok]').addEventListener('click', () => { closeSheet(); G.selectDungeon(0); showScreen('battle'); });
+      return;
+    }
+    const typeName = t.citadel ? '⛴ CITADEL SIEGE ZONE' : t.boss ? '☠ Boss Tile' : t.resource ? (GM.RES[t.resource].glyph + ' Resource Field') : 'Combat Sector';
+    const owner = t.owned ? 'You' : (t.rival || 'Unclaimed');
+    const ownerCol = t.owned ? 'var(--gold)' : (t.rival ? '#e8a34a' : '#7fb4ff');
+    const ratePerH = t.rate ? t.rate * (t.deep ? GM.DEEP_MULT.resource : 1) : 0;
+    const cdTxt = t.cooldown > 0 ? (t.citadel ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
+    const blocked = t.rival && t.cooldown > 0;
+    const action = t.owned ? 'Deploy' : t.rival ? (t.citadel ? 'Siege' : 'Attack') : (t.citadel ? 'Siege' : 'Capture');
+    const obj = t.owned ? (t.boss || t.citadel ? 'Farm endless boss waves on your tile' : 'Farm your territory')
+      : t.citadel ? 'Fight up through the garrison, raze the Void Citadel, and it becomes YOUR Citadel'
+      : t.boss ? 'Clear 10 waves, then defeat the <b style="color:var(--hp)">BOSS</b>' : 'Clear 10 waves to capture';
+    const ec = G.entryCostFor ? G.entryCostFor(id) : null;
+    const myRes = G.getResources ? G.getResources() : {};
+    const ecAfford = !ec || GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (ec[k2] || 0));
+    const ecRow = ec ? `<div class="ip-stat"><span class="ip-sname">Entry cost</span><span class="v">${GM.RES_KEYS.filter((k2) => ec[k2]).map((k2) => `<span style="color:${(myRes[k2] || 0) >= ec[k2] ? GM.RES[k2].color : 'var(--bad)'}">${GM.RES[k2].glyph} ${G.formatNum(ec[k2])}</span>`).join(' ')}${t.owned ? ' <span style="color:var(--muted-2)">(½ — your territory)</span>' : ''}</span></div>` : '';
+    const sheet = showSheet(`<div class="sheet-head">${t.rival ? 'Contest' : t.owned ? 'Your Tile' : 'Claim'} · ${t.name}</div><div class="sheet-body">
+      <div class="ip-stat"><span class="ip-sname">Ring · Level</span><span class="v">Ring ${t.ring} · Lv ${t.level}${t.deep ? ' · ☢ DEEP SPACE' : ''}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Type</span><span class="v">${typeName}${t.rarity ? ' · ' + (t.rarity === 2 ? '★★ Rare' : '★ Uncommon') : ''}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Owner</span><span class="v" style="color:${ownerCol}">${owner}</span></div>
+      ${ratePerH ? `<div class="ip-stat"><span class="ip-sname">Output / h</span><span class="v" style="color:${GM.RES[t.resource].color}">${GM.RES[t.resource].glyph} ${G.formatNum(ratePerH)} ${GM.RES[t.resource].name}${t.citadel ? ' · 100× CITADEL' : ''}</span></div>` : ''}
+      <div class="ip-stat"><span class="ip-sname">Enemy difficulty</span><span class="v">Zone Lv ${t.diff}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Loot quality</span><span class="v">×${t.lootQ}${t.deep ? ' (deep space)' : ''}</span></div>
+      ${ecRow}
+      <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Cooldown ') + cdTxt : (t.locked ? '🔒 Lv ' + Math.max(1, t.level - 10) + ' required' : '⚔ Open to attack')}</span></div>
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
-      <div class="ip-stat"><span class="ip-sname">Reward</span><span class="v">${reward}</span></div>
-      ${R.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
-      ${rival && !blocked ? `<p style="font-size:11px;margin-top:6px;color:var(--muted)">Attacking puts <b>${R.name}</b> on a 15-min contest cooldown.</p>` : ''}
-      ${blocked ? `<p style="color:var(--bad);font-size:11px;margin-top:6px">On cooldown — ${fmtCd(cd)} until ${R.name} can be contested again.</p>` : ''}
-      <div class="sheet-actions"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok ${blocked ? 'disabled' : ''}>${rival ? 'Attack' : 'Capture'}</button></div></div>`);
+      ${t.citadel && !t.owned ? '<p style="font-size:11px;margin-top:6px;color:#ffb088">⛴ Citadels generate <b>100×</b> resources and can only be sieged <b>once per day</b>.</p>' : ''}
+      ${t.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
+      ${!ecAfford ? '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough Galaxy Resources to warp this deep — farm or capture closer rings first.</p>' : ''}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${action}</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
       const r = G.warp(id);
-      if (r.ok) { closeSheet(); toast((rival ? 'Attacking ' : 'Deploying to ') + t.name, '#5b9cff'); showScreen('battle'); }
-      else toast(r.reason === 'cooldown' ? 'Region on cooldown' : 'Cannot deploy', '#e23b4e');
+      if (r.ok) { closeSheet(); toast((t.rival ? 'Attacking ' : t.owned ? 'Deploying to ' : 'Claiming ') + t.name, '#5b9cff'); showScreen('battle'); }
+      else toast(r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
     });
   }
 
@@ -482,16 +818,20 @@
       const lockLabel = blocked ? '🔒 Clear Zone ' + (Math.floor((d - 1) / C.ZONE_BLOCK) * C.ZONE_BLOCK) : '🔒 Lv ' + reqLv;
       const bz = G.zoneBonuses(d);
       const wave = d % 11 === 0;
+      const cit = G.isCitadelZone && G.isCitadelZone(d);
+      const citCd = cit ? G.citadelCooldownLeft(d) : 0;
       const bonus = (wave?`<span class="z-bon wave">◎ WAVE ZONE · 25 waves → boss</span>`:'') +
+                    (cit?`<span class="z-bon cit">⛴ CITADEL SIEGE · raze the fortress</span>`:'') +
+                    (citCd>0?`<span class="z-bon citcd">◷ rebuilds in ${fmtCd(citCd)}</span>`:'') +
                     (bz.density>1?`<span class="z-bon dens">⚔ ${bz.density}× density</span>`:'') +
                     (bz.quality>1?`<span class="z-bon qual">✦ ${bz.quality}× loot quality</span>`:'');
-      html += `<div class="zone-row ${active?'active':''} ${locked?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''}" data-d="${d}">
+      html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}">
         <div class="z-num">${d}</div>
-        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}</div>
+        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}</div>
           <div class="z-sub">Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
           ${bonus?`<div class="z-bons">${bonus}</div>`:''}
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
-        <div class="z-go">${locked ? lockLabel : active ? '● HERE' : (wave ? '◎ ENTER' : (d===rec ? '★ DEPLOY' : 'DEPLOY'))}</div></div>`;
+        <div class="z-go">${locked ? lockLabel : citCd>0 ? '◷ ' + fmtCd(citCd) : active ? '● HERE' : (cit ? '⛴ BREACH' : wave ? '◎ ENTER' : (d===rec ? '★ DEPLOY' : 'DEPLOY'))}</div></div>`;
     }
     el['zones-body'].innerHTML = html;
     el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => { G.selectDungeon(+row.dataset.d); showScreen('battle'); }));
@@ -520,14 +860,19 @@
   function storeHead(ico, title, right) { return `<div class="sec-head"><span class="sec-ic">${ico}</span><h3>${title}</h3>${right?`<span class="sec-right">${right}</span>`:''}</div>`; }
   // Unified Hangar segment header — shared by the "My Ship" (hero) view and the
   // store categories, so Ship + Store live under one tab.
-  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['cosmetics','Cosmetics']];
+  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['board','Leaderboard'],['cosmetics','Cosmetics']];
   function hangarTabsHTML(active) {
-    return `<div class="store-cats">${HANGAR_TABS.map(([k,l]) => `<button class="store-cat ${active===k?'active':''}" data-hangtab="${k}">${l}</button>`).join('')}</div>`;
+    const fleetMode = G && G.fleetShips && G.fleetShips().length > 0;
+    return `<div class="store-cats">${HANGAR_TABS.map(([k,l]) => {
+      const label = (k === 'ship' && fleetMode) ? 'My Fleet' : l;
+      return `<button class="store-cat ${active===k?'active':''}" data-hangtab="${k}">${label}</button>`;
+    }).join('')}</div>`;
   }
   function wireHangarTabs(root) {
     root.querySelectorAll('[data-hangtab]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.hangtab;
       if (k === 'ship') { tapMyShip(); showScreen('hero'); }
+      else if (k === 'board') showScreen('board');
       else { storeCat = k; showScreen('store'); }
     }));
   }
@@ -675,7 +1020,12 @@
   function renderBoard() {
     const heat = LB.heatBoard(G);
     el['board-sub'].textContent = lbTab === 'heat' ? 'Heat ' + heat.heat : 'All-Time';
-    let html = `<div class="lb-tabs">
+    // LIVE feel: rival scores wobble a touch every refresh (pure presentation —
+    // zero net growth, just a ±~1% sine jitter seeded per name)
+    const jt = Date.now() / 1000;
+    const jitter = (v, s2) => { let h = 0; for (let i = 0; i < s2.length; i++) h = (h * 31 + s2.charCodeAt(i)) | 0; return Math.max(1, Math.round(v * (1 + 0.012 * Math.sin(jt * 0.9 + (h % 97))))); };
+    let html = hangarTabsHTML('board');
+    html += `<div class="lb-tabs">
       <button class="lb-tab ${lbTab==='heat'?'active':''}" data-t="heat">My Heat</button>
       <button class="lb-tab ${lbTab==='all'?'active':''}" data-t="all">All-Time</button></div>`;
     let data;
@@ -690,13 +1040,27 @@
       <div class="lb-row ${p.isMe?'me':''}" data-rank="${i}">
         <div class="lb-rank ${p.rank<=3?'top':''}">${p.rank}</div>
         <div class="lb-nm"><div class="lb-name ${p.isMe?'':''}">${p.isMe?'★ ':''}${p.name}</div>
-          <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div></div>
-        <div class="lb-pow"><span class="pl">PWR</span>${G.formatNum(p.power)}</div></div>`).join('');
+          <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.isMe ? p.kills : jitter(p.kills, p.name + 'k'))} kills</div>
+          <div class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</div></div>
+        <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.isMe ? p.power : jitter(p.power, p.name))}</div></div>`).join('');
+    const _sc = el['board-body'].scrollTop;
     el['board-body'].innerHTML = html;
+    el['board-body'].scrollTop = _sc;
+    wireHangarTabs(el['board-body']);
     el['board-body'].querySelectorAll('.lb-tab').forEach((b) => b.addEventListener('click', () => { lbTab = b.dataset.t; renderBoard(); }));
     el['board-body'].querySelectorAll('.lb-row').forEach((row) => row.addEventListener('click', () => openLoadout(data.board[+row.dataset.rank], data.board.length)));
+    // auto-refresh every few seconds while the board is open
+    clearInterval(_boardTimer);
+    _boardTimer = setInterval(() => { if (screen === 'board') renderBoard(); else clearInterval(_boardTimer); }, 4000);
   }
   function openLoadout(p, total) {
+    const fl = p.isMe
+      ? [G.state.ship].concat(G.fleetShips ? G.fleetShips().map((x) => x.key) : [])
+      : (LB.fleetFor ? LB.fleetFor(p, p.rank, total) : []);
+    const fleetHtml = fl.map((fk, i) => {
+      const sh = C.SHIP_BY_KEY[fk];
+      return `<div class="lo-ship ${i === 0 ? 'flag' : ''}"><img src="ships/ship-${fk}.png" alt=""><div class="lo-sn">${sh ? sh.name : fk}</div><div class="lo-st">${i === 0 ? '★ FLAGSHIP' : 'ESCORT'}</div></div>`;
+    }).join('');
     const eq = p.isMe ? G.state.equipped : LB.loadoutFor(p, p.rank, total);
     let grid = '';
     C.SLOT_KEYS.forEach((slot) => {
@@ -706,6 +1070,8 @@
     });
     const sheet = showSheet(`<div class="sheet-head">${p.isMe?'Your Loadout':p.name}</div><div class="sheet-body">
       <p style="margin-bottom:10px">Rank <b>#${p.rank}</b> · Zone <b>${p.zone}</b> · Level <b>${p.level}</b> · Power <b style="color:var(--gold)">${G.formatNum(p.power)}</b></p>
+      <div class="lo-fleet">${fleetHtml}</div>
+      <div class="lo-sect">Flagship loadout</div>
       <div class="loadout-grid">${grid}</div>
       <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Close</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
@@ -744,6 +1110,14 @@
     const sheet = showSheet(`<div id="item-pop"><div class="sheet-body">
       <div class="ip-name ${rc(item.rarity)}">${item.name}</div>
       <div class="ip-type">${r.name} · ${C.SLOTS[item.slot].name} · Zone ${item.dungeon}</div>
+      ${(function(){ if (item.slot !== 'bow' || !window.ITEMS.weaponClassOf) return '';
+        const wc = window.ITEMS.weaponClassOf(item);
+        let extra = '';
+        if (wc.key === 'support' && window.ITEMS.supportAura) {
+          const au = window.ITEMS.supportAura(item);
+          if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(60, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
+        }
+        return `<div class="ip-wclass" style="color:${wc.color}">${wc.glyph} ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`; })()}
       ${statHTML}${cmpNote}${actions||'<div class="sheet-actions"><button class="btn" data-x>Close</button></div>'}</div></div>`);
     const eq = sheet.querySelector('[data-eq]'); if (eq) eq.addEventListener('click', () => { G.equip(item, 'primary'); closeSheet(); });
     const eq2 = sheet.querySelector('[data-eq2]'); if (eq2) eq2.addEventListener('click', () => { G.equip(item, 'secondary'); closeSheet(); });
@@ -934,6 +1308,10 @@
     if (!_inited) return;
     if (kind === 'start') { toast('⚔ Siege begun — clear 10 waves', '#5b9cff'); }
     else if (kind === 'wavezone') { toast('★ Wave Zone cleared — the gauntlet resets', '#5bc06b'); }
+    else if (kind === 'citadel') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff9a50'; t.style.fontSize = '22px'; t.innerHTML = '⛴ THE VOID CITADEL<br><span style="font-size:12px;color:#ffd9c4">Burn it down — 75% · 50% · 25% · boom</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2400); }
+    else if (kind === 'citadeldown') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d'; t.style.fontSize = '24px'; t.innerHTML = '☀ SUPERNOVA<br><span style="font-size:12px;color:#ffe9b0">Citadel razed — grab the loot!</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
+    else if (kind === 'citadelhome') { toast('⌂ Siege complete — towed home. Citadel rebuilds in 15 min.', '#9ec5ff'); }
+    else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); }
     else if (kind === 'wave') { toast('Wave ' + s.wave + ' / ' + s.total, '#9ec5ff'); }
     else if (kind === 'boss') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '22px'; t.textContent = '☠ BOSS WAVE'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700); }
     else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(sys.rate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }

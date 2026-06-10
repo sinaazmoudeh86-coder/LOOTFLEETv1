@@ -33,6 +33,14 @@
   // Every 11th Grind Zone (11, 22, 33…) is a WAVE ZONE: 25 escalating waves of
   // extreme density ending in a boss (30% Super Boss). Classic free-play only.
   function isWaveZone(zone) { return zone > 0 && zone % 11 === 0; }
+  // CITADEL SIEGE — ~10% of grind zones (every zone ending in 7; wave zones win
+  // ties): push UP through waves of heavy garrison hulks, then raze the Void
+  // Citadel at the top. Razed citadels rebuild for 15 minutes.
+  function isCitadelZone(zone) { return zone > 0 && zone % 10 === 7 && !isWaveZone(zone); }
+  function citadelCooldownLeft(zone) {
+    const until = state.citadelCd && state.citadelCd[zone];
+    return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
+  }
   // ---- ZONE BONUSES ----------------------------------------------------------
   // Every 10th zone (10,20,30…): 5× mob density. Every 25th (25,50,75…): 2× loot
   // quality. Every 100th (100,200…): 5× loot quality. Quality bonuses STACK
@@ -54,7 +62,7 @@
     currentSystem: null,                  // tile id you're deployed to (null = hangar)
     ownedSystems: {},                     // tiles you own: { tileId: true }
     rivalTiles: {},                       // simulated rival owners: { tileId: name }
-    regionCd: {},                         // per-region contest cooldown end times (ms)
+    tileCd: {},                           // per-tile contest cooldowns (15 min · 24 h citadels)
     resources: { fuel: 80, iron: 0, plasma: 0 },
     lastResTick: Date.now(),              // for per-hour resource accrual
     ship: 'frigate',        // active hull
@@ -85,7 +93,7 @@
     canvas: null, ctx: null, w: 0, h: 0,
     worldW: 0, worldH: 0, cam: { x: 0, y: 0 },
     archer: null,
-    enemies: [], nodes: [], projectiles: [], particles: [], floats: [], ground: [], drones: [],
+    enemies: [], nodes: [], projectiles: [], ebolts: [], particles: [], floats: [], ground: [], drones: [],
     time: 0, last: 0, running: false,
     siege: null,            // active 10-wave siege state when capturing a system
     realTiles: {},          // shared cross-account tile ownership (Supabase turf war)
@@ -109,26 +117,50 @@
       if (!it) return;
       for (const k in it.stats) s[k] = (s[k] || 0) + it.stats[k];
     });
+    // FLEET fittings: escorts' stowed gear feeds the fleet at the same share
+    // as their hull mods — auto-improved escort loadouts are real power.
+    if (state.fleet && state.fleet.length) {
+      fleetShips().forEach((f) => {
+        const fit = state.fittings && state.fittings[f.key]; if (!fit) return;
+        for (const sk in fit) {
+          const it = fit[sk]; if (!it) continue;
+          for (const k in it.stats) s[k] = (s[k] || 0) + it.stats[k] * C.FLEET.statShare;
+        }
+      });
+    }
     // skill-tree modifiers
     const m = skillMods();
     // ship passive modifiers
     const ship = C.SHIP_BY_KEY[state.ship] || C.SHIPS[0];
     const sm = ship.mods || {};
-    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0)) / 100);
-    s.health *= (1 + (m.hpPct + (sm.hpPct||0)) / 100);
-    s.critChance += m.critChance + (sm.critChance||0);
-    s.critDamage += m.critDamage + (sm.critDamage||0);
-    s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0);
-    s.lifeSteal += m.lifeSteal + (sm.lifeSteal||0);
-    s.multiShot += m.multiShot + (sm.multiShot||0);
-    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0)) / 100);
+    // FLEET: escorts contribute a share of their hull mods to the fleet score
+    const fs = { dmgPct:0, hpPct:0, critChance:0, critDamage:0, atkSpeedPct:0, moveSpeed:0, lifeSteal:0, multiShot:0, rangePct:0 };
+    const esc = fleetShips();
+    esc.forEach((f) => { const fm = f.mods || {}; for (const k in fs) fs[k] += (fm[k] || 0) * C.FLEET.statShare; });
+    // WARDEN ARRAY: fleet-support aura from an equipped support weapon —
+    // doubled while flying the Aegis (its whole reason to exist)
+    const aura = I.supportAura ? I.supportAura(state.equipped.bow) : null;
+    // Warden arrays mount only on the Aegis — inert anywhere else (legacy saves)
+    const aMul = ship.cls === 'Aegis' ? 2 : 0;
+    s.regen = aura ? aura.regen * aMul : 0;
+    s.dmgReduce = aura ? Math.min(60, aura.reduce * aMul) : 0;
+    if (aura) s.multiShot += aura.multiShot * aMul;
+    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct) / 100);
+    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct) / 100);
+    s.critChance += m.critChance + (sm.critChance||0) + fs.critChance;
+    s.critDamage += m.critDamage + (sm.critDamage||0) + fs.critDamage;
+    s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0) + fs.moveSpeed;
+    s.lifeSteal += m.lifeSteal + (sm.lifeSteal||0) + fs.lifeSteal;
+    s.multiShot += m.multiShot + (sm.multiShot||0) + fs.multiShot;
+    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct) / 100);
     s.critChance = Math.min(100, s.critChance);
     s.lifeSteal = Math.min(95, s.lifeSteal);
     s.multiShot = Math.min(100, s.multiShot);
     s.maxHp = s.health;
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
-    // weapon range — base engagement range, extended by a hull's rangePct mod
-    s.fireRange = FIRE_RANGE * (1 + (sm.rangePct || 0) / 100);
+    // weapon range — hull mod + fleet share + Warden aura all extend it
+    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0)) / 100);
+    s.fleetSize = esc.length;
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
     s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
     return s;
@@ -169,10 +201,21 @@
     refreshStats(); if (window.UI) window.UI.refreshAll(); save();
     return refund;
   }
+  // FLEET / SHIP SCORE — display scale. The raw power value (theoryDps +
+  // 0.5·maxHp) keeps growing forever internally; the SCORE shown is identical
+  // below 1M, then square-root compressed — so it lives far below 999T at any
+  // realistic progression without ever being capped. Display-only.
+  function score() {
+    const s = rt.stats; if (!s) return 0;
+    const raw = s.theoryDps + s.maxHp * 0.5;
+    return Math.floor(raw <= 1e6 ? raw : 1e6 * Math.sqrt(raw / 1e6));
+  }
+
   function refreshStats() {
     const prevMax = rt.stats ? rt.stats.maxHp : 0;
     rt.stats = computeStats();
     if (rt.archer) {
+      rt.archer.dmgReduce = rt.stats.dmgReduce || 0;
       rt.archer.maxHp = rt.stats.maxHp;
       if (prevMax <= 0) rt.archer.hp = rt.stats.maxHp;
       else rt.archer.hp = Math.min(rt.stats.maxHp, rt.archer.hp * (rt.stats.maxHp / prevMax));
@@ -264,30 +307,90 @@
     if (state.auto) dmg *= 0.8; // auto-mode (hands-off) deals 20% less damage
     return { dmg: Math.max(1, Math.round(dmg)), crit };
   }
-  function fireAt(target, s) {
+  // Cycle the volley through EVERY equipped weapon hardpoint — each shot
+  // carries the class (and visual) of the weapon that actually fired it.
+  function nextWeapon() {
+    const list = [];
+    for (const k in state.equipped) {
+      if (k !== 'bow' && !/^bow\d+$/.test(k)) continue;
+      const it = state.equipped[k]; if (it) list.push(it);
+    }
+    if (!list.length) return null;
+    rt.volleyIdx = ((rt.volleyIdx || 0) + 1) % list.length;
+    return list[rt.volleyIdx];
+  }
+  // muzzle-flash palette per weapon class — the ship visibly fires DIFFERENT guns
+  const MUZZLE_COL = {
+    laser:   ['#bdeeff', '#5fd1ff'],
+    gatling: ['#ffe6a0', '#ffaf40'],
+    missile: ['#ffc9a0', '#ff7a3c'],
+    rail:    ['#e9d6ff', '#b87bff'],
+    plasma:  ['#c8ffdd', '#46d27a'],
+    support: ['#dcffe9', '#7ce0a0'],
+  };
+  function fireAt(target, s, wpn) {
     const p = new E.Projectile(rt.archer.x, rt.archer.y, target, 0, false);
     const r = rollDamage(s); p.damage = r.dmg; p.crit = r.crit;
     p.angle = Math.atan2(target.y - rt.archer.y, target.x - rt.archer.x);
+    // weapon-class visuals: each projectile carries the class of ITS hardpoint
+    if (!wpn) wpn = nextWeapon() || (state.equipped && state.equipped.bow);
+    p.wtype = wpn && I.weaponClassOf ? I.weaponClassOf(wpn).key : 'gatling';
     rt.projectiles.push(p);
+    return p;
   }
+  // ENEMY STANDOFF FIRE — gunner vessels volley dodgeable bolts from range.
+  // Bolts fly straight (no homing), are visible & avoidable, and respect the
+  // no-one-shot cap in Archer.takeHit. Bosses fire a 3-bolt spread.
+  function enemyFire(e) {
+    if (rt.ebolts.length > 48) return;                  // perf + fairness cap
+    const a = rt.archer; if (!a || a.dead) return;
+    const shots = e.isCitadel ? 4 : e.isBoss ? 3 : 1;
+    for (let i = 0; i < shots; i++) {
+      const spread = e.isCitadel ? (i - 1.5) * 0.18 : e.isBoss ? (i - 1) * 0.22 : (Math.random() - 0.5) * 0.07;
+      const ang = Math.atan2(a.y - e.y, a.x - e.x) + spread;
+      const sp = e.isCitadel ? 150 : e.isBoss ? 165 : 200;
+      rt.ebolts.push({ x: e.x + Math.cos(ang) * e.size * 0.8, y: e.y + Math.sin(ang) * e.size * 0.8,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, ang,
+        dmg: e.damage * (e.isCitadel ? 0.45 : e.isBoss ? 0.55 : 0.7), tint: e.tint, src: e, life: 2.6 });
+    }
+    burst(e.x + Math.cos(rt.time) * 2, e.y, e.tint, 4, { speed: 90, life: 0.22, glow: true });
+  }
+  function updateEbolts(dt) {
+    const a = rt.archer;
+    for (const b of rt.ebolts) {
+      b.life -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.life <= 0) { b.dead = true; continue; }
+      if (a && !a.dead && Math.hypot(a.x - b.x, a.y - b.y) <= a.size + 5) {
+        b.dead = true;
+        a.takeHit(b.dmg, b.src);
+        burst(b.x, b.y, '#ff7a8a', 6, { speed: 140, life: 0.28, glow: true });
+      }
+    }
+    rt.ebolts = rt.ebolts.filter((b) => !b.dead);
+  }
+
   function fire(primary) {
     const s = rt.stats;
     rt.archer.facing = Math.atan2(primary.y - rt.archer.y, primary.x - rt.archer.x);
     rt.archer.muzzle = 1; rt.archer.recoil = 1;
-    fireAt(primary, s);
-    // muzzle: bright flash sparks + smoke puff + ejected casing along the aim
+    const shot = fireAt(primary, s);
+    // muzzle: flash sparks tinted by the class that fired + smoke + casing
+    const mc = MUZZLE_COL[shot.wtype] || MUZZLE_COL.gatling;
     const ang = rt.archer.facing;
     const mx = rt.archer.x + Math.cos(ang) * 26, my = rt.archer.y + Math.sin(ang) * 26;
     for (let i = 0; i < 6; i++) {
       const a = ang + (Math.random() - 0.5) * 0.5, sp = 150 + Math.random() * 160;
-      rt.particles.push(new E.Particle(mx, my, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.12 + Math.random()*0.12, size: 1.6 + Math.random()*2, color: i % 2 ? '#ffe6a0' : '#ffaf40', glow: true, drag: 0.82 }));
+      rt.particles.push(new E.Particle(mx, my, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.12 + Math.random()*0.12, size: 1.6 + Math.random()*2, color: i % 2 ? mc[0] : mc[1], glow: true, drag: 0.82 }));
     }
-    // smoke
-    rt.particles.push(new E.Particle(mx, my, { vx: Math.cos(ang)*40, vy: Math.sin(ang)*40 - 10, life: 0.4, size: 5, color: 'rgba(180,180,185,0.5)', drag: 0.9 }));
-    // ejected casing (sideways)
-    const ej = ang + Math.PI/2;
-    rt.particles.push(new E.Particle(rt.archer.x + 6, rt.archer.y - 4, { vx: Math.cos(ej)*70, vy: -120, gravity: 420, life: 0.5, size: 1.6, color: '#d9b25a' }));
-    // MULTI-SHOT: chance to also fire at nearby enemies
+    // smoke (kinetic classes only — energy weapons leave a light shimmer instead)
+    if (shot.wtype === 'gatling' || shot.wtype === 'missile') {
+      rt.particles.push(new E.Particle(mx, my, { vx: Math.cos(ang)*40, vy: Math.sin(ang)*40 - 10, life: 0.4, size: 5, color: 'rgba(180,180,185,0.5)', drag: 0.9 }));
+      const ej = ang + Math.PI/2;
+      rt.particles.push(new E.Particle(rt.archer.x + 6, rt.archer.y - 4, { vx: Math.cos(ej)*70, vy: -120, gravity: 420, life: 0.5, size: 1.6, color: '#d9b25a' }));
+    } else {
+      rt.particles.push(new E.Particle(mx, my, { vx: Math.cos(ang)*30, vy: Math.sin(ang)*30, life: 0.25, size: 4, color: hexToRgba(mc[1], 0.35), drag: 0.88 }));
+    }
+    // MULTI-SHOT: chance to also fire at nearby enemies — each from its own hardpoint
     if (s.multiShot > 0 && Math.random() * 100 < s.multiShot) {
       const extra = nearbyEnemies(C.MULTISHOT_MAX_TARGETS, primary);
       extra.forEach((t) => fireAt(t, s));
@@ -297,21 +400,58 @@
     const e = p.target;
     if (!e || e.dead) return;
     const killed = e.takeDamage(p.damage);
-    rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(p.damage), { color: p.crit ? '#e07c12' : '#15202e', size: p.crit ? 48 : 32, crit: p.crit }));
-    // IMPACT: directional spray of sparks/blood opposite the bullet + flash ring
-    const back = p.angle;
-    const col = p.crit ? '#ffd24d' : '#ffcaa0', n = p.crit ? 16 : 9;
-    for (let i = 0; i < n; i++) {
-      const a = back + (Math.random() - 0.5) * 1.3, sp = (p.crit ? 230 : 150) * (0.4 + Math.random());
-      rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.22 + Math.random()*0.22, size: 1.4 + Math.random()*2.4, color: col, glow: p.crit, drag: 0.86 }));
+    // damage floats are thinned under load — crits ALWAYS show
+    if (p.crit || rt.floats.length < 28) {
+      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(p.damage), { color: p.crit ? '#e07c12' : '#f4f8ff', size: p.crit ? 48 : 32, crit: p.crit }));
     }
-    // ichor/blood mist in the enemy tint
-    for (let i = 0; i < 5; i++) {
+    // IMPACT: class-specific hit effects — each weapon lands differently
+    const back = p.angle;
+    const wt = p.wtype || 'gatling';
+    if (wt === 'missile') {
+      // EXPLOSION — omnidirectional fireball + shockwave flash + punch
+      const n = p.crit ? 18 : 12;
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, sp = (p.crit ? 260 : 190) * (0.3 + Math.random());
+        rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.25 + Math.random()*0.3, size: 1.8 + Math.random()*3, color: i % 3 ? '#ff9a50' : '#ffd9a0', glow: i % 2 === 0, drag: 0.85 }));
+      }
+      rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: -16, life: 0.5, size: 7, color: 'rgba(150,150,155,0.45)', drag: 0.92 }));
+      rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.16, size: p.crit ? 13 : 10, color: '#fff0d0', glow: true, drag: 1 }));
+      rt.shake = Math.min(6, (rt.shake || 0) + (p.crit ? 3.5 : 1.6));
+    } else if (wt === 'rail') {
+      // PIERCE — slug punches THROUGH: sparks continue forward + entry flash
+      for (let i = 0; i < (p.crit ? 12 : 8); i++) {
+        const a = back + (Math.random() - 0.5) * 0.35, sp = (p.crit ? 320 : 240) * (0.5 + Math.random());
+        rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.18 + Math.random()*0.16, size: 1.3 + Math.random()*1.8, color: i % 2 ? '#cfa6ff' : '#efe2ff', glow: true, drag: 0.93 }));
+      }
+      rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.12, size: p.crit ? 9 : 6, color: '#e9d6ff', glow: true, drag: 1 }));
+    } else if (wt === 'plasma') {
+      // SPLASH — molten droplets sputter and hang
+      for (let i = 0; i < (p.crit ? 14 : 9); i++) {
+        const a = back + (Math.random() - 0.5) * 2.2, sp = 90 * (0.3 + Math.random());
+        rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 20, life: 0.35 + Math.random()*0.3, size: 1.8 + Math.random()*2.6, color: i % 2 ? '#7df0a8' : '#c8ffdd', glow: true, gravity: 60, drag: 0.9 }));
+      }
+      rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.18, size: p.crit ? 11 : 8, color: '#d8ffe8', glow: true, drag: 1 }));
+    } else if (wt === 'laser') {
+      // FLASH-BURN — instant bright bloom + thin cyan embers
+      rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.14, size: p.crit ? 11 : 8, color: '#eaf9ff', glow: true, drag: 1 }));
+      for (let i = 0; i < (p.crit ? 10 : 6); i++) {
+        const a = back + (Math.random() - 0.5) * 1.0, sp = 140 * (0.4 + Math.random());
+        rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.16 + Math.random()*0.14, size: 1.2 + Math.random()*1.6, color: i % 2 ? '#8fe0ff' : '#d9f4ff', glow: true, drag: 0.88 }));
+      }
+    } else {
+      // kinetic spray (gatling/support) — directional sparks opposite the round
+      const col = p.crit ? '#ffd24d' : (wt === 'support' ? '#a8f0c4' : '#ffcaa0'), n = p.crit ? 16 : 9;
+      for (let i = 0; i < n; i++) {
+        const a = back + (Math.random() - 0.5) * 1.3, sp = (p.crit ? 230 : 150) * (0.4 + Math.random());
+        rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.22 + Math.random()*0.22, size: 1.4 + Math.random()*2.4, color: col, glow: p.crit, drag: 0.86 }));
+      }
+      rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.14, size: p.crit ? 9 : 6, color: p.crit ? '#fff0b0' : '#ffe6c0', glow: true, drag: 1 }));
+    }
+    // ichor mist in the enemy tint (all classes)
+    for (let i = 0; i < 4; i++) {
       const a = Math.random()*Math.PI*2, sp = 60 + Math.random()*90;
       rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.3, size: 1.5 + Math.random()*2, color: e.tint, gravity: 140, drag: 0.9 }));
     }
-    // expanding impact ring (a short-lived particle styled as a ring would need ring support; use a bright flash dot)
-    rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.14, size: p.crit ? 9 : 6, color: p.crit ? '#fff0b0' : '#ffe6c0', glow: true, drag: 1 }));
     // crit: a little screen punch
     if (p.crit) rt.shake = Math.min(6, (rt.shake || 0) + 4);
     rt.dmgWindow.push({ t: rt.time, dmg: p.damage });
@@ -332,6 +472,27 @@
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
     gainXp(C.enemyXp(e.dungeon) * (e.isBoss ? 12 : 1));
     state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1);
+    // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
+    // iron & plasma are the rare finds (rarer, but a real grind faucet now).
+    // Bosses always pay a wreck's worth of all three.
+    if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
+    if (e.isBoss) {
+      const z = e.dungeon || state.currentDungeon;
+      state.resources.fuel += 40 + z * 4;
+      state.resources.iron += 18 + z * 2;
+      state.resources.plasma += 12 + Math.round(z * 1.5);
+    } else if (Math.random() < 0.14) {
+      const z = e.dungeon || state.currentDungeon;
+      const r = Math.random();
+      const kind = r < 0.45 ? 'fuel' : r < 0.78 ? 'iron' : 'plasma';
+      const base = kind === 'fuel' ? 3 + z * 0.5 : kind === 'iron' ? 2 + z * 0.35 : 1.5 + z * 0.3;
+      const amt = Math.max(1, Math.round(base * (0.7 + Math.random() * 0.6)));
+      state.resources[kind] += amt;
+      const rc = kind === 'fuel' ? '#5bc0ff' : kind === 'iron' ? '#d0a060' : '#c07bff';
+      const rg = kind === 'fuel' ? '⬢' : kind === 'iron' ? '◆' : '✦';
+      rt.floats.push(new E.FloatText(e.x, e.y - e.size - 14, rg + ' +' + formatNum(amt), { color: rc, size: 13, vy: -34, life: 0.8 }));
+    }
+    if (e.isCitadel) { citadelDown(e); if (window.UI) window.UI.syncStatsTab(); return; }
 
     if (e.isBoss) {
       const isSuper = !!e.isSuper;
@@ -359,6 +520,34 @@
   }
 
   // ---- BOSS ----------------------------------------------------------------
+  // ---- CARGO HOLD (inventory cap) ------------------------------------------
+  // 100 slots to start. Each +100 expansion costs exponentially more gold —
+  // deep hoarding is a luxury you grind for. When the hold is full, new loot
+  // pickups are auto-scrapped into Galaxy Resources (with a periodic warning).
+  const INV_BASE_CAP = 100, INV_STEP = 100, INV_COST_BASE = 10e6, INV_COST_MULT = 25;
+  function invCap() { return INV_BASE_CAP + (state.invSlotsBought || 0) * INV_STEP; }
+  function invSlotCost() { return Math.floor(INV_COST_BASE * Math.pow(INV_COST_MULT, state.invSlotsBought || 0)); }
+  function buyInvSlots() {
+    const c = invSlotCost();
+    if (state.gold < c) return { ok: false, reason: 'gold' };
+    state.gold -= c;
+    state.invSlotsBought = (state.invSlotsBought || 0) + 1;
+    save(); if (window.UI) window.UI.refreshAll();
+    return { ok: true, cap: invCap() };
+  }
+  function addToInventory(item) {
+    if (state.inventory.length >= invCap()) {
+      addSalvage(item); // full hold → the item is scrapped for resources
+      if (window.UI && (!rt.cargoWarnT || rt.time - rt.cargoWarnT > 8)) {
+        rt.cargoWarnT = rt.time;
+        window.UI.unlockToast('⚠ Cargo full (' + invCap() + ') — loot auto-scrapped. Expand the hold in Loot.');
+      }
+      return false;
+    }
+    state.inventory.push(item);
+    return true;
+  }
+
   function spawnBoss(opts) {
     opts = opts || {};
     const pool = allowedEnemies();
@@ -375,7 +564,9 @@
       : (Math.random() < Math.min(0.45, 0.12 + state.currentDungeon * 0.004));
     const b = new E.Enemy(type, state.currentDungeon, x, y);
     b.isBoss = true; b.isSuper = isSuper;
-    b.maxHp *= isSuper ? 30 : 14; b.hp = b.maxHp;
+    // base enemy HP is now grind-tuned (6x), so boss multipliers come DOWN to
+    // keep boss fights long-but-fair rather than endless
+    b.maxHp *= isSuper ? 16 : 8; b.hp = b.maxHp;
     b.damage *= isSuper ? 3.0 : 2.3;
     b.size *= isSuper ? 3.1 : 2.5;
     b.speed *= 0.72;
@@ -419,6 +610,17 @@
       rt.particles.push(new E.Particle(x, y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: (opts.life ?? 0.6)*(0.6+Math.random()*0.5), size: opts.size ?? (2+Math.random()*2.5), color, gravity: opts.gravity ?? 0, glow: opts.glow ?? false }));
     }
   }
+  // ---- pickup filter / auto-sell helpers ------------------------------------
+  function autoSellTier() { return state.autoSellTier == null ? -1 : state.autoSellTier; }
+  // Would this drop upgrade ANY of the flagship's slots for its base type?
+  function isPickupUpgrade(item) {
+    const targets = slotsForBase(item.slot);
+    if (!targets.length) return false;
+    let weakest = Infinity, empty = false;
+    targets.forEach((t) => { const e = state.equipped[t]; if (!e) empty = true; else weakest = Math.min(weakest, I.itemPower(e)); });
+    return empty || I.itemPower(item) > weakest;
+  }
+
   function lootBurst(x, y, rarity) {
     const col = C.RARITY[rarity].color;
     burst(x, y, col, 10 + rarity * 3, { speed: 120, life: 0.9, glow: rarity >= 2, gravity: -40 });
@@ -543,6 +745,16 @@
       }
     }
     // SUPER BOSS aura — pulsing red motes around the elite while it lives.
+    if (rt.warpT > 0) rt.warpT -= dt;
+    if (rt.novaT > 0) rt.novaT -= dt;
+    // post-capture tow: count down, then return the player to the hangar
+    if (rt.towT > 0) {
+      rt.towT -= dt;
+      if (rt.towT <= 0) {
+        rt.towT = 0;
+        if (state.currentDungeon >= 1) { respawnAt(0); if (window.UI) window.UI.siegeEvent('towhome', {}); }
+      }
+    }
     if (rt.superBossAlive && rt.boss && !rt.boss.dying && Math.random() < 0.6) {
       const b = rt.boss, aa = Math.random() * Math.PI * 2, rr = b.size * (1.1 + Math.random() * 0.5);
       rt.particles.push(new E.Particle(b.x + Math.cos(aa) * rr, b.y + Math.sin(aa) * rr, { vx: Math.cos(aa) * 30, vy: Math.sin(aa) * 30 - 12, life: 0.5, size: 2 + Math.random() * 2.4, color: '#ff2a4a', glow: true, drag: 0.9 }));
@@ -556,12 +768,26 @@
     }
 
     // enemies
-    for (const e of rt.enemies) e.update(dt, a);
+    for (const e of rt.enemies) {
+      e.update(dt, a);
+      if (e.fireReq) { e.fireReq = false; enemyFire(e); }
+      // citadel battle damage — embers & smoke pour out as it degrades
+      if (e.isCitadel && !e.dying) {
+        const f = e.hp / e.maxHp;
+        if (f < 0.75 && Math.random() < dt * (f < 0.25 ? 14 : f < 0.5 ? 8 : 4)) {
+          const a2 = Math.random() * 7, r2 = e.size * (0.3 + Math.random() * 0.6);
+          rt.particles.push(new E.Particle(e.x + Math.cos(a2) * r2, e.y + Math.sin(a2) * r2 * 0.7, { vx: (Math.random() - 0.5) * 30, vy: -40 - Math.random() * 50, life: 0.5 + Math.random() * 0.4, size: 2 + Math.random() * 2.5, color: Math.random() < 0.6 ? '#ff9a50' : 'rgba(120,120,125,0.5)', glow: Math.random() < 0.5, drag: 0.94 }));
+        }
+      }
+    }
     separateEnemies();
     rt.enemies = rt.enemies.filter((e) => !e.dead);
+    updateEbolts(dt);
 
     // carrier drones: orbit the ship and fire on nearby enemies
     updateDrones(dt);
+    // FLEET escorts: formation flight, escort fire, Warden support pulses
+    updateEscorts(dt);
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
@@ -617,8 +843,25 @@
   function collect(g) {
     g.picked = true; g.dead = true;
     const item = g.item;
+    // PICKUP FILTER: drops below the player's chosen rarity floor never enter
+    // the bag — they're instantly scrapped into Galaxy Resources on contact.
+    // (An empty slot still equips anything: never scrap gear you NEED.)
+    const minR = state.pickupFilter || 0;
     if (!state.equipped[item.slot]) { state.equipped[item.slot] = item; refreshStats(); }
-    else { state.inventory.push(item); if (state.autoEquipAlways) autoEquip(true); }
+    else if (item.rarity < minR) {
+      addSalvage(item);
+      rt.floats.push(new E.FloatText(g.x, g.y - 10, '⚒ scrapped', { color: '#8a97ab', size: 11, vy: -36, life: 0.6 }));
+      return;
+    }
+    else if (autoSellTier() >= 0 && item.rarity <= autoSellTier() && !isPickupUpgrade(item)) {
+      // AUTO-SELL (default off): low-tier pickups convert straight to gold +
+      // salvage. Anything that would upgrade an equipped slot is always kept.
+      const gold = C.sellValue(item);
+      state.gold += gold; addSalvage(item);
+      rt.floats.push(new E.FloatText(g.x, g.y - 10, '+$' + formatNum(gold), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
+      return;
+    }
+    else { addToInventory(item); if (state.autoEquipAlways) autoEquip(true); }
     burst(g.x, g.y, C.RARITY[item.rarity].color, 10, { speed: 130, life: 0.6, glow: item.rarity >= 2 });
     rt.floats.push(new E.FloatText(g.x, g.y - 12, '+1', { color: C.RARITY[item.rarity].color, size: 16, vy: -50, life: 0.8 }));
     if (window.UI) window.UI.onCollect(item);
@@ -667,9 +910,11 @@
     for (const p of rt.particles) R.drawParticle(ctx, p);
     drawGround(ctx);
     for (const e of rt.enemies) R.drawEnemy(ctx, e);
+    for (const es of (rt.escorts || [])) R.drawEscort(ctx, es.key, es.x, es.y, rt.time, es.heal);
     R.drawArcher(ctx, rt.archer.x, rt.archer.y, 1.5, rt.archer, state.equipped, rt.time);
     for (const dr of rt.drones) R.drawDrone(ctx, dr.x, dr.y, rt.time, dr.ang);
     for (const p of rt.projectiles) R.drawArrow(ctx, p);
+    for (const b of rt.ebolts) R.drawEnemyBolt(ctx, b);
     for (const f of rt.floats) R.drawFloat(ctx, f);
     ctx.restore();
 
@@ -679,6 +924,42 @@
       ctx.fillText('DOWN', w/2, h/2 - 4);
       ctx.font = '600 14px Rajdhani'; ctx.fillStyle = '#ce9b78';
       ctx.fillText('Choose a zone to redeploy', w/2, h/2 + 22);
+    }
+    // LOW HP: red danger vignette breathes at the edges when hull is critical.
+    if (!rt.archer.dead && rt.stats && rt.stats.maxHp > 0) {
+      const hpPct = rt.archer.hp / rt.stats.maxHp;
+      if (hpPct < 0.3) {
+        const sev = (0.3 - hpPct) / 0.3;                       // 0 → 1 as HP falls
+        const pa = sev * (0.16 + 0.1 * Math.sin(rt.time * 6));
+        const dg = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.34, w/2, h/2, Math.max(w,h)*0.6);
+        dg.addColorStop(0, 'rgba(255,30,50,0)');
+        dg.addColorStop(1, 'rgba(255,30,50,' + Math.max(0, pa).toFixed(3) + ')');
+        ctx.fillStyle = dg; ctx.fillRect(0, 0, w, h);
+      }
+    }
+    // SUPERNOVA flash — the citadel's death blooms white across the zone
+    if (rt.novaT > 0) {
+      ctx.globalAlpha = Math.min(1, rt.novaT / 0.6) * 0.9;
+      ctx.fillStyle = '#fff4da'; ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+    // HYPERSPACE WARP-IN — radial streaks collapse as the zone resolves
+    if (rt.warpT > 0) {
+      const k = Math.max(0, rt.warpT / 0.85);            // 1 → 0
+      const cx2 = w / 2, cy2 = h / 2, R0 = Math.max(w, h);
+      ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = '#cfe8ff';
+      for (let i = 0; i < 36; i++) {
+        const a = (i / 36) * Math.PI * 2 + (i % 5) * 0.07;
+        const r1 = 26 + (1 - k) * R0 * 0.72;
+        const r2 = r1 + 36 + 110 * k;
+        ctx.globalAlpha = Math.min(1, k * 1.3) * (0.3 + (i % 3) * 0.22);
+        ctx.lineWidth = 1 + (i % 3);
+        ctx.beginPath(); ctx.moveTo(cx2 + Math.cos(a) * r1, cy2 + Math.sin(a) * r1);
+        ctx.lineTo(cx2 + Math.cos(a) * r2, cy2 + Math.sin(a) * r2); ctx.stroke();
+      }
+      ctx.globalAlpha = k * 0.45; ctx.fillStyle = '#eaf6ff';
+      ctx.beginPath(); ctx.arc(cx2, cy2, 46 * k, 0, 7); ctx.fill();
+      ctx.restore(); ctx.globalAlpha = 1;
     }
     // SUPER BOSS: the whole zone pulses red at the edges while one is loose.
     if (rt.superBossAlive) {
@@ -690,7 +971,11 @@
     }
     drawMinimap(ctx);
     drawPortrait();
-    if (window.UI) window.UI.syncHUD(); // once per frame, not per sim-substep
+    // SELF-HEAL: if the canvas ever measures 0 (e.g. it was sized while hidden
+    // behind an overlay), re-fit it — don't wait for a window resize.
+    if ((rt.canvas.height === 0 || rt.canvas.width === 0) && rt.canvas.offsetHeight > 0) resize();
+    // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
+    if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
   }
 
   function drawHangarScene() {
@@ -717,12 +1002,16 @@
       const fade = g.lost ? Math.min(1, g.life / 1.5) : (g.life < 5 ? g.life / 5 : 1);
       ctx.globalAlpha = fade;
       ctx.fillStyle = `rgba(0,0,0,0.3)`; ctx.beginPath(); ctx.ellipse(g.x, g.y + 8, 11*sc, 4*sc, 0, 0, 7); ctx.fill();
-      // GLOW scales with rarity. Mythic+ (tier ≥ 5) pulses and throws a halo.
+      // GLOW scales with rarity — layered alpha discs (no shadowBlur: this path
+      // runs for every ground drop, every frame). Mythic+ pulses with a halo.
       const tier = it ? it.rarity : 0;
+      const col2 = g.lost ? 'rgba(140,140,140,0.5)' : col;
       if (!g.lost) {
         const pulse = tier >= 5 ? (0.7 + 0.3 * Math.sin(rt.time * 6 + g.bob * 2)) : 1;
-        ctx.shadowColor = col;
-        ctx.shadowBlur = (5 + tier * 3.4) * pulse;
+        ctx.globalAlpha = fade * (0.22 + tier * 0.05) * pulse;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(g.x, g.y - 2 + yoff, (9 + tier * 1.6) * sc, 0, 7); ctx.fill();
+        ctx.globalAlpha = fade;
         if (tier >= 5) {
           const haloR = (12 + tier * 2) * sc * (0.85 + 0.25 * Math.sin(rt.time * 6 + g.bob * 2));
           ctx.globalAlpha = fade * 0.5;
@@ -731,9 +1020,8 @@
           ctx.globalAlpha = fade;
         }
       }
-      ctx.fillStyle = g.lost ? 'rgba(140,140,140,0.5)' : col;
+      ctx.fillStyle = col2;
       ctx.beginPath(); ctx.arc(g.x, g.y - 2 + yoff, (6 + tier * 0.5) * sc, 0, 7); ctx.fill();
-      ctx.shadowBlur = 0;
       // light beam — taller & brighter the rarer the drop (Rare and up)
       if (!g.lost && it && tier >= 2) {
         const bh = 30 + tier * 6, bw = (4 + tier * 0.7) * sc;
@@ -783,7 +1071,29 @@
     if (!rt.portraitCtx) return;
     const ctx = rt.portraitCtx, cw = rt.portW, ch = rt.portH;
     ctx.clearRect(0, 0, cw, ch);
-    R.drawArcher(ctx, cw/2, ch*0.66, 3.6, { facing: -0.35, bob: rt.time*2.4, hurtFlash: 0, muzzle: 0, recoil: 0 }, state.equipped, rt.time);
+    const esc = fleetShips();
+    const cy = ch * 0.55;
+    // escorts flank SYMMETRICALLY for the actual count (odd counts center the
+    // extra ship high behind the flagship) — all positions stay within ±0.36·cw
+    // so nothing clips the frame edges
+    const FORMS = {
+      1: [[0.34, 0.10]],
+      2: [[-0.34, 0.10], [0.34, 0.10]],
+      3: [[-0.36, 0.10], [0.36, 0.10], [0, -0.18]],
+      4: [[-0.36, 0.10], [0.36, 0.10], [-0.20, -0.17], [0.20, -0.17]],
+    };
+    const fx = FORMS[Math.min(4, esc.length)] || [];
+    esc.forEach((sh, i) => {
+      if (!fx[i] || !R.drawEscort) return;
+      ctx.save();
+      ctx.translate(cw / 2 + fx[i][0] * cw, cy + fx[i][1] * ch);
+      ctx.scale(1.55, 1.55);
+      R.drawEscort(ctx, sh.key, 0, 0, rt.time, 0);
+      ctx.restore();
+    });
+    // flagship scales down when escorts fly so everything fits the frame
+    const flagScale = esc.length >= 3 ? 2.1 : esc.length ? 2.4 : 2.9;
+    R.drawArcher(ctx, cw / 2, cy, flagScale, { facing: -0.35, bob: rt.time * 2.4, hurtFlash: 0, muzzle: 0, recoil: 0 }, state.equipped, rt.time);
   }
 
   // --------------------------------------------------------------------------
@@ -810,8 +1120,18 @@
     });
   }
 
+  // WARDEN ARRAYS mount ONLY on the Aegis support hull — the fleet aura is its
+  // entire reason to exist. Everything else refuses the fitting.
+  function canMountWeapon(item, cls) {
+    if (!item || item.slot !== 'bow' || !I.weaponClassOf) return true;
+    return I.weaponClassOf(item).key !== 'support' || cls === 'Aegis';
+  }
   function equip(item, targetSlot) {
     const idx = state.inventory.indexOf(item); if (idx === -1) return;
+    if (!canMountWeapon(item, (C.SHIP_BY_KEY[state.ship] || {}).cls)) {
+      if (window.UI) window.UI.unlockToast('⚠ Warden arrays mount ONLY on the Aegis support hull');
+      return false;
+    }
     const base = item.slot;
     const slots = slotsForBase(base);
     if (!slots.length) return;
@@ -866,9 +1186,35 @@
       let pool = [];
       targets.forEach((t) => { if (state.equipped[t]) { pool.push(state.equipped[t]); state.equipped[t] = null; } });
       state.inventory = state.inventory.filter((it) => { if (it.slot === base) { pool.push(it); return false; } return true; });
-      pool = [...new Set(pool)].sort((a, b) => I.itemPower(b) - I.itemPower(a));
+      const flagCls = (C.SHIP_BY_KEY[state.ship] || {}).cls;
+      pool = [...new Set(pool)];
+      // Aegis-only weapons can't sit on other hulls — send them back to the bag
+      const reject = pool.filter((it) => !canMountWeapon(it, flagCls));
+      pool = pool.filter((it) => canMountWeapon(it, flagCls)).sort((a, b) => I.itemPower(b) - I.itemPower(a));
+      reject.forEach((it) => state.inventory.push(it));
       targets.forEach((t, i) => { state.equipped[t] = pool[i] || null; });
       pool.slice(targets.length).forEach((it) => state.inventory.push(it));
+    });
+    // FLEET AUTO-IMPROVE: every escort's fitting upgrades from the bag too.
+    // The flagship picks first; each escort then takes the next-best gear for
+    // its own slot layout, so the whole fleet's loadout improves on its own.
+    if (!state.fittings) state.fittings = {};
+    fleetShips().forEach((sh) => {
+      const fit = state.fittings[sh.key] || (state.fittings[sh.key] = {});
+      const eSlots = C.shipSlots(sh.key);
+      C.SLOT_KEYS.forEach((base) => {
+        const targets = eSlots.filter((sk) => C.slotBase(sk) === base);
+        if (!targets.length) return;
+        let pool = [];
+        targets.forEach((t) => { if (fit[t]) { pool.push(fit[t]); fit[t] = null; } });
+        state.inventory = state.inventory.filter((it) => { if (it.slot === base) { pool.push(it); return false; } return true; });
+        pool = [...new Set(pool)];
+        const eReject = pool.filter((it) => !canMountWeapon(it, sh.cls));
+        pool = pool.filter((it) => canMountWeapon(it, sh.cls)).sort((a, b) => I.itemPower(b) - I.itemPower(a));
+        eReject.forEach((it) => state.inventory.push(it));
+        targets.forEach((t, i) => { fit[t] = pool[i] || null; });
+        pool.slice(targets.length).forEach((it) => state.inventory.push(it));
+      });
     });
     refreshStats();
     if (silent) return 1;
@@ -961,6 +1307,8 @@
     Object.keys(next).forEach((sk) => { if (next[sk] && !(sk in fit)) state.inventory.push(next[sk]); });
     state.equipped = fit;
     state.ship = key;
+    // the new flagship can't also fly as an escort — free its fleet slot
+    if (state.fleet) state.fleet = state.fleet.map((k) => (k === key ? null : k));
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
     if (state.autoEquipAlways) autoEquip(true);
     refreshStats(); spawnDrones();
@@ -986,6 +1334,7 @@
       const p = prev[i];
       rt.drones.push({ ang: p ? p.ang : (Math.PI * 2 * i / Math.max(1, n)), cd: p ? p.cd : Math.random() * 0.5, x: ax, y: ay });
     }
+    rebuildEscorts(); // fleet escorts redeploy alongside the drone screen
   }
   // On a kill, a carrier with an empty bay has a chance to capture a drone.
   function maybeDropDrone(e) {
@@ -1024,6 +1373,97 @@
         rt.projectiles.push(p);
         dr.cd = 1 / C.DRONE.fireRate;
         rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.12, size: 1.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
+      }
+    }
+  }
+
+  // ==========================================================================
+  // FLEET — escort ships fly with the flagship (Lv 100+, 1 slot / 100 levels)
+  // ==========================================================================
+  function fleetSlots() {
+    let n = 0;
+    C.FLEET.slotLevels.forEach((lv) => { if (state.level >= lv) n++; });
+    return Math.min(C.FLEET.maxShips - 1, n);
+  }
+  function fleetShips() {
+    if (!state.fleet) return [];
+    const seen = {};
+    return state.fleet
+      .filter((k) => k && state.ownedShips[k] && k !== state.ship && !seen[k] && (seen[k] = 1))
+      .slice(0, fleetSlots())
+      .map((k) => C.SHIP_BY_KEY[k])
+      .filter(Boolean);
+  }
+  // Assign (or clear with null) escort slot i. Enforces: slot unlocked, hull
+  // owned, not the flagship, no duplicates (hulls are unique anyway).
+  function setFleetSlot(i, key) {
+    if (i < 0 || i >= fleetSlots()) return { ok: false, reason: 'locked' };
+    if (!state.fleet) state.fleet = [];
+    if (key == null) { state.fleet[i] = null; }
+    else {
+      if (!state.ownedShips[key]) return { ok: false, reason: 'unowned' };
+      if (key === state.ship) return { ok: false, reason: 'flagship' };
+      if (state.fleet.some((k, j) => k === key && j !== i)) return { ok: false, reason: 'duplicate' };
+      state.fleet[i] = key;
+    }
+    refreshStats(); rebuildEscorts(); save();
+    if (window.UI) window.UI.refreshAll();
+    return { ok: true };
+  }
+  const ESCORT_OFF = [[-36, 30], [36, 30], [-66, 6], [66, 6]];
+  const ESCORT_WTYPE = { Frigate: 'laser', Cruiser: 'gatling', Battleship: 'missile', Carrier: 'rail', Aegis: 'support' };
+  function rebuildEscorts() {
+    const ax = rt.archer ? rt.archer.x : 0, ay = rt.archer ? rt.archer.y : 0;
+    rt.escorts = fleetShips().map((sh, i) => ({
+      key: sh.key, cls: sh.cls,
+      x: ax + ESCORT_OFF[i][0], y: ay + ESCORT_OFF[i][1],
+      ox: ESCORT_OFF[i][0], oy: ESCORT_OFF[i][1],
+      cd: Math.random(), heal: 0,
+    }));
+  }
+  function updateEscorts(dt) {
+    const a = rt.archer, s = rt.stats;
+    // WARDEN AURA hull recovery — fleet-wide regen ticks here
+    if (s && s.regen > 0 && a && !a.dead && a.hp < s.maxHp) {
+      a.hp = Math.min(s.maxHp, a.hp + s.maxHp * (s.regen / 100) * dt);
+      if (Math.random() < dt * 0.5) rt.floats.push(new E.FloatText(a.x, a.y - 22, '✚', { color: '#7ce0a0', size: 13, vy: -34, life: 0.7 }));
+    }
+    const list = rt.escorts;
+    if (!list || !list.length || !a) return;
+    for (const es of list) {
+      // formation flight — ease toward station-keeping point behind the flagship
+      const tx = a.x + es.ox, ty = a.y + es.oy;
+      const k = Math.min(1, dt * 3.2);
+      es.x += (tx - es.x) * k; es.y += (ty - es.y) * k;
+      if (es.heal > 0) es.heal -= dt;
+      es.cd -= dt;
+      if (a.dead || rt.awaitingRespawn || state.currentDungeon < 1) continue;
+      if (es.cd > 0) continue;
+      if (es.cls === 'Aegis') {
+        // support escort: periodic repair pulse instead of weapons fire
+        es.cd = 3.2; es.heal = 0.8;
+        if (a.hp < s.maxHp) {
+          const heal = s.maxHp * 0.02;
+          a.hp = Math.min(s.maxHp, a.hp + heal);
+          rt.floats.push(new E.FloatText(a.x, a.y - 22, '+' + formatNum(heal), { color: '#7ce0a0', size: 14, vy: -40, life: 0.8 }));
+          burst(es.x, es.y, '#7ce0a0', 8, { speed: 90, life: 0.5, glow: true });
+        }
+        continue;
+      }
+      // combat escort: fire at the nearest enemy in fleet range
+      let best = null, bd = (s.fireRange || 300) * (s.fireRange || 300);
+      for (const en of rt.enemies) { if (en.dying) continue; const d = (en.x - es.x) ** 2 + (en.y - es.y) ** 2; if (d < bd) { bd = d; best = en; } }
+      if (best) {
+        const p = new E.Projectile(es.x, es.y, best, 0, false);
+        const crit = Math.random() * 100 < s.critChance;
+        let dmg = s.attackDamage * C.FLEET.escortDmgFrac * (0.9 + Math.random() * 0.2);
+        if (crit) dmg *= 1 + s.critDamage / 100;
+        if (state.auto) dmg *= 0.8;
+        p.damage = Math.max(1, Math.round(dmg)); p.crit = crit;
+        p.wtype = ESCORT_WTYPE[es.cls] || 'gatling';
+        p.angle = Math.atan2(best.y - es.y, best.x - es.x);
+        rt.projectiles.push(p);
+        es.cd = 1 / C.FLEET.escortFireRate;
       }
     }
   }
@@ -1131,6 +1571,10 @@
   }
   function selectDungeon(d) {
     if (d > state.highestUnlocked) return;
+    if (isCitadelZone(d) && citadelCooldownLeft(d) > 0) {
+      if (window.UI) window.UI.unlockToast('⛴ Citadel rebuilding — ready in ' + Math.ceil(citadelCooldownLeft(d) / 60) + ' min');
+      return false;
+    }
     state.currentDungeon = d;
     state.currentSystem = null;   // classic free-play deploy (not a galaxy tile)
     rt.siege = null;
@@ -1166,7 +1610,9 @@
     if (window.UI) window.UI.refreshAll(); save();
   }
   function resetZone() {
-    rt.enemies = []; rt.projectiles = []; rt.ground = [];
+    rt.enemies = []; rt.projectiles = []; rt.ground = []; rt.ebolts = []; rt.towT = 0;
+    // CINEMATIC: hyperspace warp-in streaks on every combat deploy
+    if (state.currentDungeon >= 1) rt.warpT = 0.85;
     // re-fit world size + zoom for this zone (wider & more zoomed-out deeper in)
     const mul = worldMul(state.currentDungeon);
     rt.worldW = Math.round(rt.w * mul); rt.worldH = Math.round(rt.h * mul);
@@ -1188,6 +1634,13 @@
       rt.nodes = [];
       rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
       rt.waves = { active: true, total: 25, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false };
+    } else if (!state.currentSystem && isCitadelZone(state.currentDungeon)) {
+      // CITADEL SIEGE: fight from the bottom of the zone UP through 8 garrison
+      // waves, then destroy the citadel. One run per 15 min per zone.
+      rt.nodes = [];
+      rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
+      rt.waves = { active: true, total: 8, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, citadel: true };
+      if (rt.archer) { rt.archer.x = rt.worldW / 2; rt.archer.y = rt.worldH * 0.82; }
     } else {
       rt.waves = null;
       buildNodes();
@@ -1214,26 +1667,18 @@
     }
     return (state.rivalTiles && state.rivalTiles[k]) || null;
   }
-  // Do I own every tile in a region? (gates the 10× full-region ownership bonus)
-  function regionFull(region) {
-    for (let i = 0; i < GX.TILES_PER_REGION; i++) if (!state.ownedSystems[GX.tileId(region, i)]) return false;
-    return true;
-  }
-  // Seconds left on a region's 15-min contest cooldown (0 = attackable).
-  function regionCooldownLeft(region) {
-    const until = state.regionCd && state.regionCd[region];
+  // Seconds left on a tile's contest cooldown (15 min normal · 24 h citadels).
+  function tileCooldownLeft(k) {
+    const until = state.tileCd && state.tileCd[k];
     return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
   }
-  // Combat multipliers for the tile we're standing in: deep-space (20× density,
-  // 3× spawn rate, 10× loot, lose 2 on death) stacked with the 10× full-region
-  // ownership bonus. Read with `|| 1` fallbacks elsewhere.
+  // Combat multipliers for the tile we're standing in — deep space rings give
+  // 20× density, 3× spawn rate, 10× loot, and the lose-2-items death rule.
   function applyTileMults(tile) {
-    const R = tile ? GX.REGIONS[tile.region] : null;
-    const full = tile ? regionFull(tile.region) : false;
-    rt.tileDensity = ((R && R.deep) ? GX.DEEP_MULT.density : 1) * (full ? 10 : 1);
-    rt.tileLoot    = ((R && R.deep) ? GX.DEEP_MULT.loot : 1) * (full ? 10 : 1);
-    rt.tileRespawnMult = (R && R.deep) ? GX.DEEP_MULT.rate : 1;
-    rt.deepDeath   = !!(R && R.deep);
+    rt.tileDensity = (tile && tile.deep) ? GX.DEEP_MULT.density : 1;
+    rt.tileLoot    = (tile && tile.deep) ? GX.DEEP_MULT.loot : 1;
+    rt.tileRespawnMult = (tile && tile.deep) ? GX.DEEP_MULT.rate : 1;
+    rt.deepDeath   = !!(tile && tile.deep);
   }
   // Effective loot-quality roll multiplier for the current tile (capped so the
   // keep-best rarity roll never loops absurdly).
@@ -1248,23 +1693,24 @@
     if (!state.rivalTiles) state.rivalTiles = {};
     let seed = 1337;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
-    GX.REGIONS.forEach((R) => {
-      const p = 0.12 + R.idx * 0.13; // ~12% (Frontier) → ~77% (Omega) of free tiles held
-      for (let i = 0; i < GX.TILES_PER_REGION; i++) {
-        const id = GX.tileId(R.idx, i);
-        if (state.ownedSystems[id] || state.rivalTiles[id]) continue;
+    for (let ring = 1; ring <= GX.RINGS; ring++) {
+      const p = Math.min(0.5, 0.08 + ring * 0.018); // deeper rings more contested
+      GX.ringCoords(ring).forEach((c) => {
+        const id = GX.tileId(c.q, c.r);
+        if (state.ownedSystems[id] || state.rivalTiles[id]) return;
         if (rnd() < p) state.rivalTiles[id] = RIVAL_NAMES[(rnd() * RIVAL_NAMES.length) | 0];
-      }
-    });
+      });
+    }
   }
-  // Structured view for the UI: six regions, each with its ten tiles + ownership.
-  function galaxyView() {
-    return GX.REGIONS.map((R) => {
-      const tiles = GX.regionTiles(R.idx).map((t) => Object.assign({}, t, {
-        owned: isOwned(t.id), rival: rivalOf(t.id), active: state.currentSystem === t.id,
-      }));
-      const ownedCount = tiles.filter((t) => t.owned).length;
-      return { region: R, tiles, ownedCount, full: ownedCount === GX.TILES_PER_REGION, cooldown: regionCooldownLeft(R.idx) };
+  // Full info card for one tile — everything the detail panel needs.
+  function tileInfo(k) {
+    const t = sysAt(k); if (!t) return null;
+    return Object.assign({}, t, {
+      owned: isOwned(k), rival: rivalOf(k), active: state.currentSystem === k,
+      cooldown: tileCooldownLeft(k),
+      lootQ: (t.deep ? GX.DEEP_MULT.loot : 1),
+      resMult: (t.deep ? GX.DEEP_MULT.resource : 1),
+      locked: t.level > state.level + 10 && !isOwned(k),
     });
   }
   // ---- LIVING GALAXY: simulated rival turf wars (NOT real PvP) -------------
@@ -1273,13 +1719,12 @@
   // during) sessions. Catch-up runs on load for the time you were away.
   function rndRivalName() { return RIVAL_NAMES[(Math.random() * RIVAL_NAMES.length) | 0]; }
   function galaxyEvent() {
-    const wsum = GX.REGIONS.reduce((a, R) => a + (1 + R.idx), 0); // deeper = more contested
-    let roll = Math.random() * wsum, region = 0;
-    for (const R of GX.REGIONS) { roll -= (1 + R.idx); if (roll <= 0) { region = R.idx; break; } }
-    const ids = []; for (let i = 0; i < GX.TILES_PER_REGION; i++) ids.push(GX.tileId(region, i));
+    // weighted ring pick — deeper space is more contested
+    const ring = 1 + Math.min(GX.RINGS - 1, Math.floor(Math.pow(Math.random(), 0.6) * GX.RINGS));
+    const ids = GX.ringCoords(ring).map((c) => GX.tileId(c.q, c.r));
     const neutral = ids.filter((id) => !state.ownedSystems[id] && !state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]));
     const rivalHeld = ids.filter((id) => state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]));
-    const mine = ids.filter((id) => state.ownedSystems[id] && id !== GX.HOME && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]));
+    const mine = ids.filter((id) => state.ownedSystems[id] && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]));
     const pick = (arr) => arr[(Math.random() * arr.length) | 0];
     const r = Math.random();
     if (r < 0.5 && neutral.length) {
@@ -1291,9 +1736,13 @@
       if (name === from) name = rndRivalName();
       state.rivalTiles[id] = name; return { kind: 'war', name, from, tile: id };
     }
-    // contest one of YOUR tiles (rarer) — never the tile you're on or your home
-    if (mine.length && regionCooldownLeft(region) <= 0) {
-      const id = pick(mine), name = rndRivalName();
+    // contest one of YOUR tiles (deliberately rare; citadels are siege-locked)
+    if (mine.length && Math.random() < 0.4) {
+      const id = pick(mine);
+      const t = sysAt(id);
+      if (tileCooldownLeft(id) > 0) return null;
+      if (t && t.citadel && Math.random() < 0.85) return null; // citadels rarely fall to the sim
+      const name = rndRivalName();
       delete state.ownedSystems[id]; state.rivalTiles[id] = name;
       return { kind: 'lost', name, tile: id };
     }
@@ -1307,8 +1756,8 @@
   function galaxyTick() {
     const now = Date.now();
     if (!state.lastGalaxyTick) state.lastGalaxyTick = now;
-    let events = Math.min(30, Math.floor((now - state.lastGalaxyTick) / 150000)); // ~1 / 2.5 min
-    if (events <= 0) { if (Math.random() < 0.5) events = 1; else return; }
+    let events = Math.min(8, Math.floor((now - state.lastGalaxyTick) / 360000)); // ~1 / 6 min, small catch-up bursts
+    if (events <= 0) { if (Math.random() < 0.2) events = 1; else return; }
     state.lastGalaxyTick = now;
     let lost = null;
     for (let i = 0; i < events; i++) {
@@ -1355,18 +1804,39 @@
   }
   function initTerritory() {
     if (!(window.TERRITORY && window.TERRITORY.enabled())) return;
+    rt._terrSync = Date.now();
     window.TERRITORY.loadAll().then((map) => { syncRealTiles(map); if (window.UI) window.UI.galaxyChanged(); });
     window.TERRITORY.subscribe(onRealtimeTile);
   }
   // Tap a tile: own → deploy/farm; neutral → capture siege; rival → contest
   // (starts a 15-min region cooldown). Returns {ok} / {ok:false, reason}.
+  // Effective entry cost for a tile (your own territory warps at half price).
+  function entryCostFor(k) {
+    const t = sysAt(k); if (!t || t.home) return null;
+    const c = GX.entryCost(t.ring); if (!c) return null;
+    const disc = isOwned(k) ? 0.5 : 1;
+    const eff = {};
+    for (const ck in c) eff[ck] = Math.ceil(c[ck] * disc);
+    return eff;
+  }
   function warp(k) {
     const tile = sysAt(k); if (!tile) return { ok: false, reason: 'invalid' };
-    if (isOwned(k)) { enterTile(k); return { ok: true }; }
-    if (rivalOf(k)) {
-      if (regionCooldownLeft(tile.region) > 0) return { ok: false, reason: 'cooldown' };
-      if (!state.regionCd) state.regionCd = {};
-      state.regionCd[tile.region] = Date.now() + 15 * 60 * 1000; // contest cooldown
+    if (tile.home) return { ok: false, reason: 'home' };       // the Home Citadel is neutral
+    const owned = isOwned(k);
+    if (!owned && tile.level > state.level + 10) return { ok: false, reason: 'locked' };
+    if (!owned && rivalOf(k) && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
+    // ENTRY COST — every warp burns resources; deeper rings are punishing
+    const cost = entryCostFor(k);
+    if (cost) {
+      if (!canAfford(cost)) return { ok: false, reason: 'resources', cost };
+      state.resources.fuel -= cost.fuel || 0;
+      state.resources.iron -= cost.iron || 0;
+      state.resources.plasma -= cost.plasma || 0;
+    }
+    if (!owned && rivalOf(k)) {
+      if (!state.tileCd) state.tileCd = {};
+      // attacking locks the tile — citadels can only be sieged once per DAY
+      state.tileCd[k] = Date.now() + (tile.citadel ? 24 * 3600 : 15 * 60) * 1000;
     }
     enterTile(k);
     save();
@@ -1374,6 +1844,7 @@
   }
   function enterTile(k) {
     const tile = sysAt(k); if (!tile) return;
+    if (tile.home) { respawnAt(0); return; }      // Home Citadel → safe harbor
     state.currentSystem = k;
     state.currentDungeon = tile.diff;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, tile.diff);
@@ -1382,12 +1853,16 @@
     if (u > state.highestUnlocked) state.highestUnlocked = u;
     applyTileMults(tile);
     const owned = isOwned(k);
-    if (owned && tile.boss) {
-      // owned Boss Tile → endless gauntlet, a boss every 10 waves (30% Super)
+    if (owned && (tile.boss || tile.citadel)) {
+      // owned Boss/Citadel tile → endless gauntlet, a boss every 10 waves
       rt.siege = null;
       rt.waves = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false, bossTile: true };
     } else if (owned) {
       rt.siege = null; rt.waves = null;
+    } else if (tile.citadel) {
+      // CITADEL SIEGE ZONE → the full citadel-siege encounter; raze it to CLAIM it
+      rt.siege = null;
+      rt.waves = { active: true, total: 8, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, citadel: true, claimTile: k };
     } else {
       // neutral or rival-held → capture siege (Boss Tiles end on a boss wave)
       rt.siege = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.0, boss: tile.boss };
@@ -1403,22 +1878,87 @@
 
   // ---- SIEGE wave engine ---------------------------------------------------
   function spawnWaveEnemy() {
-    const a = Math.random() * Math.PI * 2, rad = Math.min(rt.worldW, rt.worldH) * (0.28 + Math.random() * 0.18);
-    const x = Math.max(30, Math.min(rt.worldW - 30, rt.archer.x + Math.cos(a) * rad));
-    const y = Math.max(30, Math.min(rt.worldH - 30, rt.archer.y + Math.sin(a) * rad));
+    const cit = rt.waves && rt.waves.active && rt.waves.citadel;
+    let x, y;
+    if (cit) {
+      // CITADEL SIEGE: the garrison descends from the top — you push UP
+      x = 30 + Math.random() * (rt.worldW - 60);
+      y = 30 + Math.random() * rt.worldH * 0.30;
+    } else {
+      const a = Math.random() * Math.PI * 2, rad = Math.min(rt.worldW, rt.worldH) * (0.28 + Math.random() * 0.18);
+      x = Math.max(30, Math.min(rt.worldW - 30, rt.archer.x + Math.cos(a) * rad));
+      y = Math.max(30, Math.min(rt.worldH - 30, rt.archer.y + Math.sin(a) * rad));
+    }
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
+    if (cit) {
+      // garrison hulks: walls, not bombs — brutal HP, feeble guns
+      e.maxHp *= 4.5; e.hp = e.maxHp;
+      e.damage *= 0.32; e.speed *= 0.72; e.size *= 1.25;
+    }
     rt.enemies.push(e);
   }
   function spawnWave(n, densityMul) {
     densityMul = densityMul || 1;
     const t = state.currentSystem ? sysAt(state.currentSystem) : null;
-    const ringN = t ? (t.region + 1) : Math.max(1, Math.ceil(state.currentDungeon / 10));
+    const ringN = t ? Math.max(1, t.ring) : Math.max(1, Math.ceil(state.currentDungeon / 10));
     let count = Math.min(16, 4 + Math.floor(ringN * 0.7) + Math.floor(n * 0.7));
     count = Math.min(34, Math.round(count * densityMul * (rt.tileDensity ? Math.min(2.2, 1 + (rt.tileDensity - 1) * 0.06) : 1)));
     for (let i = 0; i < count; i++) spawnWaveEnemy();
   }
   function spawnSiegeBoss() {
     spawnBoss();
+  }
+  // THE VOID CITADEL — a massive static fortress at the top of the zone.
+  // It cannot move; it suppresses with slow 4-bolt spreads while you grind
+  // its enormous hull down. Visual damage states live in render.drawCitadel.
+  function spawnCitadel() {
+    const pool = allowedEnemies();
+    const type = pool[pool.length - 1];
+    const c = new E.Enemy(type, state.currentDungeon, rt.worldW / 2, rt.worldH * 0.20);
+    c.isCitadel = true; c.isBoss = true;      // boss-grade xp/gold on kill
+    c.name = 'Void Citadel';
+    c.maxHp *= 800; c.hp = c.maxHp;           // a fortress — a true siege grind
+    c.damage *= 0.5;
+    c.size = 118; c.speed = 0;                // dominates the top of the zone
+    c.ranged = true; c.range = 430; c.fireCd = 2.6; c.fireT = 1.4;
+    rt.enemies.push(c);
+    burst(c.x, c.y, '#ff9a50', 50, { speed: 300, life: 1.0, glow: true });
+    return c;
+  }
+  function citadelDown(e) {
+    // SUPERNOVA — triple blast rings + white flash + heavy shake
+    burst(e.x, e.y, '#fff3d0', 90, { speed: 430, life: 1.2, glow: true });
+    burst(e.x, e.y, '#ffd24d', 60, { speed: 260, life: 1.0, glow: true });
+    burst(e.x, e.y, '#ff9a50', 40, { speed: 150, life: 0.9, glow: true });
+    rt.shake = 14; rt.novaT = 0.6;
+    // loot shower — better than the zone average, nothing absurd: +2 rarity
+    // tiers over a 4×-quality roll, dropped in a ring around the PLAYER so the
+    // magnet vacuums every piece before the tow home.
+    const drops = 8, zone = state.currentDungeon;
+    for (let i = 0; i < drops; i++) {
+      const base = rollRarityBoosted(zone, Math.min(40, qualityMult(zone) * 4));
+      const item = I.generate(zone, Math.min(10, base + 2));
+      state.itemsFound++;
+      const a = Math.PI * 2 * (i / drops), r = 42 + Math.random() * 36;
+      rt.ground.push(new E.GroundItem(rt.archer.x + Math.cos(a) * r, rt.archer.y + Math.sin(a) * r, item, false));
+      lootBurst(e.x, e.y, item.rarity);
+      if (window.UI) window.UI.onLoot(item, true);
+    }
+    // modest resource bounty + the 15-minute rebuild clock
+    if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
+    state.resources.fuel += 150 + zone * 20; state.resources.iron += 60 + zone * 8; state.resources.plasma += 40 + zone * 6;
+    // the rebuild clock: grind zones lock 15 min · claimed citadel tiles are
+    // siege-locked for 24 h (your new fortress can only be sieged once a day)
+    if (rt.waves && rt.waves.claimTile) {
+      if (!state.tileCd) state.tileCd = {};
+      state.tileCd[rt.waves.claimTile] = Date.now() + 24 * 3600 * 1000;
+      captureSystem();                         // the razed citadel becomes YOURS
+    } else {
+      if (!state.citadelCd) state.citadelCd = {};
+      state.citadelCd[zone] = Date.now() + 15 * 60 * 1000;
+    }
+    if (window.UI) window.UI.siegeEvent('citadeldown', {});
+    save();
   }
   function updateSiege(dt) {
     const s = rt.siege; if (!s || !s.active) return;
@@ -1452,13 +1992,19 @@
     if (s.spawnT > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
-        if (s.pendingBoss) { spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
+        if (s.pendingBoss) { if (s.citadel) spawnCitadel(); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
         else spawnWave(s.wave, 1.8); // extreme density
       }
       return;
     }
     if (rt.enemies.filter((e) => !e.dying).length > 0) return;
     if (s.bossSpawned) {
+      if (s.citadel) {
+        // CITADEL RAZED — a short grace to vacuum the loot, then tow home.
+        s.graceT = (s.graceT == null) ? 3.4 : s.graceT - dt;
+        if (s.graceT <= 0) { s.active = false; respawnAt(0); if (window.UI) window.UI.siegeEvent('citadelhome', {}); }
+        return;
+      }
       // gauntlet complete — reset and run it again
       s.wave = 1; s.bossSpawned = false; s.pendingBoss = false; s.super = false; s.spawnT = 2.2;
       if (window.UI) window.UI.siegeEvent('wavezone', { kind: 'clear' });
@@ -1468,9 +2014,9 @@
       s.wave++; s.spawnT = 0.9;
       if (window.UI && (s.wave % 5 === 0 || s.wave === s.total)) window.UI.siegeEvent('wave', s);
     } else {
-      s.super = Math.random() < 0.30; // final wave → boss (30% Super)
+      s.super = !s.citadel && Math.random() < 0.30; // final wave → boss (30% Super)
       s.pendingBoss = true; s.spawnT = 1.6;
-      if (window.UI) window.UI.siegeEvent('boss', s);
+      if (window.UI) window.UI.siegeEvent(s.citadel ? 'citadel' : 'boss', s);
     }
   }
 
@@ -1481,31 +2027,36 @@
     state.ownedSystems[k] = true;
     if (state.rivalTiles) delete state.rivalTiles[k];
     pushFeed(fromRival ? ('You took ' + tile.name + ' from ' + fromRival) : ('You captured ' + tile.name));
-    // REAL turf war: stake the claim on the shared server (server-authoritative).
+    // REAL turf war: stake the claim on the shared server (server-authoritative,
+    // atomic). If several operators raced for this tile, FIRST claim wins —
+    // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName()).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), tile.citadel ? 1440 : 15).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
-        if (res.ok && res.row) rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until };
+        if (res.ok && res.row) {
+          rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until };
+        } else if (res.reason && /protected|cooldown/i.test(res.reason)) {
+          // RACE LOST — another operator sealed the claim first
+          delete state.ownedSystems[k];
+          pushFeed('Beaten to ' + tile.name + ' — another operator sealed the claim first', true);
+          if (window.UI) window.UI.unlockToast('⚔ Race lost — ' + tile.name + ' was claimed seconds before you');
+          save();
+        }
         if (window.UI) window.UI.galaxyChanged();
       });
     }
     rt.siege = null;
     // boss tiles pay out the rare void/eternal loot table on capture
     if (tile.boss) bossSystemLoot(tile);
-    applyTileMults(tile); // ownership may have just completed the region (10×)
-    const full = regionFull(tile.region);
-    if (tile.boss) {
-      // now an owned Boss Tile → start its endless boss-wave gauntlet
-      rt.waves = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, bossTile: true };
-      resetZone();
-    } else {
-      rt.waves = null;
-      buildNodes();
-      rt.nodes.forEach((n, i) => { n.respawnT = 0.4 + i * 0.3; });
-      rt.bossInit = rt.bossTimer = 600 + Math.random() * 300; rt.lastBoss = rt.time - 600;
-    }
+    applyTileMults(tile);
+    // TERRITORY SECURED — stop all spawns, give the magnet a moment to vacuum
+    // the spoils, then tow the player home to the hangar.
+    rt.waves = null;
+    rt.nodes = [];
+    rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9;
+    rt.towT = 3.0;
     burst(rt.archer.x, rt.archer.y, '#5bc06b', 40, { speed: 240, life: 1.0, glow: true });
-    if (window.UI) { window.UI.siegeEvent('captured', { sys: tile, fromRival: fromRival, full: full }); window.UI.refreshAll(); }
+    if (window.UI) { window.UI.siegeEvent('captured', { sys: tile, fromRival: fromRival, full: false }); window.UI.refreshAll(); }
     save();
   }
   // Boss-system loot: 50% Void @~90% level, 10% Eternal @~50%, 1% Eternal @level
@@ -1528,14 +2079,10 @@
   // ---- RESOURCES (per-hour, offline-capped) --------------------------------
   function resourceRates() {
     const r = { fuel: 0, iron: 0, plasma: 0 };
-    const full = {}; GX.REGIONS.forEach((R) => { if (regionFull(R.idx)) full[R.idx] = true; });
     Object.keys(state.ownedSystems).forEach((k) => {
-      const t = sysAt(k); if (!t || !t.resource || !t.rate) return;
-      const R = GX.REGIONS[t.region];
-      let mult = 1;
-      if (R && R.deep) mult *= GX.DEEP_MULT.resource; // 25× deep-space yield
-      if (full[t.region]) mult *= 10;                 // full-region ownership bonus
-      r[t.resource] += t.rate * mult;
+      const t = sysAt(k); if (!t || !t.rate) return;
+      // citadel tiles already carry their 100× in t.rate; deep space adds ×25
+      r[t.resource || 'fuel'] += t.rate * (t.deep ? GX.DEEP_MULT.resource : 1);
     });
     return r;
   }
@@ -1553,6 +2100,8 @@
   function setAuto(v) { state.auto = !!v; rt.joy.x = rt.joy.y = 0; save(); }
   function setJoystick(x, y, active) { rt.joy.x = x; rt.joy.y = y; rt.joy.active = active; }
   function setGameSpeed(mult) {
+    // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it
+    if (mult === 10) { if (!state.secretSpeed) return false; state.gameSpeed = 10; save(); return true; }
     if (mult === 1 || hasSpeed('speed' + mult)) { state.gameSpeed = mult; save(); return true; }
     return false;
   }
@@ -1608,7 +2157,7 @@
     for (let i = 0; i < kills; i++) {
       if (Math.random() < dropP) { found++; const _q = qualityMult(d); if (newItems.length < 40) newItems.push(_q > 1 ? I.generate(d, rollRarityBoosted(d, _q)) : I.generate(d)); }
     }
-    newItems.forEach((it) => { if (!state.equipped[it.slot]) state.equipped[it.slot] = it; else state.inventory.push(it); });
+    newItems.forEach((it) => { if (!state.equipped[it.slot]) state.equipped[it.slot] = it; else if (state.inventory.length < invCap()) state.inventory.push(it); else addSalvage(it); });
     state.itemsFound += found;
     // deaths: estimate from how dangerous the zone is
     const lethal = dmg / (rt.stats.maxHp || 1);
@@ -1680,15 +2229,19 @@
     if (state.shipKills[state.ship] == null) state.shipKills[state.ship] = 0;
     if (!state.blueprints) state.blueprints = {};
     if (state.drones == null) state.drones = 0;
-    // ---- GALAXY v2 migration: infinite hex map → fixed 6-region structure ----
-    if (state.galaxyVer !== 2) {
-      state.ownedSystems = {}; state.ownedSystems[GX.HOME] = true; // keep a starter foothold
-      state.rivalTiles = {}; state.regionCd = {}; state.currentSystem = null;
-      state.galaxyVer = 2;
+    // ---- GALAXY v3 migration: regions → one massive unified hex grid --------
+    if (state.galaxyVer !== 3) {
+      state.ownedSystems = {};            // the Home Citadel is neutral — no starter tile
+      state.rivalTiles = {}; state.tileCd = {}; state.currentSystem = null;
+      delete state.regionCd;
+      state.galaxyVer = 3;
     }
     if (!state.rivalTiles) state.rivalTiles = {};
-    if (!state.regionCd) state.regionCd = {};
+    if (!state.tileCd) state.tileCd = {};
     if (!state.galaxyFeed) state.galaxyFeed = [];
+    if (state.gameSpeed > 3 && !state.secretSpeed) state.gameSpeed = 1; // 10× is easter-egg-only
+    if (!state.fleet) state.fleet = [];
+    if (!state.citadelCd) state.citadelCd = {};
     // ---- ZONE-CAP: keep exactly 10 zones unlocked beyond the pilot's level (and
     // within the current 100-block). This both GRANTS the level+10 runway to fresh
     // pilots and CORRECTS saves from the old, looser unlock curve. Since pilot
@@ -1753,10 +2306,10 @@
 
     setInterval(save, 8000);
     setInterval(() => { accrueResources(); }, 60000); // tick resources every minute
-    setInterval(galaxyTick, 60000); // tick simulated rival turf wars
+    setInterval(galaxyTick, 120000); // tick simulated rival turf wars (gently)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) save();
-      else { accrueResources(); const sum = computeOffline(); if (window.UI) { window.UI.refreshAll(); if (sum) window.UI.showOffline(sum); } rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); }
+      else { accrueResources(); const sum = computeOffline(); if (window.UI) { window.UI.refreshAll(); if (sum) window.UI.showOffline(sum); } rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled() && (!rt._terrSync || Date.now() - rt._terrSync > 60000)) { rt._terrSync = Date.now(); window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } }
     });
     window.addEventListener('beforeunload', save);
 
@@ -1768,7 +2321,24 @@
   // --------------------------------------------------------------------------
   // FORMAT HELPERS
   // --------------------------------------------------------------------------
+  // DISPLAY GAUGE — every number the player SEES is compressed above 1T and
+  // hard-capped at 999T. Pure presentation: damage dealt, HP pools, XP and
+  // score sources keep their true values internally; only the readout shrinks.
+  const GAUGE_T = 1e12;
+  function gaugeNum(n) {
+    if (n <= GAUGE_T) return n;
+    return Math.min(999 * GAUGE_T, GAUGE_T * Math.pow(n / GAUGE_T, 0.55));
+  }
   function formatNum(n) {
+    n = gaugeNum(n);
+    if (n < 1000) return Math.floor(n).toString();
+    const u = ['', 'K', 'M', 'B', 'T']; let i = 0, v = n;
+    while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
+    return (v >= 100 ? v.toFixed(0) : v.toFixed(2)) + u[i];
+  }
+  // RAW formatter — no 999T gauge. Used for Ship/Fleet Score and gold, which
+  // are allowed to grow without a display ceiling.
+  function formatNumRaw(n) {
     if (n < 1000) return Math.floor(n).toString();
     const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc']; let i = 0, v = n;
     while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
@@ -1785,19 +2355,25 @@
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, respawnAt,
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
+    fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
+    isCitadelZone, citadelCooldownLeft,
+    getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,
     shipDroneCount, getDrones: () => state.drones, getShipKills: (k) => (state.shipKills[k] || 0),
     skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills,
     getShop, shopTimeLeft, buyShopItem, getBossInfo, shopItemPrice, shopIsUpgrade,
     secondUnlocked: (b) => secondUnlocked(b), equipLayout,
     recommendedZone, zoneAdvice, zoneBonuses, currentWeek,
     // galaxy map
-    galaxyView, warp, sysAt, isOwned, rivalOf, regionFull, regionCooldownLeft, REGIONS: GX.REGIONS,
+    warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],
-    formatNum, formatTime,
-    getStats: () => rt.stats, getDps: () => rt.dps,
+    formatNum, formatNumRaw, formatTime,
+    getStats: () => rt.stats, getDps: () => rt.dps, score,
     getHp: () => ({ cur: rt.archer ? rt.archer.hp : 0, max: rt.stats.maxHp, dead: rt.archer && rt.archer.dead, awaiting: rt.awaitingRespawn }),
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
+    invCap, invSlotCost, buyInvSlots,
+    setPickupFilter: (t) => { state.pickupFilter = Math.max(0, t | 0); save(); },
+    setAutoSellTier: (t) => { state.autoSellTier = (t == null || t < 0) ? -1 : (t | 0); save(); },
     // dev/verify
     fastForward(seconds) { const dt = 1/60, n = Math.floor(seconds/dt); for (let i=0;i<n;i++){ rt.time+=dt; state.playTime+=dt; update(dt); } if (window.UI) window.UI.refreshAll(); },
   };

@@ -100,8 +100,12 @@
 
   // XP required to advance FROM `level` to level+1.
   // Hybrid linear*exponential: L1->2 = 100, L2->3 ≈ 165, scales forever.
+  // BAND WALLS: every 100 levels the whole curve steps up another ×5 — so the
+  // 100→200 journey costs ~5× the XP of 1→100, 200→300 ~5× that again, and the
+  // trend continues through 400→500. Levels are meant to be EARNED out there.
   function xpToNext(level) {
-    return Math.floor((50 + 50 * level) * Math.pow(1.10, level - 1));
+    const band = Math.min(5, Math.floor(level / 100)); // ×1, ×5, ×25, ×125, ×625
+    return Math.floor((50 + 50 * level) * Math.pow(1.10, level - 1) * Math.pow(5, band));
   }
 
   // Cosmetic "enemy level" shown to the player. D1=1, D5=25, D20=400, D100=10000.
@@ -120,15 +124,19 @@
   }
 
   // Enemy max HP for a dungeon.
+  // Enemy max HP for a dungeon. Tuned HIGH on purpose: combat is about
+  // GRINDING units down over several volleys, not one-shotting the screen —
+  // an on-level enemy should soak a good handful of hits before breaking.
   function enemyHp(dungeon) {
-    return Math.floor(42 * dungeonScale(dungeon) + 5);
+    return Math.floor(252 * dungeonScale(dungeon) + 30);
   }
 
   // Contact damage an enemy deals per hit. Kept low relative to player HP so a
   // small swarm is survivable WITH appropriate gear; over-pushing still kills,
   // because enemy damage scales geometrically while your HP lags if under-geared.
+  // (Also see the per-hit cap in entities.js — no single hit can one-shot you.)
   function enemyDamage(dungeon) {
-    return Math.floor(3.5 * dungeonScale(dungeon) + 1);
+    return Math.floor(2.1 * dungeonScale(dungeon) + 1);
   }
 
   // XP granted for a kill — rises with dungeon to reward pushing deeper.
@@ -183,22 +191,22 @@
   // ---------------------------------------------------------------------------
   function salvage(item) {
     const tier = RARITY[item.rarity] ? RARITY[item.rarity].tier : 0;
-    const chance = Math.min(0.85, 0.12 + tier * 0.07);
+    const chance = Math.min(0.9, 0.18 + tier * 0.08);
     if (Math.random() >= chance) return null;
-    // which resource: fuel is always likely; iron/plasma weight in with rarity.
-    // plasma is a workhorse resource (not meant to be scarce), so it salvages
-    // from Rare+ gear alongside iron rather than being gated to high tiers.
+    // which resource: fuel is the workhorse, but iron & plasma salvage off ANY
+    // gear now — just with weights (and amounts) that climb with rarity, so
+    // scrapping your grind loot is a real iron/plasma faucet.
     const w = {
       fuel: 10,
-      iron: tier >= 2 ? 3 + tier * 0.7 : 0,
-      plasma: tier >= 2 ? 2.5 + (tier - 2) * 0.8 : 0,
+      iron: 3.5 + tier * 1.1,
+      plasma: 2.2 + tier * 1.0,
     };
     const total = w.fuel + w.iron + w.plasma;
     let roll = Math.random() * total, kind = 'fuel';
     for (const k of ['fuel', 'iron', 'plasma']) { if (roll < w[k]) { kind = k; break; } roll -= w[k]; }
-    // amount: scales with rarity; fuel salvages most, iron & plasma a bit less
-    const km = kind === 'fuel' ? 1 : kind === 'iron' ? 0.6 : 0.6;
-    const amt = Math.max(1, Math.round((1 + tier * 0.7) * km * (0.6 + Math.random() * 0.8)));
+    // amount: scales with rarity; iron/plasma salvage nearly as much as fuel
+    const km = kind === 'fuel' ? 1 : 0.8;
+    const amt = Math.max(1, Math.round((1.4 + tier * 0.9) * km * (0.6 + Math.random() * 0.8)));
     return { [kind]: amt };
   }
 
@@ -239,8 +247,8 @@
     { mult: 1, label: '1×', price: 0, priceLabel: 'Free', sku: null },
     { mult: 2, label: '2×', price: 0, priceLabel: 'Free', sku: 'speed2' },
     { mult: 3, label: '3×', price: 0, priceLabel: 'Free', sku: 'speed3' },
-    { mult: 4, label: '4×', price: 0, priceLabel: 'Free', sku: 'speed4' },
-    { mult: 10, label: '10×', price: 0, priceLabel: 'Free', sku: 'speed10' },
+    // SECRET — never shown or settable until the Mothership easter egg fires
+    { mult: 10, label: '10×', price: 0, priceLabel: 'Secret', sku: null, secret: true },
   ];
   const STORE = {
     afk: { sku: 'afk', name: 'AFK Combat Mode', price: 0, priceLabel: 'Free',
@@ -265,6 +273,10 @@
     { key:'battleship',  name:'Battleship',     cls:'Battleship', price:12000000,    reqKills:9000,  weapons:3, ammo:2, hull:2, drones:0, mods:{hpPct:45,dmgPct:18},                          tag:'Bruiser',        desc:'Three weapons, heavy plating. +45% HP, +18% Damage.' },
     { key:'dreadnought', name:'Dreadnought',    cls:'Battleship', price:50000000,    reqKills:15000, weapons:4, ammo:2, hull:3, drones:0, mods:{dmgPct:30,hpPct:45,critChance:8},            tag:'Capital Ship',   desc:'Four weapons, fortress plating. The line-breaker.' },
     { key:'carrier',     name:'Carrier',        cls:'Carrier',    price:200000000,   reqKills:24000, weapons:2, ammo:2, hull:2, drones:2, mods:{hpPct:25,dmgPct:12},                          tag:'Drone Bay ×2',   desc:'Launches drones that swarm and fire on their own. 2 drone bays.' },
+    // AEGIS — carrier-tier FLEET SUPPORT hull. A side-branch (not required for
+    // the upgrade chain): its unique role is hosting Warden support arrays —
+    // their fleet-wide heal/buff aura is DOUBLED while you fly an Aegis.
+    { key:'aegis',       name:'Aegis',          cls:'Aegis',      price:350000000,   reqKills:26000, weapons:3, ammo:2, hull:3, drones:2, side:true, mods:{hpPct:55,dmgPct:8,critChance:4,rangePct:12}, tag:'FLEET SUPPORT', desc:'Guardian hull built around Warden support arrays — their fleet heal/buff aura is DOUBLED while you fly the Aegis.' },
     { key:'supercarrier',name:'Super Carrier',  cls:'Carrier',    price:900000000,   reqKills:39000, weapons:3, ammo:2, hull:3, drones:4, mods:{hpPct:40,dmgPct:24,critChance:8},            tag:'Drone Bay ×4',   desc:'3 weapons, heavy plating, 4 drone bays.' },
     { key:'titan',       name:'Titan Carrier',  cls:'Carrier',    price:4000000000,  reqKills:60000, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'FLAGSHIP',      desc:'The apex hull. 4 weapons, 3 ammo, and 8 drone bays.' },
     // MOTHERSHIP — the endgame faction Titan Carrier. Bought ONLY with Galaxy
@@ -277,14 +289,30 @@
   // BLUEPRINTS — a hull's buy option stays locked until you recover its
   // blueprint by defeating the BOSS in a specific zone. Staggered ever deeper
   // so each hull is a real expedition to find.
-  const SHIP_BP_ZONE = { interceptor:9, cruiser:18, heavycruiser:30, destroyer:42, battleship:55, dreadnought:68, carrier:80, supercarrier:90, titan:98 };
+  const SHIP_BP_ZONE = { interceptor:9, cruiser:18, heavycruiser:30, destroyer:42, battleship:55, dreadnought:68, carrier:80, aegis:84, supercarrier:90, titan:98 };
   SHIPS.forEach((s) => { s.bpZone = SHIP_BP_ZONE[s.key] || 0; });
-  function shipPrevKey(key) { const i = SHIPS.findIndex((s) => s.key === key); return i > 0 ? SHIPS[i - 1].key : null; }
+  // Previous hull in the upgrade chain. `side` hulls (Aegis) are optional
+  // branches: they hang off the chain but are never required by later hulls.
+  function shipPrevKey(key) {
+    let i = SHIPS.findIndex((s) => s.key === key);
+    if (i <= 0) return null;
+    i--;
+    while (i > 0 && SHIPS[i].side) i--;
+    return SHIPS[i].key;
+  }
   // Which hull blueprint (if any) drops from the boss of a given zone.
   function blueprintForZone(zone) { const s = SHIPS.find((x) => x.bpZone === zone); return s ? s.key : null; }
   // Drone bays: while flying a carrier, each kill has `dropChance` to drop a
   // drone into an empty bay. Drones deal `dmgFrac` of your damage per shot.
   const DRONE = { dmgFrac: 0.45, fireRate: 1.5, range: 235, orbit: 52, spin: 1.0, dropChance: 0.16, projSpeed: 560 };
+
+  // ---------------------------------------------------------------------------
+  // FLEET — from Lv 100 you unlock an escort slot every 100 levels (4 max).
+  // Flagship + 4 escorts = 5 ships. Hulls are unique, so no duplicate ships.
+  // Escorts fly in formation, fire real shots (escortDmgFrac of your damage)
+  // and contribute statShare of their hull mods to your fleet score.
+  // ---------------------------------------------------------------------------
+  const FLEET = { slotLevels: [100, 200, 300, 400], maxShips: 5, escortDmgFrac: 0.25, escortFireRate: 1.1, statShare: 0.30 };
 
   // The ordered equipment slots a ship exposes. Extra weapon/ammo/hull slots
   // reuse the base item types (a 'bow' item fits bow2/bow3/bow4, etc.).
@@ -420,7 +448,7 @@
     RARITY, RARITY_BY_KEY, STATS, STAT_KEYS, SLOTS, SLOT_KEYS, ENEMIES,
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
-    SHIPS, SHIP_BY_KEY, DRONE, shipSlots, slotBase, shipPrevKey, blueprintForZone,
+    SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, dungeonScale, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice,
   };

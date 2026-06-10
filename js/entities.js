@@ -88,7 +88,7 @@
 
       // record trail point
       this.trail.push({ x: this.x, y: this.y });
-      if (this.trail.length > 7) this.trail.shift();
+      if (this.trail.length > 5) this.trail.shift();
 
       if (this.target && !this.target.dead && dist <= step + this.target.size) {
         this.x = tx; this.y = ty;
@@ -122,6 +122,15 @@
       this.moving = false;
       this.attackLunge = 0;    // 0..1 melee lunge animation
       this.seed = Math.random() * 1000; // per-enemy variation
+      // RANGED GUNNERS — a seeded ~35% of vessels carry standoff guns: they
+      // close to firing distance, hold there, and volley bolts at the player
+      // (every boss is a gunner too — set via isBoss after construction).
+      this.ranged = (this.seed % 10) < 3.5;
+      this.range = 230;                              // ≈ the player's own 250
+      this.holdAt = this.range * (0.55 + (this.seed % 1) * 0.25);
+      this.fireT = 1.2 + (this.seed % 1.4);          // first shot is staggered
+      this.fireCd = 2.0 + (this.seed % 1.2);
+      this.fireReq = false;                          // game loop consumes this
       this.dying = false;
       this.deathT = 0;        // 0..1 death animation progress
       this.dead = false;      // fully removed
@@ -143,12 +152,23 @@
       this.wobble += dt * 8;
       this.dir = dx >= 0 ? 1 : -1;
       const reach = this.size + archer.size;
-      if (dist > reach) {
+      const gunner = this.ranged || this.isBoss;
+      const holdAt = gunner ? Math.max(reach + 6, this.isBoss ? this.range * 0.8 : this.holdAt) : reach;
+      if (dist > holdAt) {
         const sp = this.speed * Math.min(1, this.spawnT * 1.5);
         this.x += (dx / dist) * sp * dt;
         this.y += (dy / dist) * sp * dt;
         this.walk += dt * sp * 0.16;   // walk cycle speed tied to movement
         this.moving = true;
+        this.contactTimer = Math.max(0, this.contactTimer - dt);
+      } else if (dist > reach) {
+        // gunner on station — slow strafing orbit while the guns cycle
+        const ta = Math.atan2(dy, dx) + Math.PI / 2;
+        const drift = this.speed * 0.3 * ((this.seed % 2) < 1 ? 1 : -1);
+        this.x += Math.cos(ta) * drift * dt;
+        this.y += Math.sin(ta) * drift * dt;
+        this.walk += dt * Math.abs(drift) * 0.16;
+        this.moving = false;
         this.contactTimer = Math.max(0, this.contactTimer - dt);
       } else {
         this.moving = false;
@@ -158,6 +178,15 @@
           this.contactTimer = C.ARENA.contactCooldown;
           this.attackLunge = 1; // trigger melee lunge animation
           archer.takeHit(this.damage, this);
+        }
+      }
+      // standoff fire — request a bolt; the game loop spawns + draws it
+      if (gunner && !archer.dead && this.spawnT >= 1 && dist <= this.range * 1.05) {
+        this.fireT -= dt;
+        if (this.fireT <= 0) {
+          this.fireT = this.isBoss ? 2.6 : this.fireCd;
+          this.fireReq = true;
+          this.attackLunge = 1;
         }
       }
     }
@@ -191,6 +220,11 @@
     }
     takeHit(dmg, src) {
       if (this.dead || this.invuln > 0) return;
+      // Warden aura damage reduction (set by game.js when stats refresh)
+      if (this.dmgReduce > 0) dmg *= 1 - Math.min(0.6, this.dmgReduce / 100);
+      // NO ONE-SHOTS: a single hit can never take more than 22% of max hull.
+      // Sustained swarm pressure still kills — burst alone can't delete you.
+      if (this.maxHp > 1) dmg = Math.min(dmg, this.maxHp * 0.22);
       this.hp = Math.max(0, this.hp - dmg);
       this.hurtFlash = 1;
       if (this.hp <= 0) { this.dead = true; this.justDied = true; this.killer = src || null; }

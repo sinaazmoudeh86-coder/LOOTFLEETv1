@@ -59,6 +59,27 @@
     return list;
   }
 
+  // Deterministic rival FLEET — higher-ranked pilots field bigger, fancier
+  // fleets (1–5 unique hulls, flagship first). Seeded by name; stable per heat.
+  const FLEET_POOL = ['frigate', 'interceptor', 'cruiser', 'heavycruiser', 'destroyer', 'battleship', 'dreadnought', 'carrier', 'aegis', 'supercarrier', 'titan', 'mothership'];
+  function fleetFor(p, rank, total) {
+    if (p._fleet) return p._fleet;
+    let h = 0; const nm = p.name || '?';
+    for (let i = 0; i < nm.length; i++) h = (h * 31 + nm.charCodeAt(i)) >>> 0;
+    const r = () => { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 8) / 16777216; };
+    const k = 1 - (rank - 1) / Math.max(1, (total || 20) - 1);   // 1 = top of board
+    const ships = 1 + Math.min(4, Math.floor(k * 4 + r() * 1.2));
+    const top = Math.max(2, Math.round(3 + k * (FLEET_POOL.length - 4)));
+    const picks = [];
+    let guard = 0;
+    while (picks.length < ships && guard++ < 40) {
+      const idx = Math.max(0, Math.min(FLEET_POOL.length - 1, top - ((r() * 5) | 0)));
+      if (!picks.includes(FLEET_POOL[idx])) picks.push(FLEET_POOL[idx]);
+    }
+    p._fleet = picks;
+    return picks;
+  }
+
   function loadoutFor(p, rank, total) {
     if (p._loadout) return p._loadout;
     const eq = { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null };
@@ -84,7 +105,8 @@
   function meEntry(GAME) {
     const s = GAME.state, st = GAME.getStats();
     return { name: 'You', isMe: true, zone: s.highestDungeonReached, level: s.level,
-      power: Math.round((st ? st.theoryDps : 0) + (st ? st.maxHp : 0) * 0.5), kills: s.totalKills,
+      power: GAME.score ? GAME.score() : Math.round((st ? st.theoryDps : 0) + (st ? st.maxHp : 0) * 0.5), kills: s.totalKills,
+      fleet: [s.ship].concat(GAME.fleetShips ? GAME.fleetShips().map((x) => x.key) : []),
       _loadout: s.equipped };
   }
 
@@ -106,5 +128,5 @@
     return { board: rankBoard(list) };
   }
 
-  window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, heatNumber, weekLabel };
+  window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel };
 })();

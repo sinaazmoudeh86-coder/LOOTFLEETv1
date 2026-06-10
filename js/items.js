@@ -14,8 +14,9 @@
   // the chain progressively harder to reach.
   function rollRarity(dungeon) {
     const luck = 1 + dungeon * 0.0045;            // much gentler depth scaling
+    const cap = C.rarityCap ? C.rarityCap(dungeon) : 11;   // zone-gated ceiling
     const weights = C.RARITY.map((r) =>
-      r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier)
+      r.tier > cap ? 0 : (r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier))
     );
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = Math.random() * total;
@@ -321,8 +322,9 @@
   // array of probabilities (0..1) indexed by rarity tier, summing to 1.
   function rarityChances(dungeon) {
     const luck = 1 + dungeon * 0.0045;
+    const cap = C.rarityCap ? C.rarityCap(dungeon) : 11;
     const weights = C.RARITY.map((r) =>
-      r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier)
+      r.tier > cap ? 0 : (r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier))
     );
     const total = weights.reduce((a, b) => a + b, 0) || 1;
     return weights.map((w) => w / total);

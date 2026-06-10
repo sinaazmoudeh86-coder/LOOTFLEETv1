@@ -632,10 +632,11 @@
     const zone = state.currentDungeon;
     const drops = isSuper ? 12 : 5;
     const qMul = Math.min(50, qualityMult(zone) * (rt.tileLoot || 1) * (isSuper ? 25 : 1));
+    const rcap = Math.min(10, C.rarityCap(zone) + 1); // bosses beat the zone cap by ONE tier, never more
     for (let i = 0; i < drops; i++) {
       const base = rollRarityBoosted(zone, qMul);
-      let boosted = Math.min(10, base + (isSuper ? 5 : 3) + ((Math.random() * 2) | 0));
-      if (isSuper && i < 2) boosted = Math.max(boosted, 4); // guarantee Legendary+
+      let boosted = Math.min(rcap, base + (isSuper ? 5 : 3) + ((Math.random() * 2) | 0));
+      if (isSuper && i < 2) boosted = Math.max(boosted, Math.min(rcap, 4)); // guarantee Legendary+ where the zone allows
       const item = I.generate(zone, boosted);
       state.itemsFound++;
       const a = Math.PI * 2 * (i / drops), r = 26 + Math.random() * 26;
@@ -1937,7 +1938,7 @@
     const drops = 8, zone = state.currentDungeon;
     for (let i = 0; i < drops; i++) {
       const base = rollRarityBoosted(zone, Math.min(40, qualityMult(zone) * 4));
-      const item = I.generate(zone, Math.min(10, base + 2));
+      const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
       state.itemsFound++;
       const a = Math.PI * 2 * (i / drops), r = 42 + Math.random() * 36;
       rt.ground.push(new E.GroundItem(rt.archer.x + Math.cos(a) * r, rt.archer.y + Math.sin(a) * r, item, false));
@@ -2063,10 +2064,11 @@
   function bossSystemLoot(sys) {
     const VOID = 9, ETERNAL = 10;
     const lvl = Math.max(1, sys.diff);
+    const rcap = Math.min(10, C.rarityCap(lvl) + 1); // ring-gated — no Void drops from ring-1 boss tiles
     const drops = [];
-    if (Math.random() < 0.50) drops.push(I.generate(Math.max(1, Math.round(lvl * 0.9)), VOID));
-    if (Math.random() < 0.10) drops.push(I.generate(Math.max(1, Math.round(lvl * 0.5)), ETERNAL));
-    if (Math.random() < 0.01) drops.push(I.generate(lvl, ETERNAL));
+    if (Math.random() < 0.50) drops.push(I.generate(Math.max(1, Math.round(lvl * 0.9)), Math.min(rcap, VOID)));
+    if (Math.random() < 0.10) drops.push(I.generate(Math.max(1, Math.round(lvl * 0.5)), Math.min(rcap, ETERNAL)));
+    if (Math.random() < 0.01) drops.push(I.generate(lvl, Math.min(rcap, ETERNAL)));
     drops.forEach((it, i) => {
       state.itemsFound++;
       const a = Math.PI * 2 * (i / Math.max(1, drops.length)), r = 24 + Math.random() * 20;

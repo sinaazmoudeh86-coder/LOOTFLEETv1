@@ -105,7 +105,7 @@
   // trend continues through 400→500. Levels are meant to be EARNED out there.
   function xpToNext(level) {
     const band = Math.min(5, Math.floor(level / 100)); // ×1, ×5, ×25, ×125, ×625
-    return Math.floor((50 + 50 * level) * Math.pow(1.10, level - 1) * Math.pow(5, band));
+    return Math.floor((120 + 120 * level) * Math.pow(1.11, level - 1) * Math.pow(5, band));
   }
 
   // Cosmetic "enemy level" shown to the player. D1=1, D5=25, D20=400, D100=10000.
@@ -128,7 +128,9 @@
   // GRINDING units down over several volleys, not one-shotting the screen —
   // an on-level enemy should soak a good handful of hits before breaking.
   function enemyHp(dungeon) {
-    return Math.floor(252 * dungeonScale(dungeon) + 30);
+    // zones 1–3 are a gentle on-ramp for ungeared rookies
+    const ramp = dungeon === 1 ? 0.65 : dungeon === 2 ? 0.8 : dungeon === 3 ? 0.92 : 1;
+    return Math.floor((252 * dungeonScale(dungeon) + 30) * ramp);
   }
 
   // Contact damage an enemy deals per hit. Kept low relative to player HP so a
@@ -136,12 +138,14 @@
   // because enemy damage scales geometrically while your HP lags if under-geared.
   // (Also see the per-hit cap in entities.js — no single hit can one-shot you.)
   function enemyDamage(dungeon) {
-    return Math.floor(2.1 * dungeonScale(dungeon) + 1);
+    // zones 1–3 hit soft — a fresh, itemless frigate must survive its first sortie
+    const ramp = dungeon === 1 ? 0.45 : dungeon === 2 ? 0.62 : dungeon === 3 ? 0.8 : 1;
+    return Math.max(1, Math.floor((2.1 * dungeonScale(dungeon) + 1) * ramp));
   }
 
   // XP granted for a kill — rises with dungeon to reward pushing deeper.
   function enemyXp(dungeon) {
-    return Math.floor(28 * Math.pow(dungeonScale(dungeon), 0.82) + 16);
+    return Math.floor(16 * Math.pow(dungeonScale(dungeon), 0.82) + 9);
   }
 
   // Gold granted for a kill.
@@ -152,6 +156,25 @@
   // Chance an enemy drops loot at all (before rarity roll).
   function dropChance(dungeon) {
     return Math.min(0.55, 0.32 + dungeon * 0.004);
+  }
+
+  // ---------------------------------------------------------------------------
+  // RARITY CAP — loot quality is progression-gated. Each zone band has a hard
+  // ceiling on what can DROP there: no Divine/Cosmic raining on Zone 1. Bosses
+  // and citadels may beat the cap by exactly ONE tier (their flat bonuses are
+  // clamped in game.js). Tier index → see RARITY above.
+  // ---------------------------------------------------------------------------
+  function rarityCap(zone) {
+    if (zone >= 200) return 11;  // Primordial
+    if (zone >= 150) return 10;  // Eternal
+    if (zone >= 100) return 9;   // Void
+    if (zone >= 75)  return 8;   // Cosmic
+    if (zone >= 55)  return 7;   // Divine
+    if (zone >= 35)  return 6;   // Ancient
+    if (zone >= 20)  return 5;   // Mythic
+    if (zone >= 10)  return 4;   // Legendary
+    if (zone >= 5)   return 3;   // Epic
+    return 2;                    // Rare (zones 1–4)
   }
 
   // Per-level player base stats (before gear).
@@ -450,6 +473,6 @@
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
     SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, dungeonScale, enemyHp, enemyDamage, enemyXp, enemyGold,
-    dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice,
+    dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap,
   };
 })();

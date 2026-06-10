@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v61';
+const CACHE = 'lootfleet-v62';
 const CORE = [
   './', 'index.html', 'game.html', 'manifest.json',
   'icon-192.png', 'icon-512.png',

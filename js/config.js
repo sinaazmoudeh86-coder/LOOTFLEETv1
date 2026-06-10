@@ -128,9 +128,10 @@
   // GRINDING units down over several volleys, not one-shotting the screen —
   // an on-level enemy should soak a good handful of hits before breaking.
   function enemyHp(dungeon) {
-    // zones 1–3 are a gentle on-ramp for ungeared rookies
-    const ramp = dungeon === 1 ? 0.65 : dungeon === 2 ? 0.8 : dungeon === 3 ? 0.92 : 1;
-    return Math.floor((252 * dungeonScale(dungeon) + 30) * ramp);
+    // zones 1–5 are the FAST lane — fresh pilots nearly one-shot everything;
+    // real HP arrives at zone 6
+    const ramp = dungeon === 1 ? 0.06 : dungeon === 2 ? 0.12 : dungeon === 3 ? 0.25 : dungeon === 4 ? 0.45 : dungeon === 5 ? 0.65 : 1;
+    return Math.max(8, Math.floor((252 * dungeonScale(dungeon) + 30) * ramp));
   }
 
   // Contact damage an enemy deals per hit. Kept low relative to player HP so a
@@ -138,8 +139,8 @@
   // because enemy damage scales geometrically while your HP lags if under-geared.
   // (Also see the per-hit cap in entities.js — no single hit can one-shot you.)
   function enemyDamage(dungeon) {
-    // zones 1–3 hit soft — a fresh, itemless frigate must survive its first sortie
-    const ramp = dungeon === 1 ? 0.45 : dungeon === 2 ? 0.62 : dungeon === 3 ? 0.8 : 1;
+    // zones 1–5 hit soft — a fresh, itemless frigate must survive its first sorties
+    const ramp = dungeon === 1 ? 0.45 : dungeon === 2 ? 0.6 : dungeon === 3 ? 0.75 : dungeon === 4 ? 0.85 : dungeon === 5 ? 0.95 : 1;
     return Math.max(1, Math.floor((2.1 * dungeonScale(dungeon) + 1) * ramp));
   }
 
@@ -154,7 +155,9 @@
   }
 
   // Chance an enemy drops loot at all (before rarity roll).
+  // Zones 1–5: EVERY kill drops — the opening minutes shower (rarity-capped) loot.
   function dropChance(dungeon) {
+    if (dungeon >= 1 && dungeon <= 5) return 1;
     return Math.min(0.55, 0.32 + dungeon * 0.004);
   }
 

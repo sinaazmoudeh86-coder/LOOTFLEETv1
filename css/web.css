@@ -310,15 +310,158 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 .fp-pick.rm{ border-color:rgba(255,73,95,.4); }
 
 /* ===== top-bar wallet — gold + all Galaxy Resources (lives in the status bar) ===== */
-.wallet{ display:flex; flex:1; align-items:center; justify-content:flex-start; gap:6px; min-width:0; margin:0 8px 0 2px; overflow:hidden; }
+.wallet{ display:flex; flex:1; align-items:center; justify-content:flex-start; gap:4px; min-width:0; margin:0 6px 0 2px; overflow:hidden; }
 .wallet .gold-chip{ margin:0; height:20px; display:flex; align-items:center; }
 .wallet .res-chip{
-  display:flex; align-items:center; gap:3px; height:20px; padding:0 8px; border-radius:99px; flex:none;
+  display:flex; align-items:center; gap:3px; height:20px; padding:0 7px; border-radius:99px; flex:none;
   background:rgba(10,14,22,.72); border:1px solid color-mix(in srgb, var(--rc) 35%, transparent);
   font-size:10px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums;
 }
+.wallet .lc-chip{ cursor:pointer; pointer-events:auto; border-color:rgba(242,169,60,.5); }
+.wallet .lc-chip svg.lc{ width:13px; height:13px; margin:0; vertical-align:0; filter:drop-shadow(0 0 3px rgba(242,169,60,.55)); }
+.wallet .lc-chip:active{ transform:translateY(1px); }
+#statusbar .acct-btn{ max-width:92px; }
+/* fit-guard stages — applied by syncHUD when balances outgrow the bar */
+.wallet.tight .res-chip .rr{ display:none; }
+.wallet.tight .res-chip{ padding:0 5px; gap:2px; }
+.wallet.tight{ gap:3px; }
+.wallet.tighter .res-chip{ font-size:9px; padding:0 4px; }
+.wallet.tighter .res-chip .rg{ font-size:8.5px; }
+.wallet.tighter .gold-chip{ transform:scale(.9); transform-origin:left center; margin-right:-4px; }
+.wallet.tightest .res-chip{ font-size:8.5px; padding:0 3px; gap:1.5px; }
+.wallet.tightest .lc-chip svg.lc{ width:11px; height:11px; }
 .wallet .res-chip .rg{ color:var(--rc); font-size:9.5px; }
 .wallet .res-chip .rr{ font-size:7.5px; font-weight:800; color:#7ce0a0; letter-spacing:.02em; margin-left:3px; }
+
+/* ===== HOLD FULL badge — beside the loot feed while drops are scrapped ===== */
+.loot-toast .lt-scrap{ margin-left:6px; font-size:9.5px; color:#9aa3b2; font-weight:800; }
+.loot-toast.scrapped{ background:rgba(30,34,42,.92); border-left-color:#7d828c !important; }
+.loot-toast.scrapped span:first-child{ opacity:.75; }
+#cargo-full{ display:none; position:absolute; left:12px; bottom:96px; z-index:5; pointer-events:auto; cursor:pointer;
+  font-size:10.5px; font-weight:800; letter-spacing:.04em; color:#ffd9c4;
+  background:rgba(40,12,10,.92); border:1px solid rgba(255,90,60,.65); border-left:3px solid #ff5a3c;
+  border-radius:8px; padding:6px 10px; animation:cargoPulse 1.6s ease-in-out infinite; }
+#cargo-full.show{ display:flex; align-items:center; gap:7px; }
+#cargo-full .cf-go{ font-size:9px; color:#ffb088; font-weight:800; white-space:nowrap; }
+#cargo-full:active{ transform:translateY(1px); }
+@keyframes cargoPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,90,60,.35);} 50%{ box-shadow:0 0 14px 2px rgba(255,90,60,.5);} }
+
+/* ===== COSMETICS market ===== */
+.wci{ font-size:21px; line-height:1; font-weight:400; }
+.cred-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 8px;
+  background:linear-gradient(180deg,#161f2d,#10172333); border:1px solid var(--line-2); border-radius:11px; padding:9px 12px; }
+.cred-have{ font-size:12.5px; color:#c8b4ff; font-weight:700; }
+.cred-have b{ font-size:15px; color:#e6dbff; font-variant-numeric:tabular-nums; }
+.cred-get{ border:1px solid rgba(154,91,255,.55); background:rgba(154,91,255,.16); color:#d9c4ff;
+  font-size:11px; font-weight:800; letter-spacing:.03em; border-radius:99px; padding:6px 12px; cursor:pointer; }
+.cred-get:active{ transform:translateY(1px); }
+.cos-note{ font-size:10.5px; color:var(--muted); margin-bottom:10px; line-height:1.5; }
+.cos-h{ font-family:var(--font-display); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:12px 0 7px; }
+.cos-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+.cos-card{ border:1px solid var(--line-2); border-radius:12px; padding:9px; cursor:pointer;
+  background:linear-gradient(180deg,#141d2c,#10172333); display:flex; flex-direction:column; gap:5px; }
+.cos-card:active{ transform:translateY(1px); }
+.cos-card.on{ border-color:#7ce0a0; box-shadow:0 0 0 1px #7ce0a0 inset, 0 0 14px -4px #7ce0a0; }
+.cos-prev{ height:52px; border-radius:8px; border:1px solid rgba(255,255,255,.12); }
+.cos-prev.anim{ animation:cosHue 3.2s linear infinite; }
+@keyframes cosHue{ to{ filter:hue-rotate(360deg); } }
+.cos-name{ font-size:12px; font-weight:800; color:var(--text); }
+.cos-desc{ font-size:9.5px; color:var(--muted); line-height:1.45; min-height:26px; }
+.cos-act{ display:flex; justify-content:flex-end; }
+.cos-btn{ border-radius:99px; padding:5px 13px; font-size:11px; font-weight:800; cursor:pointer; }
+.cos-btn.buy{ border:1px solid rgba(154,91,255,.55); background:rgba(154,91,255,.16); color:#d9c4ff; display:inline-flex; align-items:center; gap:4px; }
+.cos-btn.buy.cant{ opacity:.55; }
+.cos-btn.eq{ border:1px solid var(--line-2); background:#18202e; color:var(--text); }
+.cos-on{ font-size:10.5px; font-weight:800; color:#7ce0a0; padding:5px 2px; }
+.pk-tag{ font-size:8.5px; font-weight:800; letter-spacing:.05em; color:#120826; background:#c8a4ff;
+  border-radius:4px; padding:1px 5px; vertical-align:1px; margin-left:4px; white-space:nowrap; display:inline-block; }
+.pk-tag.hot{ background:linear-gradient(90deg,#ffe27a,#f2a93c); color:#2a1808; }
+
+/* pack rows: name + tags wrap as whole chips, never clipping */
+.fp-pick .fpp-n{ display:flex; flex-wrap:wrap; align-items:center; gap:3px 6px; line-height:1.35; }
+.fp-pick .pk-tag{ margin-left:0; vertical-align:0; flex:none; }
+
+/* ===== Get LootCoins hero banner ===== */
+.lc-hero{ position:relative; overflow:hidden; text-align:center; border-radius:13px; margin-bottom:12px;
+  border:1px solid rgba(242,169,60,.45); padding:18px 14px 15px;
+  background:radial-gradient(130% 110% at 50% 0%, rgba(184,106,223,.20), rgba(12,17,27,.95) 62%), #0b0f18; }
+.lch-glow{ position:absolute; left:50%; top:40%; width:160px; height:160px; transform:translate(-50%,-50%);
+  background:radial-gradient(circle, rgba(242,169,60,.5), rgba(184,106,223,.2) 55%, transparent 72%);
+  filter:blur(12px); animation:lchPulse 2.6s ease-in-out infinite; }
+@keyframes lchPulse{ 0%,100%{ opacity:.5; transform:translate(-50%,-50%) scale(.9);} 50%{ opacity:1; transform:translate(-50%,-50%) scale(1.1);} }
+.lc-hero svg.lch-coin{ position:relative; width:64px; height:64px; margin:0; vertical-align:0;
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.65)) drop-shadow(0 0 16px rgba(242,169,60,.6));
+  animation:lchFloat 3.2s ease-in-out infinite; }
+@keyframes lchFloat{ 0%,100%{ transform:translateY(0) rotate(-5deg);} 50%{ transform:translateY(-7px) rotate(5deg);} }
+.lch-sp{ position:absolute; width:4px; height:4px; border-radius:50%; background:#ffe9b0;
+  box-shadow:0 0 9px #f2b24b; animation:lchTw 1.9s ease-in-out infinite; }
+.lch-sp.s1{ left:22%; top:32%; }
+.lch-sp.s2{ left:74%; top:22%; width:3px; height:3px; animation-delay:.4s; }
+.lch-sp.s3{ left:64%; top:62%; animation-delay:.8s; }
+.lch-sp.s4{ left:32%; top:14%; width:3px; height:3px; animation-delay:1.2s; }
+.lch-sp.s5{ left:84%; top:48%; background:#e7c4ff; box-shadow:0 0 9px #b86adf; animation-delay:.6s; }
+.lch-shine{ position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(115deg, transparent 32%, rgba(255,255,255,.13) 46%, transparent 60%);
+  background-size:240% 100%; animation:lchSweep 3.4s linear infinite; }
+@keyframes lchSweep{ 0%{ background-position:135% 0;} 100%{ background-position:-115% 0;} }
+.lch-title{ position:relative; font-family:var(--font-display); font-size:19px; font-weight:800; letter-spacing:.16em; margin-top:9px;
+  background:linear-gradient(90deg,#ffe27a,#f2a93c 50%,#d9a4ff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.lch-sub{ position:relative; font-size:10.5px; color:var(--muted); margin-top:3px; letter-spacing:.04em; }
+@media (prefers-reduced-motion: reduce){ .lch-glow,.lc-hero svg.lch-coin,.lch-sp,.lch-shine{ animation:none; } }
+/* the LootCoin mark */
+svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; margin-right:3px;
+  filter:drop-shadow(0 0 4px rgba(242,169,60,.6)); }
+.cred-have svg.lc{ width:18px; height:18px; vertical-align:-4px; }
+.sheet-head svg.lc{ width:18px; height:18px; vertical-align:-3px; }
+/* 4× premium speed pill (locked state shows the coin) */
+.spd.lc-lock{ border-color:rgba(242,169,60,.6) !important; }
+.spd.lc-lock svg.lc{ width:11px; height:11px; vertical-align:-2px; margin-left:3px; }
+
+/* ===== FEATURED ship hero banner (LootCoin fast-track) ===== */
+.hero-offer{ position:relative; display:flex; align-items:center; gap:10px; overflow:hidden;
+  border:1px solid rgba(242,169,60,.5); border-radius:14px; padding:13px 14px; margin:2px 0 10px;
+  background:linear-gradient(115deg, rgba(242,169,60,.16), rgba(184,106,223,.12) 55%, #10172333);
+  box-shadow:0 0 22px -8px rgba(242,169,60,.5); }
+.ho-tag{ position:absolute; top:9px; right:11px; font-size:8.5px; font-weight:800; letter-spacing:.1em;
+  color:#2a1808; background:linear-gradient(90deg,#ffe27a,#f2a93c); border-radius:4px; padding:2px 7px; }
+.ho-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.ho-name{ font-family:var(--font-display); font-size:16px; font-weight:800; letter-spacing:.04em; color:#ffe9c4; }
+.ho-desc{ font-size:10.5px; color:var(--muted); line-height:1.45; }
+.ho-buy{ align-self:flex-start; display:inline-flex; align-items:center; gap:5px; margin-top:4px;
+  border:1px solid rgba(242,169,60,.65); background:rgba(242,169,60,.18); color:#ffe9c4;
+  font-size:11.5px; font-weight:800; border-radius:99px; padding:7px 14px; cursor:pointer; }
+.ho-buy:active{ transform:translateY(1px); }
+.ho-ship{ width:74px; height:74px; object-fit:contain; flex:none;
+  filter:drop-shadow(0 0 14px rgba(242,169,60,.45)); }
+
+/* ===== LootFleet PRO hero offering ===== */
+#pro-banner{ margin:0 0 10px; }
+#pro-banner:empty{ margin:0; }
+.pro-offer{ position:relative; display:flex; align-items:center; gap:11px; cursor:pointer;
+  border:1px solid rgba(184,106,223,.55); border-radius:13px; padding:11px 13px;
+  background:linear-gradient(115deg, rgba(184,106,223,.16), rgba(242,169,60,.12) 60%, #10172333);
+  box-shadow:0 0 20px -8px rgba(184,106,223,.55); }
+.pro-offer.active{ cursor:default; border-color:rgba(124,224,160,.5); box-shadow:0 0 16px -8px rgba(124,224,160,.5); }
+.po-tag{ flex:none; font-family:var(--font-display); font-size:11px; font-weight:800; letter-spacing:.08em;
+  color:#2a1040; background:linear-gradient(90deg,#e7c4ff,#b86adf); border-radius:7px; padding:7px 9px; }
+.pro-offer.active .po-tag{ background:linear-gradient(90deg,#b4f0cc,#7ce0a0); color:#0a2414; }
+.po-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.po-name{ font-family:var(--font-display); font-size:13.5px; font-weight:800; color:#efe2ff; }
+.po-desc{ font-size:10.5px; color:var(--muted); line-height:1.45; }
+.po-buy{ align-self:flex-start; margin-top:4px; border:1px solid rgba(184,106,223,.6); background:rgba(184,106,223,.18);
+  color:#e7d4ff; font-size:11.5px; font-weight:800; border-radius:99px; padding:6px 13px; cursor:pointer; }
+.po-buy:active{ transform:translateY(1px); }
+.spd.pro-lock{ border-color:rgba(184,106,223,.6) !important; }
+.spd-pro{ font-size:7px; font-weight:800; letter-spacing:.05em; color:#2a1040;
+  background:linear-gradient(90deg,#e7c4ff,#b86adf); border-radius:3px; padding:1px 3px; margin-left:3px; vertical-align:1px; }
+
+/* ===== account sheet ===== */
+.acct-row{ display:flex; gap:7px; margin:5px 0; align-items:center; }
+.acct-in{ flex:1; min-width:0; height:34px; padding:0 11px; border-radius:9px;
+  background:#0e1521; border:1px solid var(--line-2); color:var(--text);
+  font-size:12.5px; font-weight:600; outline:none; }
+.acct-in:focus{ border-color:#5b9cff; }
+.acct-hint{ font-size:10px; color:var(--muted); line-height:1.5; }
 #statusbar{ padding-right:14px !important; }
 #statusbar .acct-btn{ max-width:104px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:none; }
 

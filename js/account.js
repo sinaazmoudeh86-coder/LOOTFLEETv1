@@ -83,6 +83,7 @@
       b.className = 'acct-btn';
       sb.appendChild(b);
       b.addEventListener('click', () => {
+        if (window.UI && window.UI.openAccountSheet) { window.UI.openAccountSheet(); return; }
         const nm = (session() || {}).name || 'this account';
         if (confirm('Sign out of ' + nm + '?')) {
           if (window.AUTH && window.AUTH.signOut) window.AUTH.signOut();
@@ -90,9 +91,19 @@
         }
       });
     }
-    b.innerHTML = '<span class="dot"></span><span class="who">' + (s.name || 'Operator') + '</span><span class="pw">⏻</span>';
+    b.innerHTML = '<span class="dot"></span><span class="who">' + (s.name || 'Operator') + '</span>';
   }
   window.addEventListener('load', () => setTimeout(refreshBar, 200));
 
-  window.ACCOUNT = { key, current, session, load, save: saveLocal, push, pull, refreshBar, cloudOn };
+  // Rename the pilot — updates the live session (and cloud user metadata when
+  // signed in) so the leaderboard + top bar pick it up.
+  function setName(n) {
+    const s = session(); if (!s || !n) return false;
+    s.name = n;
+    try { localStorage.setItem(SESS, JSON.stringify(s)); } catch (e) {}
+    if (cloudOn() && window.CLOUD.client) { try { window.CLOUD.client.auth.updateUser({ data: { name: n } }); } catch (e) {} }
+    refreshBar();
+    return true;
+  }
+  window.ACCOUNT = { key, current, session, load, save: saveLocal, push, pull, refreshBar, cloudOn, setName };
 })();

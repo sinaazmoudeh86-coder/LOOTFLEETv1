@@ -696,6 +696,113 @@
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }
   function shipImg(key) { const im = SHIP_IMG[key]; return (im && im.complete && im.naturalWidth) ? im : null; }
 
+  // =========================================================================
+  // COSMETICS — premium hull skins + auras (Market → Cosmetics)
+  // =========================================================================
+  const SKIN_CACHE = {};
+  function cosmeticsState() {
+    const s = window.GAME && window.GAME.state;
+    return (s && s.cosmetics) || { skin: 'stock', aura: 'none' };
+  }
+  // The hull sprite with a skin finish composited over its silhouette.
+  // Static skins cache per (hull, skin); Prismatic re-renders (tiny canvas).
+  function skinnedShip(key, skin, t) {
+    const im = shipImg(key); if (!im) return null;
+    if (!skin || skin === 'stock') return im;
+    const animated = skin === 'prismatic';
+    const ck = key + ':' + skin;
+    if (!animated && SKIN_CACHE[ck]) return SKIN_CACHE[ck];
+    const S = 96;
+    const cv = (!animated ? document.createElement('canvas') : (SKIN_CACHE._anim || (SKIN_CACHE._anim = document.createElement('canvas'))));
+    cv.width = S; cv.height = S;
+    const cx = cv.getContext('2d');
+    cx.drawImage(im, 0, 0, S, S);
+    cx.globalCompositeOperation = 'source-atop';
+    if (skin === 'prismatic') {
+      const off = (t * 60) % 360;
+      const g = cx.createLinearGradient(0, 0, S, S);
+      for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsla(${(off + i * 60) % 360},95%,62%,0.55)`);
+      cx.fillStyle = g; cx.fillRect(0, 0, S, S);
+    } else if (skin === 'tiger') {
+      cx.fillStyle = 'rgba(232,128,30,0.52)'; cx.fillRect(0, 0, S, S);
+      cx.fillStyle = 'rgba(14,9,4,0.8)';
+      for (let i = -1; i < 8; i++) {
+        cx.save(); cx.translate(i * 15, 0); cx.rotate(0.45);
+        cx.beginPath(); cx.moveTo(0, -24); cx.quadraticCurveTo(8, S * 0.4, 0, S + 24); cx.lineTo(-6, S + 24); cx.quadraticCurveTo(2, S * 0.4, -6, -24); cx.closePath(); cx.fill();
+        cx.restore();
+      }
+    } else if (skin === 'void') {
+      cx.fillStyle = 'rgba(56,18,108,0.66)'; cx.fillRect(0, 0, S, S);
+      cx.fillStyle = 'rgba(190,130,255,0.4)';
+      for (let i = 0; i < 16; i++) cx.fillRect((i * 37 + 11) % S, (i * 53 + 5) % S, 2, 2);
+    } else if (skin === 'gilded') {
+      const g = cx.createLinearGradient(0, 0, S, S);
+      g.addColorStop(0, 'rgba(255,222,120,0.7)'); g.addColorStop(0.5, 'rgba(196,142,36,0.62)'); g.addColorStop(1, 'rgba(255,236,170,0.7)');
+      cx.fillStyle = g; cx.fillRect(0, 0, S, S);
+    } else if (skin === 'crimson') {
+      cx.fillStyle = 'rgba(214,40,62,0.56)'; cx.fillRect(0, 0, S, S);
+    } else if (skin === 'arctic') {
+      cx.fillStyle = 'rgba(196,232,255,0.58)'; cx.fillRect(0, 0, S, S);
+      cx.fillStyle = 'rgba(255,255,255,0.35)'; cx.fillRect(0, 0, S, S * 0.2);
+    }
+    cx.globalCompositeOperation = 'source-over';
+    if (!animated) SKIN_CACHE[ck] = cv;
+    return cv;
+  }
+  // Aura ring effects drawn UNDER the hull (origin at ship center).
+  function drawCosmeticAura(ctx, aura, t, r) {
+    if (!aura || aura === 'none') return;
+    if (aura === 'prism') {
+      const off = (t * 50) % 360;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + t * 0.8;
+        ctx.strokeStyle = `hsla(${(off + i * 30) % 360},95%,62%,0.8)`;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.arc(0, 0, r, a, a + 0.34); ctx.stroke();
+      }
+    } else if (aura === 'flame') {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.sin(t * 3 + i) * 0.2;
+        const fl = 0.6 + 0.4 * Math.sin(t * 9 + i * 2.4);
+        const x1 = Math.cos(a) * r, y1 = Math.sin(a) * r;
+        const g = ctx.createRadialGradient(x1, y1, 0, x1, y1, 6 + fl * 5);
+        g.addColorStop(0, `rgba(255,200,90,${0.55 * fl})`); g.addColorStop(1, 'rgba(255,90,20,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x1, y1, 6 + fl * 5, 0, 7); ctx.fill();
+      }
+    } else if (aura === 'frost') {
+      ctx.strokeStyle = `rgba(150,220,255,${0.4 + 0.25 * Math.sin(t * 2.4)})`;
+      ctx.lineWidth = 1.6; ctx.setLineDash([5, 7]); ctx.lineDashOffset = -t * 14;
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
+      ctx.lineDashOffset = t * 9;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.78, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - t * 0.6;
+        ctx.fillStyle = 'rgba(210,240,255,0.85)';
+        ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 1.6, 0, 7); ctx.fill();
+      }
+    } else if (aura === 'voidstorm') {
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2 + t * (i % 2 ? 1.1 : -0.8);
+        const rr2 = r * (0.85 + 0.2 * Math.sin(t * 2 + i * 3));
+        ctx.fillStyle = `rgba(${i % 2 ? '154,91,255' : '110,60,180'},${0.5 + 0.3 * Math.sin(t * 4 + i)})`;
+        ctx.shadowColor = '#9a5bff'; ctx.shadowBlur = 7;
+        ctx.beginPath(); ctx.arc(Math.cos(a) * rr2, Math.sin(a) * rr2, 2.2, 0, 7); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    } else if (aura === 'sentinel') {
+      for (let k = 0; k < 2; k++) {
+        ctx.save(); ctx.rotate(t * (k ? -0.9 : 0.6));
+        ctx.strokeStyle = `rgba(242,178,75,${k ? 0.5 : 0.75})`;
+        ctx.lineWidth = k ? 1.4 : 2;
+        ctx.setLineDash([r * (k ? 0.5 : 0.9), r * 0.5]);
+        ctx.beginPath(); ctx.arc(0, 0, r * (k ? 0.82 : 1), 0, 7); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.setLineDash([]);
+    }
+  }
+
   function drawArcher(ctx, x, y, scale, archer, equipped, t) {
     const level = (window.GAME && window.GAME.state) ? window.GAME.state.level : 1;
     const tier = hullTier(level);
@@ -716,6 +823,9 @@
       ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
       ctx.strokeStyle = rgba(rc, 0.5*pulse); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
     }
+
+    // cosmetic aura (premium) — rendered beneath the hull
+    drawCosmeticAura(ctx, cosmeticsState().aura, t, 24 + tier * 4);
 
     // orient: art drawn nose-up (-y); rotate so nose points along facing
     ctx.translate(0, bob);
@@ -741,7 +851,8 @@
           ctx.beginPath(); ctx.arc(ex, ds * 0.355, ds * 0.028 + flick * 0.7, 0, 7); ctx.fill();
         }
       }
-      ctx.drawImage(_im, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
+      const _skinned = skinnedShip(activeShipKey(), cosmeticsState().skin, t) || _im;
+      ctx.drawImage(_skinned, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
       if (muzzle > 0) {
         const mx = Math.cos(facing) * ds * 0.34, my = Math.sin(facing) * ds * 0.34 - ds * 0.12;
         ctx.globalAlpha = Math.min(1, muzzle);
@@ -1114,7 +1225,7 @@
   }
 
   window.RENDER = {
-    drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon,
+    drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon, skinnedShip, drawCosmeticAura,
     gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES,
   };
 })();

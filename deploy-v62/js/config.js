@@ -267,41 +267,12 @@
   const MULTISHOT_MAX_TARGETS = 10;
 
   // ---------------------------------------------------------------------------
-  // COSMETICS — premium hull skins & auras (Market → Cosmetics). Purely visual,
-  // never affect power. Priced in CREDITS (premium currency — see payments.js).
-  // `sw` is the CSS preview swatch used by the store cards.
-  // ---------------------------------------------------------------------------
-  const COSMETICS = {
-    skins: [
-      { key: 'stock',     name: 'Factory Stock', credits: 0,   desc: 'Original hull finish', sw: 'linear-gradient(135deg,#8a97ad,#4a5468)' },
-      { key: 'crimson',   name: 'Crimson Fang',  credits: 240, desc: 'Blood-red raider plating', sw: 'linear-gradient(135deg,#e84a5f,#8a1626)' },
-      { key: 'arctic',    name: 'Arctic Ghost',  credits: 240, desc: 'Polar-white stealth finish', sw: 'linear-gradient(135deg,#eef7ff,#9cc4e0)' },
-      { key: 'tiger',     name: 'Tiger Strike',  credits: 320, desc: 'Predator stripes — fear travels faster than lasers', sw: 'repeating-linear-gradient(115deg,#e8801e 0 7px,#1a1208 7px 13px)' },
-      { key: 'void',      name: 'Voidplate',     credits: 320, desc: 'Hull forged in deep-space shadow', sw: 'linear-gradient(135deg,#3c146e,#120826)' },
-      { key: 'gilded',    name: 'Gilded',        credits: 560, desc: 'Solid-gold flex for the top of the board', sw: 'linear-gradient(135deg,#ffe27a,#c89020 60%,#ffeebc)' },
-      { key: 'prismatic', name: 'Prismatic',     credits: 720, desc: 'Animated rainbow chrome — the rarest finish in the galaxy', sw: 'linear-gradient(115deg,#ff5168,#ffa838,#46d27a,#4fa6ff,#b87bff)' },
-    ],
-    auras: [
-      { key: 'none',      name: 'No Aura',        credits: 0,   desc: 'Clean space around your hull', sw: 'radial-gradient(circle,#1c2433 40%,#0c111b)' },
-      { key: 'sentinel',  name: 'Sentinel Rings', credits: 300, desc: 'Twin counter-rotating guardian rings', sw: 'radial-gradient(circle,#0c111b 42%,#f2b24b 46%,#0c111b 52%,rgba(242,178,75,.5) 60%,#0c111b 66%)' },
-      { key: 'frost',     name: 'Cryo Field',     credits: 380, desc: 'A crystalline frost lattice orbits your ship', sw: 'radial-gradient(circle,#0c111b 40%,#9ad4ff 55%,#0c111b 70%)' },
-      { key: 'flame',     name: 'Solar Flare',    credits: 380, desc: 'Licks of starfire ring the hull', sw: 'radial-gradient(circle,#0c111b 35%,#ff9a3c 55%,#0c111b 75%)' },
-      { key: 'voidstorm', name: 'Void Storm',     credits: 520, desc: 'Captive void motes swarm in orbit', sw: 'radial-gradient(circle,#0c111b 40%,#9a5bff 58%,#0c111b 75%)' },
-      { key: 'prism',     name: 'Prismatic Halo', credits: 720, desc: 'A rotating rainbow halo — pairs with the Prismatic skin', sw: 'conic-gradient(#ff5168,#ffa838,#46d27a,#4fa6ff,#b87bff,#ff5168)' },
-    ],
-  };
-
-  // ---------------------------------------------------------------------------
   // STORE — speed + offline play are FREE (no real-money purchases in this game)
   // ---------------------------------------------------------------------------
   const SPEED_TIERS = [
     { mult: 1, label: '1×', price: 0, priceLabel: 'Free', sku: null },
     { mult: 2, label: '2×', price: 0, priceLabel: 'Free', sku: 'speed2' },
     { mult: 3, label: '3×', price: 0, priceLabel: 'Free', sku: 'speed3' },
-    // PREMIUM — unlocked ONLY by spending 500 LootCoins (see ui.js + game.js)
-    { mult: 4, label: '4×', price: 0, priceLabel: '500 LootCoins', sku: 'speed4lc', lootcoins: 500 },
-    // PRO — exclusive to the LootFleet Pro subscription ($20/mo)
-    { mult: 5, label: '5×', price: 0, priceLabel: 'PRO', sku: 'pro5', pro: true },
     // SECRET — never shown or settable until the Mothership easter egg fires
     { mult: 10, label: '10×', price: 0, priceLabel: 'Secret', sku: null, secret: true },
   ];
@@ -505,6 +476,6 @@
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
     SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, dungeonScale, enemyHp, enemyDamage, enemyXp, enemyGold,
-    dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
+    dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap,
   };
 })();

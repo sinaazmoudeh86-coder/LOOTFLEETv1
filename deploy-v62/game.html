@@ -26,9 +26,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=80">
-<link rel="stylesheet" href="css/theme.css?v=80">
-<link rel="stylesheet" href="css/web.css?v=80">
+<link rel="stylesheet" href="css/style.css?v=62">
+<link rel="stylesheet" href="css/theme.css?v=62">
+<link rel="stylesheet" href="css/web.css?v=62">
 </head>
 <body>
 <div id="stage">
@@ -43,7 +43,6 @@
           <div class="res-chip" style="--rc:#5bc0ff"><span class="rg">⬢</span><span id="hud-fuel">0</span><span class="rr" id="hud-fuel-rate"></span></div>
           <div class="res-chip" style="--rc:#d0a060"><span class="rg">◆</span><span id="hud-iron">0</span><span class="rr" id="hud-iron-rate"></span></div>
           <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
-          <div class="res-chip lc-chip" style="--rc:#f2a93c" title="LootCoins"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
         </div>
       </div>
 
@@ -81,7 +80,6 @@
               <div id="advice" class="ok"></div>
             </div>
             <div id="loot-feed"></div>
-            <div id="cargo-full">⚠ HOLD FULL · loot auto-scrapped<span class="cf-go">tap to manage ›</span></div>
             <div id="toast-layer"></div>
             <div id="joystick"><div class="knob"></div></div>
             <div id="battle-controls">
@@ -109,7 +107,6 @@
         <div class="screen overlay" id="screen-hero">
           <div class="scr-head"><span class="scr-title">Hangar</span><span class="scr-sub" id="hero-sub"></span></div>
           <div class="scr-body">
-            <div id="pro-banner"></div>
             <div id="char-portrait"><canvas id="portrait-canvas"></canvas><div id="char-power">Power <b>—</b></div></div>
             <div id="fleet-panel"></div>
             <div class="equip-grid" id="equip-grid"></div>
@@ -210,21 +207,20 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config.js?v=80"></script>
-<script src="js/items.js?v=80"></script>
-<script src="js/entities.js?v=80"></script>
-<script src="js/render.js?v=80"></script>
-<script src="js/galaxy.js?v=80"></script>
-<script src="js/leaderboard.js?v=80"></script>
+<script src="js/config.js?v=62"></script>
+<script src="js/items.js?v=62"></script>
+<script src="js/entities.js?v=62"></script>
+<script src="js/render.js?v=62"></script>
+<script src="js/galaxy.js?v=62"></script>
+<script src="js/leaderboard.js?v=62"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.public.js?v=80"></script>
-<script src="js/cloud.js?v=80"></script>
-<script src="js/account.js?v=80"></script>
-<script src="js/territory.js?v=80"></script>
-<script src="js/payments.js?v=80"></script>
-<script src="js/game.js?v=80"></script>
-<script src="js/ui.js?v=80"></script>
-<script src="js/auth.js?v=80"></script>
+<script src="js/config.public.js?v=62"></script>
+<script src="js/cloud.js?v=62"></script>
+<script src="js/account.js?v=62"></script>
+<script src="js/territory.js?v=62"></script>
+<script src="js/game.js?v=62"></script>
+<script src="js/ui.js?v=62"></script>
+<script src="js/auth.js?v=62"></script>
 <script>
   (function(){
     // Boot is gated on a signed-in (or guest) session so each account loads its

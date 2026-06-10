@@ -226,6 +226,7 @@
   // LEVELING
   // --------------------------------------------------------------------------
   function gainXp(amount) {
+    if (isPro()) amount *= 2;   // LootFleet Pro — 2× XP on every source, account-wide
     state.xp += amount;
     let gained = 0;
     while (state.xp >= C.xpToNext(state.level)) { state.xp -= C.xpToNext(state.level); state.level++; gained++; }
@@ -538,6 +539,7 @@
   function addToInventory(item) {
     if (state.inventory.length >= invCap()) {
       addSalvage(item); // full hold → the item is scrapped for resources
+      if (window.UI && window.UI.lootScrapped) window.UI.lootScrapped(item);
       if (window.UI && (!rt.cargoWarnT || rt.time - rt.cargoWarnT > 8)) {
         rt.cargoWarnT = rt.time;
         window.UI.unlockToast('⚠ Cargo full (' + invCap() + ') — loot auto-scrapped. Expand the hold in Loot.');
@@ -1469,6 +1471,28 @@
     }
   }
 
+  // ---- COSMETICS (skins/auras) + CREDITS wallet -----------------------------
+  function cosmeticList(kind) { return C.COSMETICS[kind === 'skin' ? 'skins' : 'auras'] || []; }
+  function buyCosmetic(kind, key) {
+    const c = cosmeticList(kind).find((x) => x.key === key);
+    if (!c) return { ok: false, reason: 'invalid' };
+    const cs = state.cosmetics;
+    if (cs.owned[key]) return { ok: false, reason: 'owned' };
+    if ((state.credits || 0) < c.credits) return { ok: false, reason: 'credits' };
+    state.credits -= c.credits;
+    cs.owned[key] = 1;
+    save();
+    return { ok: true };
+  }
+  function setCosmetic(kind, key) {
+    const cs = state.cosmetics;
+    if (!cs.owned[key]) return false;
+    if (kind === 'skin') cs.skin = key; else cs.aura = key;
+    save();
+    return true;
+  }
+  function addCredits(n) { state.credits = (state.credits || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); }
+
   // ---- GOLD SHOP (rotating, refreshes every 15 min) ------------------------
   function shopWindow() { return Math.floor(Date.now() / (C.SHOP.refreshMin * 60000)); }
   function getShop() {
@@ -2104,12 +2128,50 @@
   function setGameSpeed(mult) {
     // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it
     if (mult === 10) { if (!state.secretSpeed) return false; state.gameSpeed = 10; save(); return true; }
+    // 4× is the PREMIUM tier — ONLY a 500-LootCoin unlock opens it
+    if (mult === 4) { if (!state.purchases || !state.purchases.speed4lc) return false; state.gameSpeed = 4; save(); return true; }
+    // 5× is PRO-exclusive — active LootFleet Pro subscription required
+    if (mult === 5) { if (!isPro()) return false; state.gameSpeed = 5; save(); return true; }
     if (mult === 1 || hasSpeed('speed' + mult)) { state.gameSpeed = mult; save(); return true; }
     return false;
   }
-  // Speed tiers + offline play are FREE in this game — no purchases required.
-  function hasSpeed(sku) { return true; }
+  // Speed tiers + offline play are FREE in this game — except 4× (LootCoins)
+  // and 10× (easter egg), which have explicit branches in setGameSpeed.
+  function hasSpeed(sku) { return sku !== 'speed4lc'; }
   function purchase(sku) { state.purchases[sku] = true; save(); if (window.UI) window.UI.refreshAll(); }
+  // One-time premium unlock: permanent 4× battle speed for 500 LootCoins.
+  // —— LOOTFLEET PRO —— $20/mo subscription: exclusive 5× speed + 2× XP while
+  // active. proUntil is a timestamp; the Stripe webhook (or manual fulfilment)
+  // extends it each billing cycle. grantPro is the fulfilment hook.
+  function isPro() { return (state.proUntil || 0) > Date.now(); }
+  function grantPro(days) {
+    const base = Math.max(Date.now(), state.proUntil || 0);
+    state.proUntil = base + (days || 30) * 86400000;
+    save(); if (window.UI) window.UI.refreshAll();
+    return state.proUntil;
+  }
+  // LOOTCOIN FAST-TRACK — hero-banner ship offers (Ships tab). Carrier first;
+  // once owned, the banner upgrades to the Mothership.
+  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 75000 };
+  function buyShipLC(key) {
+    const price = LC_SHIP_OFFERS[key];
+    if (!price || !C.SHIP_BY_KEY[key]) return { ok: false, reason: 'invalid' };
+    if (state.ownedShips[key]) return { ok: false, reason: 'owned' };
+    if ((state.credits || 0) < price) return { ok: false, reason: 'credits' };
+    state.credits -= price;
+    grantShip(key);
+    save();
+    return { ok: true };
+  }
+  function buySpeed4() {
+    if (state.purchases && state.purchases.speed4lc) return { ok: false, reason: 'owned' };
+    if ((state.credits || 0) < 500) return { ok: false, reason: 'credits' };
+    state.credits -= 500;
+    if (!state.purchases) state.purchases = {};
+    state.purchases.speed4lc = true;
+    save();
+    return { ok: true };
+  }
 
   // recommend the deepest zone the player can comfortably clear
   function recommendedZone() {
@@ -2241,7 +2303,12 @@
     if (!state.rivalTiles) state.rivalTiles = {};
     if (!state.tileCd) state.tileCd = {};
     if (!state.galaxyFeed) state.galaxyFeed = [];
-    if (state.gameSpeed > 3 && !state.secretSpeed) state.gameSpeed = 1; // 10× is easter-egg-only
+    if (state.gameSpeed > 3 && !state.secretSpeed && !(state.gameSpeed === 4 && state.purchases && state.purchases.speed4lc)) { if (state.gameSpeed !== 5) state.gameSpeed = 1; } // 4× needs its LootCoin unlock; 10× the easter egg
+    if (state.gameSpeed === 5 && !isPro()) state.gameSpeed = 1; // Pro lapsed → drop the 5× tier
+    // ---- COSMETICS + CREDITS (premium currency) ----
+    if (!state.cosmetics) state.cosmetics = { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
+    if (!state.cosmetics.owned) state.cosmetics.owned = { stock: 1, none: 1 };
+    if (state.credits == null) state.credits = 500; // one-time founder bonus — try the system before payments go live
     if (!state.fleet) state.fleet = [];
     if (!state.citadelCd) state.citadelCd = {};
     // ---- ZONE-CAP: keep exactly 10 zones unlocked beyond the pilot's level (and
@@ -2331,7 +2398,11 @@
     if (n <= GAUGE_T) return n;
     return Math.min(999 * GAUGE_T, GAUGE_T * Math.pow(n / GAUGE_T, 0.55));
   }
-  function formatNum(n) {
+  // TRUE values — the 999T display gauge is retired: damage numbers, HP, DPS
+  // and every other readout now show the real amount, climbing the extended
+  // unit ladder (K, M, B, T, Qa, Qi, …) instead of compressing.
+  function formatNum(n) { return formatNumRaw(n); }
+  function _formatNumGaugeRetired(n) {
     n = gaugeNum(n);
     if (n < 1000) return Math.floor(n).toString();
     const u = ['', 'K', 'M', 'B', 'T']; let i = 0, v = n;
@@ -2355,7 +2426,7 @@
     init, state, rt, computeStats, refreshStats,
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
-    setGameSpeed, hasSpeed, purchase, respawnAt,
+    setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, grantPro, respawnAt,
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
     isCitadelZone, citadelCooldownLeft,
@@ -2373,6 +2444,8 @@
     getStats: () => rt.stats, getDps: () => rt.dps, score,
     getHp: () => ({ cur: rt.archer ? rt.archer.hp : 0, max: rt.stats.maxHp, dead: rt.archer && rt.archer.dead, awaiting: rt.awaitingRespawn }),
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
+    buyCosmetic, setCosmetic, addCredits,
+    getCredits: () => state.credits || 0, getCosmetics: () => state.cosmetics,
     invCap, invSlotCost, buyInvSlots,
     setPickupFilter: (t) => { state.pickupFilter = Math.max(0, t | 0); save(); },
     setAutoSellTier: (t) => { state.autoSellTier = (t == null || t < 0) ? -1 : (t | 0); save(); },

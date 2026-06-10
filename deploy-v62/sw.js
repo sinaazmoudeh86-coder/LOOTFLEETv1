@@ -6,16 +6,14 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v80';
+const CACHE = 'lootfleet-v62';
 const CORE = [
-  './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
-  'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
-  'guides/galaxy-territory.html', 'guides/ships-and-fleet.html', 'guides/loot-rarity.html', 'guides/weapon-classes.html',
+  './', 'index.html', 'game.html', 'manifest.json',
   'icon-192.png', 'icon-512.png',
   'css/style.css', 'css/theme.css', 'css/web.css',
   'js/config.js', 'js/items.js', 'js/entities.js', 'js/render.js',
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.public.js',
-  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments.js', 'js/game.js', 'js/ui.js', 'js/auth.js',
+  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/game.js', 'js/ui.js', 'js/auth.js',
   'js/showcase.js',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
   'ships/ship-heavycruiser.png', 'ships/ship-destroyer.png', 'ships/ship-battleship.png',
@@ -51,10 +49,9 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // same-origin assets: stale-while-revalidate (ignore ?v= cache-bust queries
-  // so the precached app shell serves versioned requests instantly)
+  // same-origin assets: stale-while-revalidate
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
+    caches.match(req).then((cached) => {
       const net = fetch(req).then((res) => {
         if (res && res.status === 200) {
           const copy = res.clone();

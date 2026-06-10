@@ -44,11 +44,13 @@
   function init(game) {
     G = game;
     ['hud-level','xp-fill','xp-label','hp-fill','hp-label','hud-gold','hud-dps','hud-kills',
-     'zb-name','zb-sub','advice','loot-feed','toast-layer','joystick','speed-row','auto-btn','auto-lbl',
+     'zb-name','zb-sub','advice','loot-feed','cargo-full','toast-layer','joystick','speed-row','auto-btn','auto-lbl',
      'hero-sub','char-power','equip-grid','stat-list','bag-sub','bag-body','zones-sub','zones-body','galaxy-sub','galaxy-body',
      'store-body','board-sub','board-body','modal-root','bag-badge',
-     'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power','pb-ship','hud-fuel','hud-iron','hud-plasma','hud-fuel-rate','hud-iron-rate','hud-plasma-rate',
+     'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power','pb-ship','hud-fuel','hud-iron','hud-plasma','hud-lc','hud-fuel-rate','hud-iron-rate','hud-plasma-rate',
      'siege-bar','sg-fill','sg-label'].forEach((id) => el[id] = $(id));
+    if (el['cargo-full']) el['cargo-full'].addEventListener('click', () => showScreen('bag'));
+    { const lcChip = document.querySelector('.lc-chip'); if (lcChip) lcChip.addEventListener('click', () => { storeCat = 'cosmetics'; showScreen('store'); }); }
 
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.screen)));
     buildSpeedRow();
@@ -123,6 +125,33 @@
         setR('hud-iron-rate', rr.iron || 0);
         setR('hud-plasma-rate', rr.plasma || 0);
       }
+    }
+    // LootCoins balance in the top bar
+    if (el['hud-lc'] && G.getCredits) {
+      const v = (G.formatNumRaw || G.formatNum)(G.getCredits());
+      if (el['hud-lc'].textContent !== v) el['hud-lc'].textContent = v;
+    }
+    // WALLET FIT GUARD — when balances grow long, drop the /h rates first, then
+    // compress the chips, so nothing ever clips or overlaps the name chip.
+    {
+      const w = document.querySelector('#statusbar .wallet');
+      if (w) {
+        const sig = [el['hud-gold'], el['hud-fuel'], el['hud-iron'], el['hud-plasma'], el['hud-lc'], el['hud-fuel-rate'], el['hud-iron-rate'], el['hud-plasma-rate']]
+          .map((e2) => (e2 ? e2.textContent : '')).join('|');
+        if (syncHUD._wsig !== sig) {
+          syncHUD._wsig = sig;
+          w.classList.remove('tight', 'tighter', 'tightest');
+          if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tight');
+          if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tighter');
+          if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tightest');
+        }
+      }
+    }
+    // HOLD FULL — persistent badge beside the loot feed while drops are scrapped
+    if (el['cargo-full']) {
+      const cfFull = !!(G.invCap && G.state.inventory.length >= G.invCap() && G.state.currentDungeon >= 1);
+      el['cargo-full'].classList.toggle('show', cfFull);
+      if (el['loot-feed']) el['loot-feed'].style.bottom = cfFull ? '130px' : '';
     }
     el['hud-dps'].textContent = G.formatNum(G.getDps());
     const st0 = G.getStats(); if (st0) el['hud-power'].textContent = (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st0.theoryDps + st0.maxHp * 0.5));
@@ -203,13 +232,23 @@
   // BATTLE controls
   // ==========================================================================
   function visibleSpeedTiers() { return C.SPEED_TIERS.filter((t2) => !t2.secret || (G.state && G.state.secretSpeed)); }
+  function speedOwned(tier) {
+    if (tier.pro) return !!(G.isPro && G.isPro());
+    if (tier.lootcoins) return !!(G.state.purchases && G.state.purchases[tier.sku]);
+    if (tier.secret) return !!G.state.secretSpeed;
+    return true;
+  }
   function buildSpeedRow() {
     el['speed-row'].innerHTML = '';
     visibleSpeedTiers().forEach((tier) => {
       const b = document.createElement('button');
       b.className = 'spd' + (tier.secret ? ' secret' : '');
       b.innerHTML = `<span>${tier.label}</span>`;
-      b.addEventListener('click', () => { G.setGameSpeed(tier.mult); syncSpeed(); });
+      b.addEventListener('click', () => {
+        if (tier.pro && !speedOwned(tier)) { openProSheet(); return; }
+        if (tier.lootcoins && !speedOwned(tier)) { openSpeedBuy(tier); return; }
+        G.setGameSpeed(tier.mult); syncSpeed();
+      });
       el['speed-row'].appendChild(b);
     });
     syncSpeed();
@@ -218,8 +257,123 @@
     const pills = el['speed-row'].querySelectorAll('.spd');
     visibleSpeedTiers().forEach((tier, i) => {
       if (!pills[i]) return;
+      const locked = (tier.lootcoins || tier.pro) && !speedOwned(tier);
       pills[i].classList.toggle('active', G.state.gameSpeed === tier.mult);
-      pills[i].innerHTML = `<span>${tier.label}</span>`;
+      pills[i].classList.toggle('lc-lock', !!(locked && tier.lootcoins));
+      pills[i].classList.toggle('pro-lock', !!(locked && tier.pro));
+      pills[i].innerHTML = `<span>${tier.label}</span>` + (locked ? (tier.pro ? '<span class="spd-pro">PRO</span>' : LC_ICON) : '');
+    });
+  }
+  // ==========================================================================
+  // ACCOUNT SHEET — opened from the top-bar name chip: profile, Pro manage,
+  // password reset, text-alert signup, sign out.
+  // ==========================================================================
+  function openAccountSheet() {
+    const s = (window.AUTH && window.AUTH.session && window.AUTH.session()) || {};
+    const cloud = s.method === 'Supabase';
+    const pro = G.isPro && G.isPro();
+    const sheet = showSheet(`<div class="sheet-head">⚙ Account</div><div class="sheet-body">
+      <div class="ip-stat"><span class="ip-sname">Pilot</span><span class="v">${s.name || 'Operator'}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Account</span><span class="v">${cloud ? (s.email || 'Cloud') : (s.method || 'Local')}</span></div>
+      <div class="lo-sect" style="margin-top:11px">Profile</div>
+      <div class="acct-row"><input id="ac-name" class="acct-in" maxlength="18" placeholder="New pilot name"><button class="btn" id="ac-rename">Rename</button></div>
+      <div class="lo-sect" style="margin-top:11px">★ LootFleet Pro</div>
+      <div class="ip-stat"><span class="ip-sname">Status</span><span class="v" style="color:${pro ? '#7ce0a0' : 'var(--muted)'}">${pro ? 'ACTIVE · renews ' + new Date(G.state.proUntil).toLocaleDateString() : 'Not subscribed'}</span></div>
+      <div class="acct-row">${pro ? '<button class="btn" id="ac-manage">Manage / cancel subscription</button>' : '<button class="btn gold" id="ac-gopro">★ Go Pro — $20/mo</button>'}</div>
+      <div class="lo-sect" style="margin-top:11px">Security</div>
+      <div class="acct-row">${cloud && s.email ? '<button class="btn" id="ac-reset">Send password-reset email</button>' : '<span class="acct-hint">Password reset needs a cloud account — sign up with email to enable it.</span>'}</div>
+      <div class="lo-sect" style="margin-top:11px">📱 Text alerts</div>
+      <p class="acct-hint" style="margin-bottom:6px">Get a text for big updates, heat resets &amp; exclusive drops.</p>
+      <div class="acct-row"><input id="ac-phone" class="acct-in" type="tel" placeholder="+1 555 123 4567" value="${G.state.smsPhone || ''}"><button class="btn" id="ac-sms">${G.state.smsOptIn ? 'Update' : 'Sign up'}</button></div>
+      ${G.state.smsOptIn ? '<p class="acct-hint" style="color:#7ce0a0">✓ Signed up — you can opt out anytime here.</p>' : ''}
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Close</button><button class="btn" id="ac-signout" style="border-color:rgba(255,73,95,.5);color:#ff8a96">⏻ Sign out</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const $s = (id) => sheet.querySelector('#' + id);
+    const rn = $s('ac-rename');
+    if (rn) rn.addEventListener('click', () => {
+      const v = ($s('ac-name').value || '').trim();
+      if (v.length < 3) { toast('Name needs 3+ characters', '#e23b4e'); return; }
+      if (window.ACCOUNT && window.ACCOUNT.setName && window.ACCOUNT.setName(v)) { toast('✓ Pilot name updated', '#7ce0a0'); closeSheet(); refreshAll(); }
+    });
+    const gp = $s('ac-gopro'); if (gp) gp.addEventListener('click', () => { closeSheet(); openProSheet(); });
+    const mg = $s('ac-manage'); if (mg) mg.addEventListener('click', () => {
+      const portal = (window.LOOTFLEET && window.LOOTFLEET.stripePortal) || null;
+      if (portal) window.open(portal, '_blank');
+      else toast('Manage billing via your Stripe receipt email — portal link coming soon', '#ffcf7a');
+    });
+    const rs = $s('ac-reset'); if (rs) rs.addEventListener('click', () => {
+      rs.disabled = true; rs.textContent = 'Sending…';
+      try {
+        window.CLOUD.client.auth.resetPasswordForEmail(s.email, { redirectTo: location.origin + location.pathname })
+          .then(() => { toast('✓ Reset email sent to ' + s.email, '#7ce0a0'); rs.textContent = 'Sent ✓'; })
+          .catch(() => { toast('Could not send — try again later', '#e23b4e'); rs.disabled = false; rs.textContent = 'Send password-reset email'; });
+      } catch (e) { toast('Could not send — try again later', '#e23b4e'); rs.disabled = false; }
+    });
+    const sm = $s('ac-sms'); if (sm) sm.addEventListener('click', () => {
+      const v = ($s('ac-phone').value || '').trim();
+      if (!/^[+0-9][0-9 ()\-]{6,18}$/.test(v)) { toast('Enter a valid phone number (with country code)', '#e23b4e'); return; }
+      G.state.smsPhone = v; G.state.smsOptIn = true; G.save();
+      toast('✓ Text alerts on — ' + v, '#7ce0a0'); closeSheet();
+    });
+    const so = $s('ac-signout'); if (so) so.addEventListener('click', () => {
+      if (confirm('Sign out of ' + (s.name || 'this account') + '?')) { if (window.AUTH && window.AUTH.signOut) window.AUTH.signOut(); }
+    });
+  }
+  function openProSheet() {
+    const pro = G.isPro && G.isPro();
+    const conf = window.PAYMENTS && window.PAYMENTS.linkFor && !!window.PAYMENTS.linkFor('pro_monthly');
+    const sheet = showSheet(`<div class="sheet-head">★ LootFleet Pro</div><div class="sheet-body">
+      <div class="ip-stat"><span class="ip-sname">⚡ Battle speed</span><span class="v">Exclusive 5× tier — Pro only</span></div>
+      <div class="ip-stat"><span class="ip-sname">✨ Experience</span><span class="v">2× XP on every kill, account-wide</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">$20 / month · cancel anytime</span></div>
+      ${pro ? `<p style="font-size:11px;color:#7ce0a0;margin-top:8px">✓ Active — renews ${new Date(G.state.proUntil).toLocaleDateString()}</p>` : ''}
+      ${conf ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:8px">⚒ Subscriptions are not live yet — payments are being wired up.</p>'}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button>
+        ${pro ? '' : '<button class="btn gold" data-ok>★ Go Pro — $20/mo</button>'}</div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const ok = sheet.querySelector('[data-ok]');
+    if (ok) ok.addEventListener('click', () => {
+      const r = window.PAYMENTS && window.PAYMENTS.subscribe ? window.PAYMENTS.subscribe() : { ok: false };
+      if (!r.ok) toast('⚒ Subscriptions coming soon', '#ffcf7a');
+      else toast('Complete checkout in the new tab', '#7ce0a0');
+    });
+  }
+  function openShipLCBuy(key, price) {
+    const sh = C.SHIP_BY_KEY[key];
+    const have = G.getCredits ? G.getCredits() : 0;
+    const afford = have >= price;
+    const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Unlock ${sh.name}</div><div class="sheet-body">
+      <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">${sh.desc}</p>
+      <div class="ip-stat"><span class="ip-sname">Fast-track</span><span class="v">No blueprint · no kill requirement · yours instantly</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(price)} LootCoins</span></div>
+      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
+      ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
+      <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
+        <button class="btn gold" data-ok>${afford ? 'Unlock ' + sh.name : 'Get LootCoins'}</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-ok]').addEventListener('click', () => {
+      if (!afford) { closeSheet(); openCredits(); return; }
+      const r = G.buyShipLC(key);
+      if (r.ok) { closeSheet(); toast('★ ' + sh.name + ' unlocked!', '#ffd24d'); renderStore(); }
+      else { closeSheet(); toast('Cannot unlock', '#e23b4e'); }
+    });
+  }
+  function openSpeedBuy(tier) {
+    const have = G.getCredits ? G.getCredits() : 0;
+    const afford = have >= tier.lootcoins;
+    const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Unlock ${tier.label} Speed</div><div class="sheet-body">
+      <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">Permanent ${tier.label} battle speed — the fastest tier LootCoins can buy. One-time unlock.</p>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${tier.lootcoins} LootCoins</span></div>
+      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
+      ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
+      <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
+        <button class="btn gold" data-ok>${afford ? 'Unlock ' + tier.label : 'Get LootCoins'}</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-ok]').addEventListener('click', () => {
+      if (!afford) { closeSheet(); openCredits(); return; }
+      const r = G.buySpeed4();
+      if (r.ok) { closeSheet(); G.setGameSpeed(4); buildSpeedRow(); toast('⚡ 4× speed unlocked — permanently!', '#ffd24d'); }
+      else { closeSheet(); toast('Cannot unlock', '#e23b4e'); }
     });
   }
   function syncAuto() {
@@ -288,6 +442,18 @@
     heroBody.insertAdjacentHTML('afterbegin', hangarTabsHTML('ship'));
     wireHangarTabs(heroBody);
     el['hero-sub'].textContent = (window.AUTH ? window.AUTH.name() : 'Operator') + ' · Lv ' + G.state.level;
+    // LOOTFLEET PRO hero offering — sits just above the ship portrait
+    {
+      const pb = $('pro-banner');
+      if (pb) {
+        const pro = G.isPro && G.isPro();
+        pb.innerHTML = pro
+          ? `<div class="pro-offer active"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro · ACTIVE</div><div class="po-desc">⚡ 5× speed + ✨ 2× XP · renews ${new Date(G.state.proUntil).toLocaleDateString()}</div></div></div>`
+          : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">⚡ Exclusive 5× battle speed · ✨ 2× XP on every kill</div><button class="po-buy">$20 / month — Go Pro</button></div></div>`;
+        const cta = pb.querySelector('#pro-offer-cta');
+        if (cta) cta.addEventListener('click', openProSheet);
+      }
+    }
     el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>';
     // equipment — driven by the current ship's actual slot layout
     el['equip-grid'].innerHTML = '';
@@ -501,7 +667,7 @@
     const r = C.RARITY[it.rarity];
     const up = isUpgrade(it);
     return `<div class="item-card ${bl(it.rarity)}" data-id="${it.id}">
-      <div class="ic-icon ${rc(it.rarity)}" style="box-shadow:0 0 10px ${r.glow}">${it.icon}</div>
+      <div class="ic-icon ${rc(it.rarity)}" style="box-shadow:0 0 10px ${r.glow}">${itemIcon(it)}</div>
       <div class="ic-main"><div class="ic-name ${rc(it.rarity)}">${it.name}</div>
       <div class="ic-sub">${r.name} · ${C.SLOTS[it.slot].name} · Z${it.dungeon}</div></div>
       <div style="display:flex;gap:4px;align-items:center">${specialTags(it)}${up ? '<span class="ic-tag up">▲</span>' : ''}</div></div>`;
@@ -926,12 +1092,52 @@
       ${lock}
     </div>`;
   }
+  // ==========================================================================
+  // ITEM ICONOGRAPHY — refreshed slot icons; weapons show their CLASS glyph
+  // color-coded with a matching glow (laser/gatling/missile/rail/plasma/warden).
+  // ==========================================================================
+  const SLOT_ICONS2 = {
+    bow:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17L14 6l4 4L7 21H3z"/><path d="M14 6l2-2 4 4-2 2"/><circle cx="19" cy="5" r="1"/></svg>',
+    arrows: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20V9l2-3.5L12 9v11"/><path d="M14 20V6l2-3 2 3v14"/><path d="M5.5 20h13"/></svg>',
+    armor:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9-8 11-4.6-2-8-6-8-11V5z"/><path d="M12 6.5l4 1.5v3.2c0 2.6-1.7 4.7-4 5.8-2.3-1.1-4-3.2-4-5.8V8z"/></svg>',
+    boots:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6l1.2 10H7.8z"/><path d="M7 12h10l1 4H6z"/><path d="M12 16v4M8.6 16l-1.6 4M15.4 16l1.6 4"/></svg>',
+    gloves: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><path d="M12 2v3.4M12 18.6V22M2 12h3.4M18.6 12H22"/></svg>',
+    amulet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z"/><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg>',
+  };
+  function itemIcon(it) {
+    if (it && it.slot === 'bow' && window.ITEMS && window.ITEMS.weaponClassOf) {
+      const wc = window.ITEMS.weaponClassOf(it);
+      return `<span class="wci" style="color:${wc.color};text-shadow:0 0 9px ${wc.color}">${wc.glyph}</span>`;
+    }
+    return (it && SLOT_ICONS2[it.slot]) || (it && it.icon) || '';
+  }
+  // —— LOOTCOIN —— the premium micro-transaction currency. One unique mark used
+  // everywhere it appears: a hex coin, gold → violet, with a loot-gem facet cut
+  // into the center (echoes the loot-drop gems players chase in combat).
+  const LC_ICON = '<svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".55" stop-color="#f2a93c"/><stop offset="1" stop-color="#b86adf"/></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg)" stroke="#2a1808" stroke-width="1.1"/><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"/><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg)"/><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"/></svg>';
   function renderStore() {
     let html = hangarTabsHTML(storeCat);
     const cur = C.SHIP_BY_KEY[G.state.ship];
 
     if (storeCat === 'ships') {
       html += `<div class="store-sec">${storeHead(STORE_ICONS.ship, 'Hangar · Ships', 'Flying: ' + (cur?cur.name:'—'))}`;
+      // FEATURED hero banner — LootCoin fast-track: Carrier first, then Mothership
+      {
+        const offer = !G.state.ownedShips.carrier ? { key: 'carrier', lc: 25000 }
+          : (!G.state.ownedShips.mothership ? { key: 'mothership', lc: 75000 } : null);
+        if (offer && G.buyShipLC) {
+          const sh = C.SHIP_BY_KEY[offer.key];
+          html += `<div class="hero-offer" data-lcship="${offer.key}" data-lcprice="${offer.lc}">
+            <div class="ho-tag">★ FEATURED</div>
+            <div class="ho-main">
+              <div class="ho-name">${sh.name}</div>
+              <div class="ho-desc">${offer.key === 'carrier' ? 'Skip the grind — instant drone-bay command.' : 'The ultimate hull. Skip the entire chain.'}</div>
+              <button class="ho-buy">${LC_ICON}${(G.formatNumRaw || G.formatNum)(offer.lc)} · Unlock now</button>
+            </div>
+            <img class="ho-ship" src="ships/ship-${offer.key}.png" alt="">
+          </div>`;
+        }
+      }
       html += `<div class="sec-blurb">Buy hulls with gold. Each unlocks only after you recover its <b>blueprint</b> from a zone boss and prove yourself in the previous hull.</div>`;
       html += C.SHIPS.map((s) => shipCard(s.key)).join('');
       html += '</div>';
@@ -947,7 +1153,7 @@
         const bought = sh.bought.includes(i), r = C.RARITY[it.rarity];
         const afford = G.state.gold >= price, up = G.shopIsUpgrade(it);
         html += `<div class="store-card shop-card ${bl(it.rarity)}" style="border-left-width:3px">
-          <div class="sc-ico" style="border-color:${r.color}">${it.icon}</div>
+          <div class="sc-ico" style="border-color:${r.color}">${itemIcon(it)}</div>
           <div class="sc-main"><div class="sc-name ${rc(it.rarity)}">${it.name} ${up?'<span class="ic-tag up" style="vertical-align:2px">▲ UP</span>':''}</div>
             <div class="sc-desc">${r.name} · ${C.SLOTS[it.slot].name} · Z${it.dungeon}</div></div>
           <button class="sc-buy" data-shop="${i}" ${bought||!afford?'disabled':''}>${bought?'Sold':'<span class="coin">$</span> '+G.formatNum(price)}</button></div>`;
@@ -956,10 +1162,46 @@
     }
 
     if (storeCat === 'cosmetics') {
-      html += `<div class="store-sec">${storeHead(STORE_ICONS.cosmetics, 'Cosmetics')}<div class="store-empty">Skins, hull finishes &amp; emotes — coming soon.</div></div>`;
+      const cs = G.getCosmetics(), credits = G.getCredits();
+      html += `<div class="store-sec">${storeHead(STORE_ICONS.cosmetics, 'Cosmetics')}
+        <div class="cred-bar"><span class="cred-have">${LC_ICON}<b>${(G.formatNumRaw || G.formatNum)(credits)}</b> LootCoins</span><button class="cred-get" id="cred-get">+ Get LootCoins</button></div>
+        <p class="cos-note">Purely visual — cosmetics never affect power. Skins &amp; auras apply to every hull you fly.</p>`;
+      const section = (kind, title, list) => {
+        html += `<div class="cos-h">${title}</div><div class="cos-grid">`;
+        list.forEach((c) => {
+          const owned = !!cs.owned[c.key];
+          const equipped = (kind === 'skin' ? cs.skin : cs.aura) === c.key;
+          html += `<div class="cos-card ${equipped ? 'on' : ''}" data-ck="${kind}:${c.key}">
+            <div class="cos-prev ${(c.key === 'prismatic' || c.key === 'prism') ? 'anim' : ''}" style="background:${c.sw}"></div>
+            <div class="cos-name">${c.name}</div>
+            <div class="cos-desc">${c.desc}</div>
+            <div class="cos-act">${equipped ? '<span class="cos-on">✓ EQUIPPED</span>' : owned ? '<button class="cos-btn eq">Equip</button>' : (c.credits ? `<button class="cos-btn buy ${credits >= c.credits ? '' : 'cant'}">${LC_ICON}${c.credits}</button>` : '<button class="cos-btn eq">Equip</button>')}</div>
+          </div>`;
+        });
+        html += '</div>';
+      };
+      section('skin', '⬢ Hull Skins', C.COSMETICS.skins);
+      section('aura', '◎ Auras', C.COSMETICS.auras);
+      html += '</div>';
     }
 
     el['store-body'].innerHTML = html;
+    // featured LootCoin ship offer
+    el['store-body'].querySelectorAll('[data-lcship]').forEach((b) => b.addEventListener('click', () => openShipLCBuy(b.dataset.lcship, +b.dataset.lcprice)));
+    // cosmetics: buy / equip / get-credits wiring
+    el['store-body'].querySelectorAll('[data-ck]').forEach((card) => card.addEventListener('click', () => {
+      const parts = card.dataset.ck.split(':'), kind = parts[0], key = parts[1];
+      const cs = G.getCosmetics();
+      if (cs.owned[key]) {
+        const already = (kind === 'skin' ? cs.skin : cs.aura) === key;
+        if (!already) { G.setCosmetic(kind, key); toast('✓ Equipped', '#7ce0a0'); renderStore(); }
+      } else {
+        const r = G.buyCosmetic(kind, key);
+        if (r.ok) { G.setCosmetic(kind, key); toast('★ Unlocked & equipped!', '#ffd24d'); renderStore(); }
+        else if (r.reason === 'credits') openCredits();
+      }
+    }));
+    { const cg = $('cred-get'); if (cg) cg.addEventListener('click', openCredits); }
     // render each card's icon as the ACTUAL battle hull (same renderer as combat)
     el['store-body'].querySelectorAll('canvas[data-shipic]').forEach((cv) => {
       const key = cv.dataset.shipic; if (!C.SHIP_BY_KEY[key]) return;
@@ -987,6 +1229,31 @@
     wireHangarTabs(el['store-body']);
   }
   // confirm sheet for a gold ship purchase
+  function openCredits() {
+    const packs = window.PAYMENTS ? window.PAYMENTS.PACKS : [];
+    const conf = window.PAYMENTS && window.PAYMENTS.configured();
+    const rows = packs.map((p) => `<div class="fp-pick" data-sku="${p.sku}"><div class="fpp-m"><div class="fpp-n">${LC_ICON}${p.credits.toLocaleString()} LootCoins${p.bonus ? ` <span class="pk-tag">+${p.bonus}% BONUS</span>` : ''}${p.tag ? ` <span class="pk-tag hot">${p.tag}</span>` : ''}</div><div class="fpp-d">one-time purchase · Apple Pay / Google Pay / card</div></div><span class="fpp-go">$${p.usd}</span></div>`).join('');
+    const heroCoin = LC_ICON.replace(/lcg/g, 'lcg3').replace('class="lc"', 'class="lc lch-coin"');
+    const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Get LootCoins</div><div class="sheet-body">
+      <div class="lc-hero">
+        <div class="lch-glow"></div>
+        <i class="lch-sp s1"></i><i class="lch-sp s2"></i><i class="lch-sp s3"></i><i class="lch-sp s4"></i><i class="lch-sp s5"></i>
+        ${heroCoin}
+        <div class="lch-title">LOOTCOINS</div>
+        <div class="lch-sub">Cosmetics &amp; convenience — never power</div>
+        <div class="lch-shine"></div>
+      </div>
+      <p style="margin-bottom:9px;font-size:11.5px;color:var(--muted);line-height:1.5">Checkout remembers your payment method — repeat purchases are one tap.</p>
+      ${rows}
+      ${conf ? '<p style="font-size:10.5px;color:var(--muted);margin-top:8px">Checkout opens in a new tab. LootCoins arrive on your next login after payment.</p>' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:8px">⚒ Checkout is not live yet — payments are being wired up. Enjoy the 500 founder LootCoins on the house.</p>'}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelectorAll('[data-sku]').forEach((d) => d.addEventListener('click', () => {
+      const r = window.PAYMENTS ? window.PAYMENTS.buy(d.dataset.sku) : { ok: false };
+      if (!r.ok) toast('⚒ Checkout coming soon', '#ffcf7a');
+      else toast('Complete checkout in the new tab', '#7ce0a0');
+    }));
+  }
   function openShipBuy(key) {
     const ship = C.SHIP_BY_KEY[key], st = G.shipBuyState(key);
     const afford = st.affordable;
@@ -1248,6 +1515,18 @@
   // FEEDBACK
   // ==========================================================================
   function onLoot(item) { /* dropped on ground — pickup toast happens on collect */ }
+  // An item was auto-scrapped because the hold is full — gray line in the feed.
+  let _scrapT = 0;
+  function lootScrapped(item) {
+    if (!_inited || !item) return;
+    const now = Date.now();
+    if (now - _scrapT < 1500) return;
+    _scrapT = now;
+    const t = document.createElement('div'); t.className = 'loot-toast scrapped';
+    t.innerHTML = `<span class="${rc(item.rarity)}">${item.name}</span><span class="lt-scrap">⚒ scrapped · hold full</span>`;
+    el['loot-feed'].appendChild(t); setTimeout(() => t.remove(), 3200);
+    while (el['loot-feed'].children.length > 5) el['loot-feed'].removeChild(el['loot-feed'].firstChild);
+  }
   let _lastLootToast = 0, _bagDirty = false, _bagTimer = 0;
   function onCollect(item) {
     if (!_inited) return;
@@ -1345,5 +1624,5 @@
     sheet.querySelector('[data-x]').addEventListener('click', () => { closeSheet(); refreshAll(); });
   }
 
-  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, onCollect, onLevelUp, onDeathReturn, showOffline, unlockToast, bossEvent, blueprintEvent, siegeEvent, galaxyChanged, galaxyContestToast };
+  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showOffline, unlockToast, bossEvent, blueprintEvent, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet };
 })();

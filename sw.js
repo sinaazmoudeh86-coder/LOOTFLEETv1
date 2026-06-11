@@ -6,16 +6,16 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v85';
+const CACHE = 'lootfleet-v90';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
   'guides/galaxy-territory.html', 'guides/ships-and-fleet.html', 'guides/loot-rarity.html', 'guides/weapon-classes.html',
   'icon-192.png', 'icon-512.png',
-  'css/style.css', 'css/theme.css', 'css/web.css',
+  'css/style.css', 'css/theme.css', 'css/web-v89.css',
   'js/config.js', 'js/items.js', 'js/entities.js', 'js/render.js',
-  'js/galaxy.js', 'js/leaderboard.js', 'js/config.public.js',
-  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments.js', 'js/game.js', 'js/ui.js', 'js/coach.js', 'js/auth.js',
+  'js/galaxy.js', 'js/leaderboard.js', 'js/config.live.js',
+  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v90.js', 'js/game-v89.js', 'js/ui-v89.js', 'js/coach-v89.js', 'js/auth.js',
   'js/showcase.js',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
   'ships/ship-heavycruiser.png', 'ships/ship-destroyer.png', 'ships/ship-battleship.png',

@@ -49,6 +49,19 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // IDEMPOTENCY — record the event id first; if we've seen it before
+    // (Stripe auto-retry, manual resend), skip so nobody gets double-granted.
+    const { data: evRow, error: evErr } = await supa
+      .from("stripe_events")
+      .insert({ id: event.id, type: event.type })
+      .select("id")
+      .maybeSingle();
+    if (evErr || !evRow) {
+      // duplicate key (already processed) or table missing — in either case
+      // do not grant again on a retry path
+      return new Response("already processed", { status: 200 });
+    }
+
     if (event.type === "checkout.session.completed") {
       const s = event.data.object as Stripe.Checkout.Session;
       const uid = s.client_reference_id; // set by the game's buy() call

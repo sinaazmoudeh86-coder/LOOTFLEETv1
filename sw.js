@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v90';
+const CACHE = 'lootfleet-v91';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
@@ -15,7 +15,7 @@ const CORE = [
   'css/style.css', 'css/theme.css', 'css/web-v89.css',
   'js/config.js', 'js/items.js', 'js/entities.js', 'js/render.js',
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.live.js',
-  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v90.js', 'js/game-v89.js', 'js/ui-v89.js', 'js/coach-v89.js', 'js/auth.js',
+  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v89.js', 'js/ui-v89.js', 'js/coach-v89.js', 'js/auth.js',
   'js/showcase.js',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
   'ships/ship-heavycruiser.png', 'ships/ship-destroyer.png', 'ships/ship-battleship.png',

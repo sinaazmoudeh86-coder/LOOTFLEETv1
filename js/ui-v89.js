@@ -51,9 +51,12 @@
      'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power','pb-ship','hud-fuel','hud-iron','hud-plasma','hud-lc','hud-fuel-rate','hud-iron-rate','hud-plasma-rate',
      'siege-bar','sg-fill','sg-label'].forEach((id) => el[id] = $(id));
     if (el['cargo-full']) el['cargo-full'].addEventListener('click', () => showScreen('bag'));
-    { const lcChip = document.querySelector('.lc-chip'); if (lcChip) lcChip.addEventListener('click', () => { storeCat = 'cosmetics'; showScreen('store'); }); }
+    { const lcChip = document.querySelector('.lc-chip'); if (lcChip) lcChip.addEventListener('click', () => { storeCat = 'market'; showScreen('store'); }); }
 
-    document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.screen)));
+    // NOTE: #nav-command has NO data-screen — it opens the Command mega-menu, it
+    // does not navigate. Only bind real screen buttons here, or showScreen(undefined)
+    // would dereference a non-existent #screen-undefined and throw.
+    document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => { if (b.dataset.screen) showScreen(b.dataset.screen); }));
     buildSpeedRow();
     el['auto-btn'].addEventListener('click', () => { G.setAuto(!G.getAuto()); syncAuto(); });
     const bailBtn = $('bail-btn');
@@ -83,9 +86,13 @@
   // SCREENS
   // ==========================================================================
   function showScreen(name) {
+    // Defense-in-depth: ignore unknown screens (e.g. a nav button with no
+    // data-screen) BEFORE mutating any state, so a bad name can never crash.
+    const sc = (name && name !== 'battle') ? $('screen-' + name) : null;
+    if (name !== 'battle' && !sc) return;
     screen = name;
     document.querySelectorAll('.screen.overlay').forEach((s) => s.classList.remove('active'));
-    if (name !== 'battle') $('screen-' + name).classList.add('active');
+    if (sc) sc.classList.add('active');
     const navName = (name === 'hero') ? 'store' : name;
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navName));
     if (name === 'hero') renderHero();
@@ -467,7 +474,67 @@
       el['equip-grid'].appendChild(d);
     });
     renderFleet();
+    renderShipUpgrade();
     renderHeroStats();
+  }
+  // Hull-level color ramp — the ship visibly changes tint as it levels up.
+  const SHIP_LVL_TIERS = [
+    { min:1,  color:'#9aa7b8', name:'Stock' },
+    { min:3,  color:'#5fd1ff', name:'Mk II' },
+    { min:6,  color:'#46d27a', name:'Mk III' },
+    { min:9,  color:'#f2b24b', name:'Mk IV' },
+    { min:13, color:'#b87bff', name:'Mk V' },
+    { min:17, color:'#ff5168', name:'Apex' },
+  ];
+  function shipLvlTier(L){ let t=SHIP_LVL_TIERS[0]; for(const x of SHIP_LVL_TIERS) if(L>=x.min) t=x; return t; }
+  window.shipLvlColor = (L) => shipLvlTier(L).color; // read by render.js for the in-battle tint
+  // Confirm + WARN before every hull upgrade: an upgraded hull is reset to Lv 1
+  // (and its invested resources lost) if the ship is destroyed.
+  function confirmHullUpgrade(key, after){
+    if (!G.shipUpInfo) return;
+    const ship = C.SHIP_BY_KEY[key]; const inf = G.shipUpInfo(key); if (!inf || inf.maxed) return;
+    const col = (window.shipLvlColor ? window.shipLvlColor(inf.level) : '#f2b24b');
+    const sheet = showSheet(`<div class="sheet-head">Upgrade Hull → Lv ${inf.level+1}</div><div class="sheet-body">
+      <p>Upgrade the <b>${ship?ship.name:'hull'}</b> to <b style="color:${col}">Hull Lv ${inf.level+1}</b>?<br><span style="color:#46d27a;font-size:12px">+10% DMG · +12% HP · +5% Rate</span></p>
+      <div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,120,120,.35);border-radius:9px;padding:10px 12px;color:#ff9a64;font-size:12px;line-height:1.45;margin:4px 0 10px">⚠ <b>If your hull is destroyed, it resets to Lv 1</b> and every resource you spent leveling it is lost for good. Upgrade at your own risk.</div>
+      <div class="stat-block"><span class="sb-name">Cost</span><span class="sb-val">● ${G.formatNum(inf.cost.gold)} &nbsp; ✦ ${G.formatNum(inf.cost.plasma)}</span></div>
+      <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok ${inf.afford?'':'disabled'}>Upgrade Hull</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const ok = sheet.querySelector('[data-ok]');
+    if (ok) ok.addEventListener('click', () => { const r = G.upgradeShip(key); closeSheet();
+      if (r.ok) { toast('⬆ ' + (ship?ship.name:'Hull') + ' → Hull Lv ' + r.level, col); (after||refreshAll)(); }
+      else { toast(r.reason==='plasma' ? 'Need more Plasma (✦)' : r.reason==='gold' ? 'Need more gold' : 'Cannot upgrade', '#e23b4e'); }
+    });
+  }
+  function renderShipUpgrade(){
+    if (!G.shipUpInfo) return;
+    const key = G.state.ship; const ship = C.SHIP_BY_KEY[key]; const inf = G.shipUpInfo(key);
+    const tier = shipLvlTier(inf.level); const col = tier.color;
+    let host = document.getElementById('ship-upgrade');
+    if (!host){ host = document.createElement('div'); host.id = 'ship-upgrade'; const anchor = $('pro-banner') || document.getElementById('char-portrait'); if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(host, anchor); else return; }
+    const body = inf.maxed
+      ? `<div style="text-align:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:13px;color:${col};letter-spacing:.06em">★ MAX HULL · APEX</div>`
+      : `<div style="display:flex;justify-content:space-between;font-size:11px;color:#93a2ba;margin-bottom:8px">
+           <span>Next level</span><span style="color:#46d27a;font-weight:700">+10% DMG · +12% HP · +5% Rate</span></div>
+         <button class="btn primary" id="ship-up-btn" ${inf.afford?'':'disabled'} style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px">
+           <span>⬆ Upgrade Hull</span>
+           <span style="font-weight:700;font-variant-numeric:tabular-nums;opacity:.92">● ${G.formatNum(inf.cost.gold)} &nbsp; ✦ ${G.formatNum(inf.cost.plasma)}</span>
+         </button>
+         <div style="font-size:9.5px;color:#ff9a64;margin-top:7px;text-align:center;line-height:1.35">⚠ Destroyed hull resets to Lv 1 — upgrade resources are lost on death</div>`;
+    host.innerHTML =
+      `<div style="background:linear-gradient(180deg,#172030,#131a28);border:1px solid ${col}55;border-radius:12px;padding:12px 13px;margin:0 12px 10px;box-shadow:0 0 18px ${col}22">
+         <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+           <div style="width:30px;height:30px;border-radius:8px;background:${col}22;border:1px solid ${col};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:13px;color:${col}">${inf.level}</div>
+           <div style="flex:1;min-width:0">
+             <div style="font-family:Orbitron,sans-serif;font-weight:700;font-size:13px;color:#eaf0fa">${ship?ship.name:'Hull'} <span style="color:${col};font-size:10px;letter-spacing:.08em">· ${tier.name}</span></div>
+             <div style="font-size:10.5px;color:#46d27a;font-weight:700;margin-top:1px">+${inf.bonus.dmg}% DMG · +${inf.bonus.hp}% HP · +${inf.bonus.rate}% Rate</div>
+           </div>
+           <div style="font-family:Orbitron,sans-serif;font-size:9px;letter-spacing:.14em;color:#6f7f99;text-transform:uppercase">Hull&nbsp;Lv</div>
+         </div>
+         ${body}
+       </div>`;
+    const btn = host.querySelector('#ship-up-btn');
+    if (btn) btn.addEventListener('click', () => confirmHullUpgrade(key, renderHero));
   }
   // ==========================================================================
   // FLEET PANEL — flagship + escort slots; matches the hangar-bay visual
@@ -1027,7 +1094,7 @@
   function storeHead(ico, title, right) { return `<div class="sec-head"><span class="sec-ic">${ico}</span><h3>${title}</h3>${right?`<span class="sec-right">${right}</span>`:''}</div>`; }
   // Unified Hangar segment header — shared by the "My Ship" (hero) view and the
   // store categories, so Ship + Store live under one tab.
-  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['board','Leaderboard'],['cosmetics','Cosmetics']];
+  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['board','Leaderboard']];
   function hangarTabsHTML(active) {
     const fleetMode = G && G.fleetShips && G.fleetShips().length > 0;
     return `<div class="store-cats">${HANGAR_TABS.map(([k,l]) => {
@@ -1080,6 +1147,18 @@
       }
     }
     const bpChip = ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
+    // hull-upgrade row for any owned ship (same options as My Ship)
+    let upg = '';
+    if (st.owned && G.shipUpInfo) {
+      const inf = G.shipUpInfo(key); const tcol = (window.shipLvlColor ? window.shipLvlColor(inf.level) : '#9aa7b8');
+      upg = `<div class="ship-upg" style="display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 10px;background:#0f1623;border:1px solid ${tcol}55;border-radius:9px">
+        <div style="width:24px;height:24px;flex:none;border-radius:6px;background:${tcol}22;border:1px solid ${tcol};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${tcol}">${inf.level}</div>
+        <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700;letter-spacing:.02em">+${inf.bonus.dmg}% DMG · +${inf.bonus.hp}% HP · +${inf.bonus.rate}% Rate<div style="font-size:8.5px;color:#6f7f99;letter-spacing:.12em;text-transform:uppercase">Hull Lv ${inf.level}</div>${inf.level>1?'<div style="font-size:8px;color:#ff9a64;letter-spacing:.02em;margin-top:1px">⚠ resets to Lv 1 on death</div>':''}</div>
+        ${inf.maxed
+          ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>`
+          : `<button class="ship-btn" data-ship-upg="${key}" ${inf.afford?'':'disabled'} style="white-space:nowrap;font-variant-numeric:tabular-nums">⬆ ● ${G.formatNum(inf.cost.gold)} ✦ ${G.formatNum(inf.cost.plasma)}</button>`}
+      </div>`;
+    }
     return `<div class="ship-card ${cls} ${st.active?'is-active':''}">
       <div class="ship-top">
         <div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>
@@ -1090,6 +1169,7 @@
       </div>
       <div class="ship-desc">${ship.desc}</div>
       ${mods?`<div class="ship-mods">${mods}</div>`:''}
+      ${upg}
       ${lock}
     </div>`;
   }
@@ -1194,47 +1274,9 @@
       html += '</div>';
     }
 
-    if (storeCat === 'cosmetics') {
-      const cs = G.getCosmetics(), credits = G.getCredits();
-      html += `<div class="store-sec">${storeHead(STORE_ICONS.cosmetics, 'Cosmetics')}
-        <div class="cred-bar"><span class="cred-have">${LC_ICON}<b>${(G.formatNumRaw || G.formatNum)(credits)}</b> LootCoins</span><button class="cred-get" id="cred-get">+ Get LootCoins</button></div>
-        <p class="cos-note">Purely visual — cosmetics never affect power. Skins &amp; auras apply to every hull you fly.</p>`;
-      const section = (kind, title, list) => {
-        html += `<div class="cos-h">${title}</div><div class="cos-grid">`;
-        list.forEach((c) => {
-          const owned = !!cs.owned[c.key];
-          const equipped = (kind === 'skin' ? cs.skin : cs.aura) === c.key;
-          html += `<div class="cos-card ${equipped ? 'on' : ''}" data-ck="${kind}:${c.key}">
-            <div class="cos-prev ${(c.key === 'prismatic' || c.key === 'prism') ? 'anim' : ''}" style="background:${c.sw}"></div>
-            <div class="cos-name">${c.name}</div>
-            <div class="cos-desc">${c.desc}</div>
-            <div class="cos-act">${equipped ? '<span class="cos-on">✓ EQUIPPED</span>' : owned ? '<button class="cos-btn eq">Equip</button>' : (c.credits ? `<button class="cos-btn buy ${credits >= c.credits ? '' : 'cant'}">${LC_ICON}${c.credits}</button>` : '<button class="cos-btn eq">Equip</button>')}</div>
-          </div>`;
-        });
-        html += '</div>';
-      };
-      section('skin', '⬢ Hull Skins', C.COSMETICS.skins);
-      section('aura', '◎ Auras', C.COSMETICS.auras);
-      html += '</div>';
-    }
-
     el['store-body'].innerHTML = html;
     // featured LootCoin ship offer
     el['store-body'].querySelectorAll('[data-lcship]').forEach((b) => b.addEventListener('click', () => openShipLCBuy(b.dataset.lcship, +b.dataset.lcprice)));
-    // cosmetics: buy / equip / get-credits wiring
-    el['store-body'].querySelectorAll('[data-ck]').forEach((card) => card.addEventListener('click', () => {
-      const parts = card.dataset.ck.split(':'), kind = parts[0], key = parts[1];
-      const cs = G.getCosmetics();
-      if (cs.owned[key]) {
-        const already = (kind === 'skin' ? cs.skin : cs.aura) === key;
-        if (!already) { G.setCosmetic(kind, key); toast('✓ Equipped', '#7ce0a0'); renderStore(); }
-      } else {
-        const r = G.buyCosmetic(kind, key);
-        if (r.ok) { G.setCosmetic(kind, key); toast('★ Unlocked & equipped!', '#ffd24d'); renderStore(); }
-        else if (r.reason === 'credits') openCredits();
-      }
-    }));
-    { const cg = $('cred-get'); if (cg) cg.addEventListener('click', openCredits); }
     // render each card's icon as the ACTUAL battle hull (same renderer as combat)
     el['store-body'].querySelectorAll('canvas[data-shipic]').forEach((cv) => {
       const key = cv.dataset.shipic; if (!C.SHIP_BY_KEY[key]) return;
@@ -1343,6 +1385,7 @@
     el['store-body'].querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
     }));
+    el['store-body'].querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, renderStore)));
     el['store-body'].querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => {
       G.selectDungeon(+b.dataset.bpHunt); showScreen('battle');
       toast('Deploying — defeat the boss for the blueprint', '#e6b566');
@@ -1719,20 +1762,39 @@
     else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(sys.rate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
   }
   // Small wreck notice — the ship has already been auto-towed to the hangar.
-  function onDeathReturn(lostItem, killerName, zone) {
+  function onDeathReturn(lostItem, killerName, zone, hullReset, lostList) {
     if (!_inited) return;
     refreshAll();
     G.state.deathExplained = true; G.save();
-    const lostHtml = lostItem
-      ? `Lost <b class="${rc(lostItem.rarity)}">${lostItem.name}</b><br><span style="color:var(--muted);font-size:11px">${C.RARITY[lostItem.rarity].name} · ${C.SLOTS[lostItem.slot].name} · gone for good</span>`
-      : 'No gear was lost this time.';
+    const multi = lostList && lostList.length > 1;
+    const lostHtml = multi
+      ? `Lost <b style="color:var(--hp)">${lostList.length} items</b> in the wreck<br><span style="color:var(--muted);font-size:11px">${lostList.slice(0,4).map((it)=>`<span class="${rc(it.rarity)}">${it.name}</span>`).join(', ')}${lostList.length>4?` +${lostList.length-4} more`:''} · gone for good</span>`
+      : lostItem
+        ? `Lost <b class="${rc(lostItem.rarity)}">${lostItem.name}</b><br><span style="color:var(--muted);font-size:11px">${C.RARITY[lostItem.rarity].name} · ${C.SLOTS[lostItem.slot].name} · gone for good</span>`
+        : 'No gear was lost this time.';
+    const hullHtml = (hullReset && hullReset.from > 1)
+      ? `<div class="wreck-loss" style="margin-top:9px;color:#ff9a64;background:rgba(255,80,80,.08);border:1px solid rgba(255,120,120,.3);border-radius:9px;padding:9px 11px">⬇ <b>${hullReset.name}</b> hull reset to <b>Lv 1</b><br><span style="color:var(--muted);font-size:11px">Was Hull Lv ${hullReset.from} · upgrade resources forfeit</span></div>`
+      : '';
     const sheet = showSheet(`<div id="wreck-pop">
       <div class="wreck-skull">☠</div>
       <div class="wreck-title">SHIP WRECKED</div>
       <div class="wreck-by">Downed by a <b>${killerName || 'hostile'}</b>${zone >= 1 ? ' in ' + zoneName(zone) : ''}</div>
-      <div class="wreck-loss">${lostHtml}</div>
+      <div class="wreck-loss"${multi?' style="color:var(--hp)"':''}>${lostHtml}</div>
+      ${hullHtml}
       <div class="wreck-foot">⌂ Towed back to your hangar.</div>
       <div class="sheet-actions" style="margin-top:14px"><button class="btn primary" data-x>Continue</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+  }
+  // One-time pop-up when a pilot reaches Lv 100 — the endgame death stakes.
+  function showCatastropheWarning() {
+    const sheet = showSheet(`<div id="wreck-pop">
+      <div class="wreck-skull" style="color:#ff8a4c">⚠</div>
+      <div class="wreck-title" style="color:#ff8a4c">LEVEL 100 · HIGH STAKES</div>
+      <div class="wreck-by">You've reached the deep endgame, Operator.</div>
+      <div class="wreck-loss" style="margin-top:10px;color:#ff9a64;background:rgba(255,80,80,.08);border:1px solid rgba(255,120,120,.3);border-radius:10px;padding:11px 13px;line-height:1.5">
+        <b>If your ship explodes, you can lose your ENTIRE hold.</b><br>
+        <span style="color:var(--muted);font-size:11.5px">On death your items are rolled one by one — the 1st is lost for certain, the 2nd at 50%, the 3rd at 25%, and so on. Your best gear is rolled first. Don't fly anything you can't afford to lose.</span></div>
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn primary" data-x>Understood</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
   }
   function showOffline(sum) {
@@ -1747,5 +1809,5 @@
     sheet.querySelector('[data-x]').addEventListener('click', () => { closeSheet(); refreshAll(); });
   }
 
-  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showOffline, unlockToast, bossEvent, blueprintEvent, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet };
+  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showOffline, unlockToast, bossEvent, blueprintEvent, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet };
 })();

@@ -117,17 +117,19 @@
     // rarity: 0 common · 1 uncommon · 2 rare (boosts output)
     const rr = rnd();
     const rarity = rr < 0.7 ? 0 : rr < 0.93 ? 1 : 2;
-    let resource = null;
-    if (type === 'resource' || citadel || boss) {
-      const pool = ['fuel'];
-      if (ring >= 2) pool.push('iron');
-      if (ring >= 5) pool.push('plasma', 'plasma');
-      if (ring >= DEEP_RING) pool.push('iron', 'plasma');
-      resource = pool[(rnd() * pool.length) | 0];
-    }
+    // EVERY tile yields a resource to some degree — a combat sector pays less than
+    // a dedicated resource field, but holding ANY tile now produces income.
+    const pool = ['fuel'];
+    if (ring >= 2) pool.push('iron');
+    if (ring >= 5) pool.push('plasma', 'plasma');
+    if (ring >= DEEP_RING) pool.push('iron', 'plasma');
+    const resource = pool[(rnd() * pool.length) | 0];
     const deep = ring >= DEEP_RING;
-    let rate = resource ? Math.round(baseRate(ring, resource) * (1 + rarity * 0.6) * (boss ? 1.5 : 1)) : 0;
-    if (citadel) rate = Math.max(1, Math.round((rate || baseRate(ring, 'fuel')) ) ) * CITADEL_RATE_MULT;
+    // output multiplier by tile type: boss ×1.5 · resource field ×1 · combat ×0.4
+    // (combat tiles are a real but smaller faucet, so resource tiles stay best).
+    const typeMult = boss ? 1.5 : (type === 'resource' ? 1 : 0.4);
+    let rate = Math.max(3, Math.round(baseRate(ring, resource) * (1 + rarity * 0.6) * typeMult));
+    if (citadel) rate = Math.round(baseRate(ring, resource) * (1 + rarity * 0.6)) * CITADEL_RATE_MULT;
     const tile = {
       id, q: p.q, r: p.r, ring, type, home: false, boss, citadel, deep,
       resource, rarity, diff: ringDiff(ring), level: ringLevel(ring),

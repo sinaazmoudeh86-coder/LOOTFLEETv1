@@ -41,55 +41,28 @@ Optimized for **fast, repeat micro-purchases**:
    on conflict (user_id) do update set credits = wallets.credits + 500;
    ```
 
-## Phase 2 — Automatic fulfilment (Supabase Edge Function)
-1. Wallet table (client reads, only the webhook writes):
-   ```sql
-   create table if not exists public.wallets (
-     user_id uuid primary key references auth.users(id) on delete cascade,
-     credits integer not null default 0,
-     updated_at timestamptz not null default now()
-   );
-   alter table public.wallets enable row level security;
-   create policy "read own wallet" on public.wallets
-     for select using (auth.uid() = user_id);
-   ```
-2. Edge Function `stripe-webhook`: verify the Stripe signature; on
-   `checkout.session.completed` map price → pack and upsert
-   `wallets.credits + pack` for `client_reference_id`.
-3. Stripe → Developers → Webhooks → point `checkout.session.completed`
-   at the function URL.
-4. Client pickup on login (read wallet, sync local balance) — ask Claude
-   when Phase 2 is deployed; it's ~20 lines.
+## Phase 2 — AUTOMATIC fulfilment (LIVE as of v90)
+The client code is fully wired (js/payments-v90.js). Three setup steps remain,
+all copy-paste:
 
-## Notes
-- The anon key can never write wallets — only Stripe via service role.
-- Stay in Test mode until one full loop works, then flip links to live.
-- Internal save field is still named `credits` — display-only rebrand, so
-  no player saves were touched.
+1. **SQL** — Supabase → SQL Editor → run `supabase/payments.sql`
+   (creates wallets + stripe_customers + grant/claim functions).
+2. **Edge Function** — Supabase → Edge Functions → Deploy new function,
+   name `stripe-webhook`, paste `supabase/functions/stripe-webhook/index.ts`.
+   Turn OFF "Verify JWT". Then add two secrets to the function:
+   - STRIPE_SECRET_KEY  → Stripe → Developers → API keys → Secret key
+   - STRIPE_WEBHOOK_SECRET → from step 3
+3. **Stripe webhook** — Stripe → Developers → Webhooks → Add endpoint:
+   - URL: https://<project-ref>.supabase.co/functions/v1/stripe-webhook
+   - Events: checkout.session.completed, invoice.paid
+   - Copy the signing secret (whsec_...) → save as STRIPE_WEBHOOK_SECRET above.
 
-## LootFleet Pro ($20/month subscription)
-- Create a Stripe **subscription** Payment Link ($20/mo recurring) and add it
-  as `pro_monthly` in `window.LOOTFLEET.stripeLinks`.
-- Webhook events to handle in the Edge Function:
-  - `checkout.session.completed` / `invoice.paid` → extend the buyer's
-    `pro_until` by one month (add a `pro_until timestamptz` column to
-    `wallets`, keyed by `client_reference_id`).
-  - `customer.subscription.deleted` → leave `pro_until` to lapse naturally.
-- Manual fulfilment meanwhile: in the game console of YOUR admin session is
-  not needed — run SQL or ask Claude to wire the login sync; client-side the
-  fulfilment hook is `GAME.grantPro(30)` (extends 30 days from now/expiry).
-- The client enforces lapse automatically: 5× speed drops off and XP returns
-  to 1× the moment `proUntil` passes.
-
-## Customer portal (subscription self-cancel)
-Stripe → Settings → Billing → Customer portal → activate the no-code portal,
-copy its login link and add it to js/config.public.js as:
-  window.LOOTFLEET.stripePortal = 'https://billing.stripe.com/p/login/...';
-The in-game Account sheet's "Manage / cancel subscription" button uses it.
-
-## Text-alert signups
-Opted-in phone numbers live inside each player's save (state.smsPhone /
-state.smsOptIn) — query them in SQL when you want a broadcast list:
-  select data->>'smsPhone' as phone from public.saves
-  where (data->>'smsOptIn')::boolean is true;
-(Hook an SMS provider like Twilio later; nothing else to set up now.)
+How delivery works after that:
+- Pack purchase → webhook maps the $ amount → grant_credits → the game claims
+  it on login / tab-refocus / fast 10s polling for 5 min after checkout opens
+  → "+25,000 LootCoins delivered" toast.
+- Pro signup → first month granted instantly; renewals via invoice.paid
+  (subscription_cycle) keep extending pro_until; the game picks it up the
+  same way. Cancel → pro_until simply lapses and 5×/2× switch off.
+- Guests have no wallet — buyers must be signed into a cloud account (they
+  are: client_reference_id is only attached for Supabase sessions).

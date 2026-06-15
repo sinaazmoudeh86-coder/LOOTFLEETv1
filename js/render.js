@@ -343,18 +343,32 @@
     const wt = p.drone ? 'drone' : (WSTYLE[p.wtype] ? p.wtype : 'gatling');
     const st = WSTYLE[wt];
     const tnow = performance.now() / 1000;
-    // trail (missiles leave smoke; energy weapons leave light)
+    // trail (missiles leave smoke; energy weapons leave light) — fat additive bloom
     const tCol = p.crit ? '255,210,80' : st.trail;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
     for (let i = 1; i < p.trail.length; i++) {
       const k = i / p.trail.length;
-      const a = k * (p.crit ? 0.85 : (wt === 'missile' ? 0.4 : 0.6));
+      const a = k * (p.crit ? 0.85 : (wt === 'missile' ? 0.5 : 0.7));
+      // wide soft glow under-pass
+      ctx.strokeStyle = `rgba(${tCol},${a * 0.35})`;
+      ctx.lineWidth = (p.crit ? 8 : st.trailW * 2.4) * k + 1.5;
+      ctx.beginPath(); ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
+      // bright core
       ctx.strokeStyle = `rgba(${tCol},${a})`;
-      ctx.lineWidth = (p.crit ? 3.4 : st.trailW) * k + 0.5;
-      ctx.lineCap = 'round';
+      ctx.lineWidth = (p.crit ? 3.6 : st.trailW) * k + 0.6;
       ctx.beginPath(); ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
     }
+    ctx.restore();
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
-    const cs = (p.crit ? 1.45 : 1) * 1.3;            // crits read bigger; all shots beefed up
+    const cs = (p.crit ? 1.45 : 1) * 1.6;            // bigger, beefier shots
+    // additive bloom halo around every bolt head
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5;
+    ctx.fillStyle = 'rgba(' + (p.crit ? '255,210,80' : st.trail) + ',1)';
+    ctx.beginPath(); ctx.arc(0, 0, 6 * cs, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.85; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0, 0, 2.2 * cs, 0, 7); ctx.fill(); ctx.restore();
     // (all projectile styles below use layered alpha shapes — NO shadowBlur,
     // no per-bolt gradients: these run hundreds of times per frame)
     if (wt === 'laser') {
@@ -656,11 +670,21 @@
 
   function drawParticle(ctx, p) {
     const a = Math.max(0, p.life / p.maxLife);
+    const r2 = p.size * (0.5 + a * 0.9) * 1.45;   // beefier core
+    // additive bloom halo on every particle — reads as heat/energy
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a * (p.glow ? 0.5 : 0.32);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r2 * (p.glow ? 3.4 : 2.4), 0, 7); ctx.fill();
+    ctx.restore();
     ctx.globalAlpha = a;
     ctx.fillStyle = p.color;
-    const r2 = p.size * (0.4 + a * 0.6);
-    if (p.glow) { ctx.globalAlpha = a * 0.4; ctx.beginPath(); ctx.arc(p.x, p.y, r2 * 2, 0, 7); ctx.fill(); ctx.globalAlpha = a; }
     ctx.beginPath(); ctx.arc(p.x, p.y, r2, 0, 7); ctx.fill();
+    // hot white core
+    ctx.globalAlpha = a * 0.8;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(p.x, p.y, r2 * 0.4, 0, 7); ctx.fill();
     ctx.globalAlpha = 1;
   }
   function drawFloat(ctx, f) {
@@ -703,6 +727,26 @@
   function cosmeticsState() {
     const s = window.GAME && window.GAME.state;
     return (s && s.cosmetics) || { skin: 'stock', aura: 'none' };
+  }
+  // Hull-level tint — recolors the ship sprite as it gains upgrade levels.
+  // Cached per (hull, TINT-COLOR, skin) — NOT raw level. The tint only changes
+  // across a handful of level tiers (shipLvlColor buckets level → a few colors),
+  // so keying by the resulting color keeps this cache bounded (≈ hulls × tiers ×
+  // skins) instead of leaking a fresh canvas on every single hull upgrade over a
+  // long idle session.
+  const LVL_TINT_CACHE = {};
+  function lvlTint(img, key, lv, skin, col) {
+    if (!img) return img;
+    const id = key + ':' + (col || '') + ':' + (skin || 'stock');
+    if (LVL_TINT_CACHE[id]) return LVL_TINT_CACHE[id];
+    const S = img.width || 96;
+    const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+    const cx = cv.getContext('2d');
+    cx.drawImage(img, 0, 0, S, S);
+    cx.globalCompositeOperation = 'source-atop';
+    cx.globalAlpha = 0.42; cx.fillStyle = col; cx.fillRect(0, 0, S, S);
+    cx.globalCompositeOperation = 'source-over'; cx.globalAlpha = 1;
+    LVL_TINT_CACHE[id] = cv; return cv;
   }
   // The hull sprite with a skin finish composited over its silhouette.
   // Static skins cache per (hull, skin); Prismatic re-renders (tiny canvas).
@@ -852,7 +896,10 @@
         }
       }
       const _skinned = skinnedShip(activeShipKey(), cosmeticsState().skin, t) || _im;
-      ctx.drawImage(_skinned, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
+      const _lv = (window.GAME && GAME.state && GAME.state.shipLevels && GAME.state.shipLevels[activeShipKey()]) || 1;
+      const _tcol = (window.shipLvlColor && _lv >= 3) ? window.shipLvlColor(_lv) : null;
+      const _drawn = _tcol ? lvlTint(_skinned, activeShipKey(), _lv, cosmeticsState().skin, _tcol) : _skinned;
+      ctx.drawImage(_drawn, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
       if (muzzle > 0) {
         const mx = Math.cos(facing) * ds * 0.34, my = Math.sin(facing) * ds * 0.34 - ds * 0.12;
         ctx.globalAlpha = Math.min(1, muzzle);

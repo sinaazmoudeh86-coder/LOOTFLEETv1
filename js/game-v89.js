@@ -64,6 +64,7 @@
     rivalTiles: {},                       // simulated rival owners: { tileId: name }
     tileCd: {},                           // per-tile contest cooldowns (15 min · 24 h citadels)
     resources: { fuel: 80, iron: 0, plasma: 0 },
+    shipLevels: {},                       // per-ship hull upgrade level (1..20)
     lastResTick: Date.now(),              // for per-hour resource accrual
     ship: 'frigate',        // active hull
     ownedShips: { frigate: true },
@@ -145,14 +146,18 @@
     s.regen = aura ? aura.regen * aMul : 0;
     s.dmgReduce = aura ? Math.min(60, aura.reduce * aMul) : 0;
     if (aura) s.multiShot += aura.multiShot * aMul;
-    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct) / 100);
-    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct) / 100);
+    // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
+    const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
+    const hlDmg = _hl * 10, hlHp = _hl * 12, hlAtk = _hl * 5;
+    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct + hlDmg) / 100);
+    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct + hlHp) / 100);
     s.critChance += m.critChance + (sm.critChance||0) + fs.critChance;
     s.critDamage += m.critDamage + (sm.critDamage||0) + fs.critDamage;
     s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0) + fs.moveSpeed;
     s.lifeSteal += m.lifeSteal + (sm.lifeSteal||0) + fs.lifeSteal;
     s.multiShot += m.multiShot + (sm.multiShot||0) + fs.multiShot;
-    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct) / 100);
+    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk) / 100);
+    s.shipLevel = _hl + 1;
     s.critChance = Math.min(100, s.critChance);
     s.lifeSteal = Math.min(95, s.lifeSteal);
     s.multiShot = Math.min(100, s.multiShot);
@@ -241,6 +246,12 @@
     if (unlock > state.highestUnlocked) state.highestUnlocked = unlock;
     burst(rt.archer.x, rt.archer.y, '#e6b566', 26, { glow: true, speed: 220, life: 0.9 });
     if (window.UI) { window.UI.onLevelUp(state.level); window.UI.refreshAll(); }
+    // One-time warning the moment a pilot crosses into the Lv 100 endgame, where a
+    // destroyed ship can cost the entire hold.
+    if (state.level >= 100 && !state.lv100Warned) {
+      state.lv100Warned = true; save();
+      if (window.UI && window.UI.showCatastropheWarning) window.UI.showCatastropheWarning();
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -602,14 +613,39 @@
     return pick.item;
   }
 
+  // CATASTROPHIC LOSS (Lv 100+) — a destroyed ship can claim your WHOLE hold. Every
+  // item is rolled in turn at HALF the previous chance: 100% · 50% · 25% · 12.5% …
+  // Best gear is rolled first, so the guaranteed loss always stings.
+  function catastrophicLoss() {
+    const pool = [];
+    C.SLOT_KEYS.forEach((s) => { if (state.equipped[s]) pool.push({ from: 'eq', slot: s, item: state.equipped[s] }); });
+    state.inventory.forEach((it) => pool.push({ from: 'inv', item: it }));
+    if (!pool.length) return [];
+    pool.sort((a, b) => I.itemPower(b.item) - I.itemPower(a.item));
+    const lost = []; let chance = 1;
+    for (const p of pool) {
+      if (Math.random() < chance) {
+        if (p.from === 'eq') state.equipped[p.slot] = null;
+        else { const idx = state.inventory.indexOf(p.item); if (idx >= 0) state.inventory.splice(idx, 1); }
+        lost.push(p.item); state.itemsLost++;
+        rt.ground.push(new E.GroundItem(rt.archer.x + (Math.random() - 0.5) * 32, rt.archer.y + 8 + Math.random() * 14, p.item, true));
+      }
+      chance *= 0.5;
+    }
+    if (lost.length) refreshStats();
+    burst(rt.archer.x, rt.archer.y, '#888', 22, { speed: 150, life: 0.9 });
+    return lost;
+  }
+
   // --------------------------------------------------------------------------
   // PARTICLES
   // --------------------------------------------------------------------------
   function burst(x, y, color, n, opts = {}) {
-    const speed = opts.speed ?? 140;
+    const speed = (opts.speed ?? 140) * 1.25;
+    n = Math.ceil(n * 1.7);                               // more debris everywhere
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, sp = speed * (0.3 + Math.random() * 0.7);
-      rt.particles.push(new E.Particle(x, y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: (opts.life ?? 0.6)*(0.6+Math.random()*0.5), size: opts.size ?? (2+Math.random()*2.5), color, gravity: opts.gravity ?? 0, glow: opts.glow ?? false }));
+      const a = Math.random() * Math.PI * 2, sp = speed * (0.3 + Math.random() * 0.8);
+      rt.particles.push(new E.Particle(x, y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: (opts.life ?? 0.6)*(0.7+Math.random()*0.7), size: (opts.size ?? (2+Math.random()*2.5)) * 1.5, color, gravity: opts.gravity ?? 0, glow: true }));
     }
   }
   // ---- pickup filter / auto-sell helpers ------------------------------------
@@ -707,6 +743,16 @@
     if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
     const steps = Math.max(1, state.gameSpeed | 0);
     for (let i = 0; i < steps; i++) { rt.time += dt; state.playTime += dt; update(dt); }
+    // RENDER GATE — the simulation above always runs (so idle farming, boss
+    // timers and offline progress are never starved), but we only PAINT when the
+    // canvas is actually on-screen: skip drawing while the tab is hidden or while
+    // an opaque full-screen overlay (any menu, or the Fleet Rank panel) covers
+    // the battle view. This is the single biggest CPU/GPU/battery saver — a
+    // backgrounded or menu'd idle session stops doing per-frame additive-bloom
+    // canvas work entirely. (querySelector here is a cheap selector match — no
+    // layout/reflow — so it is fine to run once per frame.)
+    if (document.hidden) return;
+    if (document.querySelector('.screen.overlay.active')) return;
     draw();
   }
   function loop(now) { if (!rt.running) return; step(now); requestAnimationFrame(loop); }
@@ -798,15 +844,31 @@
       const killer = a.killer;
       const killerName = killer ? (killer.isBoss ? killer.name : killer.type.name) : 'the swarm';
       const diedZone = state.currentDungeon;
-      const lost = dropOnDeath();
-      if (rt.deepDeath) dropOnDeath(); // deep space: a second item is lost on death
+      // ITEM LOSS ON DEATH — below Lv 100: the classic single-item drop (two in
+      // deep space). At Lv 100+: CATASTROPHIC — your whole hold is at risk, each
+      // item rolled at half the previous chance (100% · 50% · 25% …).
+      let lost = null, lostList = null;
+      if (state.level >= 100) {
+        lostList = catastrophicLoss();
+        lost = (lostList && lostList[0]) || null;
+      } else {
+        lost = dropOnDeath();
+        if (rt.deepDeath) dropOnDeath(); // deep space: a second item is lost on death
+      }
+      // HULL RESET ON DEATH — the active hull's upgrade levels are wiped back to
+      // Lv 1 and every resource spent leveling it is forfeit. The deeper you push
+      // an upgraded hull, the more you risk losing.
+      let hullReset = null;
+      { const _hk = state.ship, _prev = (state.shipLevels && state.shipLevels[_hk]) || 1;
+        if (_prev > 1) { if (!state.shipLevels) state.shipLevels = {}; state.shipLevels[_hk] = 1; refreshStats();
+          hullReset = { ship: _hk, name: (C.SHIP_BY_KEY[_hk] || {}).name || 'Hull', from: _prev }; } }
       // a carrier loses one drone when the hull is downed
       if (state.drones > 0) { state.drones--; spawnDrones(); }
       rt.siege = null; rt.waves = null; // abort any in-progress siege / wave gauntlet
       burst(a.x, a.y, '#e23b4e', 30, { speed: 200, life: 0.9 });
       // no respawn menu — redeploy straight to the home hangar
       respawnAt(0);
-      if (window.UI) window.UI.onDeathReturn(lost, killerName, diedZone);
+      if (window.UI) window.UI.onDeathReturn(lost, killerName, diedZone, hullReset, lostList);
     }
 
     // projectiles
@@ -2474,8 +2536,43 @@
     if (h > 0) return `${h}h ${m}m`; if (m > 0) return `${m}m ${s}s`; return `${s}s`;
   }
 
+  // ---- SHIP HULL UPGRADES — exponential resource cost, +dmg/+hp/+rate per level
+  function shipLevel(key) { return (state.shipLevels && state.shipLevels[key]) || 1; }
+  function shipUpgradeCost(key) {
+    const L = shipLevel(key);
+    // "later" ships = position in the progression order; each later hull costs
+    // exponentially more to upgrade, with steeper per-level growth too.
+    let idx = C.SHIPS.findIndex((s) => s.key === key); if (idx < 0) idx = 0;
+    const tierMul = Math.pow(1.8, idx);
+    const goldGrow = 1.95 + idx * 0.06;
+    const plasmaGrow = 1.8 + idx * 0.05;
+    return { gold: Math.round(1500 * tierMul * Math.pow(goldGrow, L - 1)),
+             plasma: Math.round(6 * tierMul * Math.pow(plasmaGrow, L - 1)) };
+  }
+  function shipUpInfo(key) {
+    const L = shipLevel(key);
+    const cost = shipUpgradeCost(L >= 20 ? key : key);
+    return { level: L, maxed: L >= 20, cost,
+             owned: !!state.ownedShips[key],
+             afford: state.gold >= cost.gold && (state.resources.plasma || 0) >= cost.plasma,
+             bonus: { dmg: (L - 1) * 10, hp: (L - 1) * 12, rate: (L - 1) * 5 } };
+  }
+  function upgradeShip(key) {
+    if (!state.ownedShips[key]) return { ok: false, reason: 'owned' };
+    if (!state.shipLevels) state.shipLevels = {};
+    if (shipLevel(key) >= 20) return { ok: false, reason: 'maxed' };
+    const c = shipUpgradeCost(key);
+    if (state.gold < c.gold) return { ok: false, reason: 'gold' };
+    if ((state.resources.plasma || 0) < c.plasma) return { ok: false, reason: 'plasma' };
+    state.gold -= c.gold; state.resources.plasma -= c.plasma;
+    state.shipLevels[key] = shipLevel(key) + 1;
+    refreshStats(); save(); if (window.UI) window.UI.refreshAll();
+    return { ok: true, level: state.shipLevels[key] };
+  }
+
   const GAME = {
-    init, state, rt, computeStats, refreshStats,
+    init, state, rt, save, computeStats, refreshStats,
+    shipLevel, shipUpInfo, upgradeShip,
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, grantPro, respawnAt,

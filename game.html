@@ -26,9 +26,68 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=91">
-<link rel="stylesheet" href="css/theme.css?v=91">
-<link rel="stylesheet" href="css/web-v89.css?v=91">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/web-v89.css">
+<style id="battle-fx-css">
+/* cinematic battle FX — pure overlay, no engine changes */
+#game-canvas{ filter:saturate(1.22) contrast(1.1) brightness(1.06); }
+#arena-wrap::after{ content:''; position:absolute; inset:0; pointer-events:none; z-index:3;
+  background:
+    radial-gradient(135% 100% at 50% 30%, transparent 46%, rgba(4,7,14,.34) 76%, rgba(2,4,9,.68) 100%),
+    radial-gradient(80% 58% at 50% 4%, rgba(95,180,255,.12), transparent 70%),
+    radial-gradient(58% 48% at 84% 97%, rgba(192,123,255,.09), transparent 72%),
+    radial-gradient(58% 48% at 14% 97%, rgba(95,209,255,.08), transparent 72%);
+}
+#arena-wrap::before{ content:''; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:radial-gradient(95% 64% at 50% 32%, rgba(120,190,255,.09), transparent 64%);
+  mix-blend-mode:screen; animation:arenaPulse 5s ease-in-out infinite; }
+@keyframes arenaPulse{ 0%,100%{ opacity:.45; } 50%{ opacity:1; } }
+@media (prefers-reduced-motion:reduce){ #arena-wrap::before{ animation:none; } }
+</style>
+<style id="lock-gate-css">
+.lock-veil{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;
+  background:rgba(7,11,20,.82);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
+.lock-veil .lock-card{max-width:300px;text-align:center;background:linear-gradient(180deg,#1a2333,#121925);
+  border:1px solid #37475f;border-radius:18px;padding:24px 22px;box-shadow:0 24px 60px rgba(0,0,0,.6);}
+.lock-veil .lock-ic{font-size:42px;line-height:1;filter:drop-shadow(0 0 16px rgba(242,178,75,.4));}
+.lock-veil h3{font-family:'Orbitron',sans-serif;font-weight:800;font-size:18px;letter-spacing:.04em;color:#f2b24b;margin:12px 0 6px;}
+.lock-veil p{font-family:'Rajdhani',sans-serif;font-size:13.5px;line-height:1.5;color:#93a2ba;margin:0 0 14px;}
+.lock-veil .lock-lv{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.04em;color:#eaf0fa;
+  background:#0f1623;border:1px solid #37475f;border-radius:10px;padding:8px 12px;}
+.lock-veil .lock-lv b{color:#f2b24b;}
+.nav-btn.nav-locked{opacity:.5;}
+.nav-btn.nav-locked .nl{opacity:.7;}
+.nav-btn .lk-badge{position:absolute;top:3px;right:50%;margin-right:-20px;font-size:9px;font-weight:700;
+  background:#0f1623;border:1px solid #37475f;border-radius:7px;padding:0 3px;color:#f2b24b;line-height:1.5;}
+.lock-tip{position:absolute;left:50%;bottom:70px;transform:translateX(-50%);z-index:60;display:none;
+  background:rgba(20,28,40,.96);border:1px solid #37475f;border-radius:11px;padding:9px 15px;
+  font-family:'Rajdhani',sans-serif;font-size:12.5px;font-weight:700;color:#eaf0fa;box-shadow:0 14px 38px rgba(0,0,0,.55);white-space:nowrap;}
+.lock-tip b{color:#f2b24b;}
+.lock-tip.show{display:block;animation:lockTipPop .35s cubic-bezier(.18,1.4,.4,1);}
+@keyframes lockTipPop{0%{opacity:0;transform:translate(-50%,8px) scale(.9);}100%{opacity:1;transform:translate(-50%,0) scale(1);}}
+</style>
+<style id="mega-css">
+.nav-grouped{display:none!important;}
+.mega{position:absolute;inset:0;z-index:55;display:none;}
+.mega.open{display:block;}
+.mega-back{position:absolute;inset:0;background:rgba(5,8,14,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:bdIn .2s ease;}
+.mega-sheet{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px 78px;box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);}
+@keyframes megaUp{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
+.mega-grab{width:40px;height:4px;border-radius:3px;background:#37475f;margin:4px auto 12px;}
+.mega-title{font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.18em;color:#f2b24b;text-transform:uppercase;margin:0 4px 11px;}
+.mega-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.mega-card{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;border-radius:14px;padding:13px 12px;position:relative;cursor:pointer;transition:transform .1s,border-color .15s;}
+.mega-card:active{transform:scale(.97);}
+.mega-card .mc-ic{width:38px;height:38px;flex:none;border-radius:11px;display:grid;place-items:center;background:radial-gradient(120% 120% at 50% 0%,#222d40,#10141d);border:1px solid #37475f;color:#5fd1ff;}
+.mega-card .mc-ic svg{width:21px;height:21px;}
+.mega-card .mc-n{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12.5px;color:#eaf0fa;letter-spacing:.02em;}
+.mega-card .mc-s{font-size:10px;color:#93a2ba;margin-top:2px;letter-spacing:.02em;}
+.mega-card.locked{opacity:.55;}
+.mega-card .mc-lock{position:absolute;top:7px;right:9px;font-size:9.5px;font-weight:700;color:#f2b24b;font-family:'Rajdhani',sans-serif;}
+.mega-card.cmd-fr{grid-column:1 / -1;}
+.mega-card.cmd-fr .mc-ic{color:#f2b24b;border-color:rgba(242,178,75,.4);}
+</style>
 </head>
 <body>
 <div id="stage">
@@ -127,6 +186,7 @@
         <div class="screen overlay" id="screen-galaxy">
           <div class="scr-head"><span class="scr-title">Galaxy Map</span><span class="scr-sub" id="galaxy-sub"></span></div>
           <div class="scr-body" id="galaxy-body"></div>
+          <div class="lock-veil" id="lock-galaxy"><div class="lock-card"><div class="lock-ic">🔒</div><h3>My Galaxy</h3><p>Claim star systems and rival citadels across a living galaxy map.</p><div class="lock-lv">Unlocks at <b>Level 25</b> · you're Level <span id="lk-gal-cur">1</span></div></div></div>
         </div>
 
         <!-- ZONES -->
@@ -153,6 +213,12 @@
           <div class="scr-body" id="skills-body"></div>
         </div>
 
+        <!-- FLEET RANK (endgame PvP) -->
+        <div class="screen overlay" id="screen-fleetrank" style="padding:0">
+          <iframe id="fr-frame" data-src="fleet-rank-embed.html" title="Fleet Rank" style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#0b1018"></iframe>
+          <div class="lock-veil" id="lock-fleetrank"><div class="lock-card"><div class="lock-ic">🔒</div><h3>Fleet Rank</h3><p>The endgame PvP ladder — build a citadel, raid rivals, and climb for daily rewards.</p><div class="lock-lv">Unlocks at <b>Level 50</b> · you're Level <span id="lk-fr-cur">1</span></div></div></div>
+        </div>
+
       </div>
 
       <!-- BOTTOM NAV -->
@@ -165,9 +231,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
           <span class="nl">Zone Grind</span>
         </button>
-        <button class="nav-btn" data-screen="galaxy">
+        <button class="nav-btn nav-grouped" data-screen="galaxy">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg>
           <span class="nl">My Galaxy</span>
+        </button>
+        <button class="nav-btn nav-grouped" data-screen="fleetrank">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg>
+          <span class="nl">Fleet Rank</span>
         </button>
         <button class="nav-btn" data-screen="bag">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 8h12a0 0 0 0 1 0 0v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
@@ -177,10 +247,39 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 9.5V20h14V9.5"/><path d="M12 20v-5c0-2 .8-3.5 0-3.5s0 1.5 0 3.5"/><path d="M9 13l3-1.6 3 1.6"/></svg>
           <span class="nl">Hangar</span>
         </button>
-        <button class="nav-btn" data-screen="skills">
+        <button class="nav-btn nav-grouped" data-screen="skills">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg>
           <span class="nl">Pilot Skills</span><span class="badge" id="hero-badge" style="display:none">0</span>
         </button>
+        <button class="nav-btn" id="nav-command" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 11h6M9 14h6M12 8v0"/></svg>
+          <span class="nl">Command</span><span class="badge" id="cmd-badge" style="display:none">0</span>
+        </button>
+      </div>
+
+      <!-- COMMAND mega-menu (groups Galaxy · Fleet Rank · Pilot Skills) -->
+      <div class="mega" id="mega">
+        <div class="mega-back"></div>
+        <div class="mega-sheet">
+          <div class="mega-grab"></div>
+          <div class="mega-title">⬡ Command</div>
+          <div class="mega-grid">
+            <div class="mega-card cmd-fr" data-go="fleetrank">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg></div>
+              <div><div class="mc-n">Fleet Rank</div><div class="mc-s">Endgame PvP ladder · raid &amp; climb</div></div>
+              <span class="mc-lock"></span>
+            </div>
+            <div class="mega-card" data-go="galaxy">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
+              <div><div class="mc-n">My Galaxy</div><div class="mc-s">Claim systems &amp; citadels</div></div>
+              <span class="mc-lock"></span>
+            </div>
+            <div class="mega-card" data-go="skills">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg></div>
+              <div><div class="mc-n">Pilot Skills</div><div class="mc-s">Spend points on your tree</div></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- LOGIN GATE -->
@@ -210,22 +309,22 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config.js?v=91"></script>
-<script src="js/items.js?v=91"></script>
-<script src="js/entities.js?v=91"></script>
-<script src="js/render.js?v=91"></script>
-<script src="js/galaxy.js?v=91"></script>
-<script src="js/leaderboard.js?v=91"></script>
+<script src="js/config.js"></script>
+<script src="js/items.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/render.js"></script>
+<script src="js/galaxy.js"></script>
+<script src="js/leaderboard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.live.js?v=91"></script>
-<script src="js/cloud.js?v=91"></script>
-<script src="js/account.js?v=91"></script>
-<script src="js/territory.js?v=91"></script>
-<script src="js/payments-v91.js?v=91"></script>
-<script src="js/game-v89.js?v=91"></script>
-<script src="js/ui-v89.js?v=91"></script>
-<script src="js/coach-v89.js?v=91"></script>
-<script src="js/auth.js?v=91"></script>
+<script src="js/config.live.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/account.js"></script>
+<script src="js/territory.js"></script>
+<script src="js/payments-v91.js"></script>
+<script src="js/game-v89.js"></script>
+<script src="js/ui-v89.js"></script>
+<script src="js/coach-v89.js"></script>
+<script src="js/auth.js"></script>
 <script>
   (function(){
     // Boot is gated on a signed-in (or guest) session so each account loads its
@@ -241,6 +340,87 @@
     if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
       window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
     }
+  })();
+</script>
+<script>
+  /* ===== level gates: My Galaxy (Lv 25) · Fleet Rank (Lv 50) ===== */
+  (function(){
+    const GATES={ galaxy:{lv:25,name:'My Galaxy',veil:'lock-galaxy',cur:'lk-gal-cur'},
+                  fleetrank:{lv:50,name:'Fleet Rank',veil:'lock-fleetrank',cur:'lk-fr-cur'} };
+    const tip=document.createElement('div'); tip.className='lock-tip'; document.getElementById('app').appendChild(tip);
+    let tipT;
+    function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
+    function apply(){
+      const L=lvl();
+      for(const scr in GATES){ const g=GATES[scr], locked=L<g.lv;
+        const v=document.getElementById(g.veil); if(v) v.style.display=locked?'flex':'none';
+        const c=document.getElementById(g.cur); if(c) c.textContent=L;
+        const btn=document.querySelector('.nav-btn[data-screen="'+scr+'"]');
+        if(btn){ btn.classList.toggle('nav-locked',locked);
+          let b=btn.querySelector('.lk-badge');
+          if(locked){ if(!b){ b=document.createElement('span'); b.className='lk-badge'; btn.appendChild(b);} b.textContent='🔒'+g.lv; }
+          else if(b){ b.remove(); }
+        }
+      }
+    }
+    // tapping a locked tab → quick tooltip (the veil over the screen explains the rest)
+    document.querySelectorAll('.nav-btn[data-screen="galaxy"],.nav-btn[data-screen="fleetrank"]').forEach(btn=>{
+      btn.addEventListener('click',()=>{ const g=GATES[btn.dataset.screen];
+        if(g && lvl()<g.lv){ tip.innerHTML='🔒 '+g.name+' unlocks at <b>Level '+g.lv+'</b>';
+          tip.classList.add('show'); clearTimeout(tipT); tipT=setTimeout(()=>tip.classList.remove('show'),2200); }
+      });
+    });
+    setInterval(apply,1000); setTimeout(apply,400); apply();
+  })();
+</script>
+<script>
+  /* ===== Command mega-menu: groups Galaxy · Fleet Rank · Pilot Skills ===== */
+  (function(){
+    const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
+    if(!cmd||!mega) return;
+    const LOCKS={galaxy:25,fleetrank:50};
+    function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
+    function sync(){ const L=lvl();
+      mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
+        c.classList.toggle('locked',!!locked); const lk=c.querySelector('.mc-lock'); if(lk) lk.textContent=locked?('🔒 Lv '+need):''; });
+    }
+    function open(){ sync(); mega.classList.add('open'); }
+    function close(){ mega.classList.remove('open'); }
+    cmd.addEventListener('click',()=>{ mega.classList.contains('open')?close():open(); });
+    mega.querySelector('.mega-back').addEventListener('click',close);
+    mega.querySelectorAll('[data-go]').forEach(c=>c.addEventListener('click',()=>{
+      const btn=document.querySelector('.nav-btn[data-screen="'+c.dataset.go+'"]');
+      close(); if(btn) btn.click(); cmd.classList.add('active');
+    }));
+    // keep Command highlighted while one of its screens is open
+    setInterval(()=>{
+      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active');
+      cmd.classList.toggle('active', !!on);
+    },500);
+  })();
+</script>
+<script>
+  /* ===== Lazy-load the Fleet Rank iframe on first open =====
+     The Fleet Rank panel is a self-contained iframe that runs its OWN canvas
+     animation loop. Loading it eagerly meant ~600KB + a second always-on rAF
+     loop competing with the main game for every player — including the majority
+     who never reach the Lv 50 unlock. We now defer its load until the screen is
+     opened for the first time. */
+  (function(){
+    const fr = document.getElementById('fr-frame');
+    const screen = document.getElementById('screen-fleetrank');
+    if(!fr || !screen || fr.src) return;
+    let loaded = false;
+    function maybeLoad(){
+      if(loaded) return;
+      if(screen.classList.contains('active')){
+        loaded = true;
+        fr.src = fr.dataset.src;
+      }
+    }
+    const mo = new MutationObserver(maybeLoad);
+    mo.observe(screen, { attributes:true, attributeFilter:['class'] });
+    maybeLoad(); // in case it is already active at boot
   })();
 </script>
 </body>

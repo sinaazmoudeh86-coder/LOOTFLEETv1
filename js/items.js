@@ -141,7 +141,10 @@
   function weaponClassOf(item) {
     if (item && item.wclass && WCLASS_BY_KEY[item.wclass]) return WCLASS_BY_KEY[item.wclass];
     const h = item ? ((item.id || 0) * 7 + (item.name ? item.name.length : 0)) : 0;
-    return WEAPON_CLASSES[h % WEAPON_CLASSES.length];
+    // floor + abs the hash so a non-integer/negative id can never index out of the
+    // array (which would yield undefined and crash any tooltip reading wc.color).
+    const idx = Math.abs(Math.floor(h)) % WEAPON_CLASSES.length;
+    return WEAPON_CLASSES[idx] || WEAPON_CLASSES[0];
   }
 
   // Fleet-support aura projected by an equipped Warden Array, scaled by rarity.

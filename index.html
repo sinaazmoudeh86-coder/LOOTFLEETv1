@@ -63,6 +63,18 @@
   .nav-cta{display:flex;align-items:center;gap:18px;}
   .nav-link{color:var(--muted);font-weight:600;font-size:14px;letter-spacing:.02em;}
   .nav-link:hover{color:var(--text);}
+  /* mobile hamburger + slide-down menu (hidden on desktop) */
+  .nav-toggle{display:none;flex-direction:column;justify-content:center;gap:5px;width:44px;height:44px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.04);cursor:pointer;padding:0 11px;-webkit-tap-highlight-color:transparent;}
+  .nav-toggle .nt-bar{display:block;height:2px;border-radius:2px;background:var(--text);transition:transform .25s ease, opacity .2s ease;}
+  .nav-toggle[aria-expanded="true"] .nt-bar:nth-child(1){transform:translateY(7px) rotate(45deg);}
+  .nav-toggle[aria-expanded="true"] .nt-bar:nth-child(2){opacity:0;}
+  .nav-toggle[aria-expanded="true"] .nt-bar:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+  .mobile-menu{display:none;flex-direction:column;padding:6px 20px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg, rgba(5,7,13,.98), rgba(5,7,13,.94));backdrop-filter:blur(10px);}
+  .mobile-menu.open{display:flex;animation:mmDrop .22s ease;}
+  @keyframes mmDrop{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:none;}}
+  .mobile-menu a:not(.btn){color:var(--text);font-family:var(--ui);font-weight:600;font-size:16px;padding:15px 6px;border-bottom:1px solid rgba(255,255,255,.07);letter-spacing:.02em;}
+  .mobile-menu a:not(.btn):active{color:var(--gold);}
+  .mobile-menu .mm-play{margin-top:14px;justify-content:center;font-size:15px;padding:15px;}
   .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--ui);font-weight:700;
     border-radius:11px;cursor:pointer;border:1px solid transparent;letter-spacing:.03em;
     transition:transform .12s, box-shadow .18s, filter .18s;}
@@ -206,6 +218,7 @@
     .hero-actions,.trust{justify-content:center;}
     .features,.steps{grid-template-columns:1fr;}
     .nav-link{display:none;}
+    .nav-toggle{display:flex;}
   }
 
   /* ===== ART UPLIFT — motion & light layer ===== */
@@ -246,12 +259,22 @@
       <span class="wm"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
     </a>
     <div class="nav-cta">
-      <a class="nav-link" href="#features">Features</a>
+      <a class="nav-link" href="features.html">Features</a>
       <a class="nav-link" href="#how">How it works</a>
       <a class="nav-link" href="guides.html">Guides</a>
-      <a class="btn btn-primary btn-sm" href="game.html">Play Free</a>
+      <a class="btn btn-primary btn-sm nav-play" href="game.html">Play Free</a>
+      <button class="nav-toggle" id="navToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <span class="nt-bar"></span><span class="nt-bar"></span><span class="nt-bar"></span>
+      </button>
     </div>
   </div>
+  <nav class="mobile-menu" id="mobileMenu" aria-hidden="true">
+    <a href="features.html">Features</a>
+    <a href="#how">How it works</a>
+    <a href="guides.html">Guides</a>
+    <a href="brand.html">Brand</a>
+    <a class="btn btn-primary mm-play" href="game.html">▸ Play Free</a>
+  </nav>
 </header>
 
 <main id="top">
@@ -406,7 +429,7 @@
     </a>
     <div class="foot-links">
       <a href="game.html">Play</a>
-      <a href="#features">Features</a>
+      <a href="features.html">Features</a>
       <a href="#how">How it works</a>
       <a href="guides.html">Guides</a>
       <a href="brand.html">Brand</a>
@@ -428,6 +451,17 @@
     document.getElementById('yr').textContent=new Date().getFullYear();
   })();
 
+</script>
+<script>
+  // mobile nav menu
+  (function(){
+    var t=document.getElementById('navToggle'), m=document.getElementById('mobileMenu');
+    if(!t||!m) return;
+    function set(open){ m.classList.toggle('open',open); t.setAttribute('aria-expanded',open?'true':'false'); m.setAttribute('aria-hidden',open?'false':'true'); }
+    t.addEventListener('click', function(){ set(!m.classList.contains('open')); });
+    m.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', function(){ set(false); }); });
+    addEventListener('resize', function(){ if(innerWidth>860) set(false); });
+  })();
 </script>
 <script src="js/showcase.js?v=60"></script>
 

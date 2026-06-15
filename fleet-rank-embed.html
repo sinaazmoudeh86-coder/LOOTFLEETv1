@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loot Fleet · Fleet Rank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================ TOKENS == */
+:root{
+  --bg:#0b1018; --panel:#151d2b; --panel-2:#1a2231; --panel-3:#212c3e;
+  --line:#28344a; --line-2:#37475f;
+  --gold:#f2b24b; --gold-dim:#c5872a; --cyan:#5fd1ff; --blue:#4fa6ff;
+  --text:#eaf0fa; --muted:#93a2ba; --muted-2:#6f7f99;
+  --good:#3fc56b; --bad:#ff495f; --hp:#ff495f; --shield:#5fd1ff;
+  --galaxy:#c07bff; --fuel:#5bc0ff; --iron:#d0a060; --plasma:#c07bff;
+  --font-d:'Orbitron',sans-serif; --font-u:'Rajdhani',sans-serif;
+  --shadow:0 14px 38px rgba(0,0,0,.55);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:#05070d;overflow:hidden;font-family:var(--font-u);color:var(--text);-webkit-font-smoothing:antialiased;user-select:none;}
+img{display:block;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+
+#stage{position:fixed;inset:0;display:grid;place-items:center;
+  background:radial-gradient(130% 100% at 50% -10%,#1a2236 0%,#0c1119 48%,#05070d 100%);}
+#stage::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(1.5px 1.5px at 18% 22%,rgba(180,200,255,.4),transparent 60%),
+    radial-gradient(1.5px 1.5px at 74% 12%,rgba(180,200,255,.3),transparent 60%),
+    radial-gradient(1.2px 1.2px at 58% 64%,rgba(180,200,255,.22),transparent 60%),
+    radial-gradient(1.2px 1.2px at 33% 82%,rgba(180,200,255,.2),transparent 60%),
+    radial-gradient(1.4px 1.4px at 88% 48%,rgba(180,200,255,.26),transparent 60%);}
+
+/* ---- phone bezel ---- */
+#phone{width:402px;height:872px;transform-origin:center center;position:relative;flex:none;
+  background:linear-gradient(155deg,#2a3142,#161b26 60%,#10141d);border-radius:42px;padding:11px;
+  box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 2px #2c3445,0 0 0 11px #11151e,0 0 0 13px #2a313f,inset 0 1px 0 rgba(255,255,255,.05);}
+#notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:120px;height:24px;background:#0c1019;border-radius:0 0 16px 16px;z-index:60;}
+#app{position:absolute;inset:11px;border-radius:32px;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
+
+/* ---- status bar / wallet (real game chrome) ---- */
+#statusbar{flex:none;display:flex;align-items:center;gap:4px;padding:9px 11px 7px;}
+.gold-chip{display:flex;align-items:center;gap:4px;background:linear-gradient(180deg,#1c2433,#141b27);border:1px solid var(--line-2);border-radius:9px;padding:4px 7px;font-weight:700;font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);white-space:nowrap;}
+.gold-chip .coin{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#ffe39a,#e0a52c 70%,#b8801c);border:1px solid #a9761a;color:#7a5410;font-size:9px;font-weight:900;display:grid;place-items:center;flex:none;}
+.res-chip{display:flex;align-items:center;gap:3px;background:linear-gradient(180deg,#1c2433,#141b27);border:1px solid var(--line);border-radius:9px;padding:4px 6px;font-weight:700;font-size:11px;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.res-chip .rg{color:var(--rc);font-size:11px;}
+.res-chip.lc-chip{margin-left:auto;}
+.res-chip .lc{width:15px;height:15px;}
+.res-chip .rr{font-size:8.5px;color:var(--muted-2);font-weight:600;}
+
+/* ---- HUD (persistent ship strip) ---- */
+#hud{flex:none;padding:5px 12px 8px;background:linear-gradient(180deg,#141c2a,#0e1421);border-bottom:1px solid var(--line);box-shadow:0 2px 14px rgba(0,0,0,.4);}
+.hud-top{display:flex;align-items:center;gap:10px;}
+.lvl-badge{flex:none;width:42px;height:42px;border-radius:11px;background:radial-gradient(120% 120% at 50% 0%,#222d40,#141b28);border:1px solid var(--line-2);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 6px rgba(0,0,0,.4);}
+.lvl-badge .lab{font-size:7px;letter-spacing:.18em;color:var(--muted);}
+.lvl-badge .num{font-family:var(--font-d);font-weight:700;font-size:18px;color:var(--gold);text-shadow:0 0 12px rgba(242,178,75,.4);line-height:1;}
+.power-block{flex:1;display:flex;flex-direction:column;align-items:center;background:radial-gradient(120% 150% at 50% 0%,rgba(242,178,75,.14),transparent 70%);border:1px solid rgba(242,178,75,.16);border-radius:13px;padding:3px 8px 5px;position:relative;}
+.power-block img{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:34px;}
+.power-block .pb-label{font-size:8px;font-weight:700;letter-spacing:.16em;color:var(--gold);opacity:.8;text-transform:uppercase;}
+.power-block .pb-val{font-family:var(--font-d);font-weight:900;font-size:26px;color:var(--gold);text-shadow:0 0 22px rgba(242,178,75,.45);font-variant-numeric:tabular-nums;line-height:1.05;}
+.hud-bars{display:flex;flex-direction:column;gap:5px;margin-top:7px;}
+.hbar{position:relative;height:13px;border-radius:7px;background:#0a0f18;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 2px 5px rgba(0,0,0,.5);}
+.hbar i{position:absolute;inset:0;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25);}
+.hbar i.xp{background:linear-gradient(90deg,#2f6fc4,#4fa6ff);}
+.hbar i.hp{background:linear-gradient(90deg,#a01f30,#ff495f);}
+.hbar .hl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;letter-spacing:.04em;text-shadow:0 1px 2px rgba(0,0,0,.9);}
+.hud-sub{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--muted);letter-spacing:.04em;}
+.hud-sub b{color:var(--cyan);}
+
+/* ============================================================ SCREENS == */
+#screens{flex:1;position:relative;min-height:0;}
+.view{position:absolute;inset:0;display:none;flex-direction:column;}
+.view.active{display:flex;}
+.scr-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:10px 16px 9px;background:linear-gradient(180deg,#141c2a,#0f1521);border-bottom:1px solid var(--line);}
+.scr-head .sh-l{display:flex;flex-direction:column;}
+.scr-title{font-family:var(--font-d);font-weight:800;font-size:15px;letter-spacing:.04em;color:var(--gold);text-shadow:0 0 14px rgba(242,178,75,.25);}
+.scr-sub{font-size:10.5px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-top:1px;}
+.scr-head .daily-bell{position:relative;width:34px;height:34px;border-radius:9px;background:linear-gradient(180deg,#1c2433,#141b27);border:1px solid var(--line-2);display:grid;place-items:center;font-size:16px;color:var(--gold);}
+.scr-head .daily-bell .nd{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px #0f1521,0 0 8px var(--bad);animation:pulseDot 1.6s ease-in-out infinite;}
+@keyframes pulseDot{0%,100%{transform:scale(1);}50%{transform:scale(1.3);}}
+
+/* ---- feature sub-nav (segmented) ---- */
+.frtabs{flex:none;display:flex;gap:4px;padding:9px 12px;background:#0e1420;border-bottom:1px solid var(--line);}
+.frtab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px 6px;border-radius:9px;border:1px solid transparent;color:var(--muted);transition:color .15s,background .15s;position:relative;}
+.frtab svg{width:18px;height:18px;}
+.frtab .ft{font-size:8.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.frtab.active{color:var(--gold);background:linear-gradient(180deg,#212c3e,#172030);border-color:rgba(242,178,75,.25);box-shadow:0 1px 6px rgba(0,0,0,.4);}
+.frtab .b{position:absolute;top:3px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--bad);box-shadow:0 0 6px var(--bad);}
+
+.scr-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:13px 14px 18px;min-height:0;}
+.scr-body::-webkit-scrollbar{width:5px;}
+.scr-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}
+.subview{animation:viewIn .24s cubic-bezier(.22,1,.36,1);}
+@keyframes viewIn{from{transform:translateY(8px);}to{transform:none;}}
+
+/* ============================================================ FLEET POWER == */
+.fp-banner{display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:14px;
+  background:radial-gradient(120% 160% at 0% 0%,rgba(242,178,75,.16),transparent 60%),linear-gradient(180deg,#1a2231,#131a28);
+  border:1px solid rgba(242,178,75,.22);margin-bottom:13px;cursor:pointer;}
+.fp-banner .fp-l{flex:1;}
+.fp-lab{font-size:10px;font-weight:700;letter-spacing:.22em;color:var(--gold);opacity:.85;text-transform:uppercase;}
+.fp-val{font-family:var(--font-d);font-weight:900;font-size:34px;line-height:1;color:var(--gold);text-shadow:0 0 22px rgba(242,178,75,.45);font-variant-numeric:tabular-nums;margin-top:3px;}
+.fp-trend{font-size:11px;color:var(--good);font-weight:700;letter-spacing:.03em;margin-top:4px;}
+.fp-chev{font-size:22px;color:var(--gold);opacity:.6;}
+
+/* ============================================================ CITADEL HERO == */
+.cit-stage{position:relative;border-radius:16px;overflow:hidden;border:1px solid var(--line);margin-bottom:13px;
+  background:radial-gradient(95% 80% at 50% 30%,#1a2740 0%,#0c1322 60%,#070b14 100%);}
+.cit-stage::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(1.3px 1.3px at 22% 26%,rgba(150,200,255,.5),transparent 60%),radial-gradient(1.3px 1.3px at 70% 18%,rgba(150,200,255,.4),transparent 60%),radial-gradient(1.1px 1.1px at 50% 70%,rgba(150,200,255,.3),transparent 60%),radial-gradient(1.1px 1.1px at 84% 60%,rgba(150,200,255,.3),transparent 60%);}
+.cit-top{position:absolute;top:11px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-start;z-index:3;}
+.cit-lvlbadge{display:flex;flex-direction:column;align-items:center;background:radial-gradient(120% 120% at 50% 0%,#222d40,#141b28);border:1px solid var(--line-2);border-radius:12px;padding:5px 11px;box-shadow:0 2px 6px rgba(0,0,0,.5);}
+.cit-lvlbadge .l{font-size:7.5px;letter-spacing:.2em;color:var(--muted);}
+.cit-lvlbadge .n{font-family:var(--font-d);font-weight:800;font-size:21px;color:var(--gold);text-shadow:0 0 12px rgba(242,178,75,.4);line-height:1;}
+.cit-rankchip{display:flex;align-items:center;gap:6px;background:rgba(12,18,28,.7);backdrop-filter:blur(6px);border:1px solid rgba(242,178,75,.35);border-radius:99px;padding:5px 11px 5px 6px;}
+.cit-rankchip .em{width:22px;height:22px;flex:none;}
+.cit-rankchip .rk{font-family:var(--font-d);font-weight:700;font-size:11px;letter-spacing:.04em;color:var(--gold);}
+.cit-rankchip .pos{font-size:10px;color:var(--muted);font-weight:700;}
+.cit-img-wrap{display:grid;place-items:center;padding:30px 10px 14px;min-height:230px;}
+.cit-img{width:240px;max-width:78%;filter:drop-shadow(0 22px 36px rgba(0,0,0,.6)) drop-shadow(0 0 36px rgba(95,209,255,.22));animation:float 6s ease-in-out infinite;}
+@keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-9px);}}
+.cit-name{position:absolute;bottom:52px;left:0;right:0;text-align:center;font-family:var(--font-d);font-weight:700;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);text-shadow:0 0 16px rgba(95,209,255,.4);z-index:3;}
+.cit-bars{position:relative;z-index:3;padding:0 13px 13px;display:flex;flex-direction:column;gap:6px;}
+.bar-wrap{position:relative;height:16px;border-radius:8px;background:#0a0f18;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 2px 5px rgba(0,0,0,.5);}
+.bar-fill{position:absolute;inset:0;border-radius:8px;transition:width .5s cubic-bezier(.22,1,.36,1);box-shadow:inset 0 1px 0 rgba(255,255,255,.25);}
+.bar-fill.hp{background:linear-gradient(90deg,#a01f30,#ff495f);}
+.bar-fill.sh{background:linear-gradient(90deg,#2b7da8,#5fd1ff);}
+.bar-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 9px;font-size:10px;font-weight:700;letter-spacing:.08em;text-shadow:0 1px 2px rgba(0,0,0,.9);text-transform:uppercase;}
+
+/* ============================================================ SECTION == */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 9px;}
+.sec-head h3{font-family:var(--font-d);font-weight:700;font-size:11px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase;}
+.sec-head .more{font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:.04em;white-space:nowrap;}
+.sec-blurb{font-size:11px;color:var(--muted);letter-spacing:.02em;margin:-4px 2px 10px;line-height:1.5;}
+
+/* ---- defense grid summary ---- */
+.grid-card{background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:13px;}
+.slot-row-lab{display:flex;align-items:center;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:2px 2px 8px;}
+.slot-row-lab>span{white-space:nowrap;}
+.slot-row-lab b{color:var(--text);}
+.slot-row-lab.mt{margin-top:13px;}
+.slot-grid{display:grid;gap:7px;}
+.slot-grid.struct{grid-template-columns:repeat(4,1fr);}
+.slot-grid.merc{grid-template-columns:repeat(5,1fr);}
+.dslot{position:relative;aspect-ratio:1;border-radius:11px;background:linear-gradient(180deg,#1d2839,#141c2a);border:1px solid var(--line-2);display:grid;place-items:center;overflow:hidden;transition:transform .1s,border-color .15s,box-shadow .15s;}
+.dslot:active{transform:scale(.95);}
+.dslot.filled{border-color:rgba(95,209,255,.4);box-shadow:inset 0 0 14px rgba(95,209,255,.1);}
+.dslot.empty{border-style:dashed;border-color:var(--line-2);}
+.dslot .plus{font-size:20px;color:var(--muted-2);font-weight:400;}
+.dslot img{width:78%;height:78%;object-fit:contain;filter:drop-shadow(0 3px 6px rgba(0,0,0,.5));}
+.dslot .glyph{font-size:21px;line-height:1;filter:drop-shadow(0 0 8px currentColor);}
+.dslot .lv{position:absolute;top:2px;right:4px;font-family:var(--font-d);font-weight:700;font-size:8.5px;color:var(--gold);text-shadow:0 1px 3px #000;}
+.dslot .tnm{position:absolute;bottom:0;left:0;right:0;font-size:7px;font-weight:700;letter-spacing:.02em;text-align:center;padding:2px 1px;background:linear-gradient(180deg,transparent,rgba(7,11,20,.92));color:var(--muted);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* ---- rank info card ---- */
+.rank-card{background:radial-gradient(120% 130% at 100% 0%,rgba(95,209,255,.08),transparent 55%),linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:13px;}
+.rank-top{display:flex;align-items:center;gap:13px;}
+.rank-em{width:52px;height:52px;flex:none;filter:drop-shadow(0 0 14px rgba(242,178,75,.4));}
+.rank-info{flex:1;min-width:0;}
+.rank-info .rn{font-family:var(--font-d);font-weight:800;font-size:18px;letter-spacing:.03em;color:var(--text);}
+.rank-info .rmeta{font-size:11px;color:var(--muted);letter-spacing:.04em;margin-top:1px;}
+.rank-info .rmeta b{color:var(--cyan);}
+.rank-pos{text-align:right;flex:none;}
+.rank-pos .pl{font-size:9px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;}
+.rank-pos .pv{font-family:var(--font-d);font-weight:900;font-size:23px;color:var(--gold);text-shadow:0 0 14px rgba(242,178,75,.4);line-height:1;}
+.rank-prog{margin-top:12px;}
+.rank-prog .lab{display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;text-transform:uppercase;}
+.rank-prog .lab b{color:var(--gold);}
+.minibar{height:8px;border-radius:5px;background:#0a0f18;border:1px solid var(--line);overflow:hidden;}
+.minibar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:5px;}
+
+/* ---- reward preview strip ---- */
+.reward-strip{display:flex;gap:8px;margin-top:13px;}
+.rwd{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:#0f1623;border:1px solid var(--line-2);border-radius:10px;padding:8px 4px;}
+.rwd .g{font-size:16px;line-height:1;}
+.rwd .amt{font-family:var(--font-d);font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;}
+.rwd.gold .amt,.rwd.gold .g{color:var(--gold);}
+.rwd.gal .amt,.rwd.gal .g{color:var(--galaxy);}
+.rwd .rl{font-size:8px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;}
+
+/* ============================================================ BUTTONS == */
+.btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:14px;font-family:var(--font-d);font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase;transition:transform .1s,filter .15s,box-shadow .15s;border:1px solid transparent;}
+.btn:active{transform:translateY(1px) scale(.99);}
+.btn.gold{background:linear-gradient(180deg,#f2b24b,#c5872a);border-color:#d79a36;color:#1c1206;box-shadow:0 5px 16px rgba(242,178,75,.32),inset 0 1px 0 rgba(255,255,255,.3);}
+.btn.gold:hover{filter:brightness(1.06);}
+.btn.red{background:linear-gradient(180deg,#e23b4e,#a01f30);border-color:#e2495c;color:#fff;box-shadow:0 5px 16px rgba(226,59,78,.32),inset 0 1px 0 rgba(255,255,255,.18);}
+.btn.blue{background:linear-gradient(180deg,#3f8df2,#2061c8);border-color:#2061c8;color:#fff;box-shadow:0 5px 16px rgba(47,120,230,.3),inset 0 1px 0 rgba(255,255,255,.2);}
+.btn.green{background:linear-gradient(180deg,#34b465,#1d8a48);border-color:#3fc56b;color:#04140a;box-shadow:0 5px 16px rgba(45,160,90,.3),inset 0 1px 0 rgba(255,255,255,.25);}
+.btn.ghost{background:linear-gradient(180deg,#1c2433,#141b27);border-color:var(--line-2);color:var(--text);}
+.btn.lg{font-size:15px;padding:16px;}
+.btn:disabled{opacity:.5;filter:grayscale(.4);box-shadow:none;cursor:default;}
+.btn .sub{font-family:var(--font-u);font-weight:600;font-size:11px;letter-spacing:.02em;text-transform:none;opacity:.85;}
+.btn-row{display:flex;gap:9px;}
+
+/* ============================================================ GAME BOTTOM NAV == */
+#nav{flex:none;height:60px;display:flex;background:linear-gradient(180deg,#121a27,#0b1019);border-top:1px solid var(--line);box-shadow:0 -3px 16px rgba(0,0,0,.4);}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted-2);position:relative;transition:color .15s;padding:0 1px;min-width:0;}
+.nav-btn svg{width:19px;height:19px;}
+.nav-btn .nl{font-size:8px;font-weight:700;letter-spacing:.01em;text-transform:uppercase;line-height:1.08;text-align:center;}
+.nav-btn:active{transform:translateY(1px);}
+.nav-btn.active{color:var(--gold);}
+.nav-btn.active svg{filter:drop-shadow(0 0 7px rgba(242,178,75,.55));}
+.nav-btn.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:var(--gold);border-radius:0 0 2px 2px;box-shadow:0 0 9px rgba(242,178,75,.7);}
+.nav-btn .badge{position:absolute;top:5px;right:50%;margin-right:-18px;background:var(--bad);color:#fff;font-size:7.5px;font-weight:700;border-radius:8px;padding:0 4px;min-width:13px;text-align:center;box-shadow:0 0 0 2px #0b1019;}
+.nav-btn.new::after{content:'NEW';position:absolute;top:4px;right:50%;margin-right:-24px;background:var(--cyan);color:#04121c;font-family:var(--font-d);font-size:6.5px;font-weight:800;letter-spacing:.05em;border-radius:5px;padding:1px 3px;box-shadow:0 0 0 2px #0b1019;}
+
+/* ============================================================ GENERIC CARDS == */
+.card{background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:13px;padding:13px;margin-bottom:11px;}
+.stat-list{display:flex;flex-direction:column;}
+.stat-row{display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.05);}
+.stat-row:last-child{border-bottom:none;}
+.stat-row .sn{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);font-weight:600;}
+.stat-row .sn .si{width:18px;text-align:center;}
+.stat-row .sv{display:flex;align-items:baseline;gap:7px;font-family:var(--font-d);font-weight:700;font-size:14px;color:var(--text);font-variant-numeric:tabular-nums;}
+.stat-row .sv .up{font-family:var(--font-u);font-size:11px;font-weight:700;color:var(--good);}
+.cost-row{display:flex;align-items:center;justify-content:center;gap:16px;margin:13px 0 11px;}
+.cost-item{display:flex;align-items:center;gap:6px;font-family:var(--font-d);font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;}
+.cost-item .g{font-size:15px;}
+.cost-item.gold,.cost-item.gold .g{color:var(--gold);}
+.cost-item.gal,.cost-item.gal .g{color:var(--galaxy);}
+.cost-item.short{color:var(--bad);}
+
+/* ---- citadel level steps ---- */
+.lvl-steps{display:flex;gap:5px;margin-bottom:13px;}
+.lvl-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 3px;border-radius:10px;background:#0f1623;border:1px solid var(--line);position:relative;}
+.lvl-step.done{border-color:rgba(63,197,107,.4);}
+.lvl-step.cur{border-color:var(--gold);background:linear-gradient(180deg,rgba(242,178,75,.14),rgba(242,178,75,.02));box-shadow:0 0 14px rgba(242,178,75,.2);}
+.lvl-step .sn{font-family:var(--font-d);font-weight:800;font-size:15px;color:var(--muted-2);}
+.lvl-step.done .sn{color:var(--good);} .lvl-step.cur .sn{color:var(--gold);}
+.lvl-step .sl{font-size:7px;letter-spacing:.04em;color:var(--muted-2);text-transform:uppercase;text-align:center;line-height:1.2;height:18px;display:flex;align-items:center;}
+.lvl-step.cur .sl{color:var(--gold);}
+
+/* ============================================================ RANK LADDER == */
+.lad-row{display:flex;align-items:center;gap:12px;background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px;transition:border-color .15s;}
+.lad-row.me{border-color:var(--gold);background:linear-gradient(180deg,rgba(242,178,75,.1),transparent);box-shadow:0 0 16px rgba(242,178,75,.15);}
+.lad-row.locked{opacity:.62;}
+.lad-em{width:40px;height:40px;flex:none;}
+.lad-mid{flex:1;min-width:0;}
+.lad-nm{font-family:var(--font-d);font-weight:700;font-size:14px;letter-spacing:.02em;}
+.lad-row.me .lad-nm{color:var(--gold);}
+.lad-rw{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.02em;margin-top:2px;font-variant-numeric:tabular-nums;}
+.lad-rw .gd{color:var(--gold);} .lad-rw .gl{color:var(--galaxy);}
+.lad-pwr{text-align:right;flex:none;min-width:50px;}
+.lad-pwr .pl{font-size:8px;letter-spacing:.12em;color:var(--muted-2);text-transform:uppercase;white-space:nowrap;}
+.lad-pwr .pv{font-family:var(--font-d);font-weight:700;font-size:13px;color:var(--cyan);font-variant-numeric:tabular-nums;}
+.lad-row.me .lad-pwr .pv{color:var(--gold);}
+.lad-you{display:inline-block;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:.12em;color:#1c1206;background:var(--gold);border-radius:5px;padding:1px 6px;margin-top:3px;}
+
+/* ============================================================ ATTACK == */
+.token-bar{display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:13px;}
+.token-pips{display:flex;gap:5px;flex:1;}
+.tpip{width:24px;height:24px;border-radius:7px;border:1px solid var(--line-2);background:#0f1623;display:grid;place-items:center;font-size:13px;color:var(--muted-2);}
+.tpip.on{border-color:rgba(242,178,75,.5);background:linear-gradient(180deg,rgba(242,178,75,.2),rgba(242,178,75,.04));color:var(--gold);box-shadow:0 0 8px rgba(242,178,75,.25);}
+.token-meta{text-align:right;}
+.token-meta .tn{font-family:var(--font-d);font-weight:700;font-size:13px;color:var(--gold);}
+.token-meta .tt{font-size:10px;color:var(--muted);letter-spacing:.03em;white-space:nowrap;}
+
+.target-card{background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:11px;}
+.target-top{display:flex;align-items:center;gap:12px;}
+.target-cit{width:62px;height:62px;flex:none;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5));}
+.target-info{flex:1;min-width:0;}
+.target-info .tnm{font-family:var(--font-d);font-weight:700;font-size:15px;color:var(--text);}
+.target-info .trk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:3px;font-weight:600;}
+.target-info .trk img{width:16px;height:16px;}
+.target-pwr{text-align:right;flex:none;}
+.target-pwr .pl{font-size:8px;letter-spacing:.12em;color:var(--muted-2);text-transform:uppercase;}
+.target-pwr .pv{font-family:var(--font-d);font-weight:800;font-size:17px;color:var(--cyan);font-variant-numeric:tabular-nums;}
+.diff-tag{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:99px;padding:3px 10px;margin-top:9px;}
+.diff-tag.easy{color:var(--good);background:rgba(63,197,107,.12);border:1px solid rgba(63,197,107,.4);}
+.diff-tag.even{color:var(--gold);background:rgba(242,178,75,.12);border:1px solid rgba(242,178,75,.4);}
+.diff-tag.hard{color:var(--bad);background:rgba(226,59,78,.12);border:1px solid rgba(226,59,78,.4);}
+.target-loot{display:flex;gap:8px;margin-top:11px;}
+.tl{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;background:#0f1623;border:1px solid var(--line-2);border-radius:9px;padding:7px;font-family:var(--font-d);font-weight:700;font-size:12px;font-variant-numeric:tabular-nums;}
+.tl.gold{color:var(--gold);} .tl.gal{color:var(--galaxy);}
+
+/* ---- replays ---- */
+.replay-row{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-left-width:3px;border-radius:11px;padding:10px 12px;margin-bottom:8px;}
+.replay-row.win{border-left-color:var(--good);}
+.replay-row.loss{border-left-color:var(--bad);}
+.replay-res{width:38px;height:38px;flex:none;border-radius:9px;display:grid;place-items:center;font-family:var(--font-d);font-weight:800;font-size:14px;}
+.replay-res.win{background:rgba(63,197,107,.14);color:var(--good);border:1px solid rgba(63,197,107,.35);}
+.replay-res.loss{background:rgba(226,59,78,.14);color:var(--bad);border:1px solid rgba(226,59,78,.35);}
+.replay-mid{flex:1;min-width:0;}
+.replay-nm{font-size:13px;font-weight:700;}
+.replay-sub{font-size:10.5px;color:var(--muted);margin-top:1px;font-variant-numeric:tabular-nums;}
+.replay-sub .neg{color:var(--bad);} .replay-sub .pos{color:var(--good);}
+.replay-watch{font-size:18px;color:var(--cyan);flex:none;}
+
+/* ============================================================ BATTLE OVERLAY == */
+.battle{position:absolute;inset:0;z-index:90;display:none;flex-direction:column;
+  background:radial-gradient(90% 70% at 50% 36%,#152544 0%,#0a1322 58%,#06090f 100%);}
+.battle.open{display:flex;}
+.battle::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(1.3px 1.3px at 20% 30%,rgba(150,200,255,.5),transparent 60%),radial-gradient(1.3px 1.3px at 76% 22%,rgba(150,200,255,.4),transparent 60%),radial-gradient(1.1px 1.1px at 56% 76%,rgba(150,200,255,.3),transparent 60%),radial-gradient(1.1px 1.1px at 38% 60%,rgba(150,200,255,.3),transparent 60%);}
+.battle-hud{position:absolute;top:14px;left:12px;right:12px;z-index:5;display:flex;flex-direction:column;gap:8px;}
+.battle-timer{align-self:center;display:flex;align-items:center;gap:7px;background:rgba(12,18,28,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:6px 16px;font-family:var(--font-d);font-weight:800;font-size:18px;letter-spacing:.06em;color:var(--text);font-variant-numeric:tabular-nums;}
+.battle-timer.crit{color:var(--bad);border-color:rgba(226,59,78,.5);}
+.enemy-hp-lab{display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;white-space:nowrap;}
+.enemy-hp-lab b{color:var(--text);}
+.battle-target{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%);width:168px;z-index:2;filter:drop-shadow(0 0 30px rgba(95,209,255,.25));}
+.battle-target.hit{animation:cithit .25s;}
+@keyframes cithit{0%{filter:drop-shadow(0 0 30px rgba(95,209,255,.25)) brightness(1);}40%{filter:drop-shadow(0 0 40px rgba(255,73,95,.6)) brightness(1.7);}100%{filter:drop-shadow(0 0 30px rgba(95,209,255,.25)) brightness(1);}}
+.battle-fleet{position:absolute;bottom:104px;left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:3;}
+.bf-ship{width:40px;animation:bob 2.4s ease-in-out infinite;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5));}
+.bf-ship:nth-child(2){animation-delay:.4s;} .bf-ship:nth-child(3){animation-delay:.8s;}
+.bf-ship:nth-child(4){animation-delay:1.2s;} .bf-ship:nth-child(5){animation-delay:1.6s;}
+@keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);}}
+.battle-log{position:absolute;bottom:62px;left:12px;right:12px;z-index:4;display:flex;flex-direction:column;gap:3px;align-items:center;pointer-events:none;}
+.blog{font-size:11px;font-weight:700;letter-spacing:.02em;background:rgba(12,18,28,.66);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:3px 11px;animation:logpop .3s;}
+.blog.dmg{color:var(--cyan);} .blog.crit{color:var(--gold);} .blog.struct{color:var(--bad);}
+@keyframes logpop{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+.battle-controls{position:absolute;bottom:12px;left:12px;right:12px;z-index:6;display:flex;gap:8px;justify-content:center;}
+.bc-speed{display:flex;gap:5px;}
+.spd{min-width:38px;height:40px;padding:0 8px;border-radius:10px;border:1px solid var(--line-2);background:rgba(20,28,40,.9);color:var(--text);font-family:var(--font-d);font-weight:700;font-size:13px;display:grid;place-items:center;}
+.spd.active{border-color:var(--gold);background:linear-gradient(180deg,rgba(242,178,75,.28),rgba(242,178,75,.06));color:var(--gold);box-shadow:0 0 12px rgba(242,178,75,.35);}
+.bail{flex:1;height:40px;border-radius:10px;background:linear-gradient(180deg,rgba(226,59,78,.2),rgba(226,59,78,.08));border:1px solid rgba(226,59,78,.5);color:#ff7e8c;font-family:var(--font-d);font-weight:700;font-size:12px;letter-spacing:.04em;}
+.auto-btn{height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line-2);background:rgba(20,28,40,.9);color:var(--muted);font-family:var(--font-d);font-weight:700;font-size:11px;letter-spacing:.04em;display:flex;align-items:center;gap:6px;}
+.auto-btn .led{width:7px;height:7px;border-radius:50%;background:var(--muted-2);}
+.auto-btn.on{color:var(--good);border-color:rgba(63,197,107,.5);}
+.auto-btn.on .led{background:var(--good);box-shadow:0 0 7px var(--good);}
+.dmgnum{position:absolute;font-family:var(--font-d);font-weight:800;font-size:16px;z-index:5;pointer-events:none;animation:dmgfloat 1s ease-out forwards;text-shadow:0 1px 4px #000;}
+@keyframes dmgfloat{0%{opacity:0;transform:translateY(0) scale(.7);}20%{opacity:1;transform:translateY(-8px) scale(1.1);}100%{opacity:0;transform:translateY(-44px) scale(1);}}
+
+/* ---- battle result ---- */
+.battle-result{position:absolute;inset:0;z-index:8;display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px 26px;text-align:center;background:rgba(5,7,13,.86);backdrop-filter:blur(8px);}
+.battle-result.open{display:flex;animation:bdIn .3s ease;}
+.br-verdict{font-family:var(--font-d);font-weight:900;font-size:38px;letter-spacing:.06em;}
+.br-verdict.win{color:var(--good);text-shadow:0 0 30px rgba(63,197,107,.5);}
+.br-verdict.loss{color:var(--bad);text-shadow:0 0 30px rgba(226,59,78,.5);}
+.br-sub{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:6px;}
+.br-spoils{display:flex;flex-direction:column;gap:9px;width:100%;max-width:260px;margin:24px 0;}
+.br-line{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(180deg,rgba(26,35,51,.86),rgba(18,25,37,.86));border:1px solid var(--line-2);border-radius:12px;padding:11px 15px;}
+.br-line .l{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;color:var(--muted);}
+.br-line .l .g{font-size:18px;}
+.br-line .v{font-family:var(--font-d);font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;}
+.br-line.gold .v,.br-line.gold .g{color:var(--gold);}
+.br-line.gal .v,.br-line.gal .g{color:var(--galaxy);}
+.br-line.rank .v{color:var(--good);}
+
+/* ============================================================ MODAL / SHEET == */
+.backdrop{position:absolute;inset:0;z-index:100;background:rgba(4,7,13,.7);backdrop-filter:blur(6px);display:none;align-items:flex-end;justify-content:center;}
+.backdrop.open{display:flex;animation:bdIn .22s ease;}
+@keyframes bdIn{from{opacity:0;}to{opacity:1;}}
+.sheet{width:100%;max-height:84%;overflow-y:auto;background:linear-gradient(180deg,#1a2333,#121925);border:1px solid var(--line-2);border-radius:22px 22px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.7);padding:8px 16px 20px;animation:sheetIn .3s cubic-bezier(.22,1,.36,1);}
+@keyframes sheetIn{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
+.sheet::-webkit-scrollbar{width:5px;} .sheet::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}
+.sheet-grab{width:40px;height:4px;border-radius:3px;background:var(--line-2);margin:5px auto 12px;}
+.sheet-title{font-family:var(--font-d);font-weight:800;font-size:16px;letter-spacing:.03em;color:var(--gold);text-align:center;margin-bottom:3px;}
+.sheet-sub{font-size:11px;color:var(--muted);text-align:center;letter-spacing:.03em;margin-bottom:14px;}
+.pick-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:6px;}
+.pick{display:flex;align-items:center;gap:10px;background:#0f1623;border:1px solid var(--line-2);border-radius:11px;padding:10px;transition:border-color .15s,transform .1s;}
+.pick:active{transform:scale(.98);}
+.pick.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;}
+.pick-ic{width:40px;height:40px;flex:none;border-radius:9px;background:linear-gradient(180deg,#1d2839,#141c2a);border:1px solid var(--line-2);display:grid;place-items:center;overflow:hidden;}
+.pick-ic img{width:84%;height:84%;object-fit:contain;}
+.pick-ic .glyph{font-size:21px;filter:drop-shadow(0 0 8px currentColor);}
+.pick-meta{min-width:0;flex:1;}
+.pick-nm{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pick-st{font-size:9.5px;color:var(--muted);letter-spacing:.02em;text-transform:uppercase;margin-top:1px;}
+.pick-st b{color:var(--cyan);}
+
+/* ============================================================ DAILY REWARD == */
+.daily{position:absolute;inset:0;z-index:200;display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px 26px;text-align:center;
+  background:radial-gradient(110% 80% at 50% 12%,#1d2c4d 0%,#0c1322 55%,#05070d 100%);}
+.daily.open{display:flex;animation:bdIn .3s ease;}
+.daily::before{content:'';position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(1.6px 1.6px at 18% 16%,rgba(190,210,255,.6),transparent 60%),radial-gradient(1.4px 1.4px at 72% 10%,rgba(190,210,255,.5),transparent 60%),radial-gradient(1.5px 1.5px at 44% 30%,rgba(190,210,255,.5),transparent 60%),radial-gradient(1.3px 1.3px at 86% 36%,rgba(190,210,255,.4),transparent 60%),radial-gradient(1.4px 1.4px at 12% 52%,rgba(190,210,255,.4),transparent 60%),radial-gradient(1.5px 1.5px at 64% 80%,rgba(190,210,255,.4),transparent 60%);}
+.daily-rays{position:absolute;top:-12%;left:50%;transform:translateX(-50%);width:520px;height:520px;pointer-events:none;
+  background:conic-gradient(from 0deg,transparent 0deg,rgba(242,178,75,.12) 12deg,transparent 24deg,transparent 36deg,rgba(242,178,75,.1) 48deg,transparent 60deg,transparent 72deg,rgba(242,178,75,.12) 84deg,transparent 96deg);
+  animation:rayspin 38s linear infinite;border-radius:50%;}
+@keyframes rayspin{to{transform:translateX(-50%) rotate(360deg);}}
+.daily-kicker{position:relative;font-family:var(--font-d);font-weight:700;font-size:11px;letter-spacing:.34em;color:var(--gold);text-transform:uppercase;}
+.daily-em{position:relative;width:90px;height:90px;margin:16px 0 8px;filter:drop-shadow(0 0 26px rgba(242,178,75,.5));animation:emPop .5s cubic-bezier(.18,1.5,.4,1);}
+@keyframes emPop{from{transform:scale(.4);opacity:0;}to{transform:scale(1);opacity:1;}}
+.daily-rank{position:relative;font-family:var(--font-d);font-weight:900;font-size:29px;letter-spacing:.04em;color:var(--text);text-shadow:0 0 24px rgba(95,209,255,.3);}
+.daily-rankl{position:relative;font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-top:2px;}
+.daily-earned{position:relative;font-size:11px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin:22px 0 12px;font-weight:700;}
+.daily-rewards{position:relative;display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;}
+.daily-rwd{display:flex;align-items:center;gap:12px;background:linear-gradient(180deg,rgba(26,35,51,.86),rgba(18,25,37,.86));border:1px solid var(--line-2);border-radius:13px;padding:13px 16px;animation:rwdSlide .5s cubic-bezier(.22,1,.36,1) both;}
+.daily-rwd:nth-child(2){animation-delay:.12s;}
+@keyframes rwdSlide{from{opacity:0;transform:translateX(-16px);}to{opacity:1;transform:none;}}
+.daily-rwd .g{font-size:30px;line-height:1;}
+.daily-rwd .dr-mid{flex:1;text-align:left;}
+.daily-rwd .dr-amt{font-family:var(--font-d);font-weight:800;font-size:22px;font-variant-numeric:tabular-nums;}
+.daily-rwd .dr-lab{font-size:9.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;}
+.daily-rwd.gold .g,.daily-rwd.gold .dr-amt{color:var(--gold);}
+.daily-rwd.gal .g,.daily-rwd.gal .dr-amt{color:var(--galaxy);}
+.daily-pos{position:relative;font-size:12px;color:var(--muted);letter-spacing:.04em;margin:20px 0 4px;}
+.daily-pos b{font-family:var(--font-d);color:var(--gold);font-size:15px;}
+.daily-foot{position:relative;font-size:11px;color:var(--muted-2);letter-spacing:.02em;margin:6px 0 18px;}
+.daily-claim{position:relative;width:100%;max-width:280px;}
+
+/* ---- season cosmetics ---- */
+.cos-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:4px;}
+.cos{display:flex;flex-direction:column;align-items:center;gap:7px;background:#0f1623;border:1px solid var(--line-2);border-radius:12px;padding:13px 6px;}
+.cos-ic{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-size:23px;background:radial-gradient(120% 120% at 50% 20%,#222d40,#10141d);border:1px solid var(--line-2);}
+.cos-nm{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-align:center;text-transform:uppercase;color:var(--text);line-height:1.2;}
+.cos-tag{font-size:8px;letter-spacing:.1em;color:var(--gold);text-transform:uppercase;font-weight:700;}
+.season-banner{display:flex;align-items:center;gap:12px;background:radial-gradient(120% 130% at 100% 0%,rgba(192,123,255,.12),transparent 55%),linear-gradient(180deg,#172030,#131a28);border:1px solid rgba(192,123,255,.25);border-radius:14px;padding:13px 15px;margin-bottom:13px;}
+.season-banner .se{font-size:28px;}
+.season-banner .sb-l{flex:1;}
+.season-banner .sb-t{font-family:var(--font-d);font-weight:700;font-size:14px;letter-spacing:.03em;color:var(--text);}
+.season-banner .sb-s{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.02em;}
+.season-banner .sb-s b{color:var(--plasma);font-variant-numeric:tabular-nums;}
+
+.divider{display:flex;align-items:center;gap:10px;margin:6px 2px 12px;font-size:9px;font-weight:700;letter-spacing:.2em;color:var(--muted-2);text-transform:uppercase;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line);}
+.toast-fr{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);z-index:300;background:rgba(20,28,40,.94);border:1px solid var(--line-2);border-radius:11px;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--text);box-shadow:var(--shadow);display:none;white-space:nowrap;}
+.toast-fr.show{display:block;animation:toastPop .42s cubic-bezier(.18,1.4,.4,1);}
+.toast-fr.good{border-color:rgba(63,197,107,.5);color:#7be08f;}
+@keyframes toastPop{0%{opacity:0;transform:translate(-50%,10px) scale(.88);}62%{opacity:1;transform:translate(-50%,-2px) scale(1.05);}100%{opacity:1;transform:translate(-50%,0) scale(1);}}
+
+/* ===== combat arena + value clarity ===== */
+.fr-arena{position:relative;height:384px;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin-bottom:11px;background:#06090f;}
+.fr-canvas{position:absolute;inset:0;display:block;}
+.arena-hint{display:flex;align-items:center;justify-content:center;gap:7px;font-size:10.5px;color:var(--muted-2);letter-spacing:.02em;margin:-4px 2px 12px;}
+.ad-split{display:flex;gap:9px;margin-bottom:13px;}
+.ad{flex:1;background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:12px;padding:10px 12px;}
+.ad.atk{border-color:rgba(226,59,78,.32);}
+.ad.def{border-color:rgba(95,209,255,.32);}
+.ad .adl{font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
+.ad.atk .adl{color:#ff8a96;} .ad.def .adl{color:var(--cyan);}
+.ad .adv{font-family:var(--font-d);font-weight:800;font-size:21px;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:2px;}
+.ad.atk .adv{color:#ff8a96;} .ad.def .adv{color:var(--cyan);}
+.ad .ads{font-size:9.5px;color:var(--muted-2);letter-spacing:.02em;margin-top:1px;}
+.defval-head{background:radial-gradient(120% 150% at 100% 0%,rgba(95,209,255,.1),transparent 55%),linear-gradient(180deg,#172030,#131a28);border:1px solid rgba(95,209,255,.22);border-radius:14px;padding:13px 15px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.defval-head .dh-v{font-family:var(--font-d);font-weight:900;font-size:30px;color:var(--cyan);text-shadow:0 0 18px rgba(95,209,255,.35);font-variant-numeric:tabular-nums;line-height:1;margin-top:3px;}
+.defval-head .dh-bd{text-align:right;font-size:10.5px;color:var(--muted);line-height:1.7;}
+.defval-head .dh-bd b{color:var(--text);font-variant-numeric:tabular-nums;}
+.pick.dis{opacity:.45;}
+.pick-cost{display:flex;gap:9px;margin-top:4px;font-family:var(--font-d);font-weight:700;font-size:11px;font-variant-numeric:tabular-nums;}
+.pick-cost .pg{color:var(--gold);} .pick-cost .pp{color:var(--galaxy);} .pick-cost.short .pg,.pick-cost.short .pp{color:var(--bad);}
+.pick-gain{font-size:9.5px;color:var(--good);font-weight:700;letter-spacing:.02em;margin-top:1px;}
+.detail-ic{width:64px;height:64px;margin:0 auto 6px;border-radius:14px;background:linear-gradient(180deg,#1d2839,#141c2a);border:1px solid var(--line-2);display:grid;place-items:center;overflow:hidden;}
+.detail-ic img{width:84%;height:84%;object-fit:contain;}
+.detail-up{background:#0f1623;border:1px solid var(--line-2);border-radius:12px;padding:11px 13px;margin:6px 0 12px;}
+.detail-up .du-h{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:7px;}
+.du-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;padding:4px 0;}
+.du-row .dl{color:var(--muted);font-weight:600;}
+.du-row .dv{font-family:var(--font-d);font-weight:700;font-variant-numeric:tabular-nums;display:flex;gap:7px;align-items:baseline;}
+.du-row .dv .up{font-family:var(--font-u);font-size:11px;color:var(--good);}
+.matchup{display:flex;align-items:center;gap:8px;justify-content:center;font-size:11px;font-weight:700;margin-top:9px;letter-spacing:.02em;}
+.matchup .mu{font-family:var(--font-d);font-variant-numeric:tabular-nums;}
+.matchup .mu.atk{color:#ff8a96;} .matchup .mu.def{color:var(--cyan);} .matchup .vs{color:var(--muted-2);font-size:10px;}
+
+/* ===== daily payout ===== */
+.payout-banner{display:flex;align-items:center;gap:12px;background:radial-gradient(120% 130% at 100% 0%,rgba(242,178,75,.13),transparent 55%),linear-gradient(180deg,#172030,#131a28);border:1px solid rgba(242,178,75,.28);border-radius:14px;padding:13px 15px;margin-bottom:13px;}
+.payout-banner .pb-ic{font-size:23px;}
+.payout-banner .pb-l{flex:1;min-width:0;}
+.payout-banner .pb-t{font-family:var(--font-d);font-weight:700;font-size:13px;letter-spacing:.02em;color:var(--text);}
+.payout-banner .pb-t .cd-clock{color:var(--gold);font-variant-numeric:tabular-nums;}
+.payout-banner .pb-s{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.02em;}
+.payout-banner .pb-s .gd{color:var(--gold);} .payout-banner .pb-s .gl{color:var(--galaxy);}
+.payout-hero{background:radial-gradient(120% 140% at 50% 0%,rgba(242,178,75,.14),transparent 60%),linear-gradient(180deg,#1a2231,#131a28);border:1px solid rgba(242,178,75,.3);border-radius:15px;padding:14px;margin-bottom:14px;}
+.payout-hero .ph-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.payout-hero .ph-lab{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);}
+.payout-hero .ph-rank{display:flex;align-items:center;gap:7px;font-family:var(--font-d);font-weight:700;font-size:13px;color:var(--text);}
+.payout-hero .ph-amts{display:flex;gap:10px;margin:12px 0;}
+.payout-hero .ph-amt{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:#0f1623;border:1px solid var(--line-2);border-radius:11px;padding:10px 6px;}
+.payout-hero .ph-amt .v{font-family:var(--font-d);font-weight:800;font-size:18px;font-variant-numeric:tabular-nums;}
+.payout-hero .ph-amt .phl{font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);}
+.payout-hero .ph-amt.gd{color:var(--gold);} .payout-hero .ph-amt.gl{color:var(--galaxy);}
+.payout-hero .cd-big{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.payout-hero .cd-big .cd-clock{font-family:var(--font-d);font-weight:900;font-size:26px;color:var(--cyan);font-variant-numeric:tabular-nums;text-shadow:0 0 16px rgba(95,209,255,.35);}
+.payout-hero .cd-big .cd-lab{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+.pl-row{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:11px;padding:9px 12px;margin-bottom:7px;}
+.pl-row.me{border-color:var(--gold);background:linear-gradient(180deg,rgba(242,178,75,.1),transparent);}
+.pl-mid{flex:1;min-width:0;display:flex;align-items:center;gap:7px;}
+.pl-nm{font-family:var(--font-d);font-weight:700;font-size:13px;}
+.pl-row.me .pl-nm{color:var(--gold);}
+.pl-amt{font-family:var(--font-d);font-weight:700;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.pl-amt .gd{color:var(--gold);} .pl-amt .gl{color:var(--galaxy);}
+
+/* ===== leaderboard ===== */
+.stand{display:flex;align-items:center;gap:14px;background:radial-gradient(120% 130% at 100% 0%,rgba(242,178,75,.13),transparent 55%),linear-gradient(180deg,#1a2231,#131a28);border:1px solid rgba(242,178,75,.27);border-radius:15px;padding:14px;margin-bottom:13px;}
+.stand .st-mid{flex:1;min-width:0;}
+.stand .st-rk{font-family:var(--font-d);font-weight:800;font-size:19px;letter-spacing:.02em;color:var(--gold);text-shadow:0 0 14px rgba(242,178,75,.3);}
+.stand .st-sub{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.02em;}
+.stand .minibar{height:7px;border-radius:5px;background:#0a0f18;border:1px solid var(--line);overflow:hidden;}
+.stand .minibar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:5px;}
+.stand .st-next{font-size:9.5px;color:var(--muted-2);letter-spacing:.04em;margin-top:4px;}
+.stand .st-pos{text-align:right;flex:none;align-self:flex-start;}
+.stand .st-pos .pl{font-size:8px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase;}
+.stand .st-pos .pv{font-family:var(--font-d);font-weight:900;font-size:24px;color:var(--gold);text-shadow:0 0 14px rgba(242,178,75,.4);line-height:1;}
+.lb-seg{display:flex;gap:5px;background:#0e1420;border:1px solid var(--line-2);border-radius:11px;padding:4px;margin-bottom:13px;}
+.lb-seg button{flex:1;padding:9px 4px;border-radius:8px;font-family:var(--font-d);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);transition:color .15s,background .15s;}
+.lb-seg button.active{background:linear-gradient(180deg,#212c3e,#172030);color:var(--gold);box-shadow:0 1px 6px rgba(0,0,0,.5),inset 0 0 0 1px rgba(242,178,75,.25);}
+.lb-head{font-family:var(--font-d);font-weight:700;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin:2px 2px 9px;}
+.lb-row{display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);border-radius:11px;padding:8px 11px;margin-bottom:7px;}
+.lb-row.me{border-color:var(--gold);background:linear-gradient(180deg,rgba(242,178,75,.12),transparent);box-shadow:0 0 16px rgba(242,178,75,.15);}
+.lb-pos{font-family:var(--font-d);font-weight:800;font-size:12.5px;color:var(--muted);min-width:42px;text-align:left;flex:none;font-variant-numeric:tabular-nums;letter-spacing:.01em;}
+.lb-pos.top{color:var(--gold);text-shadow:0 0 10px rgba(242,178,75,.5);}
+.lb-mid{flex:1;min-width:0;}
+.lb-nm{font-family:var(--font-d);font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lb-row.me .lb-nm{color:var(--gold);}
+.lb-rk{font-size:10px;color:var(--muted);letter-spacing:.03em;}
+.lb-pw{text-align:right;flex:none;}
+.lb-pw .v{font-family:var(--font-d);font-weight:700;font-size:13px;color:var(--cyan);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.lb-row.me .lb-pw .v{color:var(--gold);}
+.lb-pw .l{font-size:7.5px;letter-spacing:.1em;color:var(--muted-2);text-transform:uppercase;}
+
+/* ===== battle: two-phase (towers → citadel) ===== */
+.def-track{display:flex;align-items:center;gap:8px;background:rgba(12,18,28,.72);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px 11px;margin:0 0 7px;}
+.def-track .dt-l{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+.def-track .dt-pips{display:flex;gap:3px;flex:1;}
+.def-track .dt-pips i{width:9px;height:9px;border-radius:3px;background:#2a3445;border:1px solid var(--line-2);}
+.def-track .dt-pips i.on{background:var(--bad);border-color:#ff6a78;box-shadow:0 0 6px rgba(255,73,95,.6);}
+.def-track .dt-n{font-family:var(--font-d);font-weight:800;font-size:12px;color:var(--bad);font-variant-numeric:tabular-nums;}
+.bar-wrap.citlock{opacity:.5;filter:grayscale(.5);}
+.bar-wrap.citlock::after{content:'🔒';position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;z-index:2;}
+.phase-banner{position:absolute;top:43%;left:50%;transform:translate(-50%,-50%);z-index:6;font-family:var(--font-d);font-weight:800;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--bad);background:rgba(12,18,28,.78);backdrop-filter:blur(8px);border:1px solid rgba(226,59,78,.5);border-radius:99px;padding:7px 18px;white-space:nowrap;transition:opacity .5s ease;pointer-events:none;box-shadow:0 4px 18px rgba(0,0,0,.5);}
+.phase-banner.hide{opacity:0;}
+.phase-banner.exposed{color:var(--gold);border-color:rgba(242,178,75,.6);box-shadow:0 0 18px rgba(242,178,75,.35);}
+@keyframes phasePop{0%{transform:translateX(-50%) scale(.7);opacity:0;}100%{transform:translateX(-50%) scale(1);opacity:1;}}
+
+@media (prefers-reduced-motion:reduce){
+  .cit-img,.daily-rays,.bf-ship{animation:none!important;}
+}
+</style>
+<style id="embed-override">
+html,body{background:#0b1018;}
+#stage{background:#0b1018;}#stage::before{display:none;}
+#phone{width:100%!important;height:100%!important;transform:none!important;border-radius:0!important;padding:0!important;background:#0b1018!important;box-shadow:none!important;}
+#notch{display:none!important;}
+#app{inset:0!important;border-radius:0!important;}
+#statusbar,#hud,#nav{display:none!important;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="phone">
+    <div id="notch"></div>
+    <div id="app">
+
+      <!-- real game wallet -->
+      <div id="statusbar">
+        <div class="gold-chip"><span class="coin">$</span><span id="w-gold">2.4M</span></div>
+        <div class="res-chip" style="--rc:var(--fuel)"><span class="rg">⬢</span><span id="w-fuel">88K</span></div>
+        <div class="res-chip" style="--rc:var(--iron)"><span class="rg">◆</span><span id="w-iron">61K</span></div>
+        <div class="res-chip" style="--rc:var(--plasma)"><span class="rg">✦</span><span id="w-plasma">46.2K</span></div>
+        <div class="res-chip lc-chip" style="--rc:#f2a93c" title="LootCoins">
+          <svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".55" stop-color="#f2a93c"/><stop offset="1" stop-color="#b86adf"/></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg)" stroke="#2a1808" stroke-width="1.1"/><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"/><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg)"/><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"/></svg>
+          <span id="w-lc">214</span>
+        </div>
+      </div>
+
+      <!-- persistent ship HUD -->
+      <div id="hud">
+        <div class="hud-top">
+          <div class="lvl-badge"><span class="lab">LVL</span><span class="num">87</span></div>
+          <div class="power-block">
+            <img src="ships/ship-dreadnought.png" alt="">
+            <div class="pb-label">⚡ SHIP SCORE</div>
+            <div class="pb-val">51.8M</div>
+          </div>
+        </div>
+        <div class="hud-bars">
+          <div class="hbar"><i class="xp" style="width:64%"></i><span class="hl">12.4K / 19.2K XP</span></div>
+          <div class="hbar"><i class="hp" style="width:100%"></i><span class="hl">HULL FULL</span></div>
+        </div>
+        <div class="hud-sub"><span>DPS <b>1.92M</b></span><span>Zone 41 · 8,402 kills</span></div>
+      </div>
+
+      <div id="screens"><div class="battle" id="battle"></div><!-- the active screen is Fleet Rank --></div>
+
+      <div id="nav">
+        <button class="nav-btn" data-game="battle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/><circle cx="12" cy="12" r="2.4"/></svg>
+          <span class="nl">Battle</span>
+        </button>
+        <button class="nav-btn" data-game="zones">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+          <span class="nl">Zones</span>
+        </button>
+        <button class="nav-btn" data-game="galaxy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg>
+          <span class="nl">Galaxy</span>
+        </button>
+        <button class="nav-btn active new" data-game="fleetrank">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg>
+          <span class="nl">Fleet&nbsp;Rank</span>
+        </button>
+        <button class="nav-btn" data-game="bag">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 8h12v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
+          <span class="nl">Loot</span>
+        </button>
+        <button class="nav-btn" data-game="hangar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 9.5V20h14V9.5"/><path d="M12 2v4"/></svg>
+          <span class="nl">Hangar</span>
+        </button>
+        <button class="nav-btn" data-game="skills">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg>
+          <span class="nl">Skills</span>
+        </button>
+      </div>
+
+      <!-- overlays -->
+      <div class="backdrop" id="sheet-backdrop"><div class="sheet" id="sheet"></div></div>
+      <div class="daily" id="daily"></div>
+      <div class="toast-fr" id="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* === FRNET — real PvP backend adapter (Supabase). Reuses the parent game's
+   already-authenticated client when embedded; otherwise builds its own. When no
+   cloud user is signed in (guest/offline) FRNET.enabled() is false and Fleet Rank
+   uses its built-in simulated ladder/targets, so the feature never breaks. === */
+window.FRNET=(function(){
+  var URL='https://emldvvlaanyivpmxyylr.supabase.co';
+  var KEY='sb_publishable_IQWzW1tsUf-Rsg9Q55sJrA_RkdNIe6R';
+  var _c=null, ME=null, _did=false, _last='';
+  function cli(){
+    try{ var p=window.parent; if(p&&p!==window&&p.CLOUD&&p.CLOUD.enabled&&p.CLOUD.client) return p.CLOUD.client; }catch(e){}
+    if(_c) return _c;
+    try{ if(window.supabase&&window.supabase.createClient){ _c=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true}}); return _c; } }catch(e){}
+    return null;
+  }
+  async function init(){
+    if(_did) return ME; _did=true;
+    var c=cli(); if(!c) return null;
+    try{ var r=await c.auth.getSession(); var u=(r&&r.data&&r.data.session)?r.data.session.user:null;
+      if(u){ var m=u.user_metadata||{}; var nm=m.name||m.full_name||m.user_name||(u.email?u.email.split('@')[0]:'Operator'); ME={id:u.id,name:nm}; } }catch(e){}
+    return ME;
+  }
+  function enabled(){ return !!(ME&&cli()); }
+  function sync(p){
+    var c=cli(); if(!c||!ME) return;
+    var k=JSON.stringify(p); if(k===_last) return;
+    clearTimeout(sync._to);
+    sync._to=setTimeout(function(){ _last=k;
+      try{ c.rpc('fr_upsert_profile',{p_name:ME.name,p_fleet_power:p.fp,p_attack_power:p.ap,p_defense_value:p.dv,p_cit_lvl:p.cit,p_rank_idx:p.rank,p_defense:p.def}); }catch(e){}
+    }, 2500);
+  }
+  async function leaderboard(n){ var c=cli(); if(!c) return null; try{ var r=await c.from('fleet_ranks').select('user_id,name,fleet_power,rank_idx,cit_lvl,wins,losses').order('fleet_power',{ascending:false}).limit(n||50); return r.error?null:(r.data||[]); }catch(e){ return null; } }
+  async function position(pw){ var c=cli(); if(!c) return null; try{ var r=await c.rpc('fr_position',{p_power:Math.round(pw||0)}); return (r&&!r.error&&r.data!=null)?r.data:null; }catch(e){ return null; } }
+  async function targets(n){ var c=cli(); if(!c||!ME) return null; try{ var r=await c.rpc('fr_targets',{p_limit:n||8}); return r.error?null:(r.data||[]); }catch(e){ return null; } }
+  async function raid(id){ var c=cli(); if(!c||!ME) return {error:'offline'}; try{ var r=await c.rpc('fr_raid',{p_defender:id}); if(r.error) return {error:(r.error.message||'raid failed')}; return r.data; }catch(e){ return {error:String((e&&e.message)||e)}; } }
+  return {init:init,enabled:enabled,sync:sync,leaderboard:leaderboard,position:position,targets:targets,raid:raid,me:function(){return ME;}};
+})();
+</script>
+<script>
+/* === inlined fleet-combat.js (SW caches same-origin files cache-first w/ ignoreSearch, so external JS goes stale; inlined JS rides the network-first navigation) === */
+/* ============================================================================
+   Loot Fleet — FLEET RANK / Combat Arena
+   A canvas combat engine matching the game's battle visuals: starfield, citadel
+   sprite with shield aura, vector defense turrets, ship sprites with engine glow,
+   laser / missile projectiles with trails, hit-flash, explosions, floating text.
+   Two modes:  mountDefense()  — spatial base-layout editor (place & range rings)
+               openAttack()    — real-time fleet-vs-citadel battle
+   ============================================================================ */
+(function(){
+'use strict';
+const TAU=Math.PI*2;
+const FRCombat={};window.FRCombat=FRCombat;
+
+let CFG={};           // {MERCS,STRUCTS,fmt}
+const IMG={};         // image cache
+function preload(){
+  const need={citadel:'ships/ship-citadel.png',flag:'ships/ship-dreadnought.png'};
+  Object.keys(CFG.MERCS).forEach(k=>need[k]=CFG.MERCS[k].img);
+  Object.keys(need).forEach(k=>{const im=new Image();im.src=need[k];IMG[k]=im;});
+}
+FRCombat.init=function(cfg){CFG=cfg;preload();};
+
+/* ---------- shared canvas setup ---------- */
+function setup(canvas,w,h){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+'px';canvas.style.height=h+'px';
+  const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  return ctx;
+}
+function rgba(c,a){return 'rgba('+c+','+a+')';}
+
+/* ---------- starfield ---------- */
+function makeStars(w,h,n){const a=[];for(let i=0;i<n;i++)a.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.4+.3,a:Math.random()*.5+.2,s:Math.random()*.4+.1});return a;}
+function drawStars(ctx,stars,t){ctx.save();for(const s of stars){ctx.globalAlpha=s.a*(.7+.3*Math.sin(t*2+s.x));ctx.fillStyle='#cfe0ff';ctx.beginPath();ctx.arc(s.x,(s.y+t*s.s*12)%ctx.canvas.clientHeight,s.r,0,TAU);ctx.fill();}ctx.restore();}
+
+/* ---------- citadel sprite ---------- */
+function drawCitadel(ctx,x,y,size,t,shieldFrac,hitFlash,skin){
+  ctx.save();ctx.translate(x,y);
+  // shield aura
+  if(shieldFrac>0){
+    const sr=size*0.74;
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    const g=ctx.createRadialGradient(0,0,sr*0.6,0,0,sr);
+    g.addColorStop(0,'rgba(95,209,255,0)');g.addColorStop(.82,'rgba(95,209,255,'+(0.05+0.12*shieldFrac)+')');g.addColorStop(1,'rgba(120,220,255,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,sr,0,TAU);ctx.fill();
+    ctx.strokeStyle='rgba(120,220,255,'+(0.18+0.4*shieldFrac)+')';ctx.lineWidth=1.6;
+    ctx.beginPath();ctx.arc(0,0,sr*(0.98+0.02*Math.sin(t*3)),0,TAU);ctx.stroke();
+    ctx.restore();
+  }
+  // ground glow
+  const ag=ctx.createRadialGradient(0,size*0.1,2,0,size*0.1,size*0.6);
+  ag.addColorStop(0,'rgba(95,180,255,0.28)');ag.addColorStop(1,'rgba(95,180,255,0)');
+  ctx.fillStyle=ag;ctx.beginPath();ctx.arc(0,size*0.12,size*0.6,0,TAU);ctx.fill();
+  const im=IMG.citadel,dw=size,dh=size*0.85;
+  const bob=Math.sin(t*1.4)*size*0.012;
+  if(im&&im.complete&&im.naturalWidth>0){ctx.drawImage(im,-dw/2,-dh/2+bob,dw,dh);
+    if(skin==='prismatic'){ctx.save();ctx.globalCompositeOperation='overlay';ctx.globalAlpha=.5;const pg=ctx.createLinearGradient(-dw/2,0,dw/2,0);pg.addColorStop(0,'#ff6ad5');pg.addColorStop(.5,'#5fd1ff');pg.addColorStop(1,'#ffe27a');ctx.fillStyle=pg;ctx.fillRect(-dw/2,-dh/2+bob,dw,dh);ctx.restore();}
+    if(hitFlash>0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=hitFlash*0.5;ctx.drawImage(im,-dw/2,-dh/2+bob,dw,dh);ctx.restore();}
+  }else{ctx.fillStyle='#2a3850';ctx.beginPath();ctx.arc(0,0,size*0.4,0,TAU);ctx.fill();}
+  ctx.restore();
+}
+
+/* ---------- defense turret (vector, on-brand) ---------- */
+function drawTurret(ctx,x,y,type,t,ang,scale,hitFlash,dead){
+  const S=CFG.STRUCTS[type];if(!S)return;const c=S.c;scale=scale||1;
+  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
+  if(dead){ctx.globalAlpha=0.5;}
+  // base hex
+  const R=15;
+  ctx.beginPath();for(let i=0;i<6;i++){const a=i/6*TAU+Math.PI/6;ctx.lineTo(Math.cos(a)*R,Math.sin(a)*R);}ctx.closePath();
+  const bg=ctx.createLinearGradient(0,-R,0,R);bg.addColorStop(0,'#1d2839');bg.addColorStop(1,'#10151f');
+  ctx.fillStyle=bg;ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle=dead?'#39404d':rgba(hex2rgb(c),0.85);ctx.stroke();
+  if(!dead){
+    ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=.5+.2*Math.sin(t*4+x);
+    ctx.fillStyle=c;ctx.beginPath();ctx.arc(0,0,3.4,0,TAU);ctx.fill();ctx.restore();
+  }
+  // type-specific muzzle
+  if(!dead){
+    ctx.rotate(ang||0);
+    ctx.strokeStyle=c;ctx.fillStyle=c;ctx.lineWidth=2.4;ctx.lineCap='round';
+    if(type==='laser'){ctx.beginPath();ctx.moveTo(2,0);ctx.lineTo(15,0);ctx.stroke();}
+    else if(type==='missile'){ctx.lineWidth=2;for(const o of[-3.4,3.4]){ctx.beginPath();ctx.moveTo(3,o);ctx.lineTo(12,o);ctx.stroke();}}
+    else if(type==='drone'){for(let i=0;i<3;i++){const a=t*2+i/3*TAU;ctx.beginPath();ctx.arc(Math.cos(a)*11,Math.sin(a)*11,1.8,0,TAU);ctx.fill();}}
+    else if(type==='shield'){ctx.globalAlpha=.7;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(0,0,11+Math.sin(t*3)*1.2,0,TAU);ctx.stroke();}
+    else if(type==='repair'){ctx.lineWidth=2.2;ctx.beginPath();ctx.moveTo(-6,0);ctx.lineTo(6,0);ctx.moveTo(0,-6);ctx.lineTo(0,6);ctx.stroke();}
+  }
+  if(hitFlash>0){ctx.globalCompositeOperation='lighter';ctx.globalAlpha=hitFlash*.7;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,R,0,TAU);ctx.fill();}
+  ctx.restore();
+}
+function hex2rgb(h){h=h.replace('#','');const n=parseInt(h,16);return ((n>>16)&255)+','+((n>>8)&255)+','+(n&255);}
+
+/* ---------- ship sprite ---------- */
+function drawShip(ctx,im,x,y,size,ang,hitFlash,engine){
+  ctx.save();ctx.translate(x,y);ctx.rotate(ang+Math.PI/2);
+  if(engine!==false){ // engine glow behind
+    const eg=ctx.createRadialGradient(0,size*0.34,1,0,size*0.34,size*0.4);
+    eg.addColorStop(0,'rgba(120,200,255,0.45)');eg.addColorStop(1,'rgba(120,200,255,0)');
+    ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,size*0.34,size*0.38,0,TAU);ctx.fill();
+  }
+  if(im&&im.complete&&im.naturalWidth>0)ctx.drawImage(im,-size/2,-size/2,size,size);
+  else{ctx.fillStyle='#9fb4d6';ctx.beginPath();ctx.moveTo(0,-size*0.4);ctx.lineTo(size*0.3,size*0.3);ctx.lineTo(-size*0.3,size*0.3);ctx.closePath();ctx.fill();}
+  if(hitFlash>0&&im&&im.complete&&im.naturalWidth>0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=hitFlash*0.6;ctx.drawImage(im,-size/2,-size/2,size,size);ctx.restore();}
+  ctx.restore();
+}
+
+/* ---------- projectile (matches game render.js: trail + laser lance / rocket) ---------- */
+function drawBolt(ctx,p){
+  // trail — light for energy, smoke for missiles
+  if(p.trail&&p.trail.length>1){
+    const tc=p.crit?'255,210,80':(p.wt==='missile'?'170,170,170':p.col);
+    for(let i=1;i<p.trail.length;i++){const k=i/p.trail.length;
+      ctx.strokeStyle='rgba('+tc+','+(k*(p.crit?0.85:p.wt==='missile'?0.4:0.6))+')';
+      ctx.lineWidth=(p.crit?3.2:p.wt==='missile'?2.4:1.6)*k+0.4;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(p.trail[i-1].x,p.trail[i-1].y);ctx.lineTo(p.trail[i].x,p.trail[i].y);ctx.stroke();}
+  }
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(p.vy,p.vx));
+  const cs=(p.crit?1.45:1)*1.25;
+  if(p.wt==='missile'){
+    const fl=0.6+0.4*Math.sin(performance.now()/1000*40+p.x);
+    ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle='rgba(255,170,80,'+(0.7*fl)+')';
+    ctx.beginPath();ctx.moveTo(-5*cs,0);ctx.lineTo(-11*cs*(0.7+fl*0.5),1.7);ctx.lineTo(-11*cs*(0.7+fl*0.5),-1.7);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.fillStyle='#c8ccd4';ctx.fillRect(-5*cs,-1.9*cs,8.4*cs,3.8*cs);
+    ctx.fillStyle=p.crit?'#ffd24d':'#ff6a4a';ctx.beginPath();ctx.moveTo(3.4*cs,-1.9*cs);ctx.quadraticCurveTo(7.2*cs,0,3.4*cs,1.9*cs);ctx.closePath();ctx.fill();
+  }else{ // searing laser lance — dim wide pass + white-hot core + tip
+    const L=24*cs;ctx.lineCap='round';ctx.save();ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle='rgba('+(p.crit?'255,210,80':p.col)+',0.4)';ctx.lineWidth=5*cs;ctx.beginPath();ctx.moveTo(-L,0);ctx.lineTo(4,0);ctx.stroke();
+    ctx.strokeStyle=p.crit?'#ffe9b0':'#dff4ff';ctx.lineWidth=1.8*cs;ctx.beginPath();ctx.moveTo(-L*0.7,0);ctx.lineTo(4,0);ctx.stroke();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(4,0,1.6*cs,0,TAU);ctx.fill();ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* ============================================================ ANCHORS ==== */
+function defenseAnchors(W,H){
+  const cx=W/2,cy=H*0.40;
+  const struct=[];for(let i=0;i<8;i++){const a=-Math.PI/2+i*(TAU/8);struct.push({x:cx+Math.cos(a)*W*0.30,y:cy+Math.sin(a)*H*0.20});}
+  const merc=[];for(let i=0;i<5;i++){merc.push({x:W*(0.16+0.17*i),y:H*0.84});}
+  return {cx,cy,struct,merc};
+}
+
+/* ============================================================ DEFENSE ==== */
+FRCombat.mountDefense=function(host,S,hooks){
+  host.innerHTML='<canvas class="fr-canvas"></canvas>';
+  const canvas=host.querySelector('canvas');
+  const W=host.clientWidth,H=host.clientHeight;
+  const ctx=setup(canvas,W,H);
+  const A=defenseAnchors(W,H);
+  const stars=makeStars(W,H,60);
+  let t=0,raf=true,sel=-1,selMerc=false;
+
+  function hit(px,py){
+    for(let i=0;i<A.struct.length;i++){const a=A.struct[i];if(Math.hypot(px-a.x,py-a.y)<24)return{merc:false,i};}
+    for(let i=0;i<A.merc.length;i++){const a=A.merc[i];if(Math.hypot(px-a.x,py-a.y)<24)return{merc:true,i};}
+    return null;
+  }
+  canvas.onclick=e=>{
+    const r=canvas.getBoundingClientRect();
+    const px=(e.clientX-r.left)*(W/r.width),py=(e.clientY-r.top)*(H/r.height);
+    const h=hit(px,py);if(!h)return;
+    hooks.openPicker(h.merc,h.i);
+  };
+
+  function frame(){
+    if(!host.isConnected){raf=false;return;}
+    t+=0.033;
+    ctx.clearRect(0,0,W,H);
+    // bg
+    const bg=ctx.createRadialGradient(A.cx,A.cy,10,A.cx,A.cy,Math.max(W,H)*0.8);
+    bg.addColorStop(0,'#152544');bg.addColorStop(.55,'#0a1322');bg.addColorStop(1,'#06090f');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    drawStars(ctx,stars,t);
+    // hex deck grid (subtle)
+    ctx.save();ctx.globalAlpha=.16;ctx.strokeStyle='#2a3a55';ctx.lineWidth=1;
+    ctx.beginPath();ctx.ellipse(A.cx,A.cy,W*0.42,H*0.30,0,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.ellipse(A.cx,A.cy,W*0.30,H*0.20,0,0,TAU);ctx.stroke();ctx.restore();
+    // range rings for offensive structures
+    S.struct.forEach((ty,i)=>{
+      if(!ty)return;const a=A.struct[i];const rng=ty==='laser'?70:ty==='missile'?86:ty==='drone'?60:0;
+      if(rng){ctx.save();ctx.globalAlpha=.10;ctx.fillStyle=CFG.STRUCTS[ty].c;ctx.beginPath();ctx.arc(a.x,a.y,rng,0,TAU);ctx.fill();
+        ctx.globalAlpha=.28;ctx.strokeStyle=CFG.STRUCTS[ty].c;ctx.setLineDash([4,5]);ctx.lineWidth=1;ctx.stroke();ctx.restore();}
+    });
+    // citadel
+    drawCitadel(ctx,A.cx,A.cy,W*0.34,t,1,0,S.citLvl>=5?'prismatic':null);
+    // structure slots
+    S.struct.forEach((ty,i)=>{const a=A.struct[i];
+      if(ty){const ang=Math.atan2(a.y-A.cy,a.x-A.cx);drawTurret(ctx,a.x,a.y,ty,t,ang,1,0,false);}
+      else emptyNode(ctx,a.x,a.y,t,false);
+    });
+    // mercenary slots
+    S.merc.forEach((ty,i)=>{const a=A.merc[i];
+      if(ty){const im=IMG[ty];drawShip(ctx,im,a.x,a.y+Math.sin(t*1.6+i)*3,36,-Math.PI/2,0);}
+      else emptyNode(ctx,a.x,a.y,t,true);
+    });
+    if(raf)requestAnimationFrame(frame);else setTimeout(frame,40);
+  }
+  // immediate first paint (rAF is throttled when backgrounded), then animate
+  frame();
+  return ()=>{raf=false;canvas.onclick=null;};
+};
+function emptyNode(ctx,x,y,t,merc){
+  ctx.save();ctx.translate(x,y);ctx.setLineDash([3,4]);ctx.strokeStyle='rgba(120,150,190,'+(0.35+0.15*Math.sin(t*2+x))+')';ctx.lineWidth=1.3;
+  ctx.beginPath();ctx.arc(0,0,merc?15:14,0,TAU);ctx.stroke();ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(150,180,220,0.6)';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(-5,0);ctx.lineTo(5,0);ctx.moveTo(0,-5);ctx.lineTo(0,5);ctx.stroke();
+  ctx.restore();
+}
+
+/* ============================================================ ATTACK ===== */
+FRCombat.openAttack=function(host,target,S,hooks){
+  host.innerHTML=
+    '<canvas class="fr-canvas" id="atk-canvas"></canvas>'+
+    '<div class="battle-hud">'+
+      '<div class="battle-timer" id="b-timer">5:00</div>'+
+      '<div class="def-track" id="b-deftrack"><span class="dt-l">⛨ Enemy Defenses</span><span class="dt-pips" id="b-defpips"></span><b class="dt-n" id="b-defn">0/0</b></div>'+
+      '<div><div class="enemy-hp-lab"><span>'+target.nm+'\u2019s Citadel</span><b id="b-hpv">🔒 LOCKED</b></div>'+
+        '<div class="bar-wrap citlock" id="b-citbar" style="height:9px;margin-bottom:4px"><div class="bar-fill sh" id="b-sh" style="width:100%"></div></div>'+
+        '<div class="bar-wrap citlock" style="height:14px"><div class="bar-fill hp" id="b-hp" style="width:100%"></div></div></div>'+
+    '</div>'+
+    '<div class="phase-banner" id="b-phase">⛨ DESTROY THE DEFENSES</div>'+
+    '<div class="battle-controls"><div class="bc-speed">'+
+      '<button class="spd active" data-spd="1">1×</button><button class="spd" data-spd="2">2×</button><button class="spd" data-spd="3">3×</button></div></div>'+
+    '<div class="battle-result" id="b-result"></div>';
+  host.classList.add('open');
+  const canvas=host.querySelector('#atk-canvas');
+  const W=host.clientWidth,H=host.clientHeight;
+  const ctx=setup(canvas,W,H);
+  const stars=makeStars(W,H,80);
+  const diff=target.diff;
+
+  // ---- build defender ----
+  const cx=W/2,cy=H*0.30;
+  const defHpMax=diff==='hard'?2600:diff==='even'?1700:1200;
+  const defShMax=defHpMax*0.5;
+  const cit={x:cx,y:cy,hp:defHpMax,hpMax:defHpMax,sh:defShMax,shMax:defShMax,hit:0};
+  // defender structures ring (use a representative loadout scaled by diff)
+  const defLoadout=diff==='hard'?['laser','missile','laser','shield','missile','drone','laser','repair']
+                  :diff==='even'?['laser','missile','shield','laser','drone',null,'missile',null]
+                  :['laser','shield','missile',null,'drone',null,null,null];
+  const structs=[];
+  defLoadout.forEach((ty,i)=>{if(!ty)return;const a=-Math.PI/2+i*(TAU/8);
+    structs.push({x:cx+Math.cos(a)*W*0.26,y:cy+Math.sin(a)*H*0.13,type:ty,hpFrac:1,cd:Math.random()*40,ang:0,hit:0,alive:true,killAt:Infinity,atkStart:Infinity});});
+  const NTOW=structs.length;
+  // schedule when each tower falls. winnable → ALL fall (then citadel exposed);
+  // hard → only ~half fall, the rest hold the line so the timer runs out.
+  const TOTAL=6.9, P1S=0.7;
+  const winnable0=(target.forceWin!=null)?!!target.forceWin:(diff!=='hard'); // server decides the outcome in real PvP
+  const killable=winnable0?NTOW:Math.ceil(NTOW*0.5);
+  const P1END=winnable0?TOTAL*0.60:TOTAL*0.92;
+  // randomise fall order a little for life
+  const order=structs.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  for(let k=0;k<killable;k++){const s=structs[order[k]];s.killAt=P1S+(k+1)/killable*(P1END-P1S);s.atkStart=s.killAt-1.0;}
+
+  // ---- build attackers (player fleet) ----
+  const fleet=[];
+  const mercs=S.merc.filter(Boolean);
+  const cols=mercs.length+1;
+  mercs.forEach((m,i)=>fleet.push(mkAttacker(m,IMG[m],W*((i+0.6)/cols),38,3.0)));
+  fleet.push(mkAttacker('flag',IMG.flag,W*((cols-0.4)/cols),46,3.6)); // flagship
+  function mkAttacker(kind,im,x,size,dps){const formY=H*(0.50+Math.random()*0.14);return{kind,im,x,y:formY+78+Math.random()*46,size,hp:200,hpMax:200,ang:-Math.PI/2,cd:Math.random()*16,dps,hit:0,alive:true,ox:x,formY};}
+
+  const bolts=[],eparts=[],ftexts=[];
+  let speed=1,timeLeft=300,t=0,over=false,unlockT=null;
+  const winnable=(target.forceWin!=null)?!!target.forceWin:(diff!=='hard');
+  // PHASE 1: break every defense tower.  PHASE 2: citadel is exposed and falls.
+  let integ=1;const TIMER_TICKS=210,CIT_DRAIN=1.7;
+
+  host.querySelectorAll('.spd').forEach(s=>s.onclick=()=>{speed=+s.dataset.spd;host.querySelectorAll('.spd').forEach(x=>x.classList.toggle('active',x===s));});
+  let exposedShown=false,phaseTO=null;
+  function showPhase(txt,exposed){const ph=host.querySelector('#b-phase');if(!ph)return;ph.textContent=txt;ph.classList.toggle('exposed',!!exposed);ph.classList.remove('hide');clearTimeout(phaseTO);phaseTO=setTimeout(()=>ph.classList.add('hide'),2200);}
+  showPhase('⛨ DESTROY THE DEFENSES',false);
+
+  function nearestStruct(x,y){let best=null,bd=1e9;for(const s of structs){if(!s.alive)continue;const d=Math.hypot(s.x-x,s.y-y);if(d<bd){bd=d;best=s;}}return best;}
+  function nearestFleet(x,y){let best=null,bd=1e9;for(const f of fleet){if(!f.alive)continue;const d=Math.hypot(f.x-x,f.y-y);if(d<bd){bd=d;best=f;}}return best;}
+  function spawnBolt(x,y,tx,ty,side,wt,col,crit){const a=Math.atan2(ty-y,tx-x);const sp=wt==='missile'?5:8;bolts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,side,wt,col,crit:!!crit,life:70,trail:[]});}
+  function explode(x,y,col,n){for(let i=0;i<n;i++){const a=Math.random()*TAU,sp=Math.random()*2.6+.6;eparts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,col});}}
+  function ftext(x,y,txt,col,crit,size){ftexts.push({x,y,txt,col,crit:!!crit,size:size||15,life:1});}
+
+  const STEP=33;let acc=0;
+  function tick(){
+    if(over)return;
+    const dt=speed;
+    t+=0.033*dt;
+    timeLeft=Math.max(0,timeLeft-(300/TIMER_TICKS)*dt);
+    // --- tower destruction schedule (phase 1) ---
+    for(const s of structs){if(!s.alive)continue;
+      if(t>=s.killAt){s.alive=false;s.hpFrac=0;explode(s.x,s.y,hex2rgb(CFG.STRUCTS[s.type].c),20);ftext(s.x,s.y,'DESTROYED','#ff6a6a',false,13);}
+      else if(t>=s.atkStart){s.hpFrac=Math.max(0,(s.killAt-t)/(s.killAt-s.atkStart));}
+    }
+    const aliveTow=structs.filter(s=>s.alive).length;
+    const allDown=aliveTow===0;
+    // --- citadel only takes damage once every tower is gone (phase 2) ---
+    if(allDown){ if(unlockT===null){unlockT=t;} integ=Math.max(0,1-(t-unlockT)/CIT_DRAIN); }
+    else integ=1;
+    // --- attackers ---
+    for(const f of fleet){if(!f.alive)continue;
+      // advance into formation
+      if(f.y>f.formY){f.y-=1.4*dt;}
+      else{f.y+=Math.sin(t*2+f.ox)*0.3;f.x=f.ox+Math.sin(t*1.3+f.ox)*10;}
+      const tgt=nearestStruct(f.x,f.y)||cit;
+      f.ang=Math.atan2((tgt.y)-f.y,(tgt.x)-f.x);
+      f.cd-=dt;
+      if(f.cd<=0&&f.y<=f.formY+6){f.cd=(f.kind==='flag'?22:16);
+        const wt=f.kind==='battleship'||f.kind==='flag'?'missile':'laser';
+        const col=wt==='missile'?'255,170,90':'95,209,255';const crit=Math.random()<0.26;
+        spawnBolt(f.x,f.y-f.size*0.3,tgt.x,tgt.y,'atk',wt,col,crit);
+      }
+      f.hit=Math.max(0,f.hit-0.08*dt);
+    }
+    // --- defender structures ---
+    for(const s of structs){if(!s.alive)continue;
+      const tgt=nearestFleet(s.x,s.y);if(tgt){s.ang=Math.atan2(tgt.y-s.y,tgt.x-s.x);}
+      s.cd-=dt;s.hit=Math.max(0,s.hit-0.08*dt);
+      if(s.type==='repair'){s.cd-=dt;continue;}
+      if(s.type==='shield'){s.cd-=dt;continue;}
+      if(s.cd<=0&&tgt){s.cd=s.type==='missile'?42:26;
+        const wt=s.type==='missile'?'missile':'laser';const col=s.type==='missile'?'255,150,150':hex2rgb(CFG.STRUCTS[s.type].c);
+        spawnBolt(s.x,s.y,tgt.x,tgt.y,'def',wt,col,false);
+      }
+    }
+    // citadel returns fire
+    cit.hit=Math.max(0,cit.hit-0.06*dt);
+    if(((t*10)|0)%9===0){const tgt=nearestFleet(cit.x,cit.y);if(tgt&&Math.random()<0.4*dt)spawnBolt(cit.x,cit.y+10,tgt.x,tgt.y,'def','laser','255,120,140',false);}
+    // --- projectiles ---
+    for(const p of bolts){if(p.life<=0)continue;p.trail.push({x:p.x,y:p.y});if(p.trail.length>7)p.trail.shift();p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
+      if(p.side==='atk'){
+        // hit nearest struct/citadel near target
+        let hitObj=null;
+        for(const s of structs){if(s.alive&&Math.hypot(p.x-s.x,p.y-s.y)<16){hitObj=s;break;}}
+        if(!hitObj&&Math.hypot(p.x-cit.x,p.y-cit.y)<W*0.16)hitObj=cit;
+        if(hitObj){p.life=0;explode(p.x,p.y,p.wt==='missile'?'255,170,90':'120,210,255',p.wt==='missile'?9:5);
+          if(hitObj===cit){if(allDown){cit.hit=1;ftext(p.x+(Math.random()*24-12),p.y-6,'-'+CFG.fmt((p.crit?2.2:1)*(120000+Math.random()*90000)),p.crit?'#ffd24d':'#7fd8ff',p.crit,p.crit?17:14);}}
+          else{hitObj.hit=1;} // tower flash — actual destruction is driven by the phase-1 schedule
+        }
+      }else{
+        const f=nearestFleet(p.x,p.y);
+        if(f&&Math.hypot(p.x-f.x,p.y-f.y)<14){p.life=0;f.hp-=14;f.hit=1;explode(p.x,p.y,'255,140,150',5);
+          if(f.hp<=0){f.alive=false;explode(f.x,f.y,'255,170,120',20);}}
+      }
+      if(p.x<-20||p.x>W+20||p.y<-20||p.y>H+20)p.life=0;
+    }
+    for(let i=bolts.length-1;i>=0;i--)if(bolts[i].life<=0)bolts.splice(i,1);
+    for(const e of eparts){e.x+=e.vx*dt;e.y+=e.vy*dt;e.vx*=0.94;e.vy*=0.94;e.life-=0.04*dt;}
+    for(let i=eparts.length-1;i>=0;i--)if(eparts[i].life<=0)eparts.splice(i,1);
+    for(const f of ftexts){f.y-=0.6*dt;f.life-=0.02*dt;}
+    for(let i=ftexts.length-1;i>=0;i--)if(ftexts[i].life<=0)ftexts.splice(i,1);
+
+    // UI — defenses tracker + citadel lock
+    const shFrac=Math.max(0,Math.min(1,(integ-0.6)/0.4));
+    const hpFrac=Math.max(0,Math.min(1,integ/0.6));
+    cit.sh=shFrac*cit.shMax;
+    $('#b-sh',host).style.width=(shFrac*100)+'%';
+    $('#b-hp',host).style.width=(hpFrac*100)+'%';
+    $('#b-defn',host).textContent=aliveTow+' / '+NTOW;
+    $('#b-defpips',host).innerHTML=structs.map(s=>'<i class="'+(s.alive?'on':'')+'"></i>').join('');
+    if(allDown){
+      $('#b-hpv',host).textContent=Math.round(hpFrac*100)+'%';
+      host.querySelectorAll('.bar-wrap.citlock').forEach(b=>b.classList.remove('citlock'));
+      if(!exposedShown){exposedShown=true;showPhase('⚔ CITADEL EXPOSED · FINISH IT',true);}
+      const dtk=$('#b-deftrack',host);if(dtk)dtk.style.opacity='.4';
+    }else{
+      $('#b-hpv',host).textContent='🔒 '+aliveTow+' LEFT';
+    }
+    const mm=Math.floor(timeLeft/60),ss=Math.floor(timeLeft%60);const tm=$('#b-timer',host);
+    tm.textContent=mm+':'+(ss<10?'0':'')+ss;tm.classList.toggle('crit',timeLeft<60);
+
+    if(allDown&&integ<=0.001)return finish(true,false);
+    if(timeLeft<=0||fleet.every(f=>!f.alive))return finish(false,false);
+  }
+
+  function render(){
+    if(!host.isConnected||over)return;
+    ctx.clearRect(0,0,W,H);
+    const bg=ctx.createRadialGradient(cx,cy,10,cx,cy,Math.max(W,H));
+    bg.addColorStop(0,'#152544');bg.addColorStop(.55,'#0a1322');bg.addColorStop(1,'#06090f');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    drawStars(ctx,stars,t);
+    drawCitadel(ctx,cit.x,cit.y,W*0.30,t,cit.sh/cit.shMax,cit.hit,diff==='hard'?'prismatic':null);
+    for(const s of structs){if(s.alive){drawTurret(ctx,s.x,s.y,s.type,t,s.ang,1,s.hit,false);
+        if(s.hpFrac<0.999){ctx.save();ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(s.x-12,s.y+17,24,3);ctx.fillStyle=s.hpFrac>0.4?'#3fc56b':'#ff495f';ctx.fillRect(s.x-12,s.y+17,24*s.hpFrac,3);ctx.restore();}}
+      else drawTurret(ctx,s.x,s.y,s.type,t,0,1,0,true);}
+    for(const f of fleet){if(f.alive)drawShip(ctx,f.im,f.x,f.y,f.size,f.ang,f.hit);}
+    for(const p of bolts)drawBolt(ctx,p);
+    // explosions
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    for(const e of eparts){ctx.globalAlpha=Math.max(0,e.life);ctx.fillStyle=rgba(e.col,1);ctx.beginPath();ctx.arc(e.x,e.y,2.4*e.life+0.6,0,TAU);ctx.fill();}
+    ctx.restore();
+    // floating combat text (game style: Rajdhani, black stroke, CRIT! tag)
+    ctx.save();ctx.textAlign='center';ctx.lineJoin='round';
+    for(const f of ftexts){const a=Math.max(0,f.life);ctx.globalAlpha=a;ctx.font='800 '+f.size+'px Rajdhani, sans-serif';ctx.lineWidth=3.5;ctx.strokeStyle='rgba(0,0,0,0.85)';ctx.strokeText(f.txt,f.x,f.y);ctx.fillStyle=f.col;ctx.fillText(f.txt,f.x,f.y);if(f.crit){ctx.font='800 '+(f.size*0.5)+'px Rajdhani, sans-serif';ctx.fillStyle='#ffd24d';ctx.fillText('CRIT!',f.x,f.y-f.size*0.85);}}
+    ctx.restore();
+    requestAnimationFrame(render);
+  }
+  render();
+  const iv=setInterval(()=>{if(over){clearInterval(iv);return;}tick();},STEP);
+
+  function finish(win,retreat){
+    if(over)return;over=true;clearInterval(iv);
+    const res=$('#b-result',host);
+    if(retreat){host.classList.remove('open');host.innerHTML='';hooks.onResult(null);return;}
+    if(win){
+      const newPos=Math.max(1,S.pos-Math.floor(6+Math.random()*8));
+      res.innerHTML='<div class="br-verdict win">VICTORY</div><div class="br-sub">'+target.nm+"'s citadel destroyed</div>"+
+        '<div class="br-spoils">'+
+        '<div class="br-line gold"><span class="l"><span class="g">●</span> Gold looted</span><span class="v">+'+CFG.fmt(target.gold)+'</span></div>'+
+        '<div class="br-line gal"><span class="l"><span class="g">✦</span> Galaxy Resources</span><span class="v">+'+CFG.fmt(target.gal)+'</span></div>'+
+        '<div class="br-line rank"><span class="l">⚑ Rank position</span><span class="v">#'+S.pos+' ▸ #'+newPos+'</span></div>'+
+        '</div><button class="btn gold lg daily-claim" id="b-collect">Collect Spoils</button>';
+      res.classList.add('open');
+      $('#b-collect',host).onclick=()=>{host.classList.remove('open');host.innerHTML='';hooks.onResult({win:true,gold:target.gold,gal:target.gal,pos:newPos});};
+    }else{
+      const survivors=fleet.filter(f=>f.alive).length;
+      res.innerHTML='<div class="br-verdict loss">DEFEAT</div><div class="br-sub">'+(survivors?'Time expired · citadel held':'Fleet destroyed')+'</div>'+
+        '<div class="br-spoils"><div class="br-line"><span class="l">No spoils — defenses too strong</span><span class="v" style="color:var(--muted)">—</span></div></div>'+
+        '<button class="btn ghost lg daily-claim" id="b-collect">Return to Base</button>';
+      res.classList.add('open');
+      $('#b-collect',host).onclick=()=>{host.classList.remove('open');host.innerHTML='';hooks.onResult({win:false});};
+    }
+  }
+};
+function $(s,r){return (r||document).querySelector(s);}
+
+})();
+
+</script>
+<script>
+/* === inlined fleet-rank.js === */
+/* ============================================================================
+   Loot Fleet — FLEET RANK  (endgame PvP feature)
+   A self-contained, in-game feature prototype. Lives inside the real LootFleet
+   shell (wallet + ship HUD + bottom nav); Fleet Rank is one nav destination
+   with its own sub-navigation: Base · Defense · Upgrade · Attack · Ranks.
+   ============================================================================ */
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const el=(h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstElementChild;};
+
+/* ---- fit phone to viewport ---- */
+function fit(){
+  const p=$('#phone');const s=Math.min(innerWidth/402,innerHeight/872);
+  p.style.transform='scale('+Math.min(s,1.06)+')';
+}
+addEventListener('resize',fit);fit();
+
+/* ---- number format (brand unit ladder) ---- */
+function fmt(n){
+  const a=Math.abs(n);
+  if(a>=1e12)return trim(n/1e12)+'T';
+  if(a>=1e9)return trim(n/1e9)+'B';
+  if(a>=1e6)return trim(n/1e6)+'M';
+  if(a>=1e3)return trim(n/1e3)+'K';
+  return ''+Math.round(n);
+}
+function trim(x){return (Math.round(x*10)/10).toString();}
+
+/* ---- daily payout countdown (to next reset) ---- */
+function msToReset(){const n=new Date();const x=new Date(n);x.setHours(24,0,0,0);return x-n;}
+function cdStr(){let s=Math.max(0,Math.floor(msToReset()/1000));const p=v=>String(v).padStart(2,'0');return p(s/3600|0)+':'+p((s%3600)/60|0)+':'+p(s%60);}
+setInterval(()=>{document.querySelectorAll('.cd-clock').forEach(e=>e.textContent=cdStr());},1000);
+
+/* ============================================================ STATE ====== */
+const CIT_LEVELS=[
+  {n:'Small Outpost',     hp:'120K', sh:'40K',  reg:'1.2K/s', dmg:'8.4K',  rng:'180', cap:'25K'},
+  {n:'Expanded Defenses', hp:'340K', sh:'120K', reg:'2.6K/s', dmg:'19K',   rng:'210', cap:'60K'},
+  {n:'Fortified Citadel', hp:'720K', sh:'300K', reg:'4.8K/s', dmg:'42K',   rng:'240', cap:'120K'},
+  {n:'War Fortress',      hp:'1.4M', sh:'640K', reg:'8.2K/s', dmg:'88K',   rng:'280', cap:'240K'},
+  {n:'Prismatic Mega Citadel',hp:'3.1M',sh:'1.5M',reg:'17K/s',dmg:'205K',  rng:'340', cap:'520K'}
+];
+const CIT_COST=[null,
+  {gold:120e3,gal:0},      // 1->2  (20x)
+  {gold:900e3,gal:12e3},   // 2->3  (20x)
+  {gold:6.4e6,gal:120e3},  // 3->4  (20x)
+  {gold:30e6,gal:560e3}];  // 4->5  (20x)
+
+const RANKS=[
+  {n:'Recruit',         req:0,     gold:1000,   gal:0},
+  {n:'Cadet',           req:3e6,   gold:3000,   gal:100},
+  {n:'Commander',       req:9e6,   gold:10000,  gal:500},
+  {n:'Captain',         req:22e6,  gold:22000,  gal:1200},
+  {n:'Major',           req:45e6,  gold:40000,  gal:2200},
+  {n:'Colonel',         req:78e6,  gold:70000,  gal:3800},
+  {n:'General',         req:120e6, gold:110000, gal:6000},
+  {n:'Admiral',         req:168e6, gold:150000, gal:8000},
+  {n:'Fleet Admiral',   req:225e6, gold:240000, gal:14000},
+  {n:'Galactic Overlord',req:290e6,gold:400000, gal:25000}
+];
+
+const FP=[]; // (computed live — see fleetPower / breakdown)
+
+/* ---- value model -------------------------------------------------------
+   Attack Power  = active fleet (flagship + mercenaries)
+   Defense Value = defensive structures + active fleet + mercenaries
+   Fleet Power   = citadel + structures + active fleet + mercs + equip + research
+   Every structure shows DPS/effect, the Defense value it adds, and its cost.   */
+const FLEET_BASE=0.5e6;             // fallback when not embedded in the live game
+// AF() = your REAL active fleet power, read live from the core game when embedded
+// (uncompressed theoryDps + maxHp·0.5 — the true scale, not the HUD's compressed
+// Ship Score). Falls back to FLEET_BASE when standalone.
+function AF(){var G=FRgame();try{if(G&&G.getStats){var s=G.getStats();if(s)return Math.max(FLEET_BASE,Math.round((s.theoryDps||0)+(s.maxHp||0)*0.5));}}catch(e){}return FLEET_BASE;}
+const CIT_POWER=[1.2e6,5e6,16e6,46e6,120e6];
+const EQUIP=0.2e6, RESEARCH=0.1e6;
+
+const STRUCTS={
+  laser:  {n:'Laser Tower',     c:'#5fd1ff', kind:'dps',    dps0:4.7e3, def0:0.74e6, buyG:350e3, buyP:3e3, eff:'Single-target beam'},
+  missile:{n:'Missile Battery', c:'#ff495f', kind:'dps',    dps0:6.1e3, def0:0.86e6, buyG:480e3, buyP:4.5e3, eff:'Area splash damage'},
+  shield: {n:'Shield Generator',c:'#5fd1ff', kind:'shield', shp0:90e3,  def0:0.98e6, buyG:440e3, buyP:5.2e3, eff:'Recharges citadel shield'},
+  drone:  {n:'Drone Bay',       c:'#c07bff', kind:'dps',    dps0:5.2e3, def0:0.80e6, buyG:400e3, buyP:4e3, eff:'3 interceptor drones'},
+  repair: {n:'Repair Station',  c:'#3fc56b', kind:'repair', reg0:2.4e3, def0:0.66e6, buyG:300e3, buyP:2.6e3, eff:'Regenerates citadel hull'}
+};
+const MERCS={
+  frigate:   {n:'Frigate',    img:'ships/ship-frigate.png',   atk:5.2e6, hp:'120K', buyG:900e3,  buyP:8e3,  st:'Fast evasive screen'},
+  destroyer: {n:'Destroyer',  img:'ships/ship-destroyer.png', atk:8.1e6, hp:'190K', buyG:1.6e6, buyP:15e3, st:'Anti-structure burst'},
+  cruiser:   {n:'Cruiser',    img:'ships/ship-cruiser.png',   atk:10.4e6,hp:'260K', buyG:2.6e6, buyP:24e3, st:'Balanced line ship'},
+  battleship:{n:'Battleship', img:'ships/ship-battleship.png',atk:14.7e6,hp:'410K', buyG:4.4e6, buyP:40e3, st:'Heavy siege cannons'},
+  carrier:   {n:'Carrier',    img:'ships/ship-carrier.png',   atk:18.3e6,hp:'520K', buyG:6.8e6, buyP:60e3, st:'Launches strike wings'}
+};
+
+/* per-structure value helpers (linear per level → easy to communicate) */
+function structDef(t,L){return STRUCTS[t].def0*L;}
+function structDps(t,L){return STRUCTS[t].dps0*L;}
+function structEff(t,L){const o=STRUCTS[t];return o.kind==='shield'?o.shp0*L:o.kind==='repair'?o.reg0*L:0;}
+function structBuy(t){return {gold:STRUCTS[t].buyG, gal:STRUCTS[t].buyP};}
+function structUp(t,L){return {gold:Math.round(STRUCTS[t].buyG*0.5*Math.pow(L,1.45)), gal:Math.round(STRUCTS[t].buyP*0.5*L)};}
+function mercBuy(t){return {gold:MERCS[t].buyG, gal:MERCS[t].buyP};}
+function effLabel(t){const o=STRUCTS[t];return o.kind==='dps'?'DPS':o.kind==='shield'?'+Shield':'+Regen/s';}
+function effVal(t,L){const o=STRUCTS[t];return o.kind==='dps'?structDps(t,L):o.kind==='shield'?structEff(t,L):structEff(t,L);}
+
+/* live aggregates */
+function mercTotal(){return S.merc.reduce((a,t)=>a+(t?MERCS[t].atk:0),0);}
+function structTotal(){return S.struct.reduce((a,t,i)=>a+(t?structDef(t,S.structLv[i]):0),0);}
+function attackPower(){return AF()+mercTotal();}
+function defenseValue(){return structTotal()+AF()+mercTotal();}
+function citPower(){return CIT_POWER[S.citLvl-1];}
+function fleetPower(){return citPower()+structTotal()+AF()+mercTotal()+EQUIP+RESEARCH;}
+function curRank(){let r=0;for(let i=0;i<RANKS.length;i++){if(fleetPower()>=RANKS[i].req)r=i;}return r;} // rank derives from Fleet Power
+function diffFor(def){const r=attackPower()/def;return r>=1.12?'easy':r>=0.9?'even':'hard';}
+function affordStr(cost){return S.gold>=cost.gold&&S.plasma>=cost.gal;}
+function costHTML(cost){const sh=affordStr(cost)?'':' short';return '<div class="pick-cost'+sh+'"><span class="pg">●'+fmt(cost.gold)+'</span><span class="pp">✦'+fmt(cost.gal)+'</span></div>';}
+
+function svgIc(t,size){
+  const s=size||22,c=STRUCTS[t].c;
+  const w='width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  switch(t){
+    case'laser':  return '<svg '+w+'><circle cx="12" cy="4" r="1.6" fill="'+c+'"/><path d="M12 5.5V9"/><path d="M9 9h6l-1.3 10h-3.4z"/><path d="M12 19v2"/></svg>';
+    case'missile':return '<svg '+w+'><path d="M7 13l5-7 5 7"/><path d="M7 18l5-7 5 7"/></svg>';
+    case'shield': return '<svg '+w+'><path d="M12 3l7 3v5c0 4.2-3 6.8-7 8.2C8 17.8 5 15.2 5 11V6z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg>';
+    case'drone':  return '<svg '+w+'><path d="M12 3.5l2.6 2.6L12 8.7 9.4 6.1z"/><path d="M5.5 11l2.2 2.2-2.2 2.2L3.3 13.2z"/><path d="M18.5 11l2.2 2.2-2.2 2.2-2.2-2.2z"/></svg>';
+    case'repair': return '<svg '+w+'><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg>';
+  }
+}
+
+
+/* ---- mutable player state (persisted) ---- */
+const SAVE='lf_fr_v2';
+const def={
+  citLvl:1, rankIdx:0, pos:21450, tokens:5,
+  gold:120000, plasma:1500,
+  struct:[null,null,null,null,null,null,null,null], // empty — build it up
+  structLv:[0,0,0,0,0,0,0,0],
+  merc:[null,null,null,null,null], // empty
+  dailyClaimed:false, tokensBought:0
+};
+let S=load();
+function load(){try{const r=JSON.parse(localStorage.getItem(SAVE));var s=r?Object.assign({},def,r):Object.assign({},def);pullEconomy(s);return s;}catch(e){return Object.assign({},def);}}
+function save(){try{localStorage.setItem(SAVE,JSON.stringify(S));}catch(e){}pushEconomy();pushProfile();}
+/* ---- ONE ECONOMY: mirror gold + galaxy(plasma) to the live game when embedded ---- */
+function FRgame(){try{return (window.parent&&window.parent!==window&&window.parent.GAME&&window.parent.GAME.state)?window.parent.GAME:null;}catch(e){return null;}}
+function pullEconomy(s){const G=FRgame();if(!G)return;(s||S).gold=Math.round(G.state.gold||0);if(G.state.resources)(s||S).plasma=Math.round(G.state.resources.plasma||0);}
+function pushEconomy(){const G=FRgame();if(!G)return;G.state.gold=Math.max(0,Math.round(S.gold));if(G.state.resources)G.state.resources.plasma=Math.max(0,Math.round(S.plasma));try{G.save&&G.save();}catch(e){}try{window.parent.UI&&window.parent.UI.refreshAll();}catch(e){}}
+
+/* ---- REAL PvP networking: profile sync, live ladder, real opponents ---- */
+var NET={board:null,pos:null,targets:null,_lt:0,_tt:0};
+var RAIDLIST=[];
+function pushProfile(){ if(!window.FRNET||!FRNET.enabled())return;
+  FRNET.sync({fp:Math.round(fleetPower()),ap:Math.round(attackPower()),dv:Math.round(defenseValue()),cit:S.citLvl,rank:curRank(),
+    def:{struct:S.struct,structLv:S.structLv,merc:S.merc,citLvl:S.citLvl}}); }
+function refreshLadder(){ if(!window.FRNET||!FRNET.enabled())return;
+  FRNET.leaderboard(50).then(function(b){ if(b)NET.board=b;
+    FRNET.position(fleetPower()).then(function(p){ if(p!=null){NET.pos=p;S.pos=p;}
+      if(tab==='ranks')renderRanks(); else if(tab==='base')renderBase(); }); }); }
+function refreshTargets(){ if(!window.FRNET||!FRNET.enabled())return;
+  FRNET.targets(8).then(function(rows){ NET.targets=(rows&&rows.length)?rows.map(mapTarget):[]; if(tab==='attack')renderAttack(); }); }
+function mapTarget(row){ var def=Math.max(1e5,row.defense_value||0); var ap=attackPower(); var r=ap/def;
+  return {id:row.user_id, nm:row.name||'Operator', def:def, gold:Math.round(def*0.0016), gal:Math.max(0,Math.round(def*0.00009)),
+    rank:Math.max(0,Math.min(RANKS.length-1,row.rank_idx||0)), diff:(r>=1.12?'easy':r>=0.9?'even':'hard'), real:true, wins:row.wins||0}; }
+function goOnline(){ if(!window.FRNET)return; FRNET.init().then(function(){ if(FRNET.enabled()){ pushProfile(); refreshLadder(); } }); }
+
+/* ============================================================ HELPERS ==== */
+function emblem(i,size){
+  const s=size||40;
+  const tier=[ '#9aa7b8','#9aa7b8','#5fd1ff','#5fd1ff','#4fa6ff','#4fa6ff','#f2b24b','#f2b24b','#c07bff','#ffe27a'][i]||'#9aa7b8';
+  const elite=i>=8;                              // top two ranks earn a star
+  const chev=Math.min(4, i<2?1:i<4?2:i<6?3:4);   // 1..4 chevrons, never overflow the shield
+  // chevrons live in a band INSIDE the shield; tightened when a star sits above
+  const top=elite?13.4:10.6, bot=18.1;
+  const gap=chev>1?(bot-top)/(chev-1):0;
+  let cv='';
+  for(let k=0;k<chev;k++){const y=(chev===1?13.2:top+k*gap);
+    cv+='<path d="M8.7 '+y.toFixed(2)+'l3.3 1.7 3.3-1.7" stroke="'+tier+'" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';}
+  const star=elite?'<path d="M12 5.4l1.02 2.07 2.28.33-1.65 1.6.39 2.27L12 10.97l-2.04 1.07.39-2.27-1.65-1.6 2.28-.33z" fill="'+tier+'"/>':'';
+  return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none">'+
+    '<path d="M12 2l8 4v6.5c0 4.6-3.4 7.7-8 9.5-4.6-1.8-8-4.9-8-9.5V6z" fill="rgba(12,18,28,.7)" stroke="'+tier+'" stroke-width="1.4"/>'+
+    star+cv+'</svg>';
+}
+
+let toastT;
+function toast(msg,good){
+  const t=$('#toast');t.textContent=msg;t.className='toast-fr show'+(good?' good':'');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.className='toast-fr',1900);
+}
+function syncWallet(){
+  $('#w-gold').textContent=fmt(S.gold);
+  $('#w-plasma').textContent=fmt(S.plasma);
+  $('#w-lc').textContent='214';
+}
+
+/* ============================================================ SHELL ====== */
+let tab='base';
+const SUBTABS=[
+  {id:'base',   label:'Base',   crumb:'Home Base',        ic:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'},
+  {id:'defense',label:'Defense',crumb:'Defense Grid',      ic:'<path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/>'},
+  {id:'upgrade',label:'Upgrade',crumb:'Citadel Upgrades',  ic:'<path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/>'},
+  {id:'attack', label:'Attack', crumb:'PvP Raids',         ic:'<path d="M5 19l7-7M9 5l10 10M14 4l6 6-2 2-6-6z"/>'},
+  {id:'ranks',  label:'Ranks',  crumb:'Fleet Rank Ladder',  ic:'<path d="M5 21V9l4-2 3 2 3-2 4 2v12z"/><path d="M9 21v-6h6v6"/>'}
+];
+
+function buildScreen(){
+  const v=el('<div class="view active" id="v-fleetrank"></div>');
+  v.appendChild(el(
+    '<div class="scr-head"><div class="sh-l"><span class="scr-title">Fleet Rank</span>'+
+    '<span class="scr-sub" id="fr-crumb">Home Base</span></div>'+
+    '<button class="daily-bell" id="daily-bell" title="Daily Fleet Rank Rewards">⚡'+(S.dailyClaimed?'':'<span class="nd"></span>')+'</button></div>'));
+  const tabs=el('<div class="frtabs" id="frtabs"></div>');
+  SUBTABS.forEach(t=>{
+    const b=el('<button class="frtab'+(t.id==='base'?' active':'')+'" data-tab="'+t.id+'">'+
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+t.ic+'</svg>'+
+      '<span class="ft">'+t.label+'</span>'+(t.id==='attack'&&S.tokens>0?'<span class="b"></span>':'')+'</button>');
+    b.onclick=()=>setTab(t.id);
+    tabs.appendChild(b);
+  });
+  v.appendChild(tabs);
+  v.appendChild(el('<div class="scr-body" id="fr-body"></div>'));
+  $('#screens').appendChild(v);
+  $('#daily-bell').onclick=openDaily;
+}
+function setTab(id){
+  tab=id;
+  pullEconomy();
+  S.rankIdx=curRank();
+  document.querySelectorAll('.frtab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
+  $('#fr-crumb').textContent=SUBTABS.find(t=>t.id===id).crumb;
+  const body=$('#fr-body');body.scrollTop=0;
+  ({base:renderBase,defense:renderDefense,upgrade:renderUpgrade,attack:renderAttack,ranks:renderRanks})[id]();
+}
+
+/* ============================================================ BASE ======= */
+function renderBase(){
+  const cit=CIT_LEVELS[S.citLvl-1];
+  const rank=RANKS[S.rankIdx],next=RANKS[S.rankIdx+1];
+  const prog=next?Math.max(0,Math.min(1,(fleetPower()-rank.req)/(next.req-rank.req))):1;
+  const filled=t=>t.filter(Boolean).length;
+
+  $('#fr-body').innerHTML=
+  '<div class="subview">'+
+    // fleet power
+    '<div class="fp-banner" id="fp-open"><div class="fp-l">'+
+      '<div class="fp-lab">⚡ Fleet Power</div>'+
+      '<div class="fp-val">'+fmt(fleetPower())+'</div>'+
+      '<div class="fp-trend">▲ +14.2M this week · tap for breakdown</div>'+
+    '</div><span class="fp-chev">›</span></div>'+
+
+    // attack / defense split (the two numbers that decide raids)
+    '<div class="ad-split">'+
+      '<div class="ad atk"><div class="adl">⚔ Attack Power</div><div class="adv">'+fmt(attackPower())+'</div><div class="ads">your active fleet</div></div>'+
+      '<div class="ad def"><div class="adl">⛨ Defense Value</div><div class="adv">'+fmt(defenseValue())+'</div><div class="ads">structures + fleet</div></div>'+
+    '</div>'+
+
+    // citadel hero
+    '<div class="cit-stage">'+
+      '<div class="cit-top">'+
+        '<div class="cit-lvlbadge"><span class="l">CITADEL</span><span class="n">'+S.citLvl+'</span></div>'+
+        '<div class="cit-rankchip">'+emblem(S.rankIdx,22)+'<span><span class="rk">'+rank.n.toUpperCase()+'</span> <span class="pos">#'+S.pos+'</span></span></div>'+
+      '</div>'+
+      '<div class="cit-img-wrap"><img class="cit-img" src="ships/ship-citadel.png" alt="Citadel"></div>'+
+      '<div class="cit-name">'+cit.n+'</div>'+
+      '<div class="cit-bars">'+
+        '<div class="bar-wrap"><div class="bar-fill sh" style="width:100%"></div><div class="bar-label"><span>⛨ SHIELD</span><span>'+cit.sh+'</span></div></div>'+
+        '<div class="bar-wrap"><div class="bar-fill hp" style="width:100%"></div><div class="bar-label"><span>HULL</span><span>'+cit.hp+'</span></div></div>'+
+      '</div>'+
+    '</div>'+
+
+    // daily claim CTA
+    (S.dailyClaimed
+      ? '<div class="card" style="display:flex;align-items:center;gap:11px;margin-bottom:13px"><span style="font-size:22px">✓</span><div style="flex:1"><div style="font-family:var(--font-d);font-weight:700;font-size:12.5px;color:var(--good)">Daily rewards claimed</div><div style="font-size:11px;color:var(--muted)">Next reset in 14h 22m · keep your rank</div></div></div>'
+      : '<button class="btn gold lg" id="daily-cta" style="margin-bottom:13px">⚡ Claim Daily Rewards<span class="sub"> · '+rank.n+'</span></button>')+
+
+    // defense grid summary
+    '<div class="sec-head"><h3>Defense Grid</h3><span class="more" id="go-def">Edit ›</span></div>'+
+    '<div class="sec-blurb">Your saved layout auto-defends the citadel when rivals raid you.</div>'+
+    '<div class="grid-card">'+
+      '<div class="slot-row-lab"><span>Structures</span><span><b>'+filled(S.struct)+'</b>/8</span></div>'+
+      '<div class="slot-grid struct" id="base-struct">'+S.struct.map((t,i)=>slotMini(t,i,false)).join('')+'</div>'+
+      '<div class="slot-row-lab mt"><span>Mercenaries</span><span><b>'+filled(S.merc)+'</b>/5</span></div>'+
+      '<div class="slot-grid merc" id="base-merc">'+S.merc.map((t,i)=>slotMini(t,i,true)).join('')+'</div>'+
+    '</div>'+
+
+    // rank info
+    '<div class="sec-head"><h3>Fleet Rank</h3><span class="more" id="go-ranks">Ladder ›</span></div>'+
+    '<div class="rank-card">'+
+      '<div class="rank-top">'+emblem(S.rankIdx,52)+
+        '<div class="rank-info"><div class="rn">'+rank.n+'</div>'+
+        '<div class="rmeta">Top <b>2%</b> of all operators</div></div>'+
+        '<div class="rank-pos"><div class="pl">Global</div><div class="pv">#'+S.pos+'</div></div>'+
+      '</div>'+
+      (next?'<div class="rank-prog"><div class="lab"><span>to '+next.n+'</span><span><b>'+fmt(fleetPower())+'</b> / '+fmt(next.req)+'</span></div>'+
+        '<div class="minibar"><i style="width:'+(prog*100).toFixed(0)+'%"></i></div></div>':'')+
+      '<div class="reward-strip">'+
+        '<div class="rwd gold"><span class="g">●</span><span class="amt">+'+fmt(rank.gold)+'</span><span class="rl">Daily Gold</span></div>'+
+        '<div class="rwd gal"><span class="g">✦</span><span class="amt">+'+fmt(rank.gal)+'</span><span class="rl">Daily Galaxy</span></div>'+
+      '</div>'+
+    '</div>'+
+
+    // daily payout countdown + replays
+    '<div class="payout-banner" id="go-payout"><span class="pb-ic">⏳</span><div class="pb-l">'+
+      '<div class="pb-t">Daily payout in <span class="cd-clock">'+cdStr()+'</span></div>'+
+      '<div class="pb-s">Hold '+rank.n+' to bank <b class="gd">●'+fmt(rank.gold)+'</b> <b class="gl">✦'+fmt(rank.gal)+'</b></div>'+
+    '</div><span class="fp-chev">›</span></div>'+
+    '<button class="btn ghost" id="go-board">⚑ Global Leaderboard<span class="sub"> · you’re #'+S.pos+'</span></button>'+
+  '</div>';
+
+  $('#fp-open').onclick=openBreakdown;
+  $('#go-def').onclick=()=>setTab('defense');
+  $('#go-ranks').onclick=()=>setTab('ranks');
+  $('#go-payout').onclick=openDailyPayout;
+  $('#go-board').onclick=()=>setTab('ranks');
+  const dc=$('#daily-cta');if(dc)dc.onclick=openDaily;
+  // defense-grid summary tiles are tappable too — same detail/upgrade sheets as the Defense tab
+  document.querySelectorAll('#base-struct .dslot').forEach((d,i)=>d.onclick=()=>{S.struct[i]?openStructDetail(i):openPicker(false,i);});
+  document.querySelectorAll('#base-merc .dslot').forEach((d,i)=>d.onclick=()=>{S.merc[i]?openMercDetail(i):openPicker(true,i);});
+}
+function slotMini(t,i,isMerc){
+  if(!t)return '<div class="dslot empty"><span class="plus">+</span></div>';
+  if(isMerc){const m=MERCS[t];return '<div class="dslot filled"><img src="'+m.img+'" alt=""><span class="tnm">'+m.n+'</span></div>';}
+  const s=STRUCTS[t];return '<div class="dslot filled">'+svgIc(t,26)+'<span class="lv">L'+S.structLv[i]+'</span><span class="tnm">'+s.n.split(' ')[0]+'</span></div>';
+}
+
+/* ============================================================ DEFENSE ==== */
+function renderDefense(){
+  $('#fr-body').innerHTML=
+  '<div class="subview">'+
+    '<div class="defval-head"><div><div class="ad def" style="background:none;border:none;padding:0"><div class="adl">⛨ Defense Value</div></div>'+
+      '<div class="dh-v">'+fmt(defenseValue())+'</div></div>'+
+      '<div class="dh-bd">Structures <b>'+fmt(structTotal())+'</b><br>+ Active Fleet <b>'+fmt(AF())+'</b><br>+ Mercenaries <b>'+fmt(mercTotal())+'</b></div></div>'+
+    '<div class="fr-arena" id="fr-arena"></div>'+
+    '<div class="arena-hint">▣ Tap an empty node to build · tap a unit to upgrade or move</div>'+
+    '<div class="slot-row-lab"><span>⚙ Structures <b>'+S.struct.filter(Boolean).length+'</b>/8</span><span>★ Mercenaries <b>'+S.merc.filter(Boolean).length+'</b>/5</span></div>'+
+    '<button class="btn green lg" id="save-layout">⛨ Save Defense Layout</button>'+
+  '</div>';
+  const arena=$('#fr-arena');
+  if(window.FRCombat)FRCombat.mountDefense(arena,S,{openPicker:(merc,i)=>{
+    const cur=(merc?S.merc:S.struct)[i];
+    if(cur){merc?openMercDetail(i):openStructDetail(i);}else openPicker(merc,i);
+  }});
+  $('#save-layout').onclick=()=>{save();toast('Defense layout saved',true);};
+}
+
+/* ---- build / assign picker (shows value + cost, deducts on buy) ---- */
+function openPicker(isMerc,idx){
+  const pool=isMerc?MERCS:STRUCTS;const keys=Object.keys(pool);
+  const items=keys.map(k=>{
+    const o=pool[k];const cost=isMerc?mercBuy(k):structBuy(k);const can=affordStr(cost);
+    const stat=isMerc?('ATK <b>'+fmt(o.atk)+'</b> · HP '+o.hp):(o.kind==='dps'?'DPS <b>'+fmt(structDps(k,1))+'</b>':o.kind==='shield'?'<b>+'+fmt(o.shp0)+'</b> shield':'<b>+'+fmt(o.reg0)+'</b>/s regen');
+    const gain='+'+fmt(isMerc?o.atk:structDef(k,1))+' '+(isMerc?'Attack & Defense':'Defense Value');
+    const ic=isMerc?'<img src="'+o.img+'" alt="">':svgIc(k,24);
+    return '<button class="pick'+(can?'':' dis')+'" data-k="'+k+'"'+(can?'':' disabled')+'><div class="pick-ic">'+ic+'</div>'+
+      '<div class="pick-meta"><div class="pick-nm">'+o.n+'</div>'+
+      '<div class="pick-st">'+stat+'</div>'+
+      '<div class="pick-gain">'+gain+'</div>'+costHTML(cost)+'</div></button>';
+  }).join('');
+  sheet(
+    '<div class="sheet-title">'+(isMerc?'Deploy Mercenary':'Build Structure')+'</div>'+
+    '<div class="sheet-sub">Slot '+(idx+1)+' · '+(isMerc?'adds to Attack + Defense':'adds to Defense Value')+'</div>'+
+    '<div class="pick-grid">'+items+'</div>'+
+    '<div class="sec-blurb" style="text-align:center;margin:2px 0 0">Spend Gold + Galaxy to deploy. Upgrade later for more value.</div>',
+    sh=>{
+      sh.querySelectorAll('.pick:not(.dis)').forEach(b=>b.onclick=()=>{
+        const k=b.dataset.k;const cost=isMerc?mercBuy(k):structBuy(k);if(!affordStr(cost))return;
+        S.gold-=cost.gold;S.plasma-=cost.gal;
+        if(isMerc)S.merc[idx]=k;else{S.struct[idx]=k;S.structLv[idx]=1;}
+        save();syncWallet();closeSheet();setTab(tab);toast(pool[k].n+' deployed',true);
+      });
+    });
+}
+
+/* ---- structure detail + upgrade (clear DPS / Defense / cost) ---- */
+function openStructDetail(i){
+  const ty=S.struct[i];const L=S.structLv[i];const o=STRUCTS[ty];
+  const up=structUp(ty,L);const can=affordStr(up);
+  const dDef=structDef(ty,L+1)-structDef(ty,L);
+  const dEff=effVal(ty,L+1)-effVal(ty,L);
+  sheet(
+    '<div class="detail-ic">'+svgIc(ty,34)+'</div>'+
+    '<div class="sheet-title">'+o.n+'</div>'+
+    '<div class="sheet-sub">Level '+L+' · '+o.eff+'</div>'+
+    '<div class="card" style="padding:4px 14px;margin-bottom:6px"><div class="stat-list">'+
+      '<div class="stat-row"><span class="sn">'+effLabel(ty)+'</span><span class="sv">'+fmt(effVal(ty,L))+'</span></div>'+
+      '<div class="stat-row"><span class="sn">⛨ Defense Value</span><span class="sv" style="color:var(--cyan)">'+fmt(structDef(ty,L))+'</span></div>'+
+    '</div></div>'+
+    '<div class="detail-up"><div class="du-h">Upgrade → Level '+(L+1)+'</div>'+
+      '<div class="du-row"><span class="dl">'+effLabel(ty)+'</span><span class="dv">'+fmt(effVal(ty,L))+' <span class="up">▸ '+fmt(effVal(ty,L+1))+'</span></span></div>'+
+      '<div class="du-row"><span class="dl">⛨ Defense Value</span><span class="dv">'+fmt(structDef(ty,L))+' <span class="up">▸ '+fmt(structDef(ty,L+1))+'</span></span></div>'+
+      '<div class="du-row"><span class="dl">You gain</span><span class="dv" style="color:var(--good)">+'+fmt(dDef)+' DEF · +'+fmt(dEff)+' '+(o.kind==='dps'?'DPS':o.kind==='shield'?'SH':'REG')+'</span></div>'+
+      '<div class="cost-row" style="margin:10px 0 0"><span class="cost-item '+(S.gold>=up.gold?'gold':'short')+'"><span class="g">●</span>'+fmt(up.gold)+'</span><span class="cost-item '+(S.plasma>=up.gal?'gal':'short')+'"><span class="g">✦</span>'+fmt(up.gal)+'</span></div>'+
+    '</div>'+
+    '<button class="btn '+(can?'gold':'ghost')+'" id="d-up"'+(can?'':' disabled')+'>'+(can?'⚡ Upgrade · +'+fmt(dDef)+' Defense':'Need more resources')+'</button>'+
+    '<button class="btn ghost" id="d-rm" style="margin-top:8px">Dismantle Structure</button>',
+    sh=>{
+      const u=sh.querySelector('#d-up');if(u&&can)u.onclick=()=>{S.gold-=up.gold;S.plasma-=up.gal;S.structLv[i]++;save();syncWallet();closeSheet();setTab(tab);toast(o.n+' → Lv '+S.structLv[i]+' · +'+fmt(dDef)+' Defense',true);};
+      sh.querySelector('#d-rm').onclick=()=>{S.struct[i]=null;S.structLv[i]=0;save();closeSheet();setTab(tab);toast('Structure dismantled');};
+    });
+}
+
+/* ---- mercenary detail ---- */
+function openMercDetail(i){
+  const ty=S.merc[i];const o=MERCS[ty];
+  sheet(
+    '<div class="detail-ic"><img src="'+o.img+'" alt=""></div>'+
+    '<div class="sheet-title">'+o.n+'</div>'+
+    '<div class="sheet-sub">Active fleet · '+o.st+'</div>'+
+    '<div class="card" style="padding:4px 14px;margin-bottom:10px"><div class="stat-list">'+
+      '<div class="stat-row"><span class="sn">⚔ Attack Power</span><span class="sv" style="color:#ff8a96">'+fmt(o.atk)+'</span></div>'+
+      '<div class="stat-row"><span class="sn">⛨ Defense Value</span><span class="sv" style="color:var(--cyan)">'+fmt(o.atk)+'</span></div>'+
+      '<div class="stat-row"><span class="sn">Hull</span><span class="sv">'+o.hp+'</span></div>'+
+    '</div></div>'+
+    '<div class="sec-blurb" style="text-align:center;margin-top:0">This ship raids with your fleet <b style="color:#ff8a96">and</b> defends your citadel.</div>'+
+    '<button class="btn blue" id="m-swap">Swap Mercenary</button>'+
+    '<button class="btn ghost" id="m-rm" style="margin-top:8px">Stand Down</button>',
+    sh=>{
+      sh.querySelector('#m-swap').onclick=()=>{closeSheet();openPicker(true,i);};
+      sh.querySelector('#m-rm').onclick=()=>{S.merc[i]=null;save();closeSheet();setTab(tab);toast('Mercenary stood down');};
+    });
+}
+
+/* ============================================================ UPGRADE ==== */
+function renderUpgrade(){
+  const cur=CIT_LEVELS[S.citLvl-1];
+  const maxed=S.citLvl>=5;
+  const next=maxed?null:CIT_LEVELS[S.citLvl];
+  const cost=maxed?null:CIT_COST[S.citLvl];
+  const afford=cost&&S.gold>=cost.gold&&S.plasma>=cost.gal;
+  const rows=[['HP','hp'],['Shields','sh'],['Shield Regen','reg'],['Structure Damage','dmg'],['Structure Range','rng'],['Resource Capacity','cap']];
+  $('#fr-body').innerHTML=
+  '<div class="subview">'+
+    '<div class="lvl-steps">'+CIT_LEVELS.map((c,i)=>{
+      const cls=i+1<S.citLvl?'done':i+1===S.citLvl?'cur':'';
+      return '<div class="lvl-step '+cls+'"><span class="sn">'+(i+1)+'</span><span class="sl">'+c.n.replace('Prismatic Mega ','Prismatic ')+'</span></div>';
+    }).join('')+'</div>'+
+
+    '<div class="cit-stage" style="margin-bottom:13px"><div class="cit-img-wrap" style="min-height:180px;padding:22px 10px 14px">'+
+      '<img class="cit-img" src="ships/ship-citadel.png" style="width:188px" alt=""></div>'+
+      '<div class="cit-name" style="bottom:14px">LV '+S.citLvl+' · '+cur.n+'</div></div>'+
+
+    '<div class="card" style="padding:6px 14px"><div class="stat-list">'+
+      rows.map(([lab,key])=>{
+        const up=next&&next[key]!==cur[key];
+        return '<div class="stat-row"><span class="sn">'+lab+'</span>'+
+          '<span class="sv">'+cur[key]+(up?' <span class="up">▸ '+next[key]+'</span>':'')+'</span></div>';
+      }).join('')+
+    '</div></div>'+
+
+    (maxed
+      ? '<div class="card" style="text-align:center;padding:18px"><div style="font-family:var(--font-d);font-weight:800;font-size:15px;color:var(--gold)">MAX CITADEL</div><div style="font-size:11.5px;color:var(--muted);margin-top:4px">The Prismatic Mega Citadel is fully evolved.</div></div>'
+      : '<div class="card" style="text-align:center"><div style="font-size:10px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:7px">Upgrade to Lv '+(S.citLvl+1)+' · '+next.n+'</div>'+
+        '<div class="detail-up" style="text-align:left;margin:0 0 11px"><div class="du-h">What you gain</div>'+
+          '<div class="du-row"><span class="dl">⚡ Fleet Power</span><span class="dv">'+fmt(citPower())+' <span class="up">▸ '+fmt(CIT_POWER[S.citLvl])+'</span></span></div>'+
+          '<div class="du-row"><span class="dl">Citadel HP</span><span class="dv">'+cur.hp+' <span class="up">▸ '+next.hp+'</span></span></div>'+
+          '<div class="du-row"><span class="dl">Shields</span><span class="dv">'+cur.sh+' <span class="up">▸ '+next.sh+'</span></span></div>'+
+          '<div class="du-row"><span class="dl">You gain</span><span class="dv" style="color:var(--good)">+'+fmt(CIT_POWER[S.citLvl]-citPower())+' Fleet Power</span></div>'+
+        '</div>'+
+        '<div class="cost-row" style="margin-top:0"><span class="cost-item '+(S.gold>=cost.gold?'gold':'short')+'"><span class="g" style="color:var(--gold)">●</span>'+fmt(cost.gold)+'</span>'+
+        '<span class="cost-item '+(S.plasma>=cost.gal?'gal':'short')+'"><span class="g">✦</span>'+fmt(cost.gal)+'</span></div>'+
+        '<button class="btn '+(afford?'gold':'ghost')+' lg" id="do-upgrade"'+(afford?'':' disabled')+'>'+(afford?'⚡ Upgrade · +'+fmt(CIT_POWER[S.citLvl]-citPower())+' Power':'Need more resources')+'</button>'+
+        '<div style="font-size:10.5px;color:var(--muted-2);margin-top:9px">Bigger citadel survives longer raids &amp; lifts your rank</div></div>')+
+  '</div>';
+  const up=$('#do-upgrade');
+  if(up&&afford)up.onclick=()=>{
+    S.gold-=cost.gold;S.plasma-=cost.gal;S.citLvl++;save();syncWallet();
+    toast('Citadel upgraded to Lv '+S.citLvl+'!',true);renderUpgrade();
+  };
+}
+
+/* ============================================================ ATTACK ===== */
+const TARGETS=[
+  {nm:'NebulaQueen', rOff:-1, defMul:0.72},
+  {nm:'RustBaron',   rOff:0,  defMul:0.98},
+  {nm:'VoidReaper',  rOff:1,  defMul:1.32}
+];
+function targetStats(t){
+  const ap=attackPower();
+  const def=Math.max(1e5,Math.round(ap*t.defMul));
+  return {def, gold:Math.round(def*0.0016), gal:Math.max(0,Math.round(def*0.00009)),
+          rank:Math.max(0,Math.min(RANKS.length-1,curRank()+t.rOff)),
+          diff:t.defMul<=0.85?'easy':t.defMul<=1.05?'even':'hard'};
+}
+function renderAttack(){
+  var online=!!(window.FRNET&&FRNET.enabled());
+  if(online&&!NET.targets&&Date.now()-NET._tt>1500){NET._tt=Date.now();refreshTargets();}
+  RAIDLIST=(online&&NET.targets&&NET.targets.length)?NET.targets:TARGETS.map(function(t){var st=targetStats(t);return {nm:t.nm,def:st.def,gold:st.gold,gal:st.gal,rank:st.rank,diff:st.diff,real:false};});
+  $('#fr-body').innerHTML=
+  '<div class="subview">'+
+    '<div class="ad-split"><div class="ad atk"><div class="adl">⚔ Your Attack Power</div><div class="adv">'+fmt(attackPower())+'</div><div class="ads">flagship + mercenaries</div></div></div>'+
+    tokenBar()+
+    '<div class="sec-head"><h3>Raid Targets</h3><span class="more" id="reroll">↻ Refresh</span></div>'+
+    '<div class="sec-blurb">Your Attack Power vs their Defense Value decides the fight. Win to loot spoils &amp; climb. 1 token per raid.</div>'+
+    '<div id="target-list">'+RAIDLIST.map((t,i)=>targetCard(t,i)).join('')+'</div>'+
+  '</div>';
+  document.querySelectorAll('[data-atk]').forEach(b=>b.onclick=()=>raid(RAIDLIST[+b.dataset.atk]));
+  $('#reroll').onclick=()=>{toast('Scanning the galaxy…');};
+  $('#buy-tok').onclick=buyTokens;
+}
+function tokenBar(){
+  let pips='';for(let i=0;i<5;i++)pips+='<div class="tpip'+(i<S.tokens?' on':'')+'">⚔</div>';
+  return '<div class="token-bar"><div class="token-pips">'+pips+'</div>'+
+    '<div class="token-meta"><div class="tn">'+S.tokens+' / 5</div><div class="tt">'+(S.tokens>0?'refresh in 14h':'+1 in 4h 50m')+'</div></div>'+
+    '<button class="btn gold" id="buy-tok" style="width:auto;padding:9px 13px;font-size:11px">+1<span class="sub"> '+fmt(tokenCost())+'</span></button></div>';
+}
+function tokenCost(){return Math.round(500e3*Math.pow(5,S.tokensBought||0));} // 500K → 2.5M → 12.5M → 62.5M … steep so raids can't farm net gold
+function buyTokens(){
+  const c=tokenCost();
+  if(S.gold<c){toast('Not enough gold · next ticket '+fmt(c));return;}
+  S.gold-=c;S.tokens++;S.tokensBought=(S.tokensBought||0)+1;save();syncWallet();renderAttack();
+  toast('+1 Attack Token · −'+fmt(c)+' · next '+fmt(tokenCost()));
+}
+function targetCard(t,i){
+  const st=t;const r=RANKS[(t.rank||0)];const diff=t.diff;
+  const dtag=diff==='easy'?'▾ Favorable':diff==='even'?'◆ Even match':'▴ Tough raid';
+  return '<div class="target-card"><div class="target-top">'+
+    '<img class="target-cit" src="ships/ship-citadel.png" alt="">'+
+    '<div class="target-info"><div class="tnm">'+t.nm+'</div>'+
+      '<div class="trk">'+emblem(st.rank,16)+' '+r.n+' · #'+(60+i*9)+'</div>'+
+      '<div class="diff-tag '+diff+'">'+dtag+'</div></div>'+
+    '<div class="target-pwr"><div class="pl">⛨ Defense</div><div class="pv">'+fmt(st.def)+'</div></div></div>'+
+    '<div class="matchup"><span class="mu atk">⚔ '+fmt(attackPower())+'</span><span class="vs">VS</span><span class="mu def">⛨ '+fmt(st.def)+'</span></div>'+
+    '<div class="target-loot"><div class="tl gold"><span style="color:var(--gold)">●</span> '+fmt(st.gold)+'</div>'+
+      '<div class="tl gal"><span>✦</span> '+fmt(st.gal)+'</div>'+
+      '<button class="btn red" data-atk="'+i+'" style="flex:1.2;width:auto;padding:10px;font-size:12px">⚔ Raid</button></div></div>';
+}
+
+/* ---- raid via the canvas combat engine — SERVER decides win/loss in real PvP ---- */
+function raid(t){
+  if(S.tokens<=0){buyTokens();return;}
+  if(!window.FRCombat){toast('Combat engine loading…');return;}
+  if(t&&t.real&&window.FRNET&&FRNET.enabled()){
+    toast('Engaging '+t.nm+'…');
+    FRNET.raid(t.id).then(function(res){
+      if(!res||res.error){ var m=(res&&res.error)?res.error:'raid failed';
+        toast(m==='target protected'?'Target already raided — shielded for now':('Raid failed · '+m)); NET.targets=null; refreshTargets(); return; }
+      S.tokens--;save();
+      FRCombat.openAttack($('#battle'),{nm:t.nm,gold:res.gold||0,gal:res.galaxy||0,def:t.def,diff:t.diff,forceWin:!!res.win},S,{onResult:function(){
+        if(res.win){ S.gold+=(res.gold||0); S.plasma+=(res.galaxy||0); save();syncWallet(); toast('Victory · spoils banked',true); }
+        else toast('Raid repelled — their citadel held');
+        NET.targets=null; refreshLadder(); refreshTargets(); setTab('attack');
+      }});
+    });
+    return;
+  }
+  // simulated fallback (guest / offline)
+  S.tokens--;save();
+  FRCombat.openAttack($('#battle'),{nm:t.nm,gold:t.gold,gal:t.gal,def:t.def,diff:t.diff},S,{onResult:(rz)=>{
+    if(rz&&rz.win){S.gold+=rz.gold;S.plasma+=rz.gal;if(rz.pos)S.pos=rz.pos;save();syncWallet();toast('Spoils collected · climbed to #'+(rz.pos||S.pos),true);}
+    setTab('attack');
+  }});
+}
+
+/* ============================================================ LEADERBOARD  */
+const LB_TOP=[
+  {nm:'OMEGA PRIME',  ri:9, pw:312e6},
+  {nm:'Starscourge',  ri:9, pw:288e6},
+  {nm:'Vael Dominus', ri:8, pw:264e6},
+  {nm:'NovaTyrant',   ri:8, pw:241e6},
+  {nm:'Hollow Sun',   ri:8, pw:223e6}
+];
+let lbMode='board';
+function renderRanks(){
+  if(window.FRNET&&FRNET.enabled()&&!NET.board&&Date.now()-NET._lt>1500){NET._lt=Date.now();refreshLadder();}
+  const rank=RANKS[S.rankIdx],next=RANKS[S.rankIdx+1];
+  const prog=next?Math.max(0,Math.min(1,(fleetPower()-rank.req)/(next.req-rank.req))):1;
+  $('#fr-body').innerHTML=
+  '<div class="subview">'+
+    // your standing
+    '<div class="stand">'+emblem(S.rankIdx,60)+
+      '<div class="st-mid"><div class="st-rk">'+rank.n+'</div>'+
+        '<div class="st-sub">⚡ '+fmt(fleetPower())+' Fleet Power · top 2%</div>'+
+        (next?'<div class="minibar" style="margin-top:8px"><i style="width:'+(prog*100).toFixed(0)+'%"></i></div>'+
+          '<div class="st-next">'+fmt(next.req-fleetPower())+' to '+next.n+'</div>':'<div class="st-next">Max rank reached</div>')+
+      '</div>'+
+      '<div class="st-pos"><div class="pl">Global</div><div class="pv">#'+S.pos+'</div></div>'+
+    '</div>'+
+    // segmented toggle
+    '<div class="lb-seg">'+
+      '<button class="'+(lbMode==='board'?'active':'')+'" data-lb="board">⚑ Leaderboard</button>'+
+      '<button class="'+(lbMode==='tiers'?'active':'')+'" data-lb="tiers">⛴ Rank Rewards</button>'+
+    '</div>'+
+    (lbMode==='board'?lbBoard():lbTiers())+
+  '</div>';
+  document.querySelectorAll('[data-lb]').forEach(b=>b.onclick=()=>{lbMode=b.dataset.lb;renderRanks();});
+}
+function lbRow(pos,nm,ri,pw,me){
+  return '<div class="lb-row'+(me?' me':'')+'">'+
+    '<div class="lb-pos'+(pos<=3?' top':'')+'">'+pos+'</div>'+emblem(ri,30)+
+    '<div class="lb-mid"><div class="lb-nm">'+nm+'</div><div class="lb-rk">'+RANKS[ri].n+'</div></div>'+
+    '<div class="lb-pw"><div class="v">'+fmt(pw)+'</div><div class="l">PWR</div></div></div>';
+}
+function lbBoardLive(){
+  var meId=(window.FRNET&&FRNET.me&&FRNET.me())?FRNET.me().id:null;
+  var rows=NET.board.map(function(r){return {nm:r.name||'Operator',ri:r.rank_idx||0,pw:r.fleet_power||0,me:!!(meId&&r.user_id===meId)};});
+  if(rows.length<5){var need=5-rows.length;var top=rows.length?rows[0].pw:0;var sims=LB_TOP.slice(0,need).map(function(s){return {nm:s.nm,ri:s.ri,pw:Math.max(s.pw,top+10e6)};});rows=sims.concat(rows);}
+  rows.sort(function(a,b){return b.pw-a.pw;});
+  var html='<div class="lb-head">Global Top Operators &middot; LIVE</div>';
+  var shown=rows.slice(0,12);
+  html+=shown.map(function(r,i){return lbRow(i+1,r.nm,r.ri,r.pw,r.me);}).join('');
+  if(meId&&!shown.some(function(r){return r.me;})){html+='<div class="divider">Your Standing</div>'+lbRow(NET.pos||S.pos,'You',S.rankIdx,fleetPower(),true);}
+  return html;
+}
+function lbBoard(){
+  if(NET.board&&NET.board.length) return lbBoardLive();
+  const me=S.pos;
+  let html='<div class="lb-head">⚑ Global Top Operators</div>';
+  html+=LB_TOP.map((p,i)=>lbRow(i+1,p.nm,p.ri,p.pw,false)).join('');
+  // your division window around your position
+  html+='<div class="divider">Your Division</div>';
+  const near=[
+    {pos:me-2,nm:'GreyTalon',ri:7,pw:fleetPower()+5.4e6},
+    {pos:me-1,nm:'Cinderfall',ri:7,pw:fleetPower()+2.3e6},
+    {pos:me,nm:'You',ri:S.rankIdx,pw:fleetPower(),me:true},
+    {pos:me+1,nm:'AshenVow',ri:7,pw:fleetPower()-1.9e6},
+    {pos:me+2,nm:'Ridgeback',ri:7,pw:fleetPower()-4.1e6}
+  ].filter(r=>r.pos>=1);
+  html+=near.map(r=>lbRow(r.pos,r.nm,r.ri,r.pw,r.me)).join('');
+  return html;
+}
+function lbTiers(){
+  return '<div class="sec-blurb" style="margin-top:0">Each rank pays out automatically every day at reset — higher rank, bigger payout.</div>'+
+    RANKS.map((r,i)=>{
+      const me=i===S.rankIdx;const locked=i>S.rankIdx;
+      return '<div class="lad-row '+(me?'me':'')+(locked?' locked':'')+'">'+emblem(i,40)+
+        '<div class="lad-mid"><div class="lad-nm">'+r.n+'</div>'+
+          '<div class="lad-rw"><span class="gd">●'+fmt(r.gold)+'</span>'+(r.gal?' · <span class="gl">✦'+fmt(r.gal)+'</span>':'')+' / day</div>'+
+          (me?'<span class="lad-you">YOU · #'+S.pos+'</span>':'')+'</div>'+
+        '<div class="lad-pwr"><div class="pl">Min Power</div><div class="pv">'+(r.req?fmt(r.req):'—')+'</div></div></div>';
+    }).join('');
+}
+
+/* ============================================================ FP BREAKDOWN  */
+function openBreakdown(){
+  sheet(
+    '<div class="sheet-title">Fleet Power</div>'+
+    '<div class="sheet-sub">'+fmt(fleetPower())+' total · split into Attack &amp; Defense</div>'+
+    '<div class="ad-split" style="margin-bottom:11px"><div class="ad atk"><div class="adl">⚔ Attack Power</div><div class="adv">'+fmt(attackPower())+'</div><div class="ads">active fleet</div></div>'+
+      '<div class="ad def"><div class="adl">⛨ Defense Value</div><div class="adv">'+fmt(defenseValue())+'</div><div class="ads">structures + fleet</div></div></div>'+
+    '<div class="card" style="padding:4px 14px"><div class="stat-list">'+
+      '<div class="stat-row"><span class="sn"><span class="si">⚡</span>Active Fleet</span><span class="sv">'+fmt(AF())+'</span></div>'+
+      '<div class="stat-row"><span class="sn"><span class="si">★</span>Mercenary Fleet</span><span class="sv">'+fmt(mercTotal())+'</span></div>'+
+      '<div class="stat-row"><span class="sn"><span class="si">◈</span>Defensive Structures</span><span class="sv">'+fmt(structTotal())+'</span></div>'+
+      '<div class="stat-row"><span class="sn"><span class="si">⛴</span>Citadel Level '+S.citLvl+'</span><span class="sv">'+fmt(citPower())+'</span></div>'+
+      '<div class="stat-row"><span class="sn"><span class="si">◆</span>Equipment</span><span class="sv">'+fmt(EQUIP)+'</span></div>'+
+      '<div class="stat-row"><span class="sn"><span class="si">✦</span>Research</span><span class="sv">'+fmt(RESEARCH)+'</span></div>'+
+      '<div class="stat-row"><span class="sn" style="color:var(--gold);font-weight:700">⚡ Total Fleet Power</span><span class="sv" style="color:var(--gold)">'+fmt(fleetPower())+'</span></div>'+
+    '</div></div>'+
+    '<div class="sec-blurb" style="text-align:center">Farm loot → upgrade fleet → upgrade citadel → climb the ladder.</div>'
+  );
+}
+
+/* ============================================================ DAILY PAYOUT  */
+function openDailyPayout(){
+  const me=RANKS[S.rankIdx];
+  sheet(
+    '<div class="sheet-title">Daily Fleet Rank Payout</div>'+
+    '<div class="sheet-sub">Auto-paid every 24h at reset · higher rank, bigger payout</div>'+
+    '<div class="payout-hero">'+
+      '<div class="ph-top"><div class="ph-lab">⏳ Your payout if you hold rank</div>'+
+        '<div class="ph-rank">'+emblem(S.rankIdx,28)+'<span>'+me.n+'</span></div></div>'+
+      '<div class="ph-amts">'+
+        '<div class="ph-amt gd"><span class="v">●+'+fmt(me.gold)+'</span><span class="phl">Gold / day</span></div>'+
+        '<div class="ph-amt gl"><span class="v">✦+'+fmt(me.gal)+'</span><span class="phl">Galaxy / day</span></div>'+
+      '</div>'+
+      '<div class="cd-big"><span class="cd-clock">'+cdStr()+'</span><span class="cd-lab">until next payout</span></div>'+
+    '</div>'+
+    '<div class="slot-row-lab"><span>Payout Ladder</span><span>gold · galaxy / day</span></div>'+
+    RANKS.map((r,i)=>{
+      const meRow=i===S.rankIdx;
+      return '<div class="pl-row'+(meRow?' me':'')+'">'+emblem(i,30)+
+        '<div class="pl-mid"><div class="pl-nm">'+r.n+'</div>'+(meRow?'<span class="lad-you">YOU</span>':'')+'</div>'+
+        '<div class="pl-amt"><span class="gd">●'+fmt(r.gold)+'</span>'+(r.gal?' <span class="gl">✦'+fmt(r.gal)+'</span>':'')+'</div></div>';
+    }).join('')+
+    '<div class="sec-blurb" style="text-align:center;margin-top:10px">Climb a rank before reset and your next payout grows automatically.</div>'+
+    '<button class="btn ghost" id="dp-close">Close</button>',
+    sh=>sh.querySelector('#dp-close').onclick=closeSheet
+  );
+}
+
+/* ============================================================ DAILY ====== */
+function openDaily(){
+  const rank=RANKS[S.rankIdx];
+  const d=$('#daily');
+  d.innerHTML=
+    '<div class="daily-rays"></div>'+
+    '<div class="daily-kicker">Fleet Rank Rewards</div>'+
+    emblemBig(S.rankIdx)+
+    '<div class="daily-rank">'+rank.n.toUpperCase()+'</div>'+
+    '<div class="daily-rankl">Current Rank</div>'+
+    '<div class="daily-earned">Daily Rewards Earned</div>'+
+    '<div class="daily-rewards">'+
+      '<div class="daily-rwd gold"><span class="g">●</span><div class="dr-mid"><div class="dr-amt">+'+rank.gold.toLocaleString()+'</div><div class="dr-lab">Gold</div></div></div>'+
+      (rank.gal?'<div class="daily-rwd gal"><span class="g">✦</span><div class="dr-mid"><div class="dr-amt">+'+rank.gal.toLocaleString()+'</div><div class="dr-lab">Galaxy Resources</div></div></div>':'')+
+    '</div>'+
+    '<div class="daily-pos">Current Rank Position · <b>#'+S.pos+'</b></div>'+
+    '<div class="daily-foot">'+(S.dailyClaimed?'Already collected today — next reset in <b class="cd-clock">'+cdStr()+'</b>':'Keep climbing for bigger daily payouts.')+'</div>'+
+    (S.dailyClaimed
+      ? '<button class="btn ghost lg daily-claim" id="d-close">✓ Claimed · Close</button>'
+      : '<button class="btn gold lg daily-claim" id="d-claim">Claim Rewards</button>');
+  d.classList.add('open');
+  const cb=$('#d-close');if(cb)cb.onclick=()=>d.classList.remove('open');
+  const claim=$('#d-claim');
+  if(claim)claim.onclick=()=>{
+    if(S.dailyClaimed)return; // one-time collect — guard against spam
+    S.gold+=rank.gold;S.plasma+=rank.gal;S.dailyClaimed=true;save();syncWallet();
+    d.classList.remove('open');
+    const bell=$('#daily-bell');if(bell){const nd=bell.querySelector('.nd');if(nd)nd.remove();}
+    if(tab==='base')renderBase();
+    toast('+'+fmt(rank.gold)+' gold · +'+fmt(rank.gal)+' galaxy',true);
+  };
+}
+function emblemBig(i){
+  return '<div class="daily-em">'+emblem(i,90)+'</div>';
+}
+
+/* ============================================================ SHEET CORE = */
+function sheet(html,after){
+  const s=$('#sheet');s.innerHTML='<div class="sheet-grab"></div>'+html;
+  $('#sheet-backdrop').classList.add('open');
+  if(after)after(s);
+}
+function closeSheet(){$('#sheet-backdrop').classList.remove('open');}
+$('#sheet-backdrop').addEventListener('click',e=>{if(e.target.id==='sheet-backdrop')closeSheet();});
+
+/* ============================================================ GAME NAV === */
+document.querySelectorAll('#nav .nav-btn').forEach(b=>{
+  b.onclick=()=>{
+    if(b.dataset.game==='fleetrank'){
+      document.querySelectorAll('#nav .nav-btn').forEach(x=>x.classList.toggle('active',x===b));
+      setTab('base');return;
+    }
+    const names={battle:'Battle',zones:'Zone Grind',galaxy:'My Galaxy',bag:'Loot',hangar:'Hangar',skills:'Pilot Skills'};
+    toast(names[b.dataset.game]+' — lives in the full game');
+  };
+});
+
+/* ============================================================ BOOT ======= */
+if(window.FRCombat)FRCombat.init({MERCS:MERCS,STRUCTS:STRUCTS,fmt:fmt});
+pullEconomy();S.rankIdx=curRank();
+buildScreen();
+syncWallet();
+setTab('base');
+goOnline();
+})();
+
+</script>
+</body>
+</html>

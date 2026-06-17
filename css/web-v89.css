@@ -320,7 +320,16 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 .wallet .lc-chip{ cursor:pointer; pointer-events:auto; border-color:rgba(242,169,60,.5); }
 .wallet .lc-chip svg.lc{ width:13px; height:13px; margin:0; vertical-align:0; filter:drop-shadow(0 0 3px rgba(242,169,60,.55)); }
 .wallet .lc-chip:active{ transform:translateY(1px); }
-#statusbar .acct-btn{ max-width:92px; }
+/* keep the resource bar and the account ("name") chip on one row — chips never
+   wrap, never overflow under, and never blend behind the name chip */
+#statusbar{ display:flex; flex-wrap:nowrap; align-items:center; }
+.wallet{ flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+.wallet::-webkit-scrollbar{ display:none; }
+#statusbar .acct-btn{
+  max-width:92px; flex:0 0 auto; margin-left:auto;       /* always pinned right, never shrinks */
+  position:relative; z-index:8;                           /* always stacks above the chips */
+  background:#141d2b;                                      /* opaque — nothing shows through */
+}
 /* fit-guard stages — applied by syncHUD when balances outgrow the bar */
 .wallet.tight .res-chip .rr{ display:none; }
 .wallet.tight .res-chip{ padding:0 5px; gap:2px; }
@@ -578,6 +587,69 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 .fr-item select{ flex:1; min-width:0; font-size:11px; padding:4px 6px; border-radius:7px;
   background:var(--panel-3); border:1px solid var(--line-2); color:var(--text); }
 .fr-hint{ font-size:9.5px; color:var(--muted-2); line-height:1.5; margin-bottom:9px; padding:0 2px; }
+
+/* ===== PRISM CORE loadout slot — a prismatic, animated equipment slot shown
+   on hulls that carry a Prism Aura ===== */
+@keyframes pf-shift{ to{ background-position:300% 50%; } }
+.equip-slot.prism-slot{
+  grid-column:1 / -1; position:relative; overflow:hidden;
+  background:linear-gradient(180deg,#1d1733,#140e24) !important;
+  border:1px solid transparent !important;
+}
+.equip-slot.prism-slot::before{
+  content:''; position:absolute; inset:0; border-radius:9px; padding:1px; pointer-events:none;
+  background:linear-gradient(120deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);
+  background-size:300% 300%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude;
+  animation:pf-shift 4s linear infinite;
+}
+.equip-slot.prism-slot::after{
+  content:''; position:absolute; inset:0; border-radius:9px; pointer-events:none;
+  background:radial-gradient(120% 130% at 0 0,rgba(201,160,255,.16),transparent 60%);
+}
+.equip-slot.prism-slot .slot-icon.prism-ic{
+  background:radial-gradient(120% 120% at 50% 0,#2a2046,#140e24) !important;
+  border-color:rgba(201,160,255,.5) !important; color:#c9a0ff; font-size:18px;
+  box-shadow:0 0 13px -2px #c9a0ff;
+}
+.equip-slot.prism-slot .slot-item.prism-name{
+  background:linear-gradient(90deg,#d9c2ff,#ff9ec4,#ffe6a0,#8be0c0,#d9c2ff);
+  background-size:240% 100%; -webkit-background-clip:text; background-clip:text;
+  color:transparent; font-weight:800; animation:pf-shift 6s linear infinite;
+}
+
+/* ===== OBLIVION-class apex hull cards (build flow) ===== */
+.ship-card.apex{ position:relative; border:1px solid transparent !important;
+  background:linear-gradient(180deg,#1b1430,#120c1f) !important; overflow:hidden; }
+.ship-card.apex::before{ content:''; position:absolute; inset:0; border-radius:inherit; padding:1px; pointer-events:none;
+  background:linear-gradient(120deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff); background-size:300% 300%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+  animation:pf-shift 5s linear infinite; opacity:.6; }
+.ship-card.apex.is-active::before{ opacity:1; }
+.apex-chip{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:8px; letter-spacing:.14em; vertical-align:middle;
+  padding:2px 5px; border-radius:5px; margin-left:5px; color:#160a2a;
+  background:linear-gradient(90deg,#d9bcff,#a978ff); }
+.ship-badge.build{ background:rgba(201,160,255,.16); border:1px solid rgba(201,160,255,.45); color:#c9a0ff;
+  font-weight:800; font-size:11px; padding:4px 9px; border-radius:8px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.ship-badge.bp{ background:rgba(127,224,255,.14); border:1px solid rgba(127,224,255,.4); color:#7fe0ff;
+  font-weight:800; font-size:11px; padding:4px 9px; border-radius:8px; }
+.ship-btn.buy.res[data-build-start]{ background:linear-gradient(180deg,#d9bcff,#a978ff); border:1px solid #a978ff; color:#190a30; }
+.ship-lock.building{ background:rgba(201,160,255,.08); border-color:rgba(201,160,255,.32); }
+.lk-fill.prism{ background:linear-gradient(90deg,#5fd1ff,#b87bff,#ffd450,#46d27a,#5fd1ff); background-size:240% 100%; animation:pf-shift 4s linear infinite; }
+.bc-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; width:100%; }
+.bc-chip{ display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:800; font-variant-numeric:tabular-nums;
+  padding:3px 8px; border-radius:7px; background:rgba(10,14,22,.6); border:1px solid color-mix(in srgb, var(--cc) 38%, transparent); color:#e7eefb; }
+.bc-chip .bc-g{ color:var(--cc); font-size:10px; }
+.bc-chip.short{ color:#ff8a96; border-color:rgba(255,90,110,.5); }
+.bc-chip.short .bc-g{ color:#ff8a96; }
+/* OBLIVION FINAL — green apex variant */
+.ship-card.apex.final{ background:linear-gradient(180deg,#0c1a12,#08120c) !important; }
+.ship-card.apex.final::before{ background:linear-gradient(120deg,#1f8a3c,#5dff84,#0e7a2a,#9dffb0,#1f8a3c); animation-duration:4s; opacity:.7; }
+.ship-card.apex.final.is-active::before{ opacity:1; }
+.apex-chip.final{ background:linear-gradient(90deg,#5dff84,#1f8a3c); color:#05210f; }
+.ship-btn.buy.lcbuy{ display:inline-flex; align-items:center; gap:5px; background:linear-gradient(180deg,#5dff84,#22a64a); border:1px solid #22a64a; color:#05210f; font-weight:800; white-space:nowrap; }
+.ship-btn.buy.lcbuy svg.lc{ width:14px; height:14px; }
 
 
 

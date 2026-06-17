@@ -1143,7 +1143,7 @@ const FLEET_BASE=0.5e6;             // fallback when not embedded in the live ga
 // AF() = your REAL active fleet power, read live from the core game when embedded
 // (uncompressed theoryDps + maxHp·0.5 — the true scale, not the HUD's compressed
 // Ship Score). Falls back to FLEET_BASE when standalone.
-function AF(){var G=FRgame();try{if(G&&G.getStats){var s=G.getStats();if(s)return Math.max(FLEET_BASE,Math.round((s.theoryDps||0)+(s.maxHp||0)*0.5));}}catch(e){}return FLEET_BASE;}
+function AF(){var G=FRgame();try{if(G){if(G.score){var sc=G.score();if(sc)return Math.max(FLEET_BASE,Math.round(sc));}if(G.getStats){var s=G.getStats();if(s)return Math.max(FLEET_BASE,Math.round((s.theoryDps||0)+(s.maxHp||0)*0.5));}}}catch(e){}return FLEET_BASE;}
 const CIT_POWER=[1.2e6,5e6,16e6,46e6,120e6];
 const EQUIP=0.2e6, RESEARCH=0.1e6;
 

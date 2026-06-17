@@ -6,16 +6,16 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v105';
+const CACHE = 'lootfleet-v123';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
   'guides/galaxy-territory.html', 'guides/ships-and-fleet.html', 'guides/loot-rarity.html', 'guides/weapon-classes.html',
   'icon-192.png', 'icon-512.png',
-  'css/style.css', 'css/theme.css', 'css/web-v89.css',
-  'js/config.js', 'js/items.js', 'js/entities.js', 'js/render.js',
+  'css/style-v2.css', 'css/theme.css', 'css/web-v89.css',
+  'js/config-v2.js', 'js/items.js', 'js/entities.js', 'js/render.js',
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.live.js',
-  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v89.js', 'js/ui-v89.js', 'js/coach-v89.js', 'js/auth.js',
+  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v93.js', 'js/ui-v94.js', 'js/coach-v89.js', 'js/auth.js', 'js/prism-v5.js', 'js/prism-fleet.js',
   'js/showcase.js', 'js/ships-inline.js',
   'fleet-rank-embed.html',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
@@ -23,6 +23,7 @@ const CORE = [
   'ships/ship-dreadnought.png', 'ships/ship-carrier.png', 'ships/ship-aegis.png',
   'ships/ship-supercarrier.png', 'ships/ship-titan.png', 'ships/ship-mothership.png',
   'ships/ship-citadel.png',
+  'ships/ship-oblivionspear.png', 'ships/ship-oblivionspearalpha.png', 'ships/ship-oblivionfinal.png',
 ];
 
 self.addEventListener('install', (e) => {

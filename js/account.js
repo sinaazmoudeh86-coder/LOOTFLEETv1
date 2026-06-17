@@ -57,6 +57,18 @@
     if (ser && ser === lastSent) return;
     lastSent = ser;
     await window.CLOUD.push(s.id, data);
+    // also publish a public row to the global leaderboard (non-sensitive fields)
+    try {
+      if (window.CLOUD.lbUpsert) {
+        const G = window.GAME;
+        window.CLOUD.lbUpsert({
+          name: s.name,
+          power: (G && G.score) ? G.score() : (data.level || 1),
+          level: data.level || 1, zone: data.highestDungeonReached || 1, kills: data.totalKills || 0,
+          fleet: [data.ship].concat((G && G.fleetShips) ? G.fleetShips().map((x) => x.key) : []).filter(Boolean),
+        });
+      }
+    } catch (e) {}
   }
   // don't lose the last batch when the player leaves
   window.addEventListener('pagehide', flush);

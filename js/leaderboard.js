@@ -8,6 +8,19 @@
   'use strict';
   const C = window.CONFIG, ITEMS = window.ITEMS;
 
+  // ---- REAL cloud entries (all known accounts), blended with the simulated
+  //      roster so the board is never empty. Fetched from window.CLOUD.lbTop. ----
+  let _real = null, _realT = 0, _realInflight = false;
+  function myId(){ try { return (window.AUTH && AUTH.session && AUTH.session()) ? AUTH.session().id : null; } catch (e) { return null; } }
+  function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true }; }
+  function ensureReal(cb){
+    if (!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.lbTop)) return;
+    if (_realInflight || Date.now() - _realT < 8000) return;
+    _realInflight = true; _realT = Date.now();
+    window.CLOUD.lbTop(100).then((rows) => { _realInflight = false; if (rows) { _real = rows.map(mapReal); if (cb) cb(); } }).catch(() => { _realInflight = false; });
+  }
+  function realOthers(){ const id = myId(); return (_real || []).filter((p) => !id || p._uid !== id); }
+
   // The game's "launch" Monday. weeksSince(launch)+1 = current heat number.
   const LAUNCH = Date.UTC(2026, 0, 5);              // Mon Jan 5 2026
   const WEEK_MS = 7 * 24 * 3600 * 1000;
@@ -99,6 +112,28 @@
     list.forEach((p, i) => { p.rank = i + 1; });
     return list;
   }
+  // All-Time is a PURE POWER ladder — rank strictly by power, highest first.
+  function rankByPower(list) {
+    list.sort((a, b) => (b.power || 0) - (a.power || 0));
+    list.forEach((p, i) => { p.rank = i + 1; });
+    return list;
+  }
+  // Deterministic filler that sits in a descending power band *below* the
+  // weakest real fleet — keeps the board from looking empty without ever
+  // burying or out-powering an actual account. Stable across refreshes.
+  function fillerRoster(count, refPower, refZone) {
+    const r = rng(424242);
+    const list = [];
+    let pw = Math.max(60, refPower || 100);
+    for (let i = 0; i < count; i++) {
+      pw = Math.max(40, Math.round(pw * (0.80 + r() * 0.12)));   // strictly decreasing
+      const zone = Math.max(1, Math.round((refZone || 5) * (0.45 + r() * 0.55)));
+      const level = Math.max(1, Math.round(zone * (1.4 + r()) + r() * 6));
+      const kills = Math.round(pw * (3 + r() * 8));
+      list.push({ name: nameFor(r), zone, level, power: pw, kills, _loadout: null });
+    }
+    return list;
+  }
 
   let _heatCache = {}, _allCache = null;
 
@@ -118,15 +153,27 @@
       _heatCache[heat] = buildRoster(heat * 7919 + 13, 49, 6 + age * 1.5);
     }
     const list = _heatCache[heat].map((p) => ({ ...p }));
+    realOthers().forEach((p) => list.push({ ...p }));
     list.push(meEntry(GAME));
     return { heat, label: weekLabel(heat), board: rankBoard(list) };
   }
   function allTimeBoard(GAME) {
-    if (!_allCache) _allCache = buildRoster(424242, 99, 60); // veterans, deep zones
-    const list = _allCache.map((p) => ({ ...p }));
-    list.push(meEntry(GAME));
-    return { board: rankBoard(list) };
+    // An ACTUAL all-time POWER leaderboard: every real fleet (all known cloud
+    // accounts) plus you, ranked by power — highest first. Real fleets always
+    // appear; simulated entries only pad a descending tail below them so the
+    // board is never empty.
+    const me = meEntry(GAME);
+    const board = realOthers().map((p) => ({ ...p }));
+    board.push(me);
+    rankByPower(board);                     // real fleets → true power ranks
+    const MIN = 40;
+    if (board.length < MIN) {
+      const refPower = board.length ? (board[board.length - 1].power || 100) : (me.power || 100);
+      const fill = fillerRoster(MIN - board.length, refPower, me.zone || 5);
+      fill.forEach((p) => { p.rank = board.length + 1; board.push(p); });
+    }
+    return { board };
   }
 
-  window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel };
+  window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel, ensureReal };
 })();

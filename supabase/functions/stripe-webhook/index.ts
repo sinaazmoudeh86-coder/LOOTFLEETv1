@@ -66,6 +66,8 @@ Deno.serve(async (req) => {
       const s = event.data.object as Stripe.Checkout.Session;
       const uid = s.client_reference_id; // set by the game's buy() call
       if (!uid) return new Response("no user ref", { status: 200 });
+      const email = s.customer_details?.email ?? null;
+      const amount = s.amount_total ?? 0;
 
       if (s.mode === "subscription") {
         // LootFleet Pro signup: first month + remember the customer for renewals
@@ -75,11 +77,23 @@ Deno.serve(async (req) => {
           });
         }
         await supa.rpc("grant_pro", { p_user: uid, p_days: PRO_DAYS });
+        // REVENUE LOG — powers the admin dashboard (see supabase/admin.sql)
+        await supa.from("purchases").insert({
+          user_id: uid, email, kind: "pro", sku: "pro_monthly",
+          amount_cents: amount, currency: s.currency ?? "usd",
+          stripe_event_id: event.id,
+        });
       } else {
-        const credits = PACKS[s.amount_total ?? 0] ?? 0;
+        const credits = PACKS[amount] ?? 0;
         if (credits > 0) {
           await supa.rpc("grant_credits", { p_user: uid, p_credits: credits });
         }
+        // REVENUE LOG — record every pack purchase for the admin dashboard
+        await supa.from("purchases").insert({
+          user_id: uid, email, kind: "pack", sku: "lc_" + Math.round(amount / 100),
+          amount_cents: amount, currency: s.currency ?? "usd", credits,
+          stripe_event_id: event.id,
+        });
       }
     }
 
@@ -91,6 +105,13 @@ Deno.serve(async (req) => {
           .select("user_id").eq("customer_id", String(inv.customer)).maybeSingle();
         if (data?.user_id) {
           await supa.rpc("grant_pro", { p_user: data.user_id, p_days: PRO_DAYS });
+          // REVENUE LOG — recurring Pro revenue
+          await supa.from("purchases").insert({
+            user_id: data.user_id, email: inv.customer_email ?? null,
+            kind: "pro_renewal", sku: "pro_monthly",
+            amount_cents: inv.amount_paid ?? 0, currency: inv.currency ?? "usd",
+            stripe_event_id: event.id,
+          });
         }
       }
     }

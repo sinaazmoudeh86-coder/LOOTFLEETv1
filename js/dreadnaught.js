@@ -744,6 +744,15 @@
   .mega-card.cmd-dread .mc-n{ color:#ffd0d4; }
   .mega-card.cmd-dread::before{ background:linear-gradient(130deg,#ff5168,#ff8a3c,#ffd450,#ff5168); background-size:250% 250%; }
   .mega-card.cmd-pilot .mc-ic{ color:#ff8a94; border-color:rgba(255,58,74,.35); }
+  /* My Galaxy — the flagship Command card: always top, larger, with a live aura */
+  .mega-card.cmd-galaxy{ grid-column:1 / -1; background:linear-gradient(180deg,#13263a,#0c1726); padding:16px 16px; min-height:84px; border-color:rgba(95,209,255,.6); box-shadow:0 0 26px -4px rgba(95,209,255,.5), 0 0 0 1px rgba(95,209,255,.25) inset; animation:galaxyAura 3.2s ease-in-out infinite; }
+  @keyframes galaxyAura{ 0%,100%{ box-shadow:0 0 22px -6px rgba(95,209,255,.42), 0 0 0 1px rgba(95,209,255,.22) inset; } 50%{ box-shadow:0 0 38px 0 rgba(95,209,255,.78), 0 0 0 1px rgba(95,209,255,.4) inset; } }
+  .mega-card.cmd-galaxy .mc-ic{ width:50px; height:50px; color:#7fe0ff; border-color:rgba(95,209,255,.6); background:radial-gradient(120% 120% at 50% 0%,#1a3450,#0c1726); box-shadow:0 0 22px -2px rgba(95,209,255,.85); }
+  .mega-card.cmd-galaxy .mc-ic svg{ width:26px; height:26px; }
+  .mega-card.cmd-galaxy .mc-n{ color:#dff3ff; font-size:17px; }
+  .mega-card.cmd-galaxy .mc-s{ color:#9fcbe6; }
+  .mega-card.cmd-galaxy::before{ background:linear-gradient(130deg,#5fd1ff,#7b9bff,#46d27a,#5fd1ff); background-size:260% 260%; opacity:.5; }
+  @media (prefers-reduced-motion:reduce){ .mega-card.cmd-galaxy{ animation:none; } }
   /* DREAD-class ship cards (Hangar ▸ Ships) */
   .apex-chip.dread{ background:linear-gradient(90deg,#ff3a4a,#ff8a3c); color:#fff; }
   .ship-card.dread{ border-color:rgba(255,58,74,.4)!important; box-shadow:0 0 22px -10px rgba(255,58,74,.6); }

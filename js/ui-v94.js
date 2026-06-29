@@ -882,6 +882,16 @@
   const gxCam = { x: 0, y: 0, z: 1 };       // persistent across re-renders
   let _gxCv = null, _gxNeedsDraw = false;
   const gxCitImg = new Image(); gxCitImg.src = 'ships/ship-citadel.png';
+  let _citTint = {};   // color → tinted <canvas> of the citadel sprite (built once it loads)
+  function tintedCitadel(color) {
+    if (!gxCitImg.complete || !gxCitImg.naturalWidth) return null;
+    if (_citTint[color]) return _citTint[color];
+    const cv = document.createElement('canvas'); cv.width = gxCitImg.naturalWidth; cv.height = gxCitImg.naturalHeight;
+    const cx = cv.getContext('2d'); cx.drawImage(gxCitImg, 0, 0);
+    cx.globalCompositeOperation = 'source-atop'; cx.globalAlpha = 0.6; cx.fillStyle = color; cx.fillRect(0, 0, cv.width, cv.height);
+    cx.globalAlpha = 1; cx.globalCompositeOperation = 'source-over';
+    _citTint[color] = cv; return cv;
+  }
   const GX_HEX = 26;                         // base hex size at zoom 1
   function renderGalaxy() {
     const res = G.getResources(), rates = G.resourceRates();
@@ -1004,6 +1014,34 @@
         }
         ctx.closePath();
         ctx.fillStyle = fill; ctx.fill();
+        // PLAYER CITADEL — themed fortress: BLUE if it's yours, RED if a rival's
+        {
+          const myCit = G.hasMyCitadel && G.hasMyCitadel(id);
+          const rivCit = !myCit && G.rivalCitadelScore && G.rivalCitadelScore(id) != null;
+          if (myCit || rivCit) {
+            const cc = myCit ? [70, 150, 255] : [240, 60, 70];
+            const tint = myCit ? '#2f7dff' : '#e23b3b';
+            const pp = 0.55 + 0.45 * Math.sin(Date.now() / 380 + ring);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const ag = ctx.createRadialGradient(p.x, p.y, GX_HEX * 0.2, p.x, p.y, GX_HEX * 1.7);
+            ag.addColorStop(0, 'rgba(' + cc[0] + ',' + cc[1] + ',' + cc[2] + ',' + (0.4 * pp).toFixed(3) + ')');
+            ag.addColorStop(1, 'rgba(' + cc[0] + ',' + cc[1] + ',' + cc[2] + ',0)');
+            ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(p.x, p.y, GX_HEX * 1.7, 0, 7); ctx.fill();
+            ctx.restore();
+            const cimg = tintedCitadel(tint);
+            if (cimg) {
+              const dw = GX_HEX * 1.6, dh = dw * (cimg.height / cimg.width);
+              ctx.save(); ctx.shadowColor = 'rgb(' + cc[0] + ',' + cc[1] + ',' + cc[2] + ')'; ctx.shadowBlur = 10;
+              ctx.drawImage(cimg, p.x - dw / 2, p.y - dh / 2 - 2, dw, dh); ctx.restore();
+            } else {
+              const csv = 'rgb(' + cc[0] + ',' + cc[1] + ',' + cc[2] + ')';
+              ctx.save(); ctx.lineWidth = 2 + pp; ctx.strokeStyle = csv; ctx.shadowColor = csv; ctx.shadowBlur = 9;
+              ctx.beginPath(); ctx.arc(p.x, p.y, GX_HEX * 0.92, 0, 7); ctx.stroke(); ctx.restore();
+              ctx.fillStyle = csv; ctx.font = '800 10px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('♛', p.x, p.y - GX_HEX * 0.5);
+            }
+          }
+        }
         if (t.citadel) {
           // PRISMATIC edge — slow color-cycling sheen, phase-offset per tile
           const hue = (Date.now() / 30 + (c.q * 47 + c.r * 31)) % 360;
@@ -1112,6 +1150,25 @@
     const myRes = G.getResources ? G.getResources() : {};
     const ecAfford = !ec || GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (ec[k2] || 0));
     const ecRow = ec ? `<div class="ip-stat"><span class="ip-sname">Entry cost</span><span class="v">${GM.RES_KEYS.filter((k2) => ec[k2]).map((k2) => `<span style="color:${(myRes[k2] || 0) >= ec[k2] ? GM.RES[k2].color : 'var(--bad)'}">${GM.RES[k2].glyph} ${G.formatNum(ec[k2])}</span>`).join(' ')}${t.owned ? ' <span style="color:var(--muted-2)">(½ — your territory)</span>' : ''}</span></div>` : '';
+    let actionLabel = action;
+    if (t.rivalCitadelScore != null && !t.owned) actionLabel = '⚔ Siege Citadel';
+    let citBlock = '';
+    if (t.myCitadel) {
+      citBlock = '<div class="ip-stat"><span class="ip-sname">⛓ Citadel</span><span class="v" style="color:#ffd24d">★ YOURS · 10× resources</span></div>';
+    } else if (t.rivalCitadelScore != null) {
+      citBlock = '<div class="ip-stat"><span class="ip-sname">⛓ Enemy Citadel</span><span class="v" style="color:#ff8a64">⚡' + G.formatNum(t.rivalCitadelScore) + ' clone fleet defends</span></div>';
+    } else if (t.owned && G.citadelBuildCost) {
+      const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0;
+      const af = bc && GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (bc[k2] || 0));
+      const can = G.canBuildCitadel && G.canBuildCitadel(id);
+      const chips = GM.RES_KEYS.filter((k2) => bc && bc[k2]).map((k2) => '<span style="color:' + ((myRes[k2] || 0) >= bc[k2] ? GM.RES[k2].color : 'var(--bad)') + '">' + GM.RES[k2].glyph + ' ' + G.formatNum(bc[k2]) + '</span>').join(' &nbsp; ');
+      citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
+        '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;gap:8px">⛓ Build Citadel <span style="color:#9fb0c4;font-weight:600">10× output · ' + cn + '/50 owned</span></div>' +
+        '<div style="font-size:12.5px;font-variant-numeric:tabular-nums;margin:7px 0;font-weight:700">' + chips + '</div>' +
+        (cn >= 50 ? '<div style="font-size:10.5px;color:#ffcf7a;margin-bottom:6px">Citadel limit reached (50) — raze one to build elsewhere.</div>' : '') +
+        '<button class="btn gold" data-build-cit="' + id + '" ' + (can && af ? '' : 'disabled') + ' style="width:100%">Build Citadel</button>' +
+      '</div>';
+    }
     const sheet = showSheet(`<div class="sheet-head">${t.rival ? 'Contest' : t.owned ? 'Your Tile' : 'Claim'} · ${t.name}</div><div class="sheet-body">
       <div class="ip-stat"><span class="ip-sname">Ring · Level</span><span class="v">Ring ${t.ring} · Lv ${t.level}${t.deep ? ' · ☢ DEEP SPACE' : ''}</span></div>
       <div class="ip-stat"><span class="ip-sname">Type</span><span class="v">${typeName}${t.rarity ? ' · ' + (t.rarity === 2 ? '★★ Rare' : '★ Uncommon') : ''}</span></div>
@@ -1122,11 +1179,17 @@
       ${ecRow}
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Cooldown ') + cdTxt : (t.locked ? '🔒 Lv ' + Math.max(1, t.level - 10) + ' required' : '⚔ Open to attack')}</span></div>
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
+      ${citBlock}
       ${t.citadel && !t.owned ? '<p style="font-size:11px;margin-top:6px;color:#ffb088">⛴ Citadels generate <b>100×</b> resources and can only be sieged <b>once per day</b>.</p>' : ''}
       ${t.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
       ${!ecAfford ? '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough Galaxy Resources to warp this deep — farm or capture closer rings first.</p>' : ''}
-      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${action}</button></div></div>`);
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${actionLabel}</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelectorAll('[data-build-cit]').forEach((b) => b.addEventListener('click', () => {
+      const r = G.buildCitadel(b.dataset.buildCit);
+      if (r.ok) { closeSheet(); toast('⛓ Citadel raised — this tile now pays 10×!', '#ffd24d'); renderGalaxy(); }
+      else toast(r.reason === 'max' ? 'Citadel limit reached (50)' : r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot build here', '#e23b4e');
+    }));
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
       const r = G.warp(id);

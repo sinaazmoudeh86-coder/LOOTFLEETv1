@@ -27,12 +27,12 @@
   // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil } }
   async function loadAll() {
     const cl = client(); if (!cl) return {};
+    const toMap = (data) => { const map = {}; (data || []).forEach((r) => { map[r.tile_id] = { ownerId: r.owner_id, ownerName: r.owner_name, cooldownUntil: r.cooldown_until, citadel: !!r.citadel, fleetScore: r.fleet_score || 0 }; }); return map; };
     try {
-      const { data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until');
+      let { data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score');
+      if (error) { ({ data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until')); }
       if (error || !data) return {};
-      const map = {};
-      data.forEach((r) => { map[r.tile_id] = { ownerId: r.owner_id, ownerName: r.owner_name, cooldownUntil: r.cooldown_until }; });
-      return map;
+      return toMap(data);
     } catch (e) { return {}; }
   }
 
@@ -41,15 +41,19 @@
   // later ones reject with 'tile protected'. p_protect_minutes: 15 normal,
   // 1440 (24 h) for citadels. Falls back to the legacy 2-arg RPC if the SQL
   // hasn't been updated yet.
-  async function claim(tileId, ownerName, protectMinutes) {
+  async function claim(tileId, ownerName, protectMinutes, meta) {
     const cl = client(); if (!cl || !myId()) return { ok: false, reason: 'offline' };
+    meta = meta || {};
     try {
-      let { data, error } = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15 });
-      if (error && /p_protect_minutes|function/i.test(error.message || '')) {
-        ({ data, error } = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName() }));
+      let res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0) });
+      if (res.error && /p_citadel|p_fleet_score|function|argument/i.test(res.error.message || '')) {
+        res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15 });
       }
-      if (error) return { ok: false, reason: error.message || 'error' };
-      return { ok: true, row: data };
+      if (res.error && /p_protect_minutes|function|argument/i.test(res.error.message || '')) {
+        res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName() });
+      }
+      if (res.error) return { ok: false, reason: res.error.message || 'error' };
+      return { ok: true, row: res.data };
     } catch (e) { return { ok: false, reason: 'error' }; }
   }
 
@@ -67,6 +71,8 @@
             ownerId: payload.new ? payload.new.owner_id : null,
             ownerName: payload.new ? payload.new.owner_name : null,
             cooldownUntil: payload.new ? payload.new.cooldown_until : null,
+            citadel: payload.new ? !!payload.new.citadel : false,
+            fleetScore: payload.new ? (payload.new.fleet_score || 0) : 0,
             deleted: !payload.new,
           });
         })

@@ -29,6 +29,8 @@
     { key: 'void',      name: 'Void',      color: '#9a5bff', glow: 'rgba(154,91,255,1)',    minStats: 6, maxStats: 6, mult: 15.5, weight: 0.003,   particles: 12 },
     { key: 'eternal',   name: 'Eternal',   color: '#eae6ff', glow: 'rgba(234,230,255,1)',   minStats: 6, maxStats: 6, mult: 21.0, weight: 0.0005,  particles: 16 },
     { key: 'primordial',name: 'Primordial',color: '#ffe6a8', glow: 'rgba(255,230,168,1)',   minStats: 6, maxStats: 6, mult: 28.5, weight: 0.00004, particles: 22 },
+    { key: 'relic',     name: 'Relic',     color: '#c061ff', glow: 'rgba(192,97,255,1)',    minStats: 6, maxStats: 6, mult: 38.0, weight: 0.0000016,  particles: 26 },
+    { key: 'artifact',  name: 'Artifact',  color: '#ff2330', glow: 'rgba(255,35,48,1)',     minStats: 6, maxStats: 6, mult: 50.0, weight: 0.00000006, particles: 30 },
   ];
   // Post-mythic tiers (Ancient and beyond) are ~10× rarer across the board.
   RARITY.forEach((r, i) => { if (i >= 6) r.weight *= 0.1; });
@@ -176,6 +178,8 @@
   // clamped in game.js). Tier index → see RARITY above.
   // ---------------------------------------------------------------------------
   function rarityCap(zone) {
+    if (zone >= 300) return 13;  // Artifact
+    if (zone >= 250) return 12;  // Relic
     if (zone >= 200) return 11;  // Primordial
     if (zone >= 150) return 10;  // Eternal
     if (zone >= 100) return 9;   // Void

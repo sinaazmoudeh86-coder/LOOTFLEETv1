@@ -11,6 +11,7 @@
   --c-common:#8a93a0; --c-uncommon:#2f9e4f; --c-rare:#2f6fed; --c-epic:#9b45e6;
   --c-legendary:#e07c12; --c-mythic:#e23b4e; --c-ancient:#0fb3a4; --c-divine:#c79410;
   --c-cosmic:#e23bbf; --c-void:#7a3cff; --c-eternal:#5b6df0; --c-primordial:#d99a1f;
+  --c-relic:#a23dff; --c-artifact:#ff2330;
   --good:#2f9e4f; --bad:#e23b4e;
   --shadow:0 8px 24px rgba(40,60,90,.12);
   --font-display:'Cinzel',Georgia,serif; --font-ui:'Rajdhani','Segoe UI',sans-serif;
@@ -486,4 +487,8 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 .r-eternal{color:var(--c-eternal);}.bl-eternal{border-left-color:var(--c-eternal);}
 .r-primordial{color:var(--c-primordial);background:linear-gradient(95deg,#e0962a,#ffe6a8,#ff9ad8,#9ad2ff,#ffe6a8,#e0962a);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:primShimmer 4s linear infinite;}
 .bl-primordial{border-left-color:var(--c-primordial);}
+.r-relic{color:var(--c-relic);background:linear-gradient(95deg,#7a2dd6,#c061ff,#e3b9ff,#8a4dff,#c061ff,#7a2dd6);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:primShimmer 3.4s linear infinite;}
+.bl-relic{border-left-color:var(--c-relic);}
+.r-artifact{color:var(--c-artifact);background:linear-gradient(95deg,#b00018,#ff2330,#ffb3a3,#ff1f2e,#ff5a4d,#b00018);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:primShimmer 3s linear infinite;}
+.bl-artifact{border-left-color:var(--c-artifact);}
 @keyframes primShimmer{0%{background-position:0% 0}100%{background-position:240% 0}}

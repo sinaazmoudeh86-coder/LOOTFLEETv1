@@ -467,7 +467,7 @@
       }
       rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: -16, life: 0.5, size: 7, color: 'rgba(150,150,155,0.45)', drag: 0.92 }));
       rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.16, size: p.crit ? 13 : 10, color: '#fff0d0', glow: true, drag: 1 }));
-      rt.shake = Math.min(6, (rt.shake || 0) + (p.crit ? 3.5 : 1.6));
+      rt.shake = Math.min(3.5, (rt.shake || 0) + (p.crit ? 2.0 : 0.7));
     } else if (wt === 'rail') {
       // PIERCE — slug punches THROUGH: sparks continue forward + entry flash
       for (let i = 0; i < (p.crit ? 12 : 8); i++) {
@@ -504,7 +504,7 @@
       rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.3, size: 1.5 + Math.random()*2, color: e.tint, gravity: 140, drag: 0.9 }));
     }
     // crit: a little screen punch
-    if (p.crit) rt.shake = Math.min(6, (rt.shake || 0) + 4);
+    if (p.crit) rt.shake = Math.min(4, (rt.shake || 0) + 2.2);
     rt.dmgWindow.push({ t: rt.time, dmg: p.damage });
     // LIFE STEAL
     if (rt.stats.lifeSteal > 0 && !rt.archer.dead) {
@@ -822,6 +822,12 @@
 
   function update(dt) {
     const a = rt.archer;
+    // SCREEN SHAKE decay — time-based and done HERE (in the sim step) not in
+    // draw(). Hits add shake from inside update(), and at high game speed update
+    // runs many times per frame; decaying per-step keeps add vs. decay balanced
+    // so sustained fire no longer pins shake at the cap and vibrates the whole
+    // scene (that was the "stutter while shooting"). ~0.85/frame equivalent.
+    if (rt.shake) { rt.shake *= Math.exp(-9.75 * dt); if (rt.shake < 0.3) rt.shake = 0; }
     // OBLIVION construction clock — grant the hull the moment its 2-week build lands
     if (state.construction) { update._cc = (update._cc || 0) + dt; if (update._cc > 1) { update._cc = 0; checkConstruction(); } }
     // when downed, freeze everything until the player picks a respawn zone
@@ -1043,7 +1049,7 @@
     ctx.save();
     const z = rt.zoom || 1;
     const shx = rt.shake ? (Math.random()-0.5)*rt.shake : 0, shy = rt.shake ? (Math.random()-0.5)*rt.shake : 0;
-    if (rt.shake) rt.shake *= 0.85; if (rt.shake < 0.3) rt.shake = 0;
+    // (shake decays in update(dt) — time-based — so it stays smooth at any game speed)
     ctx.scale(z, z);
     ctx.translate(-rt.cam.x + shx, -rt.cam.y + shy);
     R.drawArena(ctx, rt.worldW, rt.worldH, rt.time, state.currentDungeon);
@@ -1175,6 +1181,57 @@
         const bh = 30 + tier * 6, bw = (4 + tier * 0.7) * sc;
         ctx.fillStyle = hexToRgba(col, 0.10 + tier * 0.025);
         ctx.fillRect(g.x - bw / 2, g.y - (bh - 8) + yoff, bw, bh);
+      }
+      // PRIMORDIAL — radiating lightning + static discharge (significantly
+      // bigger than any other tier). Bolts crackle outward, rings pulse, the
+      // core blooms in the tier palette (Primordial gold / Relic violet / Artifact red).
+      if (!g.lost && it && tier >= 11) {
+        const cx = g.x, cy = g.y - 2 + yoff, T = rt.time;
+        // per-tier palette: [coreMid, coreOuter, bolt0, bolt1, bolt2, ringA, ringB, ringC]
+        const PP = tier >= 13
+          ? { mid: '255,120,96',  out: '255,31,46',   bolts: ['255,255,255', '255,160,140', '255,45,55'],  rings: ['255,45,55', '255,120,96', '255,200,180'] }
+          : tier >= 12
+          ? { mid: '200,135,255', out: '138,77,255',  bolts: ['255,255,255', '227,185,255', '170,90,255'],  rings: ['192,97,255', '138,77,255', '227,185,255'] }
+          : { mid: '255,230,168', out: '255,154,216', bolts: ['255,255,255', '255,233,176', '154,210,255'], rings: ['255,230,168', '255,154,216', '154,210,255'] };
+        const flick = 0.55 + 0.45 * Math.sin(T * 34 + g.bob * 6);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const cgr = ctx.createRadialGradient(cx, cy, 1, cx, cy, (16 + 8 * flick) * sc);
+        cgr.addColorStop(0, 'rgba(255,255,255,' + (0.5 * fade) + ')');
+        cgr.addColorStop(0.5, 'rgba(' + PP.mid + ',' + (0.3 * fade) + ')');
+        cgr.addColorStop(1, 'rgba(' + PP.out + ',0)');
+        ctx.fillStyle = cgr; ctx.beginPath(); ctx.arc(cx, cy, (16 + 8 * flick) * sc, 0, 7); ctx.fill();
+        const RC = PP.rings;
+        for (let r = 0; r < 2; r++) {
+          const k = ((T * 0.85 + r * 0.5) % 1);
+          ctx.globalAlpha = fade * (1 - k) * 0.55;
+          ctx.strokeStyle = 'rgba(' + RC[(r + ((T * 2) | 0)) % 3] + ',1)';
+          ctx.lineWidth = (2.2 * (1 - k) + 0.5) * sc;
+          ctx.beginPath(); ctx.arc(cx, cy, (10 * sc) + k * 40 * sc, 0, 7); ctx.stroke();
+        }
+        const N = 7;
+        for (let b = 0; b < N; b++) {
+          if ((Math.sin(T * 24 + b * 2.3) + 1) < 0.7) continue;   // crackle gate
+          const a = (b / N) * 7 + T * 0.7;
+          const len = (24 + 14 * flick) * sc;
+          ctx.strokeStyle = 'rgba(' + PP.bolts[b % 3] + ',1)';
+          ctx.globalAlpha = fade * (0.5 + 0.5 * flick);
+          ctx.lineWidth = 1.5 * sc; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(cx, cy);
+          let px = cx, py = cy;
+          for (let s = 1; s <= 3; s++) {
+            const rr = len * s / 3;
+            const jit = (s < 3 ? Math.sin(T * 38 + b * 5 + s * 2.1) * 5 * sc : 0);
+            px = cx + Math.cos(a) * rr + Math.cos(a + 1.57) * jit;
+            py = cy + Math.sin(a) * rr + Math.sin(a + 1.57) * jit;
+            ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.globalAlpha = fade * flick; ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(px, py, 1.5 * sc, 0, 7); ctx.fill();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
       }
       if (g.lost) {
         ctx.fillStyle = 'rgba(255,90,90,' + fade + ')'; ctx.font = '700 11px Rajdhani'; ctx.textAlign = 'center';

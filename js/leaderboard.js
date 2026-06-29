@@ -1,8 +1,9 @@
 /* =============================================================================
-   leaderboard.js — GrabAGun Idle Operator
-   Client-side SIMULATED leaderboards (no backend). Players are grouped into
-   weekly "heats" by the week they started; a new heat begins every Monday.
-   Also an all-time board across every heat. Each rival has a viewable loadout.
+   leaderboard.js — Loot Fleet
+   REAL cross-account leaderboards. Every signed-in operator publishes a public
+   row (name/power/level/zone/kills/fleet) via CLOUD.lbUpsert → the Supabase
+   `leaderboard` table; the board reads the top N back with CLOUD.lbTop and ranks
+   you against them live. No simulated rivals — the board reflects actual players.
    ============================================================================= */
 (function () {
   'use strict';
@@ -146,33 +147,23 @@
   }
 
   function heatBoard(GAME) {
+    // REAL live ladder — every signed-in operator (from the cloud leaderboard)
+    // plus you, ranked by fleet progression. No simulated rivals: the board
+    // reflects actual players, so it grows as real operators sign in and play.
     const heat = heatNumber(GAME.state.startWeek || GAME.currentWeek());
-    if (!_heatCache[heat]) {
-      // cohort strength grows with heat age (older heats had more time)
-      const age = Math.max(1, heatNumber(GAME.currentWeek()) - heat + 1);
-      _heatCache[heat] = buildRoster(heat * 7919 + 13, 49, 6 + age * 1.5);
-    }
-    const list = _heatCache[heat].map((p) => ({ ...p }));
-    realOthers().forEach((p) => list.push({ ...p }));
-    list.push(meEntry(GAME));
-    return { heat, label: weekLabel(heat), board: rankBoard(list) };
+    const board = realOthers().map((p) => ({ ...p }));
+    board.push(meEntry(GAME));
+    rankBoard(board);
+    return { heat, label: weekLabel(heat), board, real: board.length - 1 };
   }
   function allTimeBoard(GAME) {
-    // An ACTUAL all-time POWER leaderboard: every real fleet (all known cloud
-    // accounts) plus you, ranked by power — highest first. Real fleets always
-    // appear; simulated entries only pad a descending tail below them so the
-    // board is never empty.
+    // REAL all-time POWER ladder: every known operator (all cloud accounts) plus
+    // you, ranked strictly by power, highest first. Real players only.
     const me = meEntry(GAME);
     const board = realOthers().map((p) => ({ ...p }));
     board.push(me);
     rankByPower(board);                     // real fleets → true power ranks
-    const MIN = 40;
-    if (board.length < MIN) {
-      const refPower = board.length ? (board[board.length - 1].power || 100) : (me.power || 100);
-      const fill = fillerRoster(MIN - board.length, refPower, me.zone || 5);
-      fill.forEach((p) => { p.rank = board.length + 1; board.push(p); });
-    }
-    return { board };
+    return { board, real: board.length - 1 };
   }
 
   window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel, ensureReal };

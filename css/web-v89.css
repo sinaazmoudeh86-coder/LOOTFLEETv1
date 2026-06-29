@@ -1,3 +1,42 @@
+/* ===== SHIPS tab — compact thumbnail grid (owned = blue, locked = grey) ===== */
+.ship-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px;}
+.ship-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:9px 7px 8px;border-radius:13px;cursor:pointer;text-align:center;
+  border:1px solid #2a3650;background:linear-gradient(180deg,#141c2a,#0f1622);
+  transition:transform .12s cubic-bezier(.22,1.2,.36,1),box-shadow .18s,border-color .18s,background .18s;
+  font-family:inherit;color:#dfe9ff;-webkit-tap-highlight-color:transparent;}
+.ship-tile:active{transform:scale(.96);}
+/* OWNED → lights up blue */
+.ship-tile.owned{border-color:#3d7bd6;background:linear-gradient(180deg,#16263f,#101a2b);
+  box-shadow:0 0 0 1px rgba(95,168,255,.25),0 4px 16px rgba(45,120,235,.18);}
+/* ACTIVE (flying) → brightest blue ring + glow */
+.ship-tile.active{border-color:#5fa8ff;background:linear-gradient(180deg,#1b3050,#12203a);
+  box-shadow:0 0 0 1px rgba(120,190,255,.55),0 0 22px rgba(95,168,255,.35);}
+/* LOCKED / unowned → muted grey, slightly recessed */
+.ship-tile.locked{border-color:#28303f;background:linear-gradient(180deg,#11151d,#0c1016);opacity:.82;}
+.ship-tile.locked .st-thumb img{filter:grayscale(.7) brightness(.7);}
+.ship-tile .st-thumb{position:relative;width:100%;aspect-ratio:1;display:grid;place-items:center;}
+.ship-tile .st-thumb img{width:78%;height:78%;object-fit:contain;
+  filter:drop-shadow(0 3px 7px rgba(0,0,0,.5));}
+.ship-tile.active .st-thumb img,.ship-tile.owned .st-thumb img{filter:drop-shadow(0 0 10px rgba(95,168,255,.5)) drop-shadow(0 3px 7px rgba(0,0,0,.5));}
+.st-flag{position:absolute;top:2px;left:50%;transform:translateX(-50%);font-family:Orbitron,sans-serif;
+  font-weight:800;font-size:7.5px;letter-spacing:.08em;color:#9fd0ff;background:rgba(8,18,32,.85);
+  border:1px solid rgba(95,168,255,.5);border-radius:99px;padding:1px 7px;white-space:nowrap;}
+.st-lvl{position:absolute;top:2px;right:2px;font-family:Orbitron,sans-serif;font-weight:800;font-size:8px;
+  color:#0a1018;background:linear-gradient(180deg,#ffd07a,#f2b24b);border-radius:6px;padding:1px 5px;}
+.ship-tile .st-name{font-family:Orbitron,sans-serif;font-weight:700;font-size:10.5px;line-height:1.1;
+  color:#eaf0fa;margin-top:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ship-tile.locked .st-name{color:#8a97ab;}
+.ship-tile .st-cls{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:#6f7f99;}
+.ship-tile .st-stats{display:flex;gap:5px;font-size:8.5px;font-weight:700;color:#9fb0c8;margin-top:2px;
+  font-variant-numeric:tabular-nums;}
+.ship-tile .st-stats .dr{color:#c79bff;}
+.ship-tile .st-badge{margin-top:3px;font-family:Orbitron,sans-serif;font-weight:700;font-size:8.5px;
+  letter-spacing:.02em;color:#c9d4e6;background:rgba(8,12,20,.6);border:1px solid #2a3650;border-radius:99px;
+  padding:2px 8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ship-detail-sheet .ship-card,.ship-detail-sheet .ship-card *{box-sizing:border-box;}
+.ship-detail-sheet .ship-card{margin:0;}
+
 /* =============================================================================
    web.css — hostable web-app shell
    Removes the phone-mockup bezel and turns the build into a real responsive

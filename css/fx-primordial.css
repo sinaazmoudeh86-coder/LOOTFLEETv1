@@ -1,0 +1,55 @@
+/* =============================================================================
+   fx-primordial.css — top-tier rarity base styling (Primordial / Relic / Artifact)
+   The ANIMATED lightning (radiating crackling bolts, core glow, discharge ring)
+   is driven by js/fx-primordial.js on a <canvas> overlay — colour per tier:
+     Primordial = gold/electric · Relic = violet · Artifact = red
+   …so it animates even when a device has "Reduce Motion" enabled. This file
+   only provides the static base look: hot border + a soft glow that reads
+   before the canvas paints. Targets these elements in the loadout / inventory:
+     .slot-icon.r-{tier}  (equip slot icons)
+     .ic-icon.r-{tier}    (bag item icons)
+     .sc-ico.r-{tier}     (market card icons)
+     .flc.flc-arc         (fleet "Loadouts" chips / pills, tier ≥ Primordial)
+   ============================================================================= */
+
+.slot-icon.r-primordial, .ic-icon.r-primordial, .sc-ico.r-primordial,
+.slot-icon.r-relic,      .ic-icon.r-relic,      .sc-ico.r-relic,
+.slot-icon.r-artifact,   .ic-icon.r-artifact,   .sc-ico.r-artifact,
+.flc.flc-arc {
+  position: relative;
+  overflow: visible;
+}
+/* per-tier border + base glow */
+.slot-icon.r-primordial, .ic-icon.r-primordial, .sc-ico.r-primordial {
+  border-color: #ffe6a8 !important;
+  box-shadow: 0 0 10px 1px rgba(255,230,168,.7), 0 0 22px 4px rgba(255,154,216,.35);
+}
+.slot-icon.r-relic, .ic-icon.r-relic, .sc-ico.r-relic {
+  border-color: #c061ff !important;
+  box-shadow: 0 0 10px 1px rgba(192,97,255,.75), 0 0 22px 4px rgba(138,77,255,.4);
+}
+.slot-icon.r-artifact, .ic-icon.r-artifact, .sc-ico.r-artifact {
+  border-color: #ff2d2d !important;
+  box-shadow: 0 0 10px 1px rgba(255,45,45,.8), 0 0 22px 4px rgba(255,31,46,.45);
+}
+.flc.flc-arc { border-color: currentColor; }
+
+/* keep the glyph / label crisp above the canvas overlay */
+.slot-icon.r-primordial > svg, .ic-icon.r-primordial > svg, .sc-ico.r-primordial > svg {
+  color: #fff; filter: drop-shadow(0 0 3px #ffe6a8) drop-shadow(0 0 6px #ff9ad8);
+}
+.slot-icon.r-relic > svg, .ic-icon.r-relic > svg, .sc-ico.r-relic > svg {
+  color: #fff; filter: drop-shadow(0 0 3px #c061ff) drop-shadow(0 0 6px #8a4dff);
+}
+.slot-icon.r-artifact > svg, .ic-icon.r-artifact > svg, .sc-ico.r-artifact > svg {
+  color: #fff; filter: drop-shadow(0 0 3px #ff6a5a) drop-shadow(0 0 6px #ff1f2e);
+}
+.slot-icon.r-primordial > svg, .ic-icon.r-primordial > svg, .sc-ico.r-primordial > svg,
+.slot-icon.r-relic > svg, .ic-icon.r-relic > svg, .sc-ico.r-relic > svg,
+.slot-icon.r-artifact > svg, .ic-icon.r-artifact > svg, .sc-ico.r-artifact > svg {
+  position: relative; z-index: 1;
+}
+.flc.flc-arc .flc-ic, .flc.flc-arc .flc-n { position: relative; z-index: 1; }
+
+/* the JS-injected lightning canvas */
+.prim-bolt-canvas { mix-blend-mode: screen; }

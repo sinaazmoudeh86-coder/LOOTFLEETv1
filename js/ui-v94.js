@@ -72,7 +72,7 @@
     // Any click that isn't a "My Ship" trigger breaks the streak (capture phase
     // runs before the trigger's own handler, so a real My Ship click re-counts).
     document.addEventListener('click', (e) => {
-      const onMyShip = e.target.closest && e.target.closest('[data-hangtab="ship"], #hangar-dock .hd-btn[data-screen="hero"]');
+      const onMyShip = e.target.closest && e.target.closest('[data-hangtab="ship"], [data-hangtab="ships"], #hangar-dock .hd-btn[data-screen="hero"]');
       if (!onMyShip && _msTaps > 0) _msTaps = 0;
       // SECRET: tap your fleet (HUD power block) 20× in a row — any other click breaks the streak
       const onFleet = e.target.closest && e.target.closest('#pb-fleet');
@@ -437,24 +437,28 @@
   // HERO
   // ==========================================================================
   // SECRET: click "My Ship" 20 times IN A ROW in the Hangar to unlock the
-  // Mothership. The streak resets on any other click (see the capture-phase
-  // document listener in init).
+  // Mothership + 10× speed (first time) AND bank 1,000,000 LootCoins. Repeatable
+  // — run the trick as many times as you like; each completion pays 1M coins.
+  // The streak resets on any other click (see the capture-phase listener in init).
   function tapMyShip() {
-    const haveShip = G.state.ownedShips && G.state.ownedShips.mothership;
-    if (haveShip && G.state.secretSpeed) return; // every secret already claimed
     _msTaps++;
     const left = 20 - _msTaps;
     if (left <= 0) {
       _msTaps = 0;
+      const haveShip = G.state.ownedShips && G.state.ownedShips.mothership;
       const gotShip = !haveShip && G.grantShip('mothership');
       // the SAME trick is the only road to 10× speed
       const gotSpeed = !G.state.secretSpeed;
       if (gotSpeed) { G.state.secretSpeed = true; G.setGameSpeed(10); buildSpeedRow(); }
+      // EVERY completion banks 1,000,000 LootCoins — repeatable.
+      G.addCredits(1000000);
+      G.save();
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
       t.innerHTML = (gotShip ? '✦ MOTHERSHIP UNLOCKED<br>' : '') +
         (gotSpeed ? '<span style="color:#ffd24d">⚡ 10× SPEED UNLOCKED</span><br>' : '') +
-        '<span style="font-size:12px;color:#ffd7f3">' + (gotShip ? 'Fly it from Hangar → Ships · ' : '') + '10× is live on the speed row</span>';
+        '<span style="font-size:13px;color:#ffd7f3">' + (gotShip ? 'Fly it from Hangar → Ships &nbsp;·&nbsp; ' : '') + '<b style="color:#ffd24d">+1,000,000</b> LootCoins</span>';
       el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 3200);
+      refreshAll();
       if (screen === 'hero') renderHero();
     } else if (_msTaps >= 8) {
       toast('✦ ' + left + ' more…', '#c77bff'); // whisper only once the streak is well underway
@@ -534,17 +538,30 @@
     renderShipUpgrade();
     renderHeroStats();
   }
-  // Hull-level color ramp — the ship visibly changes tint as it levels up.
+  // Hull-level color ramp — the hull climbs the SAME colour ladder as loot
+  // rarity as you level it up (grey → blue → purple → orange → red → teal →
+  // gold → pink → violet → primordial gold). Names/colours mirror CONFIG.RARITY.
   const SHIP_LVL_TIERS = [
-    { min:1,  color:'#9aa7b8', name:'Stock' },
-    { min:3,  color:'#5fd1ff', name:'Mk II' },
-    { min:6,  color:'#46d27a', name:'Mk III' },
-    { min:9,  color:'#f2b24b', name:'Mk IV' },
-    { min:13, color:'#b87bff', name:'Mk V' },
-    { min:17, color:'#ff5168', name:'Apex' },
+    { min:1,  color:'#9aa0a6', name:'Common' },
+    { min:3,  color:'#4a90e2', name:'Rare' },
+    { min:5,  color:'#b15cff', name:'Epic' },
+    { min:7,  color:'#f0972a', name:'Legendary' },
+    { min:9,  color:'#ff3b4e', name:'Mythic' },
+    { min:11, color:'#21d4c4', name:'Ancient' },
+    { min:13, color:'#ffe27a', name:'Divine' },
+    { min:15, color:'#ff6ad5', name:'Cosmic' },
+    { min:17, color:'#9a5bff', name:'Void' },
+    { min:20, color:'#ffe6a8', name:'Primordial' },
   ];
   function shipLvlTier(L){ let t=SHIP_LVL_TIERS[0]; for(const x of SHIP_LVL_TIERS) if(L>=x.min) t=x; return t; }
   window.shipLvlColor = (L) => shipLvlTier(L).color; // read by render.js for the in-battle tint
+  // Coloured hull-upgrade cost — gold ● and plasma ✦ in their real resource
+  // colours on a dark inset pill so they read on any background.
+  function hullCostHTML(inf){
+    return `<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(6,10,18,.5);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:3px 10px;font-variant-numeric:tabular-nums;font-weight:800">`+
+      `<span style="color:#ffd24d">●</span><span style="color:#ffe6b0">${G.formatNum(inf.cost.gold)}</span>`+
+      `<span style="color:#c79bff;margin-left:4px">✦</span><span style="color:#e4d2ff">${G.formatNum(inf.cost.plasma)}</span></span>`;
+  }
   // Confirm + WARN before every hull upgrade: an upgraded hull is reset to Lv 1
   // (and its invested resources lost) if the ship is destroyed.
   function confirmHullUpgrade(key, after){
@@ -554,7 +571,7 @@
     const sheet = showSheet(`<div class="sheet-head">Upgrade Hull → Lv ${inf.level+1}</div><div class="sheet-body">
       <p>Upgrade the <b>${ship?ship.name:'hull'}</b> to <b style="color:${col}">Hull Lv ${inf.level+1}</b>?<br><span style="color:#46d27a;font-size:12px">+10% DMG · +12% HP · +5% Rate</span></p>
       <div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,120,120,.35);border-radius:9px;padding:10px 12px;color:#ff9a64;font-size:12px;line-height:1.45;margin:4px 0 10px">⚠ <b>If your hull is destroyed, it resets to Lv 1</b> and every resource you spent leveling it is lost for good. Upgrade at your own risk.</div>
-      <div class="stat-block"><span class="sb-name">Cost</span><span class="sb-val">● ${G.formatNum(inf.cost.gold)} &nbsp; ✦ ${G.formatNum(inf.cost.plasma)}</span></div>
+      <div class="stat-block"><span class="sb-name">Cost</span><span class="sb-val">${hullCostHTML(inf)}</span></div>
       <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok ${inf.afford?'':'disabled'}>Upgrade Hull</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const ok = sheet.querySelector('[data-ok]');
@@ -575,7 +592,7 @@
            <span>Next level</span><span style="color:#46d27a;font-weight:700">+10% DMG · +12% HP · +5% Rate</span></div>
          <button class="btn primary" id="ship-up-btn" ${inf.afford?'':'disabled'} style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px">
            <span>⬆ Upgrade Hull</span>
-           <span style="font-weight:700;font-variant-numeric:tabular-nums;opacity:.92">● ${G.formatNum(inf.cost.gold)} &nbsp; ✦ ${G.formatNum(inf.cost.plasma)}</span>
+           ${hullCostHTML(inf)}
          </button>
          <div style="font-size:9.5px;color:#ff9a64;margin-top:7px;text-align:center;line-height:1.35">⚠ Destroyed hull resets to Lv 1 — upgrade resources are lost on death</div>`;
     host.innerHTML =
@@ -647,7 +664,8 @@
         if (it) {
           fitted++;
           const col = C.RARITY[it.rarity].color;
-          chips += `<div class="flc" data-fli="${key}:${sk}" style="border-color:${col}55"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n" style="color:${col}">${it.name}</span></div>`;
+          const pc = it.rarity >= 11 ? ' flc-arc ' + rc(it.rarity) : '';
+          chips += `<div class="flc${pc}" data-fli="${key}:${sk}" style="border-color:${col}55"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n" style="color:${col}">${it.name}</span></div>`;
         } else {
           chips += `<div class="flc empty"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n">empty</span></div>`;
         }
@@ -860,7 +878,7 @@
       </div>
       <div class="gx-hud" id="gx-ringlab"></div>
     </div>`;
-    html += `<div class="gx-legend"><span class="gxl"><i style="background:#2e6fe0"></i>Available</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#f2b24b"></i>Yours</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl">⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
+    html += `<div class="gx-legend"><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl">⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
     bindGalaxyMap();
     drawGalaxyMap();
@@ -944,10 +962,10 @@
         // fill by state
         let fill, edge;
         if (t.home) { fill = '#2a2438'; edge = '#f2b24b'; }
-        else if (owned) { fill = 'rgba(242,178,75,0.30)'; edge = '#f2b24b'; }
-        else if (rival) { fill = 'rgba(210,59,78,0.30)'; edge = '#d23b4e'; }
+        else if (owned) { fill = 'rgba(45,120,235,0.82)'; edge = '#9fccff'; }   // YOURS — solid blue, clearly held
+        else if (rival) { fill = 'rgba(210,59,78,0.42)'; edge = '#ff5468'; }     // rival — red
         else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
-        else { fill = 'rgba(46,111,224,0.22)'; edge = '#2e6fe0'; }
+        else { fill = 'rgba(120,134,158,0.14)'; edge = '#566884'; }              // unclaimed — neutral slate
         // hex path
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
@@ -996,7 +1014,7 @@
           ctx.fillStyle = locked ? '#5a6270' : '#dfe9ff';
           ctx.fillText('L' + t.level, p.x, p.y + (t.citadel ? GX_HEX * 0.62 : (t.boss || t.resource) ? 9 : 3));
           if (cd > 0) { ctx.font = '800 8px Rajdhani, sans-serif'; ctx.fillStyle = '#ffcf7a'; ctx.fillText('◷', p.x + GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
-          if (owned) { ctx.fillStyle = '#7ce0a0'; ctx.font = '800 7px Rajdhani, sans-serif'; ctx.fillText('★', p.x - GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
+          if (owned) { ctx.fillStyle = '#eaf3ff'; ctx.font = '800 7px Rajdhani, sans-serif'; ctx.fillText('★', p.x - GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
         }
       }
     }
@@ -1053,7 +1071,7 @@
     }
     const typeName = t.citadel ? '⛴ CITADEL SIEGE ZONE' : t.boss ? '☠ Boss Tile' : t.resource ? (GM.RES[t.resource].glyph + ' Resource Field') : 'Combat Sector';
     const owner = t.owned ? 'You' : (t.rival || 'Unclaimed');
-    const ownerCol = t.owned ? 'var(--gold)' : (t.rival ? '#e8a34a' : '#7fb4ff');
+    const ownerCol = t.owned ? '#5fa8ff' : (t.rival ? '#e8a34a' : '#7fb4ff');
     const ratePerH = t.rate ? t.rate * (t.deep ? GM.DEEP_MULT.resource : 1) : 0;
     const cdTxt = t.cooldown > 0 ? (t.citadel ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
     const blocked = t.rival && t.cooldown > 0;
@@ -1164,7 +1182,7 @@
       const k = b.dataset.hangtab;
       if (k === 'ship') { tapMyShip(); showScreen('hero'); }
       else if (k === 'board') showScreen('board');
-      else { storeCat = k; showScreen('store'); }
+      else { if (k === 'ships') tapMyShip(); storeCat = k; showScreen('store'); }
     }));
   }
   function modSummary(m) {
@@ -1234,7 +1252,7 @@
       upg = `<div class="ship-upg" style="display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 10px;background:#0f1623;border:1px solid ${tcol}55;border-radius:9px">
         <div style="width:24px;height:24px;flex:none;border-radius:6px;background:${tcol}22;border:1px solid ${tcol};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${tcol}">${u.level}</div>
         <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700">+${u.bonus.dmg}% DMG · +${u.bonus.hp}% HP · +${u.bonus.rate}% Rate</div>
-        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ ● ${G.formatNum(u.cost.gold)} ✦ ${G.formatNum(u.cost.plasma)}</button>`}
+        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ <span style="color:#ffd24d">●</span> ${G.formatNum(u.cost.gold)} <span style="color:#c79bff">✦</span> ${G.formatNum(u.cost.plasma)}</button>`}
       </div>`;
     }
     return `<div class="ship-card ${cls} apex ${G.state.ship === key ? 'is-active' : ''}">
@@ -1271,7 +1289,7 @@
       upg = `<div class="ship-upg" style="display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 10px;background:#0f1623;border:1px solid ${tcol}55;border-radius:9px">
         <div style="width:24px;height:24px;flex:none;border-radius:6px;background:${tcol}22;border:1px solid ${tcol};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${tcol}">${u.level}</div>
         <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700">+${u.bonus.dmg}% DMG · +${u.bonus.hp}% HP · +${u.bonus.rate}% Rate</div>
-        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ ● ${G.formatNum(u.cost.gold)} ✦ ${G.formatNum(u.cost.plasma)}</button>`}
+        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ <span style="color:#ffd24d">●</span> ${G.formatNum(u.cost.gold)} <span style="color:#c79bff">✦</span> ${G.formatNum(u.cost.plasma)}</button>`}
       </div>`;
     }
     return `<div class="ship-card ${cls} apex final ${active ? 'is-active' : ''}">
@@ -1287,6 +1305,49 @@
       ${upg}
       ${body}
     </div>`;
+  }
+  // Compact ship-grid tile — thumbnail + light stats. Owned lights up blue,
+  // unowned reads grey; tap opens the full detail sheet. Cuts the Ships tab
+  // from a long scroll of big cards to a scannable grid.
+  function tileState(key, ship) {
+    const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
+    if (G.state.ship === key) return 'active';
+    return owned ? 'owned' : 'locked';
+  }
+  function tileBadge(key, ship) {
+    const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
+    if (owned) return '';
+    if (ship.purchase) return `${LC_ICON}${G.formatNum((ship.purchase.lc) || 0)}`;
+    if (ship.build) return '⚒ Build';
+    const st = G.shipBuyState ? G.shipBuyState(key) : {};
+    if (st.unlocked) return ship.resPrice ? '✦ ' + G.formatNum(Object.values(ship.resPrice)[0] || 0) : '$ ' + G.formatNum(ship.price || 0);
+    return '🔒 Z' + (ship.bpZone || '?');
+  }
+  function shipTile(key) {
+    const ship = C.SHIP_BY_KEY[key];
+    const stateCls = tileState(key, ship);
+    const owned = stateCls !== 'locked';
+    const active = stateCls === 'active';
+    const lvl = (owned && G.shipUpInfo) ? G.shipUpInfo(key).level : 0;
+    const badge = tileBadge(key, ship);
+    return `<button class="ship-tile ${stateCls}" data-ship-tile="${key}">
+      <div class="st-thumb"><img src="ships/ship-${key}.png" alt="" loading="lazy">
+        ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}</div>
+      <div class="st-name">${ship.name}</div>
+      <div class="st-cls">${ship.cls}</div>
+      <div class="st-stats"><span>⚔${ship.weapons}</span><span>⊕${ship.ammo}</span><span>⛨${ship.hull}</span>${ship.drones ? `<span class="dr">◎${ship.drones}</span>` : ''}</div>
+      ${owned ? '' : `<div class="st-badge">${badge}</div>`}
+    </button>`;
+  }
+  function openShipDetail(key) {
+    const sheet = showSheet(`<div class="sheet-head">${C.SHIP_BY_KEY[key].name}</div><div class="sheet-body ship-detail-sheet">${shipCard(key)}<div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Close</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); closeSheet(); renderStore(); } }));
+    sheet.querySelectorAll('[data-ship-buy]').forEach((b) => b.addEventListener('click', () => { closeSheet(); openShipBuy(b.dataset.shipBuy); }));
+    sheet.querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, () => { closeSheet(); renderStore(); })));
+    sheet.querySelectorAll('[data-build-start]').forEach((b) => b.addEventListener('click', () => { closeSheet(); openBuildConfirm(b.dataset.buildStart); }));
+    sheet.querySelectorAll('[data-lc-final]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.lcFinal; closeSheet(); openShipLCBuy(k, (C.SHIP_BY_KEY[k].purchase || {}).lc); }));
+    sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
   }
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
@@ -1327,7 +1388,7 @@
         <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700;letter-spacing:.02em">+${inf.bonus.dmg}% DMG · +${inf.bonus.hp}% HP · +${inf.bonus.rate}% Rate<div style="font-size:8.5px;color:#6f7f99;letter-spacing:.12em;text-transform:uppercase">Hull Lv ${inf.level}</div>${inf.level>1?'<div style="font-size:8px;color:#ff9a64;letter-spacing:.02em;margin-top:1px">⚠ resets to Lv 1 on death</div>':''}</div>
         ${inf.maxed
           ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>`
-          : `<button class="ship-btn" data-ship-upg="${key}" ${inf.afford?'':'disabled'} style="white-space:nowrap;font-variant-numeric:tabular-nums">⬆ ● ${G.formatNum(inf.cost.gold)} ✦ ${G.formatNum(inf.cost.plasma)}</button>`}
+          : `<button class="ship-btn" data-ship-upg="${key}" ${inf.afford?'':'disabled'} style="white-space:nowrap;font-variant-numeric:tabular-nums">⬆ <span style="color:#ffd24d">●</span> ${G.formatNum(inf.cost.gold)} <span style="color:#c79bff">✦</span> ${G.formatNum(inf.cost.plasma)}</button>`}
       </div>`;
     }
     return `<div class="ship-card ${cls} ${st.active?'is-active':''}">
@@ -1390,8 +1451,8 @@
           </div>`;
         }
       }
-      html += `<div class="sec-blurb">Buy hulls with gold. Each unlocks only after you recover its <b>blueprint</b> from a zone boss and prove yourself in the previous hull.</div>`;
-      html += C.SHIPS.map((s) => shipCard(s.key)).join('');
+      html += `<div class="sec-blurb">Buy hulls with gold. Each unlocks only after you recover its <b>blueprint</b> from a zone boss and prove yourself in the previous hull. <b style="color:#5fa8ff">Tap any hull</b> for full stats.</div>`;
+      html += '<div class="ship-grid">' + C.SHIPS.map((s) => shipTile(s.key)).join('') + '</div>';
       html += '</div>';
     }
 
@@ -1407,7 +1468,7 @@
           <div class="lcv-tag">✧ DAILY · resets 12 AM CST · <span id="lc-prim-cd">${fmtT(G.lcPrimTimeLeft())}</span></div>
           <div class="lcv-title">PRIMORDIAL VAULT</div>
           <div class="store-card shop-card lcm-card ${bl(pit.rarity)}" data-lcmcard="prim:0" style="border-left-width:3px;margin-top:8px;cursor:pointer">
-            <div class="sc-ico" style="border-color:${pr.color}">${itemIcon(pit)}</div>
+            <div class="sc-ico ${rc(pit.rarity)}" style="border-color:${pr.color}">${itemIcon(pit)}</div>
             <div class="sc-main"><div class="sc-name ${rc(pit.rarity)}">${pit.name} ${G.shopIsUpgrade(pit)?'<span class="ic-tag up" style="vertical-align:2px">▲ UP</span>':''}</div>
               <div class="sc-desc">${pr.name} · ${C.SLOTS[pit.slot].name} · matched to your level</div></div>
             <button class="sc-buy lc" data-lcm="prim:0" ${sold?'disabled':''}>${sold?'CLAIMED':LC_ICON+G.formatNum(C2.prim)}</button></div>
@@ -1421,7 +1482,7 @@
           if (!it) return;
           const bought = lm.cosmic.bought.includes(i), r = C.RARITY[it.rarity];
           html += `<div class="store-card shop-card lcm-card ${bl(it.rarity)}" data-lcmcard="cosmic:${i}" style="border-left-width:3px;cursor:pointer">
-            <div class="sc-ico" style="border-color:${r.color}">${itemIcon(it)}</div>
+            <div class="sc-ico ${rc(it.rarity)}" style="border-color:${r.color}">${itemIcon(it)}</div>
             <div class="sc-main"><div class="sc-name ${rc(it.rarity)}">${it.name} ${G.shopIsUpgrade(it)?'<span class="ic-tag up" style="vertical-align:2px">▲ UP</span>':''}</div>
               <div class="sc-desc">${r.name} · ${C.SLOTS[it.slot].name}</div></div>
             <button class="sc-buy lc" data-lcm="cosmic:${i}" ${bought?'disabled':''}>${bought?'Sold':LC_ICON+G.formatNum(C2.cosmic)}</button></div>`;
@@ -1437,7 +1498,7 @@
         const bought = sh.bought.includes(i), r = C.RARITY[it.rarity];
         const afford = G.state.gold >= price, up = G.shopIsUpgrade(it);
         html += `<div class="store-card shop-card lcm-card ${bl(it.rarity)}" data-shopcard="${i}" style="border-left-width:3px;cursor:pointer">
-          <div class="sc-ico" style="border-color:${r.color}">${itemIcon(it)}</div>
+          <div class="sc-ico ${rc(it.rarity)}" style="border-color:${r.color}">${itemIcon(it)}</div>
           <div class="sc-main"><div class="sc-name ${rc(it.rarity)}">${it.name} ${up?'<span class="ic-tag up" style="vertical-align:2px">▲ UP</span>':''}</div>
             <div class="sc-desc">${r.name} · ${C.SLOTS[it.slot].name} · Z${it.dungeon}</div></div>
           <button class="sc-buy" data-shop="${i}" ${bought||!afford?'disabled':''}>${bought?'Sold':'<span class="coin">$</span> '+G.formatNum(price)}</button></div>`;
@@ -1552,6 +1613,7 @@
       });
     }));
     // ship buy / switch / blueprint-hunt
+    el['store-body'].querySelectorAll('[data-ship-tile]').forEach((b) => b.addEventListener('click', () => openShipDetail(b.dataset.shipTile)));
     el['store-body'].querySelectorAll('[data-ship-buy]').forEach((b) => b.addEventListener('click', () => openShipBuy(b.dataset.shipBuy)));
     el['store-body'].querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
@@ -1649,36 +1711,29 @@
   // ==========================================================================
   function renderBoard() {
     if (window.LEADERBOARD && LEADERBOARD.ensureReal) LEADERBOARD.ensureReal(() => { if (screen === 'board') renderBoard(); });
-    const heat = LB.heatBoard(G);
-    el['board-sub'].textContent = lbTab === 'heat' ? 'Heat ' + heat.heat : 'All-Time';
-    // LIVE feel: rival scores wobble a touch every refresh (pure presentation —
-    // zero net growth, just a ±~1% sine jitter seeded per name)
-    const jt = Date.now() / 1000;
-    const jitter = (v, s2) => { let h = 0; for (let i = 0; i < s2.length; i++) h = (h * 31 + s2.charCodeAt(i)) | 0; return Math.max(1, Math.round(v * (1 + 0.012 * Math.sin(jt * 0.9 + (h % 97))))); };
+    el['board-sub'].textContent = 'All-Time';
+    let signedIn = false; try { signedIn = !!(window.ACCOUNT && ACCOUNT.current && ACCOUNT.current()); } catch (e) {}
     let html = hangarTabsHTML('board');
-    html += `<div class="lb-tabs">
-      <button class="lb-tab ${lbTab==='heat'?'active':''}" data-t="heat">My Heat</button>
-      <button class="lb-tab ${lbTab==='all'?'active':''}" data-t="all">All-Time</button></div>`;
-    let data;
-    if (lbTab === 'heat') {
-      data = heat;
-      html += `<div class="lb-info">Heat ${heat.heat} · week of ${heat.label}. Everyone who started this week competes together. New heat every Monday.</div>`;
-    } else {
-      data = LB.allTimeBoard(G);
-      html += `<div class="lb-info">All-time ranking across every heat since launch.</div>`;
+    const data = LB.allTimeBoard(G);
+    html += `<div class="lb-info">All-time ranking of every real operator, by fleet power.</div>`;
+    if ((data.real || 0) === 0) {
+      html += `<div style="text-align:center;padding:26px 18px;border:1px dashed var(--line-2,#37475f);border-radius:14px;margin:4px 0 12px;background:rgba(95,209,255,.04);">
+        <div style="font-size:30px;line-height:1;margin-bottom:8px;">🛰️</div>
+        <div style="font-family:var(--font-display,'Orbitron');font-weight:800;font-size:14px;color:var(--text,#eaf0fa);letter-spacing:.02em;">${signedIn ? "You're the first ranked operator" : 'No rivals on the board yet'}</div>
+        <div style="font-size:12px;line-height:1.5;color:var(--muted,#93a2ba);margin:6px auto 0;max-width:34ch;">${signedIn ? 'Real operators appear here as they sign in and play. Climb while it’s wide open — every rank is live.' : 'Sign in to publish your fleet to the live board and compete against real operators worldwide.'}</div>
+      </div>`;
     }
     html += data.board.slice(0, 60).map((p, i) => `
       <div class="lb-row ${p.isMe?'me':''}" data-rank="${i}">
         <div class="lb-rank ${p.rank<=3?'top':''}">${p.rank}</div>
-        <div class="lb-nm"><div class="lb-name ${p.isMe?'':''}">${p.isMe?'★ ':''}${p.name}</div>
-          <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.isMe ? p.kills : jitter(p.kills, p.name + 'k'))} kills</div>
+        <div class="lb-nm"><div class="lb-name">${p.isMe?'★ ':''}${p.name}</div>
+          <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div>
           <div class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</div></div>
-        <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.isMe ? p.power : jitter(p.power, p.name))}</div></div>`).join('');
+        <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.power)}</div></div>`).join('');
     const _sc = el['board-body'].scrollTop;
     el['board-body'].innerHTML = html;
     el['board-body'].scrollTop = _sc;
     wireHangarTabs(el['board-body']);
-    el['board-body'].querySelectorAll('.lb-tab').forEach((b) => b.addEventListener('click', () => { lbTab = b.dataset.t; renderBoard(); }));
     el['board-body'].querySelectorAll('.lb-row').forEach((row) => row.addEventListener('click', () => openLoadout(data.board[+row.dataset.rank], data.board.length)));
     // auto-refresh every few seconds while the board is open
     clearInterval(_boardTimer);

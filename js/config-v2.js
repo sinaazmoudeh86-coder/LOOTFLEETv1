@@ -135,9 +135,17 @@
   // GRINDING units down over several volleys, not one-shotting the screen —
   // an on-level enemy should soak a good handful of hits before breaking.
   function enemyHp(dungeon) {
-    // zones 1–5 are the FAST lane — fresh pilots nearly one-shot everything;
-    // real HP arrives at zone 6
-    const ramp = dungeon === 1 ? 0.06 : dungeon === 2 ? 0.12 : dungeon === 3 ? 0.25 : dungeon === 4 ? 0.45 : dungeon === 5 ? 0.65 : 1;
+    // zones 1–25 are the FAST lane — geared pilots nearly one-shot everything.
+    // HP climbs very gently across this band, then catches up to full HP over
+    // zones 26–31 so there's no brutal cliff. Real grind HP arrives at zone 32.
+    let ramp;
+    if (dungeon <= 25) {
+      ramp = 0.04 + (dungeon - 1) * (0.12 / 24);   // 0.04 → 0.16 across 1–25
+    } else if (dungeon <= 31) {
+      ramp = 0.16 + (dungeon - 25) * ((1 - 0.16) / 6); // 0.16 → 1 across 26–31
+    } else {
+      ramp = 1;
+    }
     return Math.max(8, Math.floor((252 * dungeonScale(dungeon) + 30) * ramp));
   }
 
@@ -146,8 +154,16 @@
   // because enemy damage scales geometrically while your HP lags if under-geared.
   // (Also see the per-hit cap in entities.js — no single hit can one-shot you.)
   function enemyDamage(dungeon) {
-    // zones 1–5 hit soft — a fresh, itemless frigate must survive its first sorties
-    const ramp = dungeon === 1 ? 0.45 : dungeon === 2 ? 0.6 : dungeon === 3 ? 0.75 : dungeon === 4 ? 0.85 : dungeon === 5 ? 0.95 : 1;
+    // zones 1–25 hit soft — the easy-grind band stays forgiving, then damage
+    // ramps back to full over zones 26–31 alongside the HP catch-up.
+    let ramp;
+    if (dungeon <= 25) {
+      ramp = 0.35 + (dungeon - 1) * (0.20 / 24);   // 0.35 → 0.55 across 1–25
+    } else if (dungeon <= 31) {
+      ramp = 0.55 + (dungeon - 25) * ((1 - 0.55) / 6); // 0.55 → 1 across 26–31
+    } else {
+      ramp = 1;
+    }
     return Math.max(1, Math.floor((2.1 * dungeonScale(dungeon) + 1) * ramp));
   }
 
@@ -178,15 +194,17 @@
   // clamped in game.js). Tier index → see RARITY above.
   // ---------------------------------------------------------------------------
   function rarityCap(zone) {
-    if (zone >= 300) return 13;  // Artifact
-    if (zone >= 250) return 12;  // Relic
-    if (zone >= 200) return 11;  // Primordial
-    if (zone >= 150) return 10;  // Eternal
-    if (zone >= 100) return 9;   // Void
-    if (zone >= 75)  return 8;   // Cosmic
-    if (zone >= 55)  return 7;   // Divine
-    if (zone >= 35)  return 6;   // Ancient
-    if (zone >= 20)  return 5;   // Mythic
+    // Every tier — up to Artifact — is reachable by zone 100; the roll weights
+    // (items.js) keep the top end a real grind. Bosses/citadels beat this by +1.
+    if (zone >= 100) return 13;  // Artifact
+    if (zone >= 90)  return 12;  // Relic
+    if (zone >= 78)  return 11;  // Primordial
+    if (zone >= 66)  return 10;  // Eternal
+    if (zone >= 55)  return 9;   // Void
+    if (zone >= 44)  return 8;   // Cosmic
+    if (zone >= 34)  return 7;   // Divine
+    if (zone >= 25)  return 6;   // Ancient
+    if (zone >= 17)  return 5;   // Mythic
     if (zone >= 10)  return 4;   // Legendary
     if (zone >= 5)   return 3;   // Epic
     return 2;                    // Rare (zones 1–4)
@@ -382,6 +400,39 @@
       desc:'The final hull. 2.5× the Oblivion Spear in every dimension, wreathed in a green reactor aura. Sold for LootCoins to commanders Level 200+.',
       greenAura:true,
       purchase:{ lc:1000000, reqLevel:200 } },
+    // DREAD-CLASS — six recovered Dreadnaught hulls, sold directly for a MIX of
+    // every currency at a steeper price than the Oblivion Final, each one a step
+    // beyond it in raw performance. Gated by account level, not the blueprint chain.
+    { key:'dread1', name:'Dread Reaver', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:44,
+      mods:{ hpPct:1040, dmgPct:585, multiShot:156, critChance:130, critDamage:455, moveSpeed:98, atkSpeedPct:195, rangePct:312, lifeSteal:29 },
+      tag:'DREAD-CLASS I', dreadAura:true, reqLevel:100,
+      desc:'First of the recovered Dreadnaughts — already a tier beyond the Oblivion Final. Bought with a mix of every currency.',
+      megaCost:{ gold:5e9, fuel:60e6, iron:40e6, plasma:25e6, prism:4000, credits:1500000, dreadCores:6 } },
+    { key:'dread2', name:'Dread Sovereign', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:52,
+      mods:{ hpPct:1280, dmgPct:720, multiShot:192, critChance:160, critDamage:560, moveSpeed:120, atkSpeedPct:240, rangePct:384, lifeSteal:35 },
+      tag:'DREAD-CLASS II', dreadAura:true, reqLevel:120,
+      desc:'A command Dreadnaught bristling with hardpoints. Strictly superior to the Reaver.',
+      megaCost:{ gold:10e9, fuel:120e6, iron:80e6, plasma:50e6, prism:8000, credits:3000000, dreadCores:12 } },
+    { key:'dread3', name:'Dread Leviathan', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:60,
+      mods:{ hpPct:1560, dmgPct:878, multiShot:234, critChance:195, critDamage:683, moveSpeed:146, atkSpeedPct:293, rangePct:468, lifeSteal:43 },
+      tag:'DREAD-CLASS III', dreadAura:true, reqLevel:140,
+      desc:'A leviathan-scale hull whose reactor output dwarfs the lesser Dreads.',
+      megaCost:{ gold:15e9, fuel:180e6, iron:120e6, plasma:75e6, prism:12000, credits:4500000, dreadCores:18 } },
+    { key:'dread4', name:'Dread Harbinger', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:72,
+      mods:{ hpPct:1880, dmgPct:1058, multiShot:282, critChance:235, critDamage:823, moveSpeed:176, atkSpeedPct:353, rangePct:564, lifeSteal:52 },
+      tag:'DREAD-CLASS IV', dreadAura:true, reqLevel:160,
+      desc:'A harbinger of the apex Dreads — overwhelming firepower across 72 drone bays.',
+      megaCost:{ gold:20e9, fuel:240e6, iron:160e6, plasma:100e6, prism:16000, credits:6000000, dreadCores:24 } },
+    { key:'dread5', name:'Dread Tyrant', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:84,
+      mods:{ hpPct:2240, dmgPct:1260, multiShot:336, critChance:280, critDamage:980, moveSpeed:210, atkSpeedPct:420, rangePct:672, lifeSteal:62 },
+      tag:'DREAD-CLASS V', dreadAura:true, reqLevel:180,
+      desc:'A tyrant hull that rewrites the battlefield — second only to the Omega.',
+      megaCost:{ gold:30e9, fuel:360e6, iron:240e6, plasma:150e6, prism:24000, credits:9000000, dreadCores:36 } },
+    { key:'dread6', name:'Dread Omega', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:96,
+      mods:{ hpPct:2640, dmgPct:1485, multiShot:396, critChance:330, critDamage:1155, moveSpeed:248, atkSpeedPct:495, rangePct:792, lifeSteal:73 },
+      tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
+      desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
+      megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:15000000, dreadCores:60 } },
   ];
   // Economy tuning: hulls cost 3× gold and demand 5× the kills to unlock.
   SHIPS.forEach((s) => {

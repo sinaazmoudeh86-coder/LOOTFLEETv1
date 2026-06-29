@@ -194,6 +194,7 @@
           <div class="res-chip" style="--rc:#d0a060"><span class="rg">◆</span><span id="hud-iron">0</span><span class="rr" id="hud-iron-rate"></span></div>
           <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
           <div class="res-chip lc-chip pm-chip" id="prism-chip" style="--rc:#ff3a3a;display:none" title="Prism Ore"><span class="rg" style="color:#ff3a3a">◈</span><span id="hud-prism">0</span></div>
+          <div class="res-chip lc-chip" id="hud-dread" style="--rc:#ff3a4a;display:none" title="Dread Cores"><span class="rg" style="color:#ff3a4a">◇</span><span id="hud-dread-v">0</span></div>
           <div class="res-chip lc-chip chip-glow" style="--rc:#f2a93c" title="LootCoins"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
         </div>
       </div>
@@ -324,6 +325,18 @@
           <div class="pf-sheet-root" id="pf-sheet-root"></div>
         </div>
 
+        <!-- PILOT (Hangar ▸ Pilot) -->
+        <div class="screen overlay" id="screen-pilot">
+          <div class="scr-head"><span class="scr-title">Pilot</span><span class="scr-sub" id="pilot-sub"></span></div>
+          <div class="scr-body" id="pilot-body"></div>
+        </div>
+
+        <!-- DREADNAUGHT HUNT (Command) -->
+        <div class="screen overlay" id="screen-dread">
+          <div class="scr-head"><span class="scr-title">Dreadnaught Hunt</span><span class="scr-sub" id="dread-sub"></span></div>
+          <div class="scr-body" id="dread-body"></div>
+        </div>
+
       </div>
 
       <!-- BOTTOM NAV -->
@@ -364,6 +377,14 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg>
           <span class="nl">Pilot Skills</span><span class="badge" id="hero-badge" style="display:none">0</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="pilot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
+          <span class="nl">Pilot</span>
+        </button>
+        <button class="nav-btn nav-grouped" data-screen="dread">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg>
+          <span class="nl">Dreadnaught</span>
+        </button>
         <button class="nav-btn" id="nav-command" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 11h6M9 14h6M12 8v0"/></svg>
           <span class="nl">Command</span><span class="badge" id="cmd-badge" style="display:none">0</span>
@@ -380,6 +401,16 @@
             <div class="mega-card cmd-fr" data-go="fleetrank">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg></div>
               <div><div class="mc-n">Fleet Rank</div><div class="mc-s">Endgame PvP ladder · raid &amp; climb</div></div>
+              <span class="mc-lock"></span>
+            </div>
+            <div class="mega-card cmd-dread" data-go="dread">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg></div>
+              <div><div class="mc-n">Dreadnaught Hunt</div><div class="mc-s">Weekly raid · hunt for ◇ Dread Cores</div></div>
+              <span class="mc-lock"></span><span class="badge" id="cmd-dread-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-pilot" data-go="pilot">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg></div>
+              <div><div class="mc-n">Pilot Tree</div><div class="mc-s">Spend ◇ cores · permanent ship bonuses</div></div>
               <span class="mc-lock"></span>
             </div>
             <div class="mega-card" data-go="galaxy">
@@ -471,6 +502,7 @@
 <script src="js/coach-v89.js"></script>
 <script src="js/prism-v5.js"></script>
 <script src="js/prism-fleet.js"></script>
+<script src="js/dreadnaught.js"></script>
 <script src="js/auth.js"></script>
 <script id="auth-gate-glue">
   /* Presentational glue only — drives the new segmented control through the
@@ -550,7 +582,7 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,fleetrank:50};
+    const LOCKS={galaxy:25,fleetrank:50,dread:30,pilot:30};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -566,7 +598,7 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active');
+      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-pilot.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();

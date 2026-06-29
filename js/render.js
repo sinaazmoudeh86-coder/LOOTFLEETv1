@@ -255,8 +255,23 @@
       ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(e.x, e.y, e.size * 2.4, 0, 7); ctx.fill();
     }
     ctx.translate(e.x + (e.dir < 0 ? -lunge : lunge), e.y);
-    ctx.scale(e.dir * scale, scale);
-    drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
+    if (e.spriteImg && e.spriteImg.complete && e.spriteImg.naturalWidth) {
+      // HERO SPRITE (Dreadnaught raid boss) — draw the art instead of the alien mesh.
+      const img = e.spriteImg;
+      const dw = e.size * 2.7, dh = dw * (img.naturalHeight / img.naturalWidth);
+      ctx.scale(scale, scale);                       // no dir-mirror: keep the art crisp
+      ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+      if (e.hitFlash > 0) {                           // hit flash: additive white wash
+        ctx.globalAlpha = alpha * e.hitFlash * 0.6;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = alpha;
+      }
+    } else {
+      ctx.scale(e.dir * scale, scale);
+      drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
+    }
     ctx.restore();
 
     if (!e.dying && e.hp < e.maxHp) {

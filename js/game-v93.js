@@ -131,6 +131,9 @@
     }
     // skill-tree modifiers
     const m = skillMods();
+    // PILOT TREE — permanent, account-wide bonuses that benefit EVERY ship.
+    const pm = (window.DREAD && window.DREAD.combatMods) ? window.DREAD.combatMods() : {};
+    ['dmgPct','atkSpeedPct','critChance','critDamage','hpPct','moveSpeed','lifeSteal','multiShot'].forEach((k) => { if (pm[k]) m[k] += pm[k]; });
     // ship passive modifiers
     const ship = C.SHIP_BY_KEY[state.ship] || C.SHIPS[0];
     const sm = ship.mods || {};
@@ -143,8 +146,8 @@
     const aura = I.supportAura ? I.supportAura(state.equipped.bow) : null;
     // Warden arrays mount only on the Aegis — inert anywhere else (legacy saves)
     const aMul = ship.cls === 'Aegis' ? 2 : 0;
-    s.regen = aura ? aura.regen * aMul : 0;
-    s.dmgReduce = aura ? Math.min(60, aura.reduce * aMul) : 0;
+    s.regen = (aura ? aura.regen * aMul : 0) + (pm.regen || 0);
+    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0));
     if (aura) s.multiShot += aura.multiShot * aMul;
     // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
     const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
@@ -164,7 +167,7 @@
     s.maxHp = s.health;
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
     // weapon range — hull mod + fleet share + Warden aura all extend it
-    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0)) / 100);
+    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0)) / 100);
     s.fleetSize = esc.length;
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
     s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
@@ -247,6 +250,7 @@
   }
   function gainXp(amount) {
     if (isPro()) amount *= 2;   // LootFleet Pro — 2× XP on every source, account-wide
+    if (window.DREAD && window.DREAD.mult) amount *= window.DREAD.mult('xpGain');   // PILOT: XP Gain nodes
     state.xp += amount;
     let gained = 0;
     while (state.xp >= C.xpToNext(state.level)) { state.xp -= C.xpToNext(state.level); state.level++; gained++; }
@@ -267,6 +271,17 @@
       state.lv100Warned = true; save();
       if (window.UI && window.UI.showCatastropheWarning) window.UI.showCatastropheWarning();
     }
+  }
+  // Jump the pilot to a level (used by the secret easter eggs). Grants the
+  // matching skill points and zone unlocks, then recomputes stats.
+  function setLevel(n) {
+    n = Math.max(1, n | 0);
+    if (n <= state.level) return state.level;
+    const gained = n - state.level;
+    state.level = n; state.xp = 0;
+    state.skillPoints = (state.skillPoints || 0) + gained * C.SKILLS.pointsPerLevel;
+    onLevelUp(gained);
+    return state.level;
   }
 
   // --------------------------------------------------------------------------
@@ -448,12 +463,15 @@
   function resolveHit(p) {
     const e = p.target;
     if (!e || e.dead) return;
-    const killed = e.takeDamage(p.damage);
+    // PILOT: bonus damage vs bosses / elites (Dreadnaughts & Super Bosses count as both)
+    let _dmg = p.damage;
+    if (e.isBoss && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
+    const killed = e.takeDamage(_dmg);
     // PRISM AURA — 10% of your hit splashes as AOE to nearby foes
     if (state.shipAura && state.shipAura[state.ship]) prismSplash(e, p.damage);
     // damage floats are thinned under load — crits ALWAYS show
     if (p.crit || rt.floats.length < 28) {
-      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(p.damage), { color: p.crit ? '#e07c12' : '#f4f8ff', size: p.crit ? 48 : 32, crit: p.crit }));
+      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(_dmg), { color: p.crit ? '#e07c12' : '#f4f8ff', size: p.crit ? 48 : 32, crit: p.crit }));
     }
     // IMPACT: class-specific hit effects — each weapon lands differently
     const back = p.angle;
@@ -522,7 +540,7 @@
     maybeDropDrone(e);
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
     gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1));
-    state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1);
+    state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1);   // PILOT: Gold Find
     // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
     // iron & plasma are the rare finds (rarer, but a real grind faucet now).
     // Bosses always pay a wreck's worth of all three.
@@ -650,6 +668,36 @@
     rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = isSuper;
     burst(x, y, isSuper ? '#ff2a4a' : '#e23b4e', isSuper ? 90 : 50, { speed: isSuper ? 360 : 280, life: 1.1, glow: true });
     if (window.UI) window.UI.bossEvent(isSuper ? 'super' : 'spawn');
+    return b;
+  }
+  // ---- DREADNAUGHT raid boss (Dreadnaught Hunt) ----------------------------
+  const _dreadImgCache = {};
+  function dreadImg(tier) {
+    const n = ((Math.max(1, tier) - 1) % 6) + 1;
+    if (!_dreadImgCache[n]) { const im = new Image(); im.src = 'ships/dread-' + n + '.png'; _dreadImgCache[n] = im; }
+    return _dreadImgCache[n];
+  }
+  function dreadLevelFor(tier) { return 5 + tier * 25; }   // tier1→30, tier2→55, tier3→80 …
+  function spawnDreadnaught(tier) {
+    const pool = allowedEnemies();
+    const type = pool[pool.length - 1];
+    const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
+    const b = new E.Enemy(type, state.currentDungeon, cx, cy);
+    b.isBoss = true; b.isSuper = true; b.isDread = true; b.dreadTier = tier;
+    // HP is anchored to the player's own DPS so a Dreadnaught is ALWAYS a real
+    // raid (a long, multi-phase fight) no matter how over- or under-geared you are.
+    const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
+    const ttk = 26 + tier * 6;
+    b.maxHp = b.hp = Math.max(20000, Math.round(dps * ttk));
+    b.damage = (b.damage || 10) * (2.2 + tier * 0.1);
+    b.speed *= 0.42; b.size = 118 + Math.min(54, tier * 4);
+    b.ranged = true; b.range = 560; b.fireCd = 1.3; b.fireT = 1.2;
+    b.tint = '#ff2a3a';
+    b.spriteImg = dreadImg(tier);
+    b.name = 'DREADNAUGHT · Lv ' + dreadLevelFor(tier);
+    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    burst(cx, cy, '#ff2a3a', 110, { speed: 380, life: 1.3, glow: true });
+    if (window.UI) window.UI.bossEvent('super');
     return b;
   }
   function getBossInfo() {
@@ -815,7 +863,14 @@
     // canvas work entirely. (querySelector here is a cheap selector match — no
     // layout/reflow — so it is fine to run once per frame.)
     if (document.hidden) return;
-    if (document.querySelector('.screen.overlay.active')) return;
+    if (document.querySelector('.screen.overlay.active')) {
+      // Battle view is hidden behind a menu — skip the expensive canvas paint,
+      // but keep the always-visible top HUD (level, XP, HP, gold) live so combat
+      // progress still shows on EVERY tab while farming. Cheap throttled DOM
+      // writes only, same ~8Hz cadence as the in-draw() call.
+      if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
+      return;
+    }
     draw();
   }
   function loop(now) { if (!rt.running) return; step(now); requestAnimationFrame(loop); }
@@ -914,6 +969,8 @@
     // the real combat sim. Only active inside a Prism Field run.
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.tick) { try { window.PRISM.tick(dt, rt); } catch (e) {} }
     if (state.prismFleetRun && state.prismFleetRun.active && window.PRISMFLEET && window.PRISMFLEET.tick) { try { window.PRISMFLEET.tick(dt, rt); } catch (e) {} }
+    // DREADNAUGHT HUNT — raid-boss phase logic (adds, novas, enrage) on the real sim.
+    if (state.dreadRun && state.dreadRun.active && window.DREAD && window.DREAD.tick) { try { window.DREAD.tick(dt, rt); } catch (e) {} }
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
@@ -954,13 +1011,15 @@
 
     // ground loot pickups + LOOT MAGNET: drops within range fly toward the
     // player (accelerating as they near) and are collected on contact.
+    const _prMul = (window.DREAD ? window.DREAD.mult('pickupRadius') : 1);   // PILOT: Loot Pickup Radius
+    const _pickR = PICKUP_RADIUS * _prMul, _magR = MAGNET_RADIUS * _prMul;
     for (const g of rt.ground) {
       g.update(dt);
       if (!g.lost && !g.picked && !g.dead && !a.dead) {
         const dx = a.x - g.x, dy = a.y - g.y, d = Math.hypot(dx, dy) || 1;
-        if (d <= PICKUP_RADIUS) collect(g);
-        else if (d <= MAGNET_RADIUS) {
-          const k = 1 - d / MAGNET_RADIUS;            // 0 at edge → 1 near player
+        if (d <= _pickR) collect(g);
+        else if (d <= _magR) {
+          const k = 1 - d / _magR;            // 0 at edge → 1 near player
           const pull = MAGNET_SPEED * (0.5 + k * 2.5);
           g.x += (dx / d) * pull * dt;
           g.y += (dy / d) * pull * dt;
@@ -1128,6 +1187,8 @@
     }
     drawMinimap(ctx);
     drawPortrait();
+    // DREADNAUGHT raid-boss phase FX (telegraphs, novas) — drawn over the arena.
+    if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
     // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
     if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
   }
@@ -1448,14 +1509,39 @@
   function shipUnlocked(key) {
     const ship = C.SHIP_BY_KEY[key]; if (!ship) return false;
     if (ship.tier === 0) return true;
+    if (ship.megaCost) return (state.level || 1) >= (ship.reqLevel || 1);   // DREAD-class: level-gated direct buy
     const prev = C.shipPrevKey(key);
     return hasBlueprint(key) && !!state.ownedShips[prev] && shipKillsFor(prev) >= ship.reqKills;
+  }
+  // DREAD-class multi-currency cost helpers
+  function megaShort(c) {
+    if ((state.gold || 0) < (c.gold || 0)) return 'gold';
+    if ((state.resources.fuel || 0) < (c.fuel || 0)) return 'fuel';
+    if ((state.resources.iron || 0) < (c.iron || 0)) return 'iron';
+    if ((state.resources.plasma || 0) < (c.plasma || 0)) return 'plasma';
+    if (prismIngots() < (c.prism || 0)) return 'prism';
+    if ((state.credits || 0) < (c.credits || 0)) return 'credits';
+    if ((state.dreadCores || 0) < (c.dreadCores || 0)) return 'dreadCores';
+    return null;
+  }
+  function megaAfford(c) { return !megaShort(c); }
+  function payMega(c) {
+    state.gold -= (c.gold || 0);
+    state.resources.fuel -= (c.fuel || 0); state.resources.iron -= (c.iron || 0); state.resources.plasma -= (c.plasma || 0);
+    if (c.prism && state.prism) state.prism.ingots -= c.prism;
+    state.credits = (state.credits || 0) - (c.credits || 0);
+    state.dreadCores = (state.dreadCores || 0) - (c.dreadCores || 0);
   }
   // Descriptor the store uses to render each hull's state.
   function shipBuyState(key) {
     const ship = C.SHIP_BY_KEY[key];
     const owned = !!state.ownedShips[key];
     const active = state.ship === key;
+    if (ship.megaCost) {
+      return { key, owned, active, unlocked: (state.level || 1) >= (ship.reqLevel || 1),
+               affordable: megaAfford(ship.megaCost), megaCost: ship.megaCost, reqLevel: ship.reqLevel || 1,
+               hasBlueprint: true, prevOwned: true, killsMet: true, killsHave: 0, killsNeed: 0, price: 0 };
+    }
     const prev = C.shipPrevKey(key);
     const have = prev ? shipKillsFor(prev) : 0;
     const need = ship.reqKills || 0;
@@ -1474,8 +1560,12 @@
     const ship = C.SHIP_BY_KEY[key];
     if (!ship || state.ownedShips[key]) return { ok: false, reason: 'owned' };
     if (!shipUnlocked(key)) return { ok: false, reason: 'locked' };
-    // MOTHERSHIP & any resPrice hull: paid in Galaxy Resources, not gold.
-    if (ship.resPrice) {
+    // DREAD-class hulls: paid in a MIX of every currency.
+    if (ship.megaCost) {
+      const miss = megaShort(ship.megaCost);
+      if (miss) return { ok: false, reason: miss };
+      payMega(ship.megaCost);
+    } else if (ship.resPrice) {
       if (!canAfford(ship.resPrice)) return { ok: false, reason: 'resources' };
       state.resources.fuel -= ship.resPrice.fuel || 0;
       state.resources.iron -= ship.resPrice.iron || 0;
@@ -1858,6 +1948,7 @@
     }
     state.currentDungeon = d;
     state.currentSystem = null;   // classic free-play deploy (not a galaxy tile)
+    state.dreadRun = null;        // a normal deploy ends any Dreadnaught Hunt
     rt.siege = null;
     rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
@@ -1876,6 +1967,23 @@
     }
     if (window.UI) window.UI.refreshAll(); save();
   }
+  // DREADNAUGHT HUNT deploy — real combat into the hunt zone, then resetZone
+  // builds the 30-wave gauntlet (dread:true). Bypasses the normal unlock gate:
+  // the hunt is gated by its own level requirement + weekly lockout instead.
+  function startDreadHunt(tier) {
+    const lvl = dreadLevelFor(tier);
+    const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, lvl));
+    state.currentDungeon = zone;
+    state.currentSystem = null;
+    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = { active: true, tier: tier, started: Date.now() };
+    resetZone();
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 4;
+    if (window.UI) window.UI.refreshAll(); save();
+    return true;
+  }
   function respawnAt(d) {
     if (d > state.highestUnlocked) d = state.highestUnlocked;
     state.currentDungeon = d;
@@ -1883,6 +1991,7 @@
     rt.awaitingRespawn = false;
     rt.archer.dead = false; rt.archer.killer = null;
     rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null;
     resetZone();
     // generous safety on redeploy: 4s invulnerability + a spawn grace window so
     // the player is never instantly swarmed after choosing a zone.
@@ -1907,6 +2016,12 @@
       rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
       rt.siege.spawnT = 1.0; rt.siege.wave = 1; rt.siege.bossSpawned = false; rt.siege.pendingBoss = false;
       rt.waves = null;
+    } else if (state.dreadRun && state.dreadRun.active) {
+      // DREADNAUGHT HUNT — 30 escalating waves on the REAL battle engine, then the
+      // Dreadnaught raid boss. Driven by updateWaveZone (dread:true).
+      rt.nodes = [];
+      rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
+      rt.waves = { active: true, total: 30, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, dread: true, tier: state.dreadRun.tier };
     } else if (rt.waves && rt.waves.active) {
       // pre-configured gauntlet (owned Boss Tile) — keep its config, (re)start it
       rt.nodes = [];
@@ -1965,7 +2080,7 @@
   }
   // Effective loot-quality roll multiplier for the current tile (capped so the
   // keep-best rarity roll never loops absurdly).
-  function lootQ() { return Math.min(50, Math.max(1, Math.round(qualityMult(state.currentDungeon) * (rt.tileLoot || 1)))); }
+  function lootQ() { return Math.min(60, Math.max(1, Math.round(qualityMult(state.currentDungeon) * (rt.tileLoot || 1) * (window.DREAD ? window.DREAD.mult('lootQuality') : 1)))); }
   function canAfford(cost) {
     return state.resources.fuel >= (cost.fuel || 0) && state.resources.iron >= (cost.iron || 0) && state.resources.plasma >= (cost.plasma || 0);
   }
@@ -2276,13 +2391,21 @@
     if (s.spawnT > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
-        if (s.pendingBoss) { if (s.citadel) spawnCitadel(); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
-        else spawnWave(s.wave, 1.8); // extreme density
+        if (s.pendingBoss) { if (s.citadel) spawnCitadel(); else if (s.dread) spawnDreadnaught(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
+        else spawnWave(s.wave, s.dread ? (1.3 + Math.min(1.3, s.wave * 0.045)) : 1.8); // dread density ramps each wave
       }
       return;
     }
     if (rt.enemies.filter((e) => !e.dying).length > 0) return;
     if (s.bossSpawned) {
+      if (s.dread) {
+        // DREADNAUGHT DOWN — hand off to the hunt module (cores + weekly lock), tow home.
+        s.active = false; rt.waves = null;
+        if (window.DREAD && window.DREAD.onHuntCleared) { try { window.DREAD.onHuntCleared(s.tier); } catch (x) {} }
+        state.dreadRun = null;
+        respawnAt(0);
+        return;
+      }
       if (s.citadel) {
         // CITADEL RAZED — a short grace to vacuum the loot, then tow home.
         s.graceT = (s.graceT == null) ? 3.4 : s.graceT - dt;
@@ -2571,6 +2694,13 @@
     if (!state.cosmetics) state.cosmetics = { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
     if (!state.cosmetics.owned) state.cosmetics.owned = { stock: 1, none: 1 };
     if (state.credits == null) state.credits = 500; // one-time founder bonus — try the system before payments go live
+    // ---- PILOT PROGRESSION + DREADNAUGHT HUNT ----
+    if (state.dreadCores == null) state.dreadCores = 0;          // rare currency: only from Dreadnaughts
+    if (!state.pilot) state.pilot = { nodes: { '0,0': 1 } };     // hex skill tree: { 'q,r': 1 } unlocked nodes
+    if (!state.pilot.nodes) state.pilot.nodes = {};
+    state.pilot.nodes['0,0'] = 1;                                // origin core is always unlocked
+    if (!state.dreadLock) state.dreadLock = {};                  // weekly lockout: { tier: ISO-week completed }
+    state.dreadRun = null;                                       // a hunt never resumes across a reload
     if (!state.fleet) state.fleet = [];
     if (!state.citadelCd) state.citadelCd = {};
     // ---- ZONE-CAP: keep exactly 10 zones unlocked beyond the pilot's level (and
@@ -2697,7 +2827,7 @@
     const resMul = L >= 3 ? 10 : 1;   // 10× the resources to push a hull past Lv 3
     return { gold: Math.round(1500 * tierMul * Math.pow(goldGrow, L - 1)),
              plasma: Math.round(6 * tierMul * Math.pow(plasmaGrow, L - 1) * resMul),
-             prism: Math.round((1 + idx) * Math.pow(1.6, L - 1) * resMul) };
+             prism: 0 };   // hull upgrades cost gold + plasma only (Prism is reserved for Prism systems)
   }
   function prismIngots() { return (state.prism && state.prism.ingots) || 0; }
   function shipUpInfo(key) {
@@ -2824,6 +2954,10 @@
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
     buyCosmetic, setCosmetic, addCredits,
     getCredits: () => state.credits || 0, getCosmetics: () => state.cosmetics,
+    startDreadHunt, dreadLevelFor,
+    setLevel,
+    getDreadCores: () => state.dreadCores || 0,
+    addDreadCores: (n) => { state.dreadCores = (state.dreadCores || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); },
     invCap, invSlotCost, buyInvSlots,
     setPickupFilter: (t) => { state.pickupFilter = Math.max(0, t | 0); save(); },
     setAutoSellTier: (t) => { state.autoSellTier = (t == null || t < 0) ? -1 : (t | 0); save(); },

@@ -13,10 +13,12 @@
   // the rare tiers stay genuinely rare; a per-tier dampener makes each step up
   // the chain progressively harder to reach.
   function rollRarity(dungeon) {
-    const luck = 1 + dungeon * 0.0045;            // much gentler depth scaling
+    const luck = 1 + dungeon * 0.004;             // gentle depth pressure
     const cap = C.rarityCap ? C.rarityCap(dungeon) : 11;   // zone-gated ceiling
+    // Steeper per-tier dampener (1.30) — each rarity step is markedly rarer than
+    // the last, so top-end drops are a genuine grind even once unlocked.
     const weights = C.RARITY.map((r) =>
-      r.tier > cap ? 0 : (r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier))
+      r.tier > cap ? 0 : (r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.30, r.tier))
     );
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = Math.random() * total;

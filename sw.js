@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v143';
+const CACHE = 'lootfleet-v151';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
@@ -15,7 +15,7 @@ const CORE = [
   'css/style-v2.css', 'css/theme.css', 'css/web-v89.css', 'css/fx-cinematic.css', 'css/fx-primordial.css',
   'js/config-v2.js', 'js/items.js', 'js/entities.js', 'js/render.js',
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.live.js',
-  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v93.js', 'js/ui-v94.js', 'js/fx-cinematic.js', 'js/fx-primordial.js', 'js/coach-v89.js', 'js/auth.js', 'js/prism-v5.js', 'js/prism-fleet.js',
+  'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v93.js', 'js/ui-v94.js', 'js/fx-cinematic.js', 'js/fx-primordial.js', 'js/coach-v89.js', 'js/auth.js', 'js/prism-v5.js', 'js/prism-fleet.js', 'js/dreadnaught.js',
   'js/showcase.js', 'js/ships-inline.js',
   'fleet-rank-embed.html',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
@@ -24,6 +24,8 @@ const CORE = [
   'ships/ship-supercarrier.png', 'ships/ship-titan.png', 'ships/ship-mothership.png',
   'ships/ship-citadel.png',
   'ships/ship-oblivionspear.png', 'ships/ship-oblivionspearalpha.png', 'ships/ship-oblivionfinal.png',
+  'ships/dread-1.png', 'ships/dread-2.png', 'ships/dread-3.png', 'ships/dread-4.png', 'ships/dread-5.png', 'ships/dread-6.png',
+  'ships/ship-dread1.png', 'ships/ship-dread2.png', 'ships/ship-dread3.png', 'ships/ship-dread4.png', 'ships/ship-dread5.png', 'ships/ship-dread6.png',
 ];
 
 self.addEventListener('install', (e) => {

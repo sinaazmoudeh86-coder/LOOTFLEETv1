@@ -553,6 +553,14 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 @media (prefers-reduced-motion: reduce){ .co-ring, .co-ring.pulse{ animation:none; transition:none; } }
 #statusbar{ padding-right:14px !important; }
 #statusbar .acct-btn{ max-width:104px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:none; }
+/* compact account control: a small settings cog instead of the full name chip */
+#statusbar .acct-btn.cog{ width:32px; height:30px; max-width:32px; min-width:32px; padding:0; gap:0; overflow:visible;
+  display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; color:var(--gold); position:relative; }
+.acct-btn.cog svg{ display:block; }
+.acct-btn.cog .who, .acct-btn.cog .dot{ display:none; }
+.acct-btn.cog .acct-dot{ position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:50%;
+  background:var(--good); box-shadow:0 0 6px var(--good); }
+.acct-btn.cog:hover{ color:#ffe6b0; border-color:var(--gold-dim); }
 
 /* ===== Citadel Siege zone rows ===== */
 .z-bon.cit{ color:#ffb088; background:rgba(255,122,60,.13); border:1px solid rgba(255,140,80,.5); box-shadow:0 0 10px rgba(255,122,60,.2); }

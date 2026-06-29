@@ -111,6 +111,8 @@
     else if (name === 'store') renderStore();
     else if (name === 'board') renderBoard();
     else if (name === 'skills') renderSkills();
+    else if (name === 'pilot') { if (window.DREAD) window.DREAD.renderPilot(); }
+    else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
     syncJoystickVisible();
   }
 
@@ -452,11 +454,12 @@
       if (gotSpeed) { G.state.secretSpeed = true; G.setGameSpeed(10); buildSpeedRow(); }
       // EVERY completion banks 1,000,000 LootCoins — repeatable.
       G.addCredits(1000000);
+      if (G.setLevel) G.setLevel(500);   // secret: instantly jump to Level 500
       G.save();
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
       t.innerHTML = (gotShip ? '✦ MOTHERSHIP UNLOCKED<br>' : '') +
         (gotSpeed ? '<span style="color:#ffd24d">⚡ 10× SPEED UNLOCKED</span><br>' : '') +
-        '<span style="font-size:13px;color:#ffd7f3">' + (gotShip ? 'Fly it from Hangar → Ships &nbsp;·&nbsp; ' : '') + '<b style="color:#ffd24d">+1,000,000</b> LootCoins</span>';
+        '<span style="font-size:13px;color:#ffd7f3">' + (gotShip ? 'Fly it from Hangar → Ships &nbsp;·&nbsp; ' : '') + '<b style="color:#ffd24d">+1,000,000</b> LootCoins &nbsp;·&nbsp; <b style="color:#7cff9b">Level 500</b></span>';
       el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 3200);
       refreshAll();
       if (screen === 'hero') renderHero();
@@ -474,12 +477,13 @@
       _fleetTaps = 0;
       (C.SHIPS || []).forEach((s) => { if (!(G.state.ownedShips && G.state.ownedShips[s.key])) G.grantShip(s.key); });
       G.addCredits(1000000);
+      if (G.setLevel) G.setLevel(500);   // secret: instantly jump to Level 500
       // +10 Prism Cores (ready to apply for the Prism Aura)
       try { const pf = window.PRISMFLEET && window.PRISMFLEET.P && window.PRISMFLEET.P(); if (pf) { pf.cores = (pf.cores || 0) + 10; } } catch (e) {}
       G.save();
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d'; t.style.fontSize = '24px';
       t.innerHTML = '🚀 FULL ARMADA UNLOCKED<br>' +
-        '<span style="font-size:13px;color:#bfe0ff">Every hull is yours &nbsp;·&nbsp; <b style="color:#ffd24d">+1,000,000</b> LootCoins &nbsp;·&nbsp; <b style="color:#c9a0ff">+10 ◈ Prism Cores</b></span>';
+        '<span style="font-size:13px;color:#bfe0ff">Every hull is yours &nbsp;·&nbsp; <b style="color:#ffd24d">+1,000,000</b> LootCoins &nbsp;·&nbsp; <b style="color:#c9a0ff">+10 ◈ Prism Cores</b> &nbsp;·&nbsp; <b style="color:#7cff9b">Level 500</b></span>';
       el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 3600);
       refreshAll();
     } else if (_fleetTaps >= 8) {
@@ -556,11 +560,12 @@
   function shipLvlTier(L){ let t=SHIP_LVL_TIERS[0]; for(const x of SHIP_LVL_TIERS) if(L>=x.min) t=x; return t; }
   window.shipLvlColor = (L) => shipLvlTier(L).color; // read by render.js for the in-battle tint
   // Coloured hull-upgrade cost — gold ● and plasma ✦ in their real resource
-  // colours on a dark inset pill so they read on any background.
+  // Coloured hull-upgrade cost — glyphs + colours mirror the wallet chips so the
+  // cost reads as the SAME currencies: $ gold and ✦ plasma.
   function hullCostHTML(inf){
-    return `<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(6,10,18,.5);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:3px 10px;font-variant-numeric:tabular-nums;font-weight:800">`+
-      `<span style="color:#ffd24d">●</span><span style="color:#ffe6b0">${G.formatNum(inf.cost.gold)}</span>`+
-      `<span style="color:#c79bff;margin-left:4px">✦</span><span style="color:#e4d2ff">${G.formatNum(inf.cost.plasma)}</span></span>`;
+    return `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(6,10,18,.5);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:3px 10px;font-variant-numeric:tabular-nums;font-weight:800">`+
+      `<span style="color:#f2a93c">$</span><span style="color:#ffe6b0">${G.formatNum(inf.cost.gold)}</span>`+
+      `<span style="color:#c07bff;margin-left:4px">✦</span><span style="color:#e4d2ff">${G.formatNum(inf.cost.plasma)}</span></span>`;
   }
   // Confirm + WARN before every hull upgrade: an upgraded hull is reset to Lv 1
   // (and its invested resources lost) if the ship is destroyed.
@@ -590,7 +595,7 @@
       ? `<div style="text-align:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:13px;color:${col};letter-spacing:.06em">★ MAX HULL · APEX</div>`
       : `<div style="display:flex;justify-content:space-between;font-size:11px;color:#93a2ba;margin-bottom:8px">
            <span>Next level</span><span style="color:#46d27a;font-weight:700">+10% DMG · +12% HP · +5% Rate</span></div>
-         <button class="btn primary" id="ship-up-btn" ${inf.afford?'':'disabled'} style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px">
+         <button class="btn primary" id="ship-up-btn" ${inf.afford?'':'disabled'} style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;${inf.afford?'':'opacity:.5;filter:grayscale(.5);cursor:not-allowed'}">
            <span>⬆ Upgrade Hull</span>
            ${hullCostHTML(inf)}
          </button>
@@ -739,9 +744,9 @@
       const AST = G.state.autoSellTier == null ? -1 : G.state.autoSellTier;
       html += `<div class="filter-row">
         <div class="fr-item"><span class="fr-l">▼ Pick up</span><select id="pickup-sel">${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === PF ? 'selected' : ''}>${i === 0 ? 'Everything' : r.name + ' +'}</option>`).join('')}</select></div>
-        <div class="fr-item"><span class="fr-l">$ Auto-sell</span><select id="autosell-pickup-sel"><option value="-1" ${AST < 0 ? 'selected' : ''}>Off</option>${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === AST ? 'selected' : ''}>≤ ${r.name}</option>`).join('')}</select></div>
+        <div class="fr-item"><span class="fr-l">$ Sell on pickup</span><select id="autosell-pickup-sel"><option value="-1" ${AST < 0 ? 'selected' : ''}>Off</option>${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === AST ? 'selected' : ''}>≤ ${r.name}</option>`).join('')}</select></div>
       </div>
-      <div class="fr-hint">Below pick-up level: scrapped to resources on contact · Auto-sell: sold for gold on pickup — upgrades are always kept</div>`;
+      <div class="fr-hint">Pick up: anything below is scrapped to resources on contact · Sell on pickup: drops at/below this rarity are sold for gold as you grab them (upgrades always kept)</div>`;
     }
     html += `<div class="legend"><div class="legend-title">Rarity <span class="legend-note">· drop odds at Zone ${recZone}</span></div><div class="legend-grid">`;
     C.RARITY.forEach((r) => {
@@ -756,7 +761,7 @@
           <button class="auto-toggle ${G.state.autoEquipAlways?'on':''}" id="auto-always"><span class="at-led"></span>Always</button>
         </div>
         <div class="autosell">
-          <span class="as-lbl">Auto-Sell up to</span>
+          <span class="as-lbl">Bulk-sell hold ≤</span>
           <select id="sell-tier">${tierOpts}</select>
           <label class="as-keep"><input type="checkbox" id="keep-up" ${G.state.keepUpgrades ? 'checked' : ''}><span>Keep upgrades</span></label>
           <button class="opt-btn sell" id="auto-sell">Sell</button>
@@ -767,8 +772,8 @@
         <option value="power">Sort: Power</option><option value="rarity">Sort: Rarity</option>
         <option value="slot">Sort: Slot</option><option value="ilvl">Sort: Zone</option>
       </select></div>`;
-    if (!inv.length) html += '<div class="empty-note">No loot in your bag.<br>Run over drops to collect them.</div>';
-    else html += inv.map(itemCard).join('');
+    if (!inv.length) html += '<div id="bag-items"><div class="empty-note">No loot in your bag.<br>Run over drops to collect them.</div></div>';
+    else html += '<div id="bag-items">' + inv.map(itemCard).join('') + '</div>';
     el['bag-body'].innerHTML = html;
     const cb = $('cargo-buy'); if (cb) cb.addEventListener('click', () => {
       const r = G.buyInvSlots();
@@ -790,9 +795,33 @@
     tierSel.addEventListener('change', () => { G.state.sellTier = +tierSel.value; G.save(); });
     keep.addEventListener('change', () => { G.state.keepUpgrades = keep.checked; G.save(); });
     $('auto-sell').addEventListener('click', () => openAutoSell(+tierSel.value, keep.checked));
-    el['bag-body'].querySelectorAll('[data-id]').forEach((node) => node.addEventListener('click', () => {
+    bindBagItems();
+  }
+  // Bind click-to-open on the item cards. Used by both the full renderBag and the
+  // lightweight live refresh below.
+  function bindBagItems() {
+    const host = document.getElementById('bag-items'); if (!host) return;
+    host.querySelectorAll('[data-id]').forEach((node) => node.addEventListener('click', () => {
       const it = G.state.inventory.find((x) => x.id === +node.dataset.id); if (it) openItem(it, 'inventory');
     }));
+  }
+  // LIVE bag refresh while farming with the Loot tab open. Rebuilds ONLY the
+  // item-list container (not the whole panel) so the cargo meter, filters and
+  // legend don't replay their staggered fade-in — which was the "flashing".
+  function renderBagItems() {
+    const host = document.getElementById('bag-items');
+    if (!host) { renderBag(); return; }
+    const inv = G.state.inventory.slice();
+    sortInv(inv);
+    const cap = G.invCap ? G.invCap() : 100;
+    el['bag-sub'].textContent = inv.length + ' / ' + cap + ' slots';
+    // keep the cargo-hold count + fill bar live without touching the rest of the panel
+    const cf = el['bag-body'].querySelector('.cargo-fill');
+    if (cf) cf.style.width = Math.min(100, inv.length / cap * 100) + '%';
+    host.innerHTML = inv.length
+      ? inv.map(itemCard).join('')
+      : '<div class="empty-note">No loot in your bag.<br>Run over drops to collect them.</div>';
+    bindBagItems();
   }
   function sortInv(inv) {
     if (sortMode === 'power') inv.sort((a,b) => G.itemPower(b) - G.itemPower(a));
@@ -1169,7 +1198,7 @@
   function storeHead(ico, title, right) { return `<div class="sec-head"><span class="sec-ic">${ico}</span><h3>${title}</h3>${right?`<span class="sec-right">${right}</span>`:''}</div>`; }
   // Unified Hangar segment header — shared by the "My Ship" (hero) view and the
   // store categories, so Ship + Store live under one tab.
-  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['board','Leaderboard']];
+  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['pilot','Pilot'],['board','Leaderboard']];
   function hangarTabsHTML(active) {
     const fleetMode = G && G.fleetShips && G.fleetShips().length > 0;
     return `<div class="store-cats">${HANGAR_TABS.map(([k,l]) => {
@@ -1182,6 +1211,7 @@
       const k = b.dataset.hangtab;
       if (k === 'ship') { tapMyShip(); showScreen('hero'); }
       else if (k === 'board') showScreen('board');
+      else if (k === 'pilot') showScreen('pilot');
       else { if (k === 'ships') tapMyShip(); storeCat = k; showScreen('store'); }
     }));
   }
@@ -1269,9 +1299,78 @@
       ${body}
     </div>`;
   }
+  // DREAD-CLASS — multi-currency cost row (glyphs match the wallet chips).
+  function megaCostHTML(c, big) {
+    const row = [];
+    const add = (col, gly, v) => { if (v) row.push('<span class="mega-c"><span style="color:' + col + '">' + gly + '</span> ' + G.formatNum(v) + '</span>'); };
+    add('#f2a93c', '$', c.gold); add('#5bc0ff', '⬢', c.fuel); add('#d0a060', '◆', c.iron);
+    add('#c07bff', '✦', c.plasma); add('#ff3a3a', '◈', c.prism); add('#f2a93c', '◉', c.credits); add('#ff5a6a', '◇', c.dreadCores);
+    return '<span class="mega-cost' + (big ? ' big' : '') + '">' + row.join('') + '</span>';
+  }
+  function megaShipCard(key) {
+    const ship = C.SHIP_BY_KEY[key]; const st = G.shipBuyState(key);
+    const cls = 'sc-' + ship.cls.toLowerCase();
+    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
+    const mods = modSummary(ship.mods);
+    const lvl = G.state.level || 1;
+    let action = '', body = '';
+    if (st.active) action = `<span class="ship-badge active">● ACTIVE</span>`;
+    else if (st.owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
+    else if (lvl < st.reqLevel) { action = `<span class="ship-badge locked">🔒</span>`; body = `<div class="ship-lock"><span class="lk-ic">🔒</span><span>Reach <b>account Level ${st.reqLevel}</b> to acquire — you're Level <b>${lvl}</b></span></div>`; }
+    else { action = `<button class="ship-btn buy dreadbuy" data-mega-buy="${key}">Acquire</button>`; body = `<div class="ship-lock ready"><span class="lk-ic">◇</span><span>Cost: ${megaCostHTML(ship.megaCost)}</span></div>`; }
+    let upg = '';
+    if (st.owned && G.shipUpInfo) {
+      const u = G.shipUpInfo(key); const tcol = (window.shipLvlColor ? window.shipLvlColor(u.level) : '#9aa7b8');
+      upg = `<div class="ship-upg" style="display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 10px;background:#0f1623;border:1px solid ${tcol}55;border-radius:9px">
+        <div style="width:24px;height:24px;flex:none;border-radius:6px;background:${tcol}22;border:1px solid ${tcol};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${tcol}">${u.level}</div>
+        <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700">+${u.bonus.dmg}% DMG · +${u.bonus.hp}% HP · +${u.bonus.rate}% Rate</div>
+        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ <span style="color:#f2a93c">$</span> ${G.formatNum(u.cost.gold)} <span style="color:#c07bff">✦</span> ${G.formatNum(u.cost.plasma)}</button>`}
+      </div>`;
+    }
+    return `<div class="ship-card ${cls} apex dread ${st.active ? 'is-active' : ''}">
+      <div class="ship-top">
+        <div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>
+        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip dread">DREAD</span></div>
+          <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
+          <div class="ship-layout">${layout}</div></div>
+        <div class="ship-act">${action}</div>
+      </div>
+      <div class="ship-desc">${ship.desc}</div>
+      ${mods ? `<div class="ship-mods">${mods}</div>` : ''}
+      ${upg}
+      ${body}
+    </div>`;
+  }
+  // DREAD-class buy confirm — lists every currency with have/cost.
+  function openMegaBuy(key) {
+    const ship = C.SHIP_BY_KEY[key], c = ship.megaCost;
+    const have = { gold: G.state.gold || 0, fuel: (G.state.resources || {}).fuel || 0, iron: (G.state.resources || {}).iron || 0,
+      plasma: (G.state.resources || {}).plasma || 0, prism: (G.getResources && G.state.prism ? G.state.prism.ingots : 0) || 0,
+      credits: G.getCredits ? G.getCredits() : 0, dreadCores: G.getDreadCores ? G.getDreadCores() : 0 };
+    const rows = [
+      ['Gold', '$', '#f2a93c', c.gold, have.gold], ['Fuel', '⬢', '#5bc0ff', c.fuel, have.fuel],
+      ['Iron', '◆', '#d0a060', c.iron, have.iron], ['Plasma', '✦', '#c07bff', c.plasma, have.plasma],
+      ['Prism', '◈', '#ff3a3a', c.prism, have.prism], ['LootCoins', '◉', '#f2a93c', c.credits, have.credits],
+      ['Dread Cores', '◇', '#ff5a6a', c.dreadCores, have.dreadCores],
+    ].filter((r) => r[3]);
+    const afford = rows.every((r) => r[4] >= r[3]);
+    const rowsHTML = rows.map((r) => `<div class="ip-stat"><span class="ip-sname"><span style="color:${r[2]}">${r[1]}</span> ${r[0]}</span><span class="v" style="color:${r[4] >= r[3] ? '#7ce0a0' : 'var(--bad)'}">${G.formatNum(r[4])} / ${G.formatNum(r[3])}</span></div>`).join('');
+    const sheet = showSheet(`<div class="sheet-head">◇ Acquire ${ship.name}</div><div class="sheet-body">
+      <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">${ship.desc}</p>
+      ${rowsHTML}
+      ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough resources — keep grinding & hunting Dreadnaughts.</p>'}
+      <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
+        <button class="btn primary" data-ok ${afford ? '' : 'disabled'}>${afford ? 'Acquire ' + ship.name : 'Insufficient currency'}</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const ok = sheet.querySelector('[data-ok]');
+    if (ok && afford) ok.addEventListener('click', () => {
+      const r = G.buyShip(key); closeSheet();
+      if (r.ok) { toast('★ ' + ship.name + ' acquired!', '#ff5a6a'); renderStore(); }
+      else { toast('Cannot acquire — need more ' + (r.reason || 'currency'), '#e23b4e'); }
+    });
+  }
   // OBLIVION FINAL — purchase-only apex hull (LootCoins, Level-gated).
-  function purchaseShipCard(key) {
-    const ship = C.SHIP_BY_KEY[key];
+  function purchaseShipCard(key) {const ship = C.SHIP_BY_KEY[key];
     const cls = 'sc-' + ship.cls.toLowerCase();
     const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
     const mods = modSummary(ship.mods);
@@ -1319,6 +1418,7 @@
     if (owned) return '';
     if (ship.purchase) return `${LC_ICON}${G.formatNum((ship.purchase.lc) || 0)}`;
     if (ship.build) return '⚒ Build';
+    if (ship.megaCost) { const lv = G.state.level || 1; return lv >= (ship.reqLevel || 1) ? '◇ Acquire' : '🔒 Lv' + ship.reqLevel; }
     const st = G.shipBuyState ? G.shipBuyState(key) : {};
     if (st.unlocked) return ship.resPrice ? '✦ ' + G.formatNum(Object.values(ship.resPrice)[0] || 0) : '$ ' + G.formatNum(ship.price || 0);
     return '🔒 Z' + (ship.bpZone || '?');
@@ -1347,12 +1447,14 @@
     sheet.querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, () => { closeSheet(); renderStore(); })));
     sheet.querySelectorAll('[data-build-start]').forEach((b) => b.addEventListener('click', () => { closeSheet(); openBuildConfirm(b.dataset.buildStart); }));
     sheet.querySelectorAll('[data-lc-final]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.lcFinal; closeSheet(); openShipLCBuy(k, (C.SHIP_BY_KEY[k].purchase || {}).lc); }));
+    sheet.querySelectorAll('[data-mega-buy]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.megaBuy; closeSheet(); openMegaBuy(k); }));
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
   }
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
     if (ship.build) return buildShipCard(key);
     if (ship.purchase) return purchaseShipCard(key);
+    if (ship.megaCost) return megaShipCard(key);
     const st = G.shipBuyState(key);
     const cls = 'sc-' + ship.cls.toLowerCase();
     const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span>` +
@@ -1621,6 +1723,7 @@
     el['store-body'].querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, renderStore)));
     el['store-body'].querySelectorAll('[data-build-start]').forEach((b) => b.addEventListener('click', () => openBuildConfirm(b.dataset.buildStart)));
     el['store-body'].querySelectorAll('[data-lc-final]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.lcFinal; openShipLCBuy(k, (C.SHIP_BY_KEY[k].purchase || {}).lc); }));
+    el['store-body'].querySelectorAll('[data-mega-buy]').forEach((b) => b.addEventListener('click', () => openMegaBuy(b.dataset.megaBuy)));
     el['store-body'].querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => {
       G.selectDungeon(+b.dataset.bpHunt); showScreen('battle');
       toast('Deploying — defeat the boss for the blueprint', '#e6b566');
@@ -1966,7 +2069,7 @@
     // debounce bag re-render to at most ~3/sec while the bag is open
     if (screen === 'bag') {
       _bagDirty = true;
-      if (!_bagTimer) _bagTimer = setTimeout(() => { _bagTimer = 0; if (_bagDirty && screen === 'bag') { _bagDirty = false; renderBag(); } }, 350);
+      if (!_bagTimer) _bagTimer = setTimeout(() => { _bagTimer = 0; if (_bagDirty && screen === 'bag') { _bagDirty = false; renderBagItems(); } }, 350);
     }
   }
   function toast(text, color) {
@@ -2026,7 +2129,7 @@
     else if (kind === 'citadel') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff9a50'; t.style.fontSize = '22px'; t.innerHTML = '⛴ THE VOID CITADEL<br><span style="font-size:12px;color:#ffd9c4">Burn it down — 75% · 50% · 25% · boom</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2400); }
     else if (kind === 'citadeldown') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d'; t.style.fontSize = '24px'; t.innerHTML = '☀ SUPERNOVA<br><span style="font-size:12px;color:#ffe9b0">Citadel razed — grab the loot!</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
     else if (kind === 'citadelhome') { toast('⌂ Siege complete — towed home. Citadel rebuilds in 15 min.', '#9ec5ff'); }
-    else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); }
+    else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); showScreen('galaxy'); }
     else if (kind === 'wave') { toast('Wave ' + s.wave + ' / ' + s.total, '#9ec5ff'); }
     else if (kind === 'boss') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '22px'; t.textContent = '☠ BOSS WAVE'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700); }
     else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(sys.rate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }

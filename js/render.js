@@ -255,8 +255,23 @@
       ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(e.x, e.y, e.size * 2.4, 0, 7); ctx.fill();
     }
     ctx.translate(e.x + (e.dir < 0 ? -lunge : lunge), e.y);
-    ctx.scale(e.dir * scale, scale);
-    drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
+    if (e.spriteImg && e.spriteImg.complete && e.spriteImg.naturalWidth) {
+      // HERO SPRITE (Dreadnaught raid boss) — draw the art instead of the alien mesh.
+      const img = e.spriteImg;
+      const dw = e.size * 2.7, dh = dw * (img.naturalHeight / img.naturalWidth);
+      ctx.scale(scale, scale);                       // no dir-mirror: keep the art crisp
+      ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+      if (e.hitFlash > 0) {                           // hit flash: additive white wash
+        ctx.globalAlpha = alpha * e.hitFlash * 0.6;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = alpha;
+      }
+    } else {
+      ctx.scale(e.dir * scale, scale);
+      drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
+    }
     ctx.restore();
 
     if (!e.dying && e.hp < e.maxHp) {
@@ -457,10 +472,13 @@
   function drawEscort(ctx, key, x, y, t, healPulse) {
     const tier = HULL_VIS[key] != null ? HULL_VIS[key] : 0;
     const im = shipImg(key);
-    const ds = 26 + tier * 2.4;
+    const ds = (26 + tier * 2.4) * shipScaleOf(key);
     const bob = Math.sin(t * 2 + x * 0.07) * 1.6;
     ctx.save();
     ctx.translate(x, y + bob);
+    // PRISM AURA — escort carrying a Prism Core gets a (scaled-down) prismatic halo
+    if (shipHasPrism(key)) drawPrismAura(ctx, t + x * 0.13, ds * 0.7, 0.7);
+    if (key === 'oblivionfinal') drawGreenAura(ctx, t + x * 0.13, ds * 0.8, 0.9);
     // engine glow
     const eg = ctx.createRadialGradient(0, ds * 0.34, 1, 0, ds * 0.34, ds * 0.36);
     eg.addColorStop(0, 'rgba(120,200,255,0.4)'); eg.addColorStop(1, 'rgba(120,200,255,0)');
@@ -705,7 +723,10 @@
   }
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
-  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5 };
+  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5 };
+  // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
+  const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4 };
+  function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';
     const ht = HULL_VIS[key];
@@ -714,7 +735,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }
@@ -847,6 +868,79 @@
     }
   }
 
+  // PRISM AURA — a bold, unmistakable prismatic halo around a hull carrying a
+  // Prism Core: layered multi-colour glow, a counter-rotating prismatic ring,
+  // and orbiting facet sparkles. `mag` scales the whole effect (1 = flagship).
+  const PRISM_COLS = ['#ff5168', '#ffd450', '#46d27a', '#5fd1ff', '#b87bff'];
+  function shipHasPrism(key) {
+    return !!(window.GAME && GAME.state && GAME.state.shipAura && GAME.state.shipAura[key]);
+  }
+  // GREEN REACTOR AURA — the Oblivion Final's signature: a deep pulsing green
+  // halo, a rotating ring, and rising reactor embers. `mag` scales the effect.
+  function drawGreenAura(ctx, t, baseR, mag) {
+    mag = mag || 1;
+    const pulse = 0.6 + 0.4 * Math.sin(t * 2.6);
+    const R = baseR * (1.18 + 0.08 * Math.sin(t * 2.0));
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // layered green halo
+    const g1 = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R);
+    g1.addColorStop(0, rgba('#7dff9a', 0.30 * pulse * mag));
+    g1.addColorStop(0.55, rgba('#2bd24a', 0.16 * pulse * mag));
+    g1.addColorStop(1, rgba('#0e7a2a', 0));
+    ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+    // rotating reactor ring
+    ctx.lineWidth = 2.6 * mag; ctx.strokeStyle = rgba('#5dff84', 0.7 * pulse);
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.86, t * 1.3, t * 1.3 + Math.PI * 1.4); ctx.stroke();
+    ctx.lineWidth = 1.6 * mag; ctx.strokeStyle = rgba('#aaffc0', 0.6 * pulse);
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.72, -t * 1.7, -t * 1.7 + Math.PI * 1.1); ctx.stroke();
+    // rising reactor embers
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + t * 0.6;
+      const rr = R * (0.5 + 0.5 * ((t * 0.6 + i * 0.37) % 1));
+      const ox = Math.cos(a) * rr, oy = Math.sin(a) * rr;
+      ctx.fillStyle = rgba('#9dffb0', 0.85 * (1 - rr / R));
+      ctx.shadowColor = '#46ff70'; ctx.shadowBlur = 7 * mag;
+      ctx.beginPath(); ctx.arc(ox, oy, (1.3 + 0.7 * Math.sin(t * 5 + i)) * mag, 0, 7); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+  function drawPrismAura(ctx, t, baseR, mag) {
+    mag = mag || 1;
+    const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+    const R = baseR * (1.12 + 0.07 * Math.sin(t * 2.4));
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // layered colour halo — each facet colour orbits the hull centre
+    for (let i = 0; i < PRISM_COLS.length; i++) {
+      const ang = t * 0.9 + i * (Math.PI * 2 / PRISM_COLS.length);
+      const gx = Math.cos(ang) * R * 0.26, gy = Math.sin(ang) * R * 0.26;
+      const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, R);
+      g.addColorStop(0, rgba(PRISM_COLS[i], 0.34 * pulse * mag));
+      g.addColorStop(1, rgba(PRISM_COLS[i], 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+    }
+    // counter-rotating prismatic ring (arc segments)
+    ctx.lineWidth = 2.2 * mag;
+    const segs = PRISM_COLS.length;
+    for (let i = 0; i < segs; i++) {
+      const a0 = t * 1.6 + i * (Math.PI * 2 / segs);
+      ctx.strokeStyle = rgba(PRISM_COLS[i], 0.85 * pulse);
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.9, a0, a0 + (Math.PI * 2 / segs) * 0.8); ctx.stroke();
+    }
+    // orbiting facet sparkles
+    for (let i = 0; i < segs; i++) {
+      const a = -t * 1.25 + i * (Math.PI * 2 / segs);
+      const ox = Math.cos(a) * R * 0.9, oy = Math.sin(a) * R * 0.9;
+      ctx.fillStyle = rgba(PRISM_COLS[i], 0.95);
+      ctx.shadowColor = PRISM_COLS[i]; ctx.shadowBlur = 8 * mag;
+      ctx.beginPath(); ctx.arc(ox, oy, (1.7 + 0.8 * Math.sin(t * 6 + i)) * mag, 0, 7); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
   function drawArcher(ctx, x, y, scale, archer, equipped, t) {
     const level = (window.GAME && window.GAME.state) ? window.GAME.state.level : 1;
     const tier = hullTier(level);
@@ -871,11 +965,16 @@
     // cosmetic aura (premium) — rendered beneath the hull
     drawCosmeticAura(ctx, cosmeticsState().aura, t, 24 + tier * 4);
 
+    // PRISM AURA — significant prismatic halo when this hull carries a Prism Core
+    if (shipHasPrism(activeShipKey())) drawPrismAura(ctx, t, 30 + tier * 4, 1);
+    // GREEN REACTOR AURA — the Oblivion Final's signature glow
+    if (activeShipKey() === 'oblivionfinal') drawGreenAura(ctx, t, 46 + tier * 5, 1.4);
+
     // orient: art drawn nose-up (-y); rotate so nose points along facing
     ctx.translate(0, bob);
     const _im = shipImg(activeShipKey());
     if (_im) {
-      const ds = 42 + tier * 3;                 // sprite draw size (local units)
+      const ds = (42 + tier * 3) * shipScaleOf(activeShipKey());                 // sprite draw size (local units)
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath(); ctx.ellipse(0, ds * 0.44, ds * 0.36, ds * 0.13, 0, 0, 7); ctx.fill();
       const eg = ctx.createRadialGradient(0, ds * 0.36, 1, 0, ds * 0.36, ds * 0.42);
@@ -1273,6 +1372,6 @@
 
   window.RENDER = {
     drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon, skinnedShip, drawCosmeticAura,
-    gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES,
+    gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES, shipScaleOf,
   };
 })();

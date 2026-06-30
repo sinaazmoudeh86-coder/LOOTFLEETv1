@@ -65,5 +65,26 @@
     } catch (e) {}
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, getUser, pull, push };
+  // ---- global leaderboard (one public row per user in `leaderboard`) ----------
+  async function lbUpsert(p) {
+    try {
+      if (!enabled || !p) return;
+      await client.rpc('lb_upsert', {
+        p_name: p.name || 'Operator', p_power: Math.round(p.power || 0),
+        p_level: p.level || 1, p_zone: p.zone || 1, p_kills: Math.round(p.kills || 0),
+        p_fleet: p.fleet || [],
+      });
+    } catch (e) {}
+  }
+  async function lbTop(n) {
+    try {
+      if (!enabled) return null;
+      const { data, error } = await client.from('leaderboard')
+        .select('user_id,name,power,level,zone,kills,fleet')
+        .order('power', { ascending: false }).limit(n || 100);
+      return error ? null : (data || null);
+    } catch (e) { return null; }
+  }
+
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, getUser, pull, push, lbUpsert, lbTop };
 })();

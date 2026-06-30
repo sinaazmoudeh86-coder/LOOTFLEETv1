@@ -605,54 +605,6 @@ html,body{background:#0b1018;}
   </div>
 </div>
 
-<style id="fr-attack-redux">
-/* thin token bar */
-.tok-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  background:linear-gradient(180deg,#141c2a,#0f1622);border:1px solid var(--line);
-  border-radius:11px;padding:8px 11px;margin-bottom:11px;}
-.tok-left{display:flex;align-items:baseline;gap:6px;font-size:11.5px;color:var(--muted);min-width:0;}
-.tok-left .tok-ic{color:#ff6a78;font-size:13px;}
-.tok-left .tok-n{font-family:var(--font-d);font-weight:800;font-size:17px;color:#eaf0fa;}
-.tok-left .tok-max{font-weight:700;color:#93a2ba;}
-.tok-left .tok-next{color:#6f7f99;font-size:10px;white-space:nowrap;}
-.tok-buy{flex:none;display:flex;align-items:center;gap:7px;font-family:var(--font-d);font-weight:800;
-  font-size:12px;color:#1c1206;background:linear-gradient(180deg,#ffd07a,#f2b24b);border:0;
-  border-radius:9px;padding:7px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(242,178,75,.25);}
-.tok-buy:active{transform:scale(.95);}
-.tok-buy .tb-cost{font-size:10px;opacity:.8;font-variant-numeric:tabular-nums;}
-/* slim raid target rows */
-#target-list{display:flex;flex-direction:column;gap:8px;}
-.traid{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;
-  background:linear-gradient(180deg,#172030,#121a28);border:1px solid var(--line);
-  border-left-width:3px;border-radius:12px;padding:9px 11px;color:#dfe9ff;font-family:inherit;
-  transition:transform .1s,border-color .15s,box-shadow .15s;}
-.traid:active{transform:scale(.985);}
-.traid.easy{border-left-color:#3fc56b;}
-.traid.even{border-left-color:#5fd1ff;}
-.traid.hard{border-left-color:#ff5168;}
-.traid:hover{box-shadow:0 4px 16px rgba(0,0,0,.35);}
-.traid-cit{width:44px;height:44px;flex:none;object-fit:contain;filter:drop-shadow(0 0 10px rgba(95,180,255,.35));}
-.traid-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
-.traid-nm{display:flex;align-items:center;gap:7px;font-family:var(--font-d);font-weight:700;font-size:13.5px;color:#eaf0fa;}
-.traid-diff{font-family:var(--font-d);font-weight:700;font-size:8px;letter-spacing:.06em;text-transform:uppercase;
-  padding:1px 7px;border-radius:99px;}
-.traid-diff.easy{color:#7be08f;background:rgba(63,197,107,.14);border:1px solid rgba(63,197,107,.4);}
-.traid-diff.even{color:#9fd9ff;background:rgba(95,209,255,.12);border:1px solid rgba(95,209,255,.4);}
-.traid-diff.hard{color:#ff9aa6;background:rgba(255,81,104,.12);border:1px solid rgba(255,81,104,.4);}
-.traid-sub{display:flex;align-items:center;gap:5px;font-size:10px;color:#8a97ab;}
-.traid-sub svg,.traid-sub img{width:12px;height:12px;}
-.traid-loot{display:flex;gap:10px;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px;}
-.traid-loot .lg{color:#f2b24b;}.traid-loot .lp{color:#c79bff;}
-.traid-right{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
-.traid-def{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05;}
-.traid-def span{font-size:7.5px;letter-spacing:.12em;color:#6f7f99;font-weight:700;}
-.traid-def b{font-family:var(--font-d);font-weight:800;font-size:14px;color:#ff8a98;font-variant-numeric:tabular-nums;}
-.traid-go{font-family:var(--font-d);font-weight:800;font-size:10.5px;letter-spacing:.04em;
-  padding:5px 11px;border-radius:8px;}
-.traid-go.win{color:#0c1a10;background:linear-gradient(180deg,#5fe08a,#36b566);}
-.traid-go.risk{color:#fff;background:linear-gradient(180deg,#ff6072,#d8344a);}
-</style>
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* === FRNET — real PvP backend adapter (Supabase). Reuses the parent game's
@@ -692,11 +644,6 @@ window.FRNET=(function(){
   return {init:init,enabled:enabled,sync:sync,leaderboard:leaderboard,position:position,targets:targets,raid:raid,me:function(){return ME;}};
 })();
 </script>
-<!-- real game engine — drives the Fleet Rank attack arena with the SAME visuals + combat logic as Zone Grind -->
-<script src="js/config-v2.js"></script>
-<script src="js/items.js"></script>
-<script src="js/entities.js"></script>
-<script src="js/render.js"></script>
 <script>
 /* === inlined fleet-combat.js (SW caches same-origin files cache-first w/ ignoreSearch, so external JS goes stale; inlined JS rides the network-first navigation) === */
 /* ============================================================================
@@ -791,28 +738,16 @@ function drawTurret(ctx,x,y,type,t,ang,scale,hitFlash,dead){
 function hex2rgb(h){h=h.replace('#','');const n=parseInt(h,16);return ((n>>16)&255)+','+((n>>8)&255)+','+(n&255);}
 
 /* ---------- ship sprite ---------- */
-// red-tinted hostile sprite cache (so enemy fleet reads as hostile, like the
-// rest of the game's enemy ships) — one offscreen per image, built lazily.
-const _tintCache={};
-function tintedSprite(im,key,rgb){
-  if(!im||!im.complete||!im.naturalWidth)return null;
-  const ck=key+'|'+rgb;if(_tintCache[ck])return _tintCache[ck];
-  const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
-  const x=c.getContext('2d');x.drawImage(im,0,0);
-  x.globalCompositeOperation='source-atop';x.fillStyle='rgba('+rgb+',0.5)';x.fillRect(0,0,c.width,c.height);
-  _tintCache[ck]=c;return c;
-}
-function drawShip(ctx,im,x,y,size,ang,hitFlash,opts){
-  opts=opts||{};const ec=opts.engineCol||'120,200,255';
+function drawShip(ctx,im,x,y,size,ang,hitFlash,engine){
   ctx.save();ctx.translate(x,y);ctx.rotate(ang+Math.PI/2);
-  if(opts.engine!==false){ // engine glow behind
-    const eg=ctx.createRadialGradient(0,size*0.34,1,0,size*0.34,size*0.44);
-    eg.addColorStop(0,'rgba('+ec+',0.5)');eg.addColorStop(1,'rgba('+ec+',0)');
-    ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,size*0.34,size*0.42,0,TAU);ctx.fill();
+  if(engine!==false){ // engine glow behind
+    const eg=ctx.createRadialGradient(0,size*0.34,1,0,size*0.34,size*0.4);
+    eg.addColorStop(0,'rgba(120,200,255,0.45)');eg.addColorStop(1,'rgba(120,200,255,0)');
+    ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,size*0.34,size*0.38,0,TAU);ctx.fill();
   }
-  if(im&&im.complete!==false&&(im.naturalWidth>0||im.width>0))ctx.drawImage(im,-size/2,-size/2,size,size);
+  if(im&&im.complete&&im.naturalWidth>0)ctx.drawImage(im,-size/2,-size/2,size,size);
   else{ctx.fillStyle='#9fb4d6';ctx.beginPath();ctx.moveTo(0,-size*0.4);ctx.lineTo(size*0.3,size*0.3);ctx.lineTo(-size*0.3,size*0.3);ctx.closePath();ctx.fill();}
-  if(hitFlash>0&&im&&(im.naturalWidth>0||im.width>0)){ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=hitFlash*0.6;ctx.drawImage(im,-size/2,-size/2,size,size);ctx.restore();}
+  if(hitFlash>0&&im&&im.complete&&im.naturalWidth>0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=hitFlash*0.6;ctx.drawImage(im,-size/2,-size/2,size,size);ctx.restore();}
   ctx.restore();
 }
 
@@ -923,12 +858,12 @@ FRCombat.openAttack=function(host,target,S,hooks){
     '<canvas class="fr-canvas" id="atk-canvas"></canvas>'+
     '<div class="battle-hud">'+
       '<div class="battle-timer" id="b-timer">5:00</div>'+
-      '<div class="def-track" id="b-deftrack"><span class="dt-l">⛨ Garrison</span><span class="dt-pips" id="b-defpips"></span><b class="dt-n" id="b-defn">0/0</b></div>'+
-      '<div><div class="enemy-hp-lab"><span>'+target.nm+'\u2019s Citadel</span><b id="b-hpv">🔒 SCREENED</b></div>'+
+      '<div class="def-track" id="b-deftrack"><span class="dt-l">⛨ Enemy Defenses</span><span class="dt-pips" id="b-defpips"></span><b class="dt-n" id="b-defn">0/0</b></div>'+
+      '<div><div class="enemy-hp-lab"><span>'+target.nm+'\u2019s Citadel</span><b id="b-hpv">🔒 LOCKED</b></div>'+
         '<div class="bar-wrap citlock" id="b-citbar" style="height:9px;margin-bottom:4px"><div class="bar-fill sh" id="b-sh" style="width:100%"></div></div>'+
         '<div class="bar-wrap citlock" style="height:14px"><div class="bar-fill hp" id="b-hp" style="width:100%"></div></div></div>'+
     '</div>'+
-    '<div class="phase-banner" id="b-phase">⛨ DESTROY THE ESCORT FLEET</div>'+
+    '<div class="phase-banner" id="b-phase">⛨ DESTROY THE DEFENSES</div>'+
     '<div class="battle-controls"><div class="bc-speed">'+
       '<button class="spd active" data-spd="1">1×</button><button class="spd" data-spd="2">2×</button><button class="spd" data-spd="3">3×</button></div></div>'+
     '<div class="battle-result" id="b-result"></div>';
@@ -939,121 +874,171 @@ FRCombat.openAttack=function(host,target,S,hooks){
   const stars=makeStars(W,H,80);
   const diff=target.diff;
 
-  // ---- REAL zone-grind arena ----------------------------------------------
-  // Same engine (RENDER + ENTITIES) and same auto-combat logic as Zone Grind:
-  // YOUR flagship auto-pilots + auto-fires, your escort fleet flies with you,
-  // hostiles spawn in waves, then the rival CITADEL boss appears — destroy it
-  // to win. Server still decides the outcome (winnable); visuals are the game's.
-  const R=window.RENDER, C2=window.CONFIG, ENT=window.ENTITIES;
-  const PG=(function(){try{return (window.parent&&window.parent.GAME)||null;}catch(e){return null;}})();
-  const pst=(PG&&PG.state)?PG.state:{};
-  const zone=Math.min(40,Math.max(12,(pst.currentDungeon||30)|0));
-  let pstats=null;try{pstats=(PG&&PG.getStats)?PG.getStats():null;}catch(e){}
-  const maxHp=Math.max(2500,Math.round((pstats&&pstats.maxHp)||6000));
-  const dps=Math.max(500,Math.round((pstats&&pstats.theoryDps)||1500));
-  // compact damage formatter — use the live game's number ladder so huge hits
-  // read as "9.3Sx" not raw "9.34e+21" (which was overflowing the screen).
-  const fmtDmg=(n)=>{try{return (PG&&PG.formatNum)?PG.formatNum(Math.round(n)):CFG.fmt(Math.round(n));}catch(e){return CFG.fmt(Math.round(n));}};
-  // render shim so RENDER.drawArcher paints YOUR actual hull + cosmetics
-  window.GAME=window.GAME||{};
-  window.GAME.state=Object.assign({},window.GAME.state,{level:pst.level||120,ship:pst.ship||'dreadnought',equipped:pst.equipped||{},currentDungeon:zone,cosmetics:pst.cosmetics||{skin:'stock',aura:'none'},shipLevels:pst.shipLevels||{},shipAura:pst.shipAura||{}});
+  // ---- build defender ----
+  const cx=W/2,cy=H*0.30;
+  const defHpMax=diff==='hard'?2600:diff==='even'?1700:1200;
+  const defShMax=defHpMax*0.5;
+  const cit={x:cx,y:cy,hp:defHpMax,hpMax:defHpMax,sh:defShMax,shMax:defShMax,hit:0};
+  // defender structures ring (use a representative loadout scaled by diff)
+  const defLoadout=diff==='hard'?['laser','missile','laser','shield','missile','drone','laser','repair']
+                  :diff==='even'?['laser','missile','shield','laser','drone',null,'missile',null]
+                  :['laser','shield','missile',null,'drone',null,null,null];
+  const structs=[];
+  defLoadout.forEach((ty,i)=>{if(!ty)return;const a=-Math.PI/2+i*(TAU/8);
+    structs.push({x:cx+Math.cos(a)*W*0.26,y:cy+Math.sin(a)*H*0.13,type:ty,hpFrac:1,cd:Math.random()*40,ang:0,hit:0,alive:true,killAt:Infinity,atkStart:Infinity});});
+  const NTOW=structs.length;
+  // schedule when each tower falls. winnable → ALL fall (then citadel exposed);
+  // hard → only ~half fall, the rest hold the line so the timer runs out.
+  const TOTAL=6.9, P1S=0.7;
+  const winnable0=(target.forceWin!=null)?!!target.forceWin:(diff!=='hard'); // server decides the outcome in real PvP
+  const killable=winnable0?NTOW:Math.ceil(NTOW*0.5);
+  const P1END=winnable0?TOTAL*0.60:TOTAL*0.92;
+  // randomise fall order a little for life
+  const order=structs.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  for(let k=0;k<killable;k++){const s=structs[order[k]];s.killAt=P1S+(k+1)/killable*(P1END-P1S);s.atkStart=s.killAt-1.0;}
 
-  const archer=new ENT.Archer(W*0.5,H*0.68);
-  archer.maxHp=maxHp;archer.hp=maxHp;archer.size=18;
-  const projectiles=[],ebolts=[],parts=[],floats=[];
-  const mercKeys=(S.merc||[]).filter(Boolean);
-  const escorts=mercKeys.map((k,i)=>({kind:k,im:IMG[k],alive:true,x:W*0.5,y:H*0.78,ang:-Math.PI/2,cd:Math.random()*0.6,size:30,off:{x:(i-(mercKeys.length-1)/2)*48,y:36+(i%2)*16}}));
-  const fleet=escorts;
-  let shake=0;
+  // ---- build attackers (player fleet) ----
+  const fleet=[];
+  const mercs=S.merc.filter(Boolean);
+  const cols=mercs.length+1;
+  mercs.forEach((m,i)=>fleet.push(mkAttacker(m,IMG[m],W*((i+0.6)/cols),38,3.0)));
+  fleet.push(mkAttacker('flag',IMG.flag,W*((cols-0.4)/cols),46,3.6)); // flagship
+  function mkAttacker(kind,im,x,size,dps){const formY=H*(0.50+Math.random()*0.14);return{kind,im,x,y:formY+78+Math.random()*46,size,hp:200,hpMax:200,ang:-Math.PI/2,cd:Math.random()*16,dps,hit:0,alive:true,ox:x,formY};}
+
+  const bolts=[],eparts=[],ftexts=[];
+  let speed=1,timeLeft=300,t=0,over=false,unlockT=null;
   const winnable=(target.forceWin!=null)?!!target.forceWin:(diff!=='hard');
-  // ENEMY CITADEL at the top, ringed by DEFENSE TOWERS. No monsters spawn —
-  // your mercenary fleet fights the towers, then the exposed citadel. Pure
-  // base raid: citadel + towers (defense) vs your flagship + mercs (attack).
-  const citAnchor={x:W*0.5,y:H*0.20};
-  const etypes=C2.ENEMIES.filter(e=>zone>=e.minDungeon);
-  const cit=new ENT.Enemy(etypes[etypes.length-1]||C2.ENEMIES[0],zone,citAnchor.x,citAnchor.y);
-  cit.isCitadel=true;cit.isBoss=true;cit.size=58;cit.spawnT=1;cit.exposed=false;cit.fireT=1.5;
-  const citMaxHp=dps*(winnable?10:600);cit.maxHp=citMaxHp;cit.hp=citMaxHp;
-  // tower ring — the defender's built structures (laser/missile/shield/drone…)
-  const defLoadout=diff==='hard'?['laser','missile','drone','shield','laser','missile','drone']
-                  :diff==='even'?['laser','missile','shield','drone','laser']
-                  :['laser','missile','shield'];
-  function mkTower(ty,x,y){return {type:ty,x,y,ox:x,oy:y,ang:Math.PI/2,cd:1+Math.random()*2,hit:0,alive:true,dead:false,size:15,hp:dps*(1.8+Math.random()*1.2),
-    takeDamage(a){this.hp-=a;this.hit=1;if(this.hp<=0&&this.alive){this.alive=false;this.dead=true;return true;}return false;}};}
-  const towers=defLoadout.map((ty,i)=>{const n=defLoadout.length,sp=(i-(n-1)/2);return mkTower(ty,citAnchor.x+sp*(W*0.66/n),citAnchor.y+H*0.085+Math.abs(sp)*H*0.02+(i%2)*H*0.02);});
-  const QUOTA=towers.length;let killCount=0;
+  // PHASE 1: break every defense tower.  PHASE 2: citadel is exposed and falls.
+  let integ=1;const TIMER_TICKS=210,CIT_DRAIN=1.7;
 
-  let speed=1,timeLeft=300,t=0,over=false;
-  const TIMER_TICKS=210, STEP=33;
   host.querySelectorAll('.spd').forEach(s=>s.onclick=()=>{speed=+s.dataset.spd;host.querySelectorAll('.spd').forEach(x=>x.classList.toggle('active',x===s));});
-  let phaseTO=null;
+  let exposedShown=false,phaseTO=null;
   function showPhase(txt,exposed){const ph=host.querySelector('#b-phase');if(!ph)return;ph.textContent=txt;ph.classList.toggle('exposed',!!exposed);ph.classList.remove('hide');clearTimeout(phaseTO);phaseTO=setTimeout(()=>ph.classList.add('hide'),2200);}
-  showPhase('⛨ DESTROY THE DEFENSE TOWERS',false);
+  showPhase('⛨ DESTROY THE DEFENSES',false);
 
-  function aliveTowers(){return towers.filter(tw=>tw.alive);}
-  function nearestTarget(x,y){const pool=aliveTowers();if(pool.length){let b=null,bd=1e9;for(const tw of pool){const d=Math.hypot(tw.x-x,tw.y-y);if(d<bd){bd=d;b=tw;}}return b;}return (cit.exposed&&!cit.dying)?cit:null;}
-  function burst(x,y,col,n,opts){opts=opts||{};for(let i=0;i<n;i++){const a=Math.random()*TAU,sp=(opts.speed||140)*(0.3+Math.random()*0.8);parts.push(new ENT.Particle(x,y,{vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:opts.life||0.6,size:opts.size||(2+Math.random()*2.5),color:col,glow:true,drag:0.93}));}}
-  function floatTxt(x,y,txt,col,crit,size){floats.push(new ENT.FloatText(x,y,txt,{color:col,size:size||15,crit:!!crit,vy:-42,life:0.9}));}
-  function exposeCitadel(){if(cit.exposed)return;cit.exposed=true;showPhase('⚔ CITADEL EXPOSED · FINISH IT',true);host.querySelectorAll('.bar-wrap.citlock').forEach(b=>b.classList.remove('citlock'));}
-  function onKill(e){
-    if(e===cit){cit.dying=true;cit.deathT=0;burst(cit.x,cit.y,'255,230,150',60,{speed:300,life:1,size:4});burst(cit.x,cit.y,'255,150,90',34,{speed:180,life:.8});shake=Math.min(9,shake+9);return;}
-    e.dying=true;burst(e.x,e.y,(CFG.STRUCTS[e.type]&&hex2rgb(CFG.STRUCTS[e.type].c))||'255,170,90',22,{speed:170,life:.8});shake=Math.min(8,shake+3);killCount++;floatTxt(e.x,e.y,'DESTROYED','#ff6a6a',false,12);if(aliveTowers().length===0)exposeCitadel();
+  function nearestStruct(x,y){let best=null,bd=1e9;for(const s of structs){if(!s.alive)continue;const d=Math.hypot(s.x-x,s.y-y);if(d<bd){bd=d;best=s;}}return best;}
+  function nearestFleet(x,y){let best=null,bd=1e9;for(const f of fleet){if(!f.alive)continue;const d=Math.hypot(f.x-x,f.y-y);if(d<bd){bd=d;best=f;}}return best;}
+  function spawnBolt(x,y,tx,ty,side,wt,col,crit){const a=Math.atan2(ty-y,tx-x);const sp=wt==='missile'?5:8;bolts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,side,wt,col,crit:!!crit,life:70,trail:[]});}
+  function explode(x,y,col,n){for(let i=0;i<n;i++){const a=Math.random()*TAU,sp=Math.random()*2.6+.6;eparts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,col});}}
+  function ftext(x,y,txt,col,crit,size){ftexts.push({x,y,txt,col,crit:!!crit,size:size||15,life:1});}
+
+  const STEP=33;let acc=0;
+  function tick(){
+    if(over)return;
+    const dt=speed;
+    t+=0.033*dt;
+    timeLeft=Math.max(0,timeLeft-(300/TIMER_TICKS)*dt);
+    // --- tower destruction schedule (phase 1) ---
+    for(const s of structs){if(!s.alive)continue;
+      if(t>=s.killAt){s.alive=false;s.hpFrac=0;explode(s.x,s.y,hex2rgb(CFG.STRUCTS[s.type].c),20);ftext(s.x,s.y,'DESTROYED','#ff6a6a',false,13);}
+      else if(t>=s.atkStart){s.hpFrac=Math.max(0,(s.killAt-t)/(s.killAt-s.atkStart));}
+    }
+    const aliveTow=structs.filter(s=>s.alive).length;
+    const allDown=aliveTow===0;
+    // --- citadel only takes damage once every tower is gone (phase 2) ---
+    if(allDown){ if(unlockT===null){unlockT=t;} integ=Math.max(0,1-(t-unlockT)/CIT_DRAIN); }
+    else integ=1;
+    // --- attackers ---
+    for(const f of fleet){if(!f.alive)continue;
+      // advance into formation
+      if(f.y>f.formY){f.y-=1.4*dt;}
+      else{f.y+=Math.sin(t*2+f.ox)*0.3;f.x=f.ox+Math.sin(t*1.3+f.ox)*10;}
+      const tgt=nearestStruct(f.x,f.y)||cit;
+      f.ang=Math.atan2((tgt.y)-f.y,(tgt.x)-f.x);
+      f.cd-=dt;
+      if(f.cd<=0&&f.y<=f.formY+6){f.cd=(f.kind==='flag'?22:16);
+        const wt=f.kind==='battleship'||f.kind==='flag'?'missile':'laser';
+        const col=wt==='missile'?'255,170,90':'95,209,255';const crit=Math.random()<0.26;
+        spawnBolt(f.x,f.y-f.size*0.3,tgt.x,tgt.y,'atk',wt,col,crit);
+      }
+      f.hit=Math.max(0,f.hit-0.08*dt);
+    }
+    // --- defender structures ---
+    for(const s of structs){if(!s.alive)continue;
+      const tgt=nearestFleet(s.x,s.y);if(tgt){s.ang=Math.atan2(tgt.y-s.y,tgt.x-s.x);}
+      s.cd-=dt;s.hit=Math.max(0,s.hit-0.08*dt);
+      if(s.type==='repair'){s.cd-=dt;continue;}
+      if(s.type==='shield'){s.cd-=dt;continue;}
+      if(s.cd<=0&&tgt){s.cd=s.type==='missile'?42:26;
+        const wt=s.type==='missile'?'missile':'laser';const col=s.type==='missile'?'255,150,150':hex2rgb(CFG.STRUCTS[s.type].c);
+        spawnBolt(s.x,s.y,tgt.x,tgt.y,'def',wt,col,false);
+      }
+    }
+    // citadel returns fire
+    cit.hit=Math.max(0,cit.hit-0.06*dt);
+    if(((t*10)|0)%9===0){const tgt=nearestFleet(cit.x,cit.y);if(tgt&&Math.random()<0.4*dt)spawnBolt(cit.x,cit.y+10,tgt.x,tgt.y,'def','laser','255,120,140',false);}
+    // --- projectiles ---
+    for(const p of bolts){if(p.life<=0)continue;p.trail.push({x:p.x,y:p.y});if(p.trail.length>7)p.trail.shift();p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
+      if(p.side==='atk'){
+        // hit nearest struct/citadel near target
+        let hitObj=null;
+        for(const s of structs){if(s.alive&&Math.hypot(p.x-s.x,p.y-s.y)<16){hitObj=s;break;}}
+        if(!hitObj&&Math.hypot(p.x-cit.x,p.y-cit.y)<W*0.16)hitObj=cit;
+        if(hitObj){p.life=0;explode(p.x,p.y,p.wt==='missile'?'255,170,90':'120,210,255',p.wt==='missile'?9:5);
+          if(hitObj===cit){if(allDown){cit.hit=1;ftext(p.x+(Math.random()*24-12),p.y-6,'-'+CFG.fmt((p.crit?2.2:1)*(120000+Math.random()*90000)),p.crit?'#ffd24d':'#7fd8ff',p.crit,p.crit?17:14);}}
+          else{hitObj.hit=1;} // tower flash — actual destruction is driven by the phase-1 schedule
+        }
+      }else{
+        const f=nearestFleet(p.x,p.y);
+        if(f&&Math.hypot(p.x-f.x,p.y-f.y)<14){p.life=0;f.hp-=14;f.hit=1;explode(p.x,p.y,'255,140,150',5);
+          if(f.hp<=0){f.alive=false;explode(f.x,f.y,'255,170,120',20);}}
+      }
+      if(p.x<-20||p.x>W+20||p.y<-20||p.y>H+20)p.life=0;
+    }
+    for(let i=bolts.length-1;i>=0;i--)if(bolts[i].life<=0)bolts.splice(i,1);
+    for(const e of eparts){e.x+=e.vx*dt;e.y+=e.vy*dt;e.vx*=0.94;e.vy*=0.94;e.life-=0.04*dt;}
+    for(let i=eparts.length-1;i>=0;i--)if(eparts[i].life<=0)eparts.splice(i,1);
+    for(const f of ftexts){f.y-=0.6*dt;f.life-=0.02*dt;}
+    for(let i=ftexts.length-1;i>=0;i--)if(ftexts[i].life<=0)ftexts.splice(i,1);
+
+    // UI — defenses tracker + citadel lock
+    const shFrac=Math.max(0,Math.min(1,(integ-0.6)/0.4));
+    const hpFrac=Math.max(0,Math.min(1,integ/0.6));
+    cit.sh=shFrac*cit.shMax;
+    $('#b-sh',host).style.width=(shFrac*100)+'%';
+    $('#b-hp',host).style.width=(hpFrac*100)+'%';
+    $('#b-defn',host).textContent=aliveTow+' / '+NTOW;
+    $('#b-defpips',host).innerHTML=structs.map(s=>'<i class="'+(s.alive?'on':'')+'"></i>').join('');
+    if(allDown){
+      $('#b-hpv',host).textContent=Math.round(hpFrac*100)+'%';
+      host.querySelectorAll('.bar-wrap.citlock').forEach(b=>b.classList.remove('citlock'));
+      if(!exposedShown){exposedShown=true;showPhase('⚔ CITADEL EXPOSED · FINISH IT',true);}
+      const dtk=$('#b-deftrack',host);if(dtk)dtk.style.opacity='.4';
+    }else{
+      $('#b-hpv',host).textContent='🔒 '+aliveTow+' LEFT';
+    }
+    const mm=Math.floor(timeLeft/60),ss=Math.floor(timeLeft%60);const tm=$('#b-timer',host);
+    tm.textContent=mm+':'+(ss<10?'0':'')+ss;tm.classList.toggle('crit',timeLeft<60);
+
+    if(allDown&&integ<=0.001)return finish(true,false);
+    if(timeLeft<=0||fleet.every(f=>!f.alive))return finish(false,false);
   }
-  function updateHUD(){$('#b-defn',host).textContent=Math.min(killCount,QUOTA)+' / '+QUOTA;$('#b-defpips',host).innerHTML=towers.map(tw=>'<i class="'+(tw.alive?'on':'')+'"></i>').join('');
-    if(cit.exposed){const f=Math.max(0,cit.hp/citMaxHp);$('#b-hp',host).style.width=(f*100)+'%';$('#b-sh',host).style.width='0%';$('#b-hpv',host).textContent=Math.round(f*100)+'%';}
-    else $('#b-hpv',host).textContent='🔒 '+aliveTowers().length+' LEFT';
-    const mm=Math.floor(timeLeft/60),ss=Math.floor(timeLeft%60);const tm=$('#b-timer',host);if(tm){tm.textContent=mm+':'+(ss<10?'0':'')+ss;tm.classList.toggle('crit',timeLeft<60);}}
 
-  const fireWt=(pst.ship==='battleship'||pst.ship==='dreadnought'||pst.ship==='carrier')?'missile':'gatling';
-  function fireAt(fromX,fromY,owner,wt,critC,dmgMul){const tgt=nearestTarget(fromX,fromY);if(!tgt)return null;const ang=Math.atan2(tgt.y-fromY,tgt.x-fromX);const crit=Math.random()<critC;const dmg=dps*dmgMul*(crit?2.4:1);const p=new ENT.Projectile(fromX,fromY,tgt,dmg,crit);p.wtype=wt;p.angle=ang;projectiles.push(p);if(owner)owner.facing=ang;return ang;}
-  function playerFire(){const a=fireAt(archer.x,archer.y,archer,fireWt,0.26,0.16);if(a!=null){archer.muzzle=1;archer.recoil=1;}}
-
-  let fireT=0;
-  function update(dt){
-    t+=dt;timeLeft=Math.max(0,timeLeft-(300/TIMER_TICKS)*dt);
-    if(shake>0.3)shake*=Math.pow(0.86,dt*60);else shake=0;
-    archer.update(dt);
-    // your flagship holds the lower field and strafes (auto-combat, no kiting
-    // monsters — the threat is the tower fire above).
-    archer.x+=Math.sin(t*1.05)*46*dt;archer.y+=Math.cos(t*0.8)*16*dt;
-    archer.x=Math.max(28,Math.min(W-28,archer.x));archer.y=Math.max(H*0.52,Math.min(H-30,archer.y));
-    fireT-=dt;if(fireT<=0){fireT=0.16;playerFire();}
-    for(const e of escorts){if(!e.alive)continue;const tx=archer.x+e.off.x,ty=archer.y+e.off.y;e.x+=(tx-e.x)*Math.min(1,dt*4);e.y+=(ty-e.y)*Math.min(1,dt*4);const tg=nearestTarget(e.x,e.y);if(tg)e.ang=Math.atan2(tg.y-e.y,tg.x-e.x);e.cd-=dt;if(e.cd<=0){e.cd=0.5;fireAt(e.x,e.y,null,'laser',0.2,0.10);}if((((t*20)|0)+(e.off.x|0))%3===0)parts.push(new ENT.Particle(e.x,e.y+e.size*0.32,{vx:0,vy:34,life:0.4,size:2,color:'rgba(120,200,255,0.6)',glow:true,drag:0.9}));}
-    // towers fire on your fleet (shield/repair just hold) + drift slightly
-    for(const tw of towers){if(!tw.alive)continue;tw.x=tw.ox+Math.sin(t*0.7+tw.ox)*4;tw.hit=Math.max(0,tw.hit-dt*4);if(tw.type==='shield'||tw.type==='repair')continue;tw.cd-=dt;if(tw.cd<=0){tw.cd=tw.type==='missile'?2.4:1.7;const a=Math.atan2(archer.y-tw.y,archer.x-tw.x);ebolts.push({x:tw.x,y:tw.y,vx:Math.cos(a)*250,vy:Math.sin(a)*250,ang:a,tint:(CFG.STRUCTS[tw.type]&&CFG.STRUCTS[tw.type].c)||'#ff5468',life:2.4});}}
-    // citadel: only fires once exposed; runs its short death anim when killed
-    cit.hitFlash=Math.max(0,(cit.hitFlash||0)-dt*4);
-    if(cit.dying){cit.deathT=(cit.deathT||0)+dt*2;if(cit.deathT>=1&&!over)return finish(true,false);}
-    else if(cit.exposed){cit.fireT-=dt;if(cit.fireT<=0){cit.fireT=1.4;const a=Math.atan2(archer.y-cit.y,archer.x-cit.x);ebolts.push({x:cit.x,y:cit.y,vx:Math.cos(a)*270,vy:Math.sin(a)*270,ang:a,tint:'#ff4d6a',life:2.6});}}
-    for(const p of projectiles){if(p.dead)continue;p.update(dt);if(p.hit&&p.target){const e=p.target;const killed=e.takeDamage(p.damage);if(e===cit)cit.hitFlash=1;burst(p.x,p.y,p.crit?'255,233,150':'120,210,255',p.crit?10:6,{speed:160,life:0.5});floatTxt((e.x)+(Math.random()*16-8),(e.y)-(e.size||16)-6,fmtDmg(p.damage),p.crit?'#ffd24d':'#dff4ff',p.crit,p.crit?18:14);if(p.crit)shake=Math.min(7,shake+1.6);if(killed)onKill(e);}}
-    for(const b of ebolts){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(Math.hypot(b.x-archer.x,b.y-archer.y)<archer.size+6){b.life=0;archer.takeHit(dps*0.05,null);burst(b.x,b.y,'255,120,120',5,{speed:120,life:0.4});shake=Math.min(7,shake+1);}}
-    for(let i=projectiles.length-1;i>=0;i--)if(projectiles[i].dead)projectiles.splice(i,1);
-    for(let i=ebolts.length-1;i>=0;i--){const b=ebolts[i];if(b.life<=0||b.x<-30||b.x>W+30||b.y<-30||b.y>H+30)ebolts.splice(i,1);}
-    for(const p of parts)p.update(dt);for(let i=parts.length-1;i>=0;i--)if(parts[i].dead)parts.splice(i,1);
-    for(const f of floats)f.update(dt);for(let i=floats.length-1;i>=0;i--)if(floats[i].dead)floats.splice(i,1);
-    updateHUD();
-    if(timeLeft<=0||archer.dead)return finish(false,false);
-  }
   function render(){
     if(!host.isConnected||over)return;
     ctx.clearRect(0,0,W,H);
-    ctx.save();
-    if(shake>0.3)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
-    R.drawArena(ctx,W,H,t,zone);
-    if(!cit.dying||cit.deathT<1)R.drawEnemy(ctx,cit);
-    for(const tw of towers){if(tw.alive){drawTurret(ctx,tw.x,tw.y,tw.type,t,tw.ang,1.15,tw.hit,false);
-      const f=Math.max(0,tw.hp/(dps*2));if(f<0.999){ctx.save();ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(tw.x-13,tw.y-tw.size-7,26,3);ctx.fillStyle=f>0.4?'#3fc56b':'#ff495f';ctx.fillRect(tw.x-13,tw.y-tw.size-7,26*Math.min(1,f),3);ctx.restore();}}}
-    for(const e of escorts)if(e.alive)drawShip(ctx,e.im,e.x,e.y,e.size,e.ang,0,{engineCol:'120,200,255'});
-    if(!archer.dead)R.drawArcher(ctx,archer.x,archer.y,1.1,archer,(window.GAME.state.equipped||{}),t);
-    for(const p of projectiles)R.drawArrow(ctx,p);
-    for(const b of ebolts)R.drawEnemyBolt(ctx,b);
-    for(const p of parts)R.drawParticle(ctx,p);
-    for(const f of floats)R.drawFloat(ctx,f);
+    const bg=ctx.createRadialGradient(cx,cy,10,cx,cy,Math.max(W,H));
+    bg.addColorStop(0,'#152544');bg.addColorStop(.55,'#0a1322');bg.addColorStop(1,'#06090f');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    drawStars(ctx,stars,t);
+    drawCitadel(ctx,cit.x,cit.y,W*0.30,t,cit.sh/cit.shMax,cit.hit,diff==='hard'?'prismatic':null);
+    for(const s of structs){if(s.alive){drawTurret(ctx,s.x,s.y,s.type,t,s.ang,1,s.hit,false);
+        if(s.hpFrac<0.999){ctx.save();ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(s.x-12,s.y+17,24,3);ctx.fillStyle=s.hpFrac>0.4?'#3fc56b':'#ff495f';ctx.fillRect(s.x-12,s.y+17,24*s.hpFrac,3);ctx.restore();}}
+      else drawTurret(ctx,s.x,s.y,s.type,t,0,1,0,true);}
+    for(const f of fleet){if(f.alive)drawShip(ctx,f.im,f.x,f.y,f.size,f.ang,f.hit);}
+    for(const p of bolts)drawBolt(ctx,p);
+    // explosions
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    for(const e of eparts){ctx.globalAlpha=Math.max(0,e.life);ctx.fillStyle=rgba(e.col,1);ctx.beginPath();ctx.arc(e.x,e.y,2.4*e.life+0.6,0,TAU);ctx.fill();}
+    ctx.restore();
+    // floating combat text (game style: Rajdhani, black stroke, CRIT! tag)
+    ctx.save();ctx.textAlign='center';ctx.lineJoin='round';
+    for(const f of ftexts){const a=Math.max(0,f.life);ctx.globalAlpha=a;ctx.font='800 '+f.size+'px Rajdhani, sans-serif';ctx.lineWidth=3.5;ctx.strokeStyle='rgba(0,0,0,0.85)';ctx.strokeText(f.txt,f.x,f.y);ctx.fillStyle=f.col;ctx.fillText(f.txt,f.x,f.y);if(f.crit){ctx.font='800 '+(f.size*0.5)+'px Rajdhani, sans-serif';ctx.fillStyle='#ffd24d';ctx.fillText('CRIT!',f.x,f.y-f.size*0.85);}}
     ctx.restore();
     requestAnimationFrame(render);
   }
   render();
-  const iv=setInterval(()=>{if(over){clearInterval(iv);return;}const steps=Math.max(1,speed|0);for(let i=0;i<steps;i++)update(0.033);},STEP);
+  const iv=setInterval(()=>{if(over){clearInterval(iv);return;}tick();},STEP);
 
   function finish(win,retreat){
     if(over)return;over=true;clearInterval(iv);
@@ -1118,13 +1103,7 @@ function trim(x){return (Math.round(x*10)/10).toString();}
 /* ---- daily payout countdown (to next reset) ---- */
 function msToReset(){const n=new Date();const x=new Date(n);x.setHours(24,0,0,0);return x-n;}
 function cdStr(){let s=Math.max(0,Math.floor(msToReset()/1000));const p=v=>String(v).padStart(2,'0');return p(s/3600|0)+':'+p((s%3600)/60|0)+':'+p(s%60);}
-/* ---- DAILY RESET: free tokens refill to 5 and the ticket price ladder starts
-   over each day (local midnight, matching the countdown above). ---- */
-function frDayKey(){return new Date().toDateString();}
-function applyDailyReset(s){const k=frDayKey();if(s.dayStamp!==k){s.dayStamp=k;s.tokensBought=0;s.dailyClaimed=false;s.tokens=5;return true;}return false;}
-setInterval(()=>{document.querySelectorAll('.cd-clock').forEach(e=>e.textContent=cdStr());
-  try{ if(typeof S!=='undefined'&&applyDailyReset(S)){ save(); if(typeof setTab==='function') setTab(typeof tab!=='undefined'?tab:'base'); } }catch(e){}
-},1000);
+setInterval(()=>{document.querySelectorAll('.cd-clock').forEach(e=>e.textContent=cdStr());},1000);
 
 /* ============================================================ STATE ====== */
 const CIT_LEVELS=[
@@ -1164,7 +1143,7 @@ const FLEET_BASE=0.5e6;             // fallback when not embedded in the live ga
 // AF() = your REAL active fleet power, read live from the core game when embedded
 // (uncompressed theoryDps + maxHp·0.5 — the true scale, not the HUD's compressed
 // Ship Score). Falls back to FLEET_BASE when standalone.
-function AF(){var G=FRgame();try{if(G){if(G.score){var sc=G.score();if(sc)return Math.max(FLEET_BASE,Math.round(sc));}if(G.getStats){var s=G.getStats();if(s)return Math.max(FLEET_BASE,Math.round((s.theoryDps||0)+(s.maxHp||0)*0.5));}}}catch(e){}return FLEET_BASE;}
+function AF(){var G=FRgame();try{if(G&&G.getStats){var s=G.getStats();if(s)return Math.max(FLEET_BASE,Math.round((s.theoryDps||0)+(s.maxHp||0)*0.5));}}catch(e){}return FLEET_BASE;}
 const CIT_POWER=[1.2e6,5e6,16e6,46e6,120e6];
 const EQUIP=0.2e6, RESEARCH=0.1e6;
 
@@ -1226,10 +1205,10 @@ const def={
   struct:[null,null,null,null,null,null,null,null], // empty — build it up
   structLv:[0,0,0,0,0,0,0,0],
   merc:[null,null,null,null,null], // empty
-  dailyClaimed:false, tokensBought:0, dayStamp:''
+  dailyClaimed:false, tokensBought:0
 };
 let S=load();
-function load(){try{const r=JSON.parse(localStorage.getItem(SAVE));var s=r?Object.assign({},def,r):Object.assign({},def);pullEconomy(s);applyDailyReset(s);return s;}catch(e){return Object.assign({},def);}}
+function load(){try{const r=JSON.parse(localStorage.getItem(SAVE));var s=r?Object.assign({},def,r):Object.assign({},def);pullEconomy(s);return s;}catch(e){return Object.assign({},def);}}
 function save(){try{localStorage.setItem(SAVE,JSON.stringify(S));}catch(e){}pushEconomy();pushProfile();}
 /* ---- ONE ECONOMY: mirror gold + galaxy(plasma) to the live game when embedded ---- */
 function FRgame(){try{return (window.parent&&window.parent!==window&&window.parent.GAME&&window.parent.GAME.state)?window.parent.GAME:null;}catch(e){return null;}}
@@ -1559,13 +1538,9 @@ function renderUpgrade(){
 
 /* ============================================================ ATTACK ===== */
 const TARGETS=[
-  {nm:'DriftPirate', rOff:-2, defMul:0.58},
-  {nm:'AshRunner',   rOff:-2, defMul:0.72},
-  {nm:'NebulaQueen', rOff:-1, defMul:0.86},
-  {nm:'RustBaron',   rOff:0,  defMul:1.0},
-  {nm:'IronVow',     rOff:0,  defMul:1.16},
-  {nm:'VoidReaper',  rOff:1,  defMul:1.34},
-  {nm:'StarTyrant',  rOff:2,  defMul:1.6}
+  {nm:'NebulaQueen', rOff:-1, defMul:0.72},
+  {nm:'RustBaron',   rOff:0,  defMul:0.98},
+  {nm:'VoidReaper',  rOff:1,  defMul:1.32}
 ];
 function targetStats(t){
   const ap=attackPower();
@@ -1580,9 +1555,10 @@ function renderAttack(){
   RAIDLIST=(online&&NET.targets&&NET.targets.length)?NET.targets:TARGETS.map(function(t){var st=targetStats(t);return {nm:t.nm,def:st.def,gold:st.gold,gal:st.gal,rank:st.rank,diff:st.diff,real:false};});
   $('#fr-body').innerHTML=
   '<div class="subview">'+
+    '<div class="ad-split"><div class="ad atk"><div class="adl">⚔ Your Attack Power</div><div class="adv">'+fmt(attackPower())+'</div><div class="ads">flagship + mercenaries</div></div></div>'+
     tokenBar()+
     '<div class="sec-head"><h3>Raid Targets</h3><span class="more" id="reroll">↻ Refresh</span></div>'+
-    (online?'':'<div class="sec-blurb" style="color:#ffd24d;border:1px solid rgba(242,178,75,.4);background:rgba(242,178,75,.08);border-radius:9px;padding:7px 11px;margin-bottom:9px">⚠ Preview opponents — sign in to raid <b>real</b> rival fleets.</div>')+
+    '<div class="sec-blurb">Your Attack Power vs their Defense Value decides the fight. Win to loot spoils &amp; climb. 1 token per raid.</div>'+
     '<div id="target-list">'+RAIDLIST.map((t,i)=>targetCard(t,i)).join('')+'</div>'+
   '</div>';
   document.querySelectorAll('[data-atk]').forEach(b=>b.onclick=()=>raid(RAIDLIST[+b.dataset.atk]));
@@ -1590,12 +1566,10 @@ function renderAttack(){
   $('#buy-tok').onclick=buyTokens;
 }
 function tokenBar(){
-  const full=S.tokens>=5;
-  return '<div class="tok-row">'+
-    '<div class="tok-left"><span class="tok-ic">⚔</span><b class="tok-n">'+S.tokens+'</b><span class="tok-max">/5 attacks</span>'+
-      (full?'':'<span class="tok-next">· resets in <span class="cd-clock">'+cdStr()+'</span></span>')+'</div>'+
-    '<button class="tok-buy" id="buy-tok">+1<span class="tb-cost">'+fmt(tokenCost())+'</span></button>'+
-  '</div>';
+  let pips='';for(let i=0;i<5;i++)pips+='<div class="tpip'+(i<S.tokens?' on':'')+'">⚔</div>';
+  return '<div class="token-bar"><div class="token-pips">'+pips+'</div>'+
+    '<div class="token-meta"><div class="tn">'+S.tokens+' / 5</div><div class="tt">'+(S.tokens>0?'refresh in 14h':'+1 in 4h 50m')+'</div></div>'+
+    '<button class="btn gold" id="buy-tok" style="width:auto;padding:9px 13px;font-size:11px">+1<span class="sub"> '+fmt(tokenCost())+'</span></button></div>';
 }
 function tokenCost(){return Math.round(500e3*Math.pow(5,S.tokensBought||0));} // 500K → 2.5M → 12.5M → 62.5M … steep so raids can't farm net gold
 function buyTokens(){
@@ -1605,49 +1579,44 @@ function buyTokens(){
   toast('+1 Attack Token · −'+fmt(c)+' · next '+fmt(tokenCost()));
 }
 function targetCard(t,i){
-  const r=RANKS[(t.rank||0)];const diff=t.diff;
-  const dlabel=diff==='easy'?'Favorable':diff==='even'?'Even Match':'Tough Raid';
-  const win=Math.round(attackPower())>=Math.round(t.def);
-  return '<button class="traid '+diff+'" data-atk="'+i+'">'+
-    '<img class="traid-cit" src="ships/ship-citadel.png" alt="">'+
-    '<div class="traid-mid">'+
-      '<div class="traid-nm">'+t.nm+'<span class="traid-diff '+diff+'">'+dlabel+'</span></div>'+
-      '<div class="traid-sub">'+emblem(t.rank,12)+' '+r.n+'</div>'+
-      '<div class="traid-loot"><span class="lg">● '+fmt(t.gold)+'</span><span class="lp">✦ '+fmt(t.gal)+'</span></div>'+
-    '</div>'+
-    '<div class="traid-right">'+
-      '<div class="traid-def"><span>⛨ DEF</span><b>'+fmt(t.def)+'</b></div>'+
-      '<div class="traid-go '+(win?'win':'risk')+'">⚔ RAID</div>'+
-    '</div>'+
-  '</button>';
+  const st=t;const r=RANKS[(t.rank||0)];const diff=t.diff;
+  const dtag=diff==='easy'?'▾ Favorable':diff==='even'?'◆ Even match':'▴ Tough raid';
+  return '<div class="target-card"><div class="target-top">'+
+    '<img class="target-cit" src="ships/ship-citadel.png" alt="">'+
+    '<div class="target-info"><div class="tnm">'+t.nm+'</div>'+
+      '<div class="trk">'+emblem(st.rank,16)+' '+r.n+' · #'+(60+i*9)+'</div>'+
+      '<div class="diff-tag '+diff+'">'+dtag+'</div></div>'+
+    '<div class="target-pwr"><div class="pl">⛨ Defense</div><div class="pv">'+fmt(st.def)+'</div></div></div>'+
+    '<div class="matchup"><span class="mu atk">⚔ '+fmt(attackPower())+'</span><span class="vs">VS</span><span class="mu def">⛨ '+fmt(st.def)+'</span></div>'+
+    '<div class="target-loot"><div class="tl gold"><span style="color:var(--gold)">●</span> '+fmt(st.gold)+'</div>'+
+      '<div class="tl gal"><span>✦</span> '+fmt(st.gal)+'</div>'+
+      '<button class="btn red" data-atk="'+i+'" style="flex:1.2;width:auto;padding:10px;font-size:12px">⚔ Raid</button></div></div>';
 }
 
 /* ---- raid via the canvas combat engine — SERVER decides win/loss in real PvP ---- */
 function raid(t){
   if(S.tokens<=0){buyTokens();return;}
   if(!window.FRCombat){toast('Combat engine loading…');return;}
-  // OUTCOME = your Attack Power vs their Defense Value. Higher attack wins.
-  var win = Math.round(attackPower()) >= Math.round(t.def);
-  function play(spoilG,spoilP){
-    FRCombat.openAttack($('#battle'),{nm:t.nm,gold:spoilG,gal:spoilP,def:t.def,diff:t.diff,forceWin:win},S,{onResult:function(rz){
-      if(win){ S.gold+=spoilG; S.plasma+=spoilP; if(rz&&rz.pos)S.pos=rz.pos; save(); syncWallet(); toast('Victory · spoils banked'+(rz&&rz.pos?' · #'+rz.pos:''),true); }
-      else toast('Raid repelled — their defenses held');
-      NET.targets=null; if(window.FRNET&&FRNET.enabled()){refreshLadder();refreshTargets();} setTab('attack');
-    }});
-  }
   if(t&&t.real&&window.FRNET&&FRNET.enabled()){
     toast('Engaging '+t.nm+'…');
     FRNET.raid(t.id).then(function(res){
-      if(res&&res.error){ var m=res.error;
+      if(!res||res.error){ var m=(res&&res.error)?res.error:'raid failed';
         toast(m==='target protected'?'Target already raided — shielded for now':('Raid failed · '+m)); NET.targets=null; refreshTargets(); return; }
       S.tokens--;save();
-      play(t.gold||0,t.gal||0);
+      FRCombat.openAttack($('#battle'),{nm:t.nm,gold:res.gold||0,gal:res.galaxy||0,def:t.def,diff:t.diff,forceWin:!!res.win},S,{onResult:function(){
+        if(res.win){ S.gold+=(res.gold||0); S.plasma+=(res.galaxy||0); save();syncWallet(); toast('Victory · spoils banked',true); }
+        else toast('Raid repelled — their citadel held');
+        NET.targets=null; refreshLadder(); refreshTargets(); setTab('attack');
+      }});
     });
     return;
   }
   // simulated fallback (guest / offline)
   S.tokens--;save();
-  play(t.gold||0,t.gal||0);
+  FRCombat.openAttack($('#battle'),{nm:t.nm,gold:t.gold,gal:t.gal,def:t.def,diff:t.diff},S,{onResult:(rz)=>{
+    if(rz&&rz.win){S.gold+=rz.gold;S.plasma+=rz.gal;if(rz.pos)S.pos=rz.pos;save();syncWallet();toast('Spoils collected · climbed to #'+(rz.pos||S.pos),true);}
+    setTab('attack');
+  }});
 }
 
 /* ============================================================ LEADERBOARD  */
@@ -1692,6 +1661,7 @@ function lbRow(pos,nm,ri,pw,me){
 function lbBoardLive(){
   var meId=(window.FRNET&&FRNET.me&&FRNET.me())?FRNET.me().id:null;
   var rows=NET.board.map(function(r){return {nm:r.name||'Operator',ri:r.rank_idx||0,pw:r.fleet_power||0,me:!!(meId&&r.user_id===meId)};});
+  if(rows.length<5){var need=5-rows.length;var top=rows.length?rows[0].pw:0;var sims=LB_TOP.slice(0,need).map(function(s){return {nm:s.nm,ri:s.ri,pw:Math.max(s.pw,top+10e6)};});rows=sims.concat(rows);}
   rows.sort(function(a,b){return b.pw-a.pw;});
   var html='<div class="lb-head">Global Top Operators &middot; LIVE</div>';
   var shown=rows.slice(0,12);
@@ -1703,7 +1673,6 @@ function lbBoard(){
   if(NET.board&&NET.board.length) return lbBoardLive();
   const me=S.pos;
   let html='<div class="lb-head">⚑ Global Top Operators</div>';
-  html+='<div class="sec-blurb" style="color:#ffd24d;border:1px solid rgba(242,178,75,.35);background:rgba(242,178,75,.07);border-radius:9px;padding:7px 10px;margin-bottom:8px;">Preview ladder — sign in to compete on the live board against real operators.</div>';
   html+=LB_TOP.map((p,i)=>lbRow(i+1,p.nm,p.ri,p.pw,false)).join('');
   // your division window around your position
   html+='<div class="divider">Your Division</div>';

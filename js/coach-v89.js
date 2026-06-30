@@ -1,41 +1,22 @@
 /* =============================================================================
    coach.js — LOOT FLEET first-time-experience coaching
    ---------------------------------------------------------------------------
-   Milestone-driven coach marks. Each "moment" fires ONCE per account at the
-   player's first encounter with a system, tracking the CURRENT layout where
-   most progression screens now live inside the bottom-nav COMMAND menu:
+   Milestone-driven coach marks for new pilots. Each "moment" fires ONCE per
+   account, at the player's first encounter with a system:
 
-     BOTTOM NAV (always visible): Battle · Zone Grind · Loot · Hangar · Command
-     COMMAND MENU cards [data-go]: My Galaxy · Fleet Rank · Dreadnaught Hunt ·
-       Pilot Tree · Pilot Skills · Prism Mining · Prism Fleet
-
-   Moments + their unlock gates (kept in lock-step with game.html LOCKS and the
-   feature modules):
-
-     welcome    · first login            → deploy to Zone 1
-     loot       · first item collected   → equip upgrades from the hold
-     skills     · first skill points     → Command ▸ Pilot Skills
-     bagfull    · hold hits capacity     → auto-sell / expand cargo
-     ships      · level 8                → Hangar ▸ Ships (blueprints & escorts)
-     prism      · level 15               → Command ▸ Prism Mining (idle ◈)
-     galaxy     · level 25               → Command ▸ My Galaxy (turf war)
-     citadel    · own a 2nd system       → Command ▸ My Galaxy (build a Citadel)
-     pilot      · level 30               → Command ▸ Pilot Tree (◇ Dread Cores)
-     dread      · level 30               → Command ▸ Dreadnaught Hunt (weekly raid)
-     fleetrank  · level 50               → Command ▸ Fleet Rank (PvP ladder)
-     prismfleet · level 200              → Command ▸ Prism Fleet (boss gauntlet)
-
-   Anything reached through Command is taught in two hops: spotlight the COMMAND
-   button, then the specific card inside the menu — so the tutorial follows the
-   real navigation instead of pointing at the now-hidden grouped nav buttons.
+     welcome  · first login            → deploy to Zone 1
+     loot     · first item collected   → equip upgrades from the hold
+     bagfull  · hold hits capacity     → auto-sell / expand cargo
+     skills   · first skill points     → spend them in Pilot Skills
+     ships    · level 8                → hangar, blueprints & escorts
+     galaxy   · level 20               → The Galaxy turf war
 
    SAFETY LOGIC: a moment never interrupts combat directly — when one triggers
    mid-fight we wait a beat, dock the player at the safe home hangar, then run
    the coaching steps. Steps highlight the real UI (spotlight ring + card) and
    advance when the player taps the highlighted control, so the tutorial IS the
-   game, not a slideshow. Veteran saves are grandfathered: basics their level
-   proves they know are marked seen, while newly-relocated features re-arm once
-   (coach.ver migration) so existing pilots still get caught up on what moved.
+   game, not a slideshow. Veteran saves are grandfathered: anything their level
+   proves they've already done is marked seen on first load.
    ============================================================================= */
 (function () {
   'use strict';

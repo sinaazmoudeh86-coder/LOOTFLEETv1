@@ -26,88 +26,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css">
+<link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/web-v89.css">
-<link rel="stylesheet" href="css/fx-cinematic.css">
-<link rel="stylesheet" href="css/fx-primordial.css">
-<style id="auth-redesign-css">
-/* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
-#login{ z-index:60; }
-.lg-wrap{ padding:20px; min-height:100%; display:flex; align-items:center; justify-content:center; }
-.auth-card{
-  width:100%; max-width:374px; margin:auto;
-  background:linear-gradient(180deg, rgba(23,31,46,.94), rgba(14,20,31,.97));
-  border:1px solid var(--line-2,#37475f); border-radius:22px;
-  padding:24px 24px 20px;
-  box-shadow:0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
-  display:flex; flex-direction:column; align-items:center;
-  animation:authCardIn .42s cubic-bezier(.22,1,.36,1);
-}
-@keyframes authCardIn{ from{ opacity:0; transform:translateY(14px) scale(.985); } to{ opacity:1; transform:none; } }
-.auth-card .lg-logo{ margin-bottom:2px; background:none; border:0; box-shadow:none; width:auto; height:auto; }
-.auth-card .lg-mark{ width:min(176px,60%); }
-
-/* segmented control: the single source of "where do I go" */
-.auth-seg{
-  display:grid; grid-template-columns:1fr 1fr; gap:4px; width:100%;
-  margin:8px 0 16px; padding:4px;
-  background:rgba(8,12,20,.72); border:1px solid var(--line,#26324a); border-radius:13px;
-}
-.auth-seg-btn{
-  appearance:none; border:0; cursor:pointer; padding:11px 8px; border-radius:9px;
-  font-family:var(--font-ui); font-weight:700; font-size:13.5px; letter-spacing:.02em;
-  color:var(--muted,#93a2ba); background:transparent;
-  transition:color .18s ease, background .18s ease, box-shadow .18s ease;
-}
-.auth-seg-btn.on{
-  color:#1c1206;
-  background:linear-gradient(180deg,#ffd07a,#f2b24b);
-  box-shadow:0 6px 16px rgba(242,178,75,.3), inset 0 1px 0 rgba(255,255,255,.5);
-}
-.auth-seg-btn:not(.on):hover{ color:var(--text,#eaf0fa); }
-
-.auth-head{ font-family:var(--font-display,'Orbitron',sans-serif); font-weight:800; font-size:17px; letter-spacing:.02em; color:var(--text,#eaf0fa); text-align:center; margin:0; }
-.auth-sub{ font-size:12.5px; line-height:1.5; color:var(--muted,#93a2ba); text-align:center; margin:6px 0 16px; max-width:30ch; }
-
-.auth-card .lg-form{ gap:12px; }
-.auth-field{ display:flex; flex-direction:column; gap:5px; width:100%; text-align:left; }
-.auth-lbl{ font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-2,#6f7f99); padding-left:2px; }
-.auth-card .lg-form input{ height:48px; border-radius:12px; font-size:15px; }
-.auth-card .lg-err{ margin:-2px 0 0; }
-
-.auth-card .lg-primary{
-  height:50px; margin-top:6px; border-radius:12px; font-size:15px; letter-spacing:.03em;
-  color:#1c1206 !important; border:0;
-  background:linear-gradient(180deg,#ffd07a,#f2b24b) !important;
-  box-shadow:0 10px 26px rgba(242,178,75,.32), inset 0 1px 0 rgba(255,255,255,.45);
-}
-.auth-card .lg-primary:hover{ filter:brightness(1.05); }
-.auth-card .lg-primary:disabled{ filter:saturate(.4) brightness(.9); cursor:default; }
-
-.auth-or{ position:relative; width:100%; text-align:center; margin:16px 0 12px; }
-.auth-or::before{ content:''; position:absolute; top:50%; left:0; right:0; height:1px; background:var(--line,#26324a); }
-.auth-or span{ position:relative; padding:0 12px; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--muted-2,#6f7f99); background:#141c2a; }
-
-.auth-card .lg-guest{
-  width:100%; height:46px; margin:0; border-radius:12px;
-  background:rgba(255,255,255,.04); border:1px solid var(--line-2,#37475f);
-  color:var(--text,#eaf0fa); font-family:var(--font-ui); font-weight:700; font-size:13.5px;
-  letter-spacing:.02em; text-transform:none; cursor:pointer;
-  transition:border-color .18s ease, background .18s ease;
-}
-.auth-card .lg-guest:hover{ border-color:var(--gold,#f2b24b); background:rgba(255,255,255,.06); }
-.auth-card .lg-note{ margin-top:14px; font-size:10.5px; line-height:1.55; max-width:33ch; }
-#lg-sso-status{ margin-top:12px; }
-
-@media (max-height:680px){
-  .auth-card{ padding:18px 20px; }
-  .auth-card .lg-mark{ width:min(140px,48%); }
-  .auth-seg{ margin:4px 0 12px; }
-  .auth-sub{ margin:5px 0 12px; }
-}
-@media (prefers-reduced-motion:reduce){ .auth-card{ animation:none; } }
-</style>
 <style id="battle-fx-css">
 /* cinematic battle FX — pure overlay, no engine changes */
 #game-canvas{ filter:saturate(1.22) contrast(1.1) brightness(1.06); }
@@ -151,33 +72,21 @@
 .mega{position:absolute;inset:0;z-index:55;display:none;}
 .mega.open{display:block;}
 .mega-back{position:absolute;inset:0;background:rgba(5,8,14,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:bdIn .2s ease;}
-.mega-sheet{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px 78px;box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);overflow:hidden;}
-.mega-sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 100%;animation:prismShift 5s linear infinite;}
+.mega-sheet{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px 78px;box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);}
 @keyframes megaUp{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
-@keyframes prismShift{to{background-position:300% 50%;}}
-@keyframes prismPulse{0%,100%{opacity:.32;}50%{opacity:.6;}}
-.mega-grab{width:40px;height:4px;border-radius:3px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ffd450,#5fd1ff);background-size:250% 100%;margin:4px auto 12px;animation:prismShift 4s linear infinite;}
-.mega-title{font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin:0 4px 11px;background:linear-gradient(90deg,#7fe0ff,#c79bff,#ff8a98,#ffd97a,#8be0a6,#7fe0ff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 6s linear infinite;}
+.mega-grab{width:40px;height:4px;border-radius:3px;background:#37475f;margin:4px auto 12px;}
+.mega-title{font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.18em;color:#f2b24b;text-transform:uppercase;margin:0 4px 11px;}
 .mega-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.mega-card{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;border-radius:14px;padding:13px 12px;position:relative;cursor:pointer;transition:transform .12s,box-shadow .2s;}
-.mega-card::before{content:'';position:absolute;inset:0;border-radius:14px;padding:1px;background:linear-gradient(130deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 300%;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.34;animation:prismShift 6s linear infinite;pointer-events:none;}
-.mega-card:active{transform:scale(.97);box-shadow:0 6px 24px rgba(120,150,255,.28);}
-.mega-card:active::before{opacity:.95;}
-.mega-card .mc-ic{width:38px;height:38px;flex:none;border-radius:11px;display:grid;place-items:center;background:radial-gradient(120% 120% at 50% 0%,#222d40,#10141d);border:1px solid #37475f;color:#5fd1ff;box-shadow:0 0 12px -2px rgba(95,209,255,.45);}
-.mega-card .mc-ic svg{width:21px;height:21px;filter:drop-shadow(0 0 4px currentColor);}
+.mega-card{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;border-radius:14px;padding:13px 12px;position:relative;cursor:pointer;transition:transform .1s,border-color .15s;}
+.mega-card:active{transform:scale(.97);}
+.mega-card .mc-ic{width:38px;height:38px;flex:none;border-radius:11px;display:grid;place-items:center;background:radial-gradient(120% 120% at 50% 0%,#222d40,#10141d);border:1px solid #37475f;color:#5fd1ff;}
+.mega-card .mc-ic svg{width:21px;height:21px;}
 .mega-card .mc-n{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12.5px;color:#eaf0fa;letter-spacing:.02em;}
 .mega-card .mc-s{font-size:10px;color:#93a2ba;margin-top:2px;letter-spacing:.02em;}
 .mega-card.locked{opacity:.55;}
-.mega-card.locked::before{opacity:.12;animation:none;}
-.mega-card .mc-lock{position:absolute;top:7px;right:9px;font-size:9.5px;font-weight:700;color:#f2b24b;font-family:'Rajdhani',sans-serif;z-index:1;}
+.mega-card .mc-lock{position:absolute;top:7px;right:9px;font-size:9.5px;font-weight:700;color:#f2b24b;font-family:'Rajdhani',sans-serif;}
 .mega-card.cmd-fr{grid-column:1 / -1;}
-.mega-card.cmd-fr .mc-ic{color:#f2b24b;border-color:rgba(242,178,75,.4);box-shadow:0 0 14px -2px rgba(242,178,75,.55);}
-.mega-card.cmd-fr::before{background:linear-gradient(130deg,#ffd450,#ff8a3c,#ff5168,#ffd450);background-size:250% 250%;}
-/* PRISM-themed cards — the full prismatic treatment */
-.mega-card.cmd-prism{background:linear-gradient(180deg,#1d1733,#140e24);}
-.mega-card.cmd-prism::before{opacity:.7;animation-duration:3.6s;animation-name:prismShift,prismPulse;}
-.mega-card.cmd-prism .mc-ic{color:#c9a0ff;border-color:rgba(201,160,255,.5);background:radial-gradient(120% 120% at 50% 0%,#2a2046,#140e24);box-shadow:0 0 16px -2px rgba(201,160,255,.7);}
-.mega-card.cmd-prism .mc-n{background:linear-gradient(90deg,#d9c2ff,#ff9ec4,#ffe6a0,#8be0c0,#d9c2ff);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 5s linear infinite;}
+.mega-card.cmd-fr .mc-ic{color:#f2b24b;border-color:rgba(242,178,75,.4);}
 </style>
 </head>
 <body>
@@ -193,9 +102,7 @@
           <div class="res-chip" style="--rc:#5bc0ff"><span class="rg">⬢</span><span id="hud-fuel">0</span><span class="rr" id="hud-fuel-rate"></span></div>
           <div class="res-chip" style="--rc:#d0a060"><span class="rg">◆</span><span id="hud-iron">0</span><span class="rr" id="hud-iron-rate"></span></div>
           <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
-          <div class="res-chip lc-chip pm-chip" id="prism-chip" style="--rc:#ff3a3a;display:none" title="Prism Ore"><span class="rg" style="color:#ff3a3a">◈</span><span id="hud-prism">0</span></div>
-          <div class="res-chip lc-chip" id="hud-dread" style="--rc:#ff3a4a;display:none" title="Dread Cores"><span class="rg" style="color:#ff3a4a">◇</span><span id="hud-dread-v">0</span></div>
-          <div class="res-chip lc-chip chip-glow" style="--rc:#f2a93c" title="LootCoins"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
+          <div class="res-chip lc-chip" style="--rc:#f2a93c" title="LootCoins"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
         </div>
       </div>
 
@@ -204,7 +111,7 @@
         <div class="hud-top">
           <div class="lvl-badge"><span class="lab">LVL</span><span class="num" id="hud-level">1</span></div>
           <div class="power-block">
-            <div id="pb-fleet" class="pb-fleet"><img id="pb-ship" class="flag" src="ships/ship-frigate.png" alt=""></div>
+            <img id="pb-ship" src="ships/ship-frigate.png" alt="">
             <div class="pb-label">⚡ SHIP SCORE</div>
             <div class="pb-val" id="hud-power">0</div>
           </div>
@@ -312,31 +219,6 @@
           <div class="lock-veil" id="lock-fleetrank"><div class="lock-card"><div class="lock-ic">🔒</div><h3>Fleet Rank</h3><p>The endgame PvP ladder — build a citadel, raid rivals, and climb for daily rewards.</p><div class="lock-lv">Unlocks at <b>Level 50</b> · you're Level <span id="lk-fr-cur">1</span></div></div></div>
         </div>
 
-        <!-- PRISM MINING -->
-        <div class="screen overlay" id="screen-prism">
-          <div class="scr-head"><span class="scr-title">Prism Mining</span><span class="scr-sub" id="prism-sub"></span></div>
-          <div class="scr-body" id="prism-body"></div>
-        </div>
-
-        <!-- PRISM FLEET (weekly event) -->
-        <div class="screen overlay" id="screen-prismfleet">
-          <div class="scr-head"><span class="scr-title">Prism Fleet</span><span class="scr-sub" id="pf-sub"></span></div>
-          <div class="scr-body" id="pf-body"></div>
-          <div class="pf-sheet-root" id="pf-sheet-root"></div>
-        </div>
-
-        <!-- PILOT (Hangar ▸ Pilot) -->
-        <div class="screen overlay" id="screen-pilot">
-          <div class="scr-head"><span class="scr-title">Pilot</span><span class="scr-sub" id="pilot-sub"></span></div>
-          <div class="scr-body" id="pilot-body"></div>
-        </div>
-
-        <!-- DREADNAUGHT HUNT (Command) -->
-        <div class="screen overlay" id="screen-dread">
-          <div class="scr-head"><span class="scr-title">Dreadnaught Hunt</span><span class="scr-sub" id="dread-sub"></span></div>
-          <div class="scr-body" id="dread-body"></div>
-        </div>
-
       </div>
 
       <!-- BOTTOM NAV -->
@@ -357,14 +239,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg>
           <span class="nl">Fleet Rank</span>
         </button>
-        <button class="nav-btn nav-grouped" data-screen="prism">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 7-7 13-7-13z"/><path d="M5 9h14M12 2v20"/></svg>
-          <span class="nl">Prism Mining</span>
-        </button>
-        <button class="nav-btn nav-grouped" data-screen="prismfleet">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.4 1 6.2L12 20l-5.5 3 1-6.2L3 8.9 9 8z"/></svg>
-          <span class="nl">Prism Fleet</span>
-        </button>
         <button class="nav-btn" data-screen="bag">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 8h12a0 0 0 0 1 0 0v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
           <span class="nl">Loot</span><span class="badge" id="bag-badge" style="display:none">0</span>
@@ -376,14 +250,6 @@
         <button class="nav-btn nav-grouped" data-screen="skills">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg>
           <span class="nl">Pilot Skills</span><span class="badge" id="hero-badge" style="display:none">0</span>
-        </button>
-        <button class="nav-btn nav-grouped" data-screen="pilot">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
-          <span class="nl">Pilot</span>
-        </button>
-        <button class="nav-btn nav-grouped" data-screen="dread">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg>
-          <span class="nl">Dreadnaught</span>
         </button>
         <button class="nav-btn" id="nav-command" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 11h6M9 14h6M12 8v0"/></svg>
@@ -398,39 +264,19 @@
           <div class="mega-grab"></div>
           <div class="mega-title">⬡ Command</div>
           <div class="mega-grid">
-            <div class="mega-card cmd-galaxy" data-go="galaxy">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
-              <div><div class="mc-n">My Galaxy</div><div class="mc-s">Conquer systems, hold citadels &amp; wage the turf war</div></div>
-              <span class="mc-lock"></span>
-            </div>
-            <div class="mega-card" data-go="fleetrank">
+            <div class="mega-card cmd-fr" data-go="fleetrank">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg></div>
               <div><div class="mc-n">Fleet Rank</div><div class="mc-s">Endgame PvP ladder · raid &amp; climb</div></div>
               <span class="mc-lock"></span>
             </div>
-            <div class="mega-card cmd-dread" data-go="dread">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg></div>
-              <div><div class="mc-n">Dreadnaught Hunt</div><div class="mc-s">Weekly raid · hunt for ◇ Dread Cores</div></div>
-              <span class="mc-lock"></span><span class="badge" id="cmd-dread-badge" style="display:none">0</span>
-            </div>
-            <div class="mega-card cmd-pilot" data-go="pilot">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg></div>
-              <div><div class="mc-n">Pilot Tree</div><div class="mc-s">Spend ◇ cores · permanent ship bonuses</div></div>
+            <div class="mega-card" data-go="galaxy">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
+              <div><div class="mc-n">My Galaxy</div><div class="mc-s">Claim systems &amp; citadels</div></div>
               <span class="mc-lock"></span>
             </div>
             <div class="mega-card" data-go="skills">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg></div>
               <div><div class="mc-n">Pilot Skills</div><div class="mc-s">Spend points on your tree</div></div>
-            </div>
-            <div class="mega-card cmd-prism" data-go="prism">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 7-7 13-7-13z"/><path d="M5 9h14M12 2v20"/></svg></div>
-              <div><div class="mc-n">Prism Mining</div><div class="mc-s">Deploy &amp; fight for ◈ Prism Ingots</div></div>
-              <span class="mc-lock"></span>
-            </div>
-            <div class="mega-card cmd-prism" data-go="prismfleet">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.4 1 6.2L12 20l-5.5 3 1-6.2L3 8.9 9 8z"/></svg></div>
-              <div><div class="mc-n">Prism Fleet</div><div class="mc-s">Weekly boss gauntlet · forge a Prism Core</div></div>
-              <span class="mc-lock"></span>
             </div>
           </div>
         </div>
@@ -439,40 +285,21 @@
       <!-- LOGIN GATE -->
       <div id="login">
         <div class="lg-wrap">
-          <div class="auth-card">
-            <div class="lg-logo"><img class="lg-mark" src="logo.png" alt="Loot Fleet"></div>
-            <h1 class="lg-title">Loot Fleet</h1>
+          <div class="lg-logo"><img class="lg-mark" src="logo.png" alt="Loot Fleet"></div>
+          <h1 class="lg-title">Loot Fleet</h1>
+          <p class="lg-tag">Farm the galaxy · Evolve your fleet · Top the leaderboard</p>
 
-            <!-- one clear choice: new vs returning -->
-            <div class="auth-seg" role="tablist" aria-label="Account">
-              <button type="button" class="auth-seg-btn on" id="auth-tab-register" role="tab" aria-selected="true">Create account</button>
-              <button type="button" class="auth-seg-btn" id="auth-tab-login" role="tab" aria-selected="false">Log in</button>
-            </div>
+          <form class="lg-form" id="lg-form">
+            <input id="lg-user" placeholder="Email" autocomplete="email" autocapitalize="off" spellcheck="false">
+            <input id="lg-pass" type="password" placeholder="Password" autocomplete="current-password">
+            <div class="lg-err" id="lg-err"></div>
+            <button class="lg-primary" id="lg-submit" type="submit">Log In</button>
+          </form>
 
-            <h2 class="auth-head" id="auth-head">Create your free account</h2>
-            <p class="auth-sub" id="auth-sub">One account syncs your fleet across every device.</p>
-
-            <form class="lg-form" id="lg-form">
-              <label class="auth-field">
-                <span class="auth-lbl">Email</span>
-                <input id="lg-user" placeholder="you@example.com" autocomplete="email" autocapitalize="off" spellcheck="false">
-              </label>
-              <label class="auth-field">
-                <span class="auth-lbl">Password</span>
-                <input id="lg-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password">
-              </label>
-              <div class="lg-err" id="lg-err"></div>
-              <button class="lg-primary" id="lg-submit" type="submit">Create Account</button>
-            </form>
-
-            <!-- mode switch is driven by auth.js; the segmented control above replaces it visually -->
-            <div class="lg-switch" hidden><span id="lg-switch-txt">New here?</span> <button id="lg-toggle">Create account</button></div>
-
-            <div class="auth-or"><span>or</span></div>
-            <button class="lg-guest" id="lg-guest">Continue as guest →</button>
-            <div id="lg-sso-status"></div>
-            <p class="lg-note">No signup needed to try it — guest progress lives on this device. Create an account anytime to sync across devices.</p>
-          </div>
+          <div class="lg-switch"><span id="lg-switch-txt">New here?</span> <button id="lg-toggle">Create account</button></div>
+          <button class="lg-guest" id="lg-guest">Continue as guest</button>
+          <div id="lg-sso-status"></div>
+          <p class="lg-note">Your fleet saves to your account. Create one to sync across devices, or continue as a guest to play right away.</p>
         </div>
       </div>
 
@@ -482,7 +309,7 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js"></script>
+<script src="js/config.js"></script>
 <script src="js/items.js"></script>
 <script src="js/entities.js"></script>
 <script src="js/render.js"></script>
@@ -490,45 +317,14 @@
 <script src="js/leaderboard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
-<script src="js/analytics.js?v=1"></script>
 <script src="js/cloud.js"></script>
 <script src="js/account.js"></script>
 <script src="js/territory.js"></script>
 <script src="js/payments-v91.js"></script>
-<script src="js/game-v93.js"></script>
-<script src="js/ui-v94.js"></script>
-<script src="js/fx-cinematic.js?v=2"></script>
-<script src="js/fx-primordial.js"></script>
+<script src="js/game-v89.js"></script>
+<script src="js/ui-v89.js"></script>
 <script src="js/coach-v89.js"></script>
-<script src="js/prism-v5.js"></script>
-<script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js"></script>
 <script src="js/auth.js"></script>
-<script id="auth-gate-glue">
-  /* Presentational glue only — drives the new segmented control through the
-     existing #lg-toggle that auth.js already wires. No auth logic added. */
-  (function(){
-    function $(id){ return document.getElementById(id); }
-    var tabReg, tabLog, head, sub;
-    function curMode(){ var s=$('lg-submit'); return (s && /create/i.test(s.textContent)) ? 'register' : 'login'; }
-    function paint(mode){
-      if(tabReg){ tabReg.classList.toggle('on', mode==='register'); tabReg.setAttribute('aria-selected', mode==='register'); }
-      if(tabLog){ tabLog.classList.toggle('on', mode==='login'); tabLog.setAttribute('aria-selected', mode==='login'); }
-      if(head) head.textContent = mode==='register' ? 'Create your free account' : 'Welcome back, operator';
-      if(sub)  sub.textContent  = mode==='register' ? 'One account syncs your fleet across every device.' : 'Log in to resume your campaign.';
-      var p=$('lg-pass'); if(p){ p.setAttribute('autocomplete', mode==='register'?'new-password':'current-password'); p.placeholder = mode==='register' ? 'At least 6 characters' : 'Your password'; }
-    }
-    function go(mode){ if(curMode()!==mode){ var t=$('lg-toggle'); if(t) t.click(); } paint(mode); }
-    function init(){
-      tabReg=$('auth-tab-register'); tabLog=$('auth-tab-login'); head=$('auth-head'); sub=$('auth-sub');
-      if(!tabReg) return;
-      tabReg.addEventListener('click', function(){ go('register'); });
-      tabLog.addEventListener('click', function(){ go('login'); });
-      go('register'); // most landing traffic is new — open on Create account
-    }
-    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
-  })();
-</script>
 <script>
   (function(){
     // Boot is gated on a signed-in (or guest) session so each account loads its
@@ -582,7 +378,7 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,fleetrank:50,dread:30,pilot:30};
+    const LOCKS={galaxy:25,fleetrank:50};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -598,7 +394,7 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-pilot.active');
+      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();
@@ -626,40 +422,6 @@
     mo.observe(screen, { attributes:true, attributeFilter:['class'] });
     maybeLoad(); // in case it is already active at boot
   })();
-</script>
-<style id="currency-fx">
-.chip-glow{animation:chipGlowPulse 2.1s ease-in-out infinite;}
-@keyframes chipGlowPulse{0%,100%{box-shadow:0 0 7px rgba(242,169,60,.45),0 0 1px rgba(242,169,60,.7);}50%{box-shadow:0 0 16px rgba(242,169,60,.85),0 0 3px rgba(242,169,60,.9);}}
-.chip-earn{animation:chipEarn .7s ease-out;}
-@keyframes chipEarn{0%{transform:scale(1);}22%{transform:scale(1.2);filter:brightness(1.7) saturate(1.3);}100%{transform:scale(1);filter:none;}}
-</style>
-<script>
-/* Currency FX — flash a wallet chip whenever its displayed value INCREASES
-   (kills, sells, mining, etc). Spending decreases → no flash. */
-(function(){
-  var IDS=['hud-gold','hud-fuel','hud-iron','hud-plasma','hud-prism','hud-lc'];
-  function parseNum(s){
-    if(s==null) return 0; s=(''+s).trim().replace(/,/g,'');
-    var m=s.match(/^([\d.]+)\s*([KMBTQ]?)/i); if(!m) return parseFloat(s)||0;
-    var mul={'':1,K:1e3,M:1e6,B:1e9,T:1e12,Q:1e15}[(m[2]||'').toUpperCase()]||1;
-    return (parseFloat(m[1])||0)*mul;
-  }
-  var last={};
-  IDS.forEach(function(id){ var el=document.getElementById(id); if(el) last[id]=parseNum(el.textContent); });
-  function flash(el){
-    var chip=el.closest('.res-chip,.gold-chip')||el.parentElement; if(!chip) return;
-    chip.classList.remove('chip-earn'); void chip.offsetWidth; chip.classList.add('chip-earn');
-    setTimeout(function(){ chip.classList.remove('chip-earn'); }, 740);
-  }
-  setInterval(function(){
-    IDS.forEach(function(id){
-      var el=document.getElementById(id); if(!el) return;
-      var v=parseNum(el.textContent), p=last[id];
-      if(p!=null && v>p*1+1e-6 && v>p) flash(el);
-      last[id]=v;
-    });
-  }, 200);
-})();
 </script>
 </body>
 </html>

@@ -926,7 +926,10 @@ FRCombat.openAttack=function(host,target,S,hooks){
       '<div class="def-track" id="b-deftrack"><span class="dt-l">⛨ Garrison</span><span class="dt-pips" id="b-defpips"></span><b class="dt-n" id="b-defn">0/0</b></div>'+
       '<div><div class="enemy-hp-lab"><span>'+target.nm+'\u2019s Citadel</span><b id="b-hpv">🔒 SCREENED</b></div>'+
         '<div class="bar-wrap citlock" id="b-citbar" style="height:9px;margin-bottom:4px"><div class="bar-fill sh" id="b-sh" style="width:100%"></div></div>'+
-        '<div class="bar-wrap citlock" style="height:14px"><div class="bar-fill hp" id="b-hp" style="width:100%"></div></div></div>'+
+        '<div class="bar-wrap citlock" style="height:14px"><div class="bar-fill hp" id="b-hp" style="width:100%"></div></div>'+
+        '<div class="enemy-hp-lab" style="margin-top:7px"><span style="color:#7fd6a4">⚔ Your Flagship</span><b id="b-myhpv" style="color:#7fd6a4">100%</b></div>'+
+        '<div class="bar-wrap" style="height:11px;border-color:rgba(63,197,107,.4)"><div class="bar-fill" id="b-myhp" style="width:100%;background:linear-gradient(90deg,#2f9e58,#5fe08a)"></div></div>'+
+        '<div class="dt-pips" id="b-mercpips" style="margin-top:4px"></div></div>'+
     '</div>'+
     '<div class="phase-banner" id="b-phase">⛨ DESTROY THE ESCORT FLEET</div>'+
     '<div class="battle-controls"><div class="bc-speed">'+
@@ -965,7 +968,16 @@ FRCombat.openAttack=function(host,target,S,hooks){
   const escorts=mercKeys.map((k,i)=>({kind:k,im:IMG[k],alive:true,x:W*0.5,y:H*0.78,ang:-Math.PI/2,cd:Math.random()*0.6,size:30,off:{x:(i-(mercKeys.length-1)/2)*48,y:36+(i%2)*16}}));
   const fleet=escorts;
   let shake=0;
-  const winnable=(target.forceWin!=null)?!!target.forceWin:(diff!=='hard');
+  // ---- HONEST BALANCE ---------------------------------------------------
+  // The sim itself decides the outcome. Your attack:defense ratio sets how
+  // tough the citadel + towers are; what happens on screen IS the result.
+  //   r >= 1.12  comfortable      · citadel ~10× DPS  — clean win
+  //   r  = 1.00  fair fight       · ~16×             — win with time to spare
+  //   r  = 0.90  underdog         · ~24×             — tight but doable
+  //   r  = 0.70  heavy underdog   · ~44×             — usually times out
+  //   r <= 0.50  hopeless         · 90× cap          — the wall you can see
+  const pr=Math.max(0.2,Math.min(2.5,(target.pr!=null)?target.pr:(diff==='easy'?1.2:diff==='even'?1:0.75)));
+  const hpMult=Math.max(7,Math.min(90,16/(pr*pr)));
   // ENEMY CITADEL at the top, ringed by DEFENSE TOWERS. No monsters spawn —
   // your mercenary fleet fights the towers, then the exposed citadel. Pure
   // base raid: citadel + towers (defense) vs your flagship + mercs (attack).
@@ -973,12 +985,12 @@ FRCombat.openAttack=function(host,target,S,hooks){
   const etypes=C2.ENEMIES.filter(e=>zone>=e.minDungeon);
   const cit=new ENT.Enemy(etypes[etypes.length-1]||C2.ENEMIES[0],zone,citAnchor.x,citAnchor.y);
   cit.isCitadel=true;cit.isBoss=true;cit.size=58;cit.spawnT=1;cit.exposed=false;cit.fireT=1.5;
-  const citMaxHp=dps*(winnable?10:600);cit.maxHp=citMaxHp;cit.hp=citMaxHp;
+  const citMaxHp=dps*hpMult;cit.maxHp=citMaxHp;cit.hp=citMaxHp;
   // tower ring — the defender's built structures (laser/missile/shield/drone…)
   const defLoadout=diff==='hard'?['laser','missile','drone','shield','laser','missile','drone']
                   :diff==='even'?['laser','missile','shield','drone','laser']
                   :['laser','missile','shield'];
-  function mkTower(ty,x,y){return {type:ty,x,y,ox:x,oy:y,ang:Math.PI/2,cd:1+Math.random()*2,hit:0,alive:true,dead:false,size:15,hp:dps*(1.8+Math.random()*1.2),
+  function mkTower(ty,x,y){return {type:ty,x,y,ox:x,oy:y,ang:Math.PI/2,cd:1+Math.random()*2,hit:0,alive:true,dead:false,size:15,hp:dps*(1.8+Math.random()*1.2)*Math.max(0.7,Math.min(2.2,1/pr)),
     takeDamage(a){this.hp-=a;this.hit=1;if(this.hp<=0&&this.alive){this.alive=false;this.dead=true;return true;}return false;}};}
   const towers=defLoadout.map((ty,i)=>{const n=defLoadout.length,sp=(i-(n-1)/2);return mkTower(ty,citAnchor.x+sp*(W*0.66/n),citAnchor.y+H*0.085+Math.abs(sp)*H*0.02+(i%2)*H*0.02);});
   const QUOTA=towers.length;let killCount=0;
@@ -1002,6 +1014,12 @@ FRCombat.openAttack=function(host,target,S,hooks){
   function updateHUD(){$('#b-defn',host).textContent=Math.min(killCount,QUOTA)+' / '+QUOTA;$('#b-defpips',host).innerHTML=towers.map(tw=>'<i class="'+(tw.alive?'on':'')+'"></i>').join('');
     if(cit.exposed){const f=Math.max(0,cit.hp/citMaxHp);$('#b-hp',host).style.width=(f*100)+'%';$('#b-sh',host).style.width='0%';$('#b-hpv',host).textContent=Math.round(f*100)+'%';}
     else $('#b-hpv',host).textContent='🔒 '+aliveTowers().length+' LEFT';
+    // YOUR flagship HP + escort status — the half of the fight that was invisible
+    const mf=Math.max(0,archer.hp/Math.max(1,archer.maxHp));
+    const myBar=$('#b-myhp',host);if(myBar){myBar.style.width=(mf*100)+'%';
+      myBar.style.background=mf>0.5?'linear-gradient(90deg,#2f9e58,#5fe08a)':mf>0.25?'linear-gradient(90deg,#b98a2c,#ffd24d)':'linear-gradient(90deg,#c22f43,#ff6072)';}
+    const myV=$('#b-myhpv',host);if(myV){myV.textContent=Math.round(mf*100)+'%';myV.style.color=mf>0.5?'#7fd6a4':mf>0.25?'#ffd24d':'#ff6072';}
+    const mp=$('#b-mercpips',host);if(mp&&escorts.length)mp.innerHTML=escorts.map(e=>'<i class="'+(e.alive?'on':'')+'"></i>').join('');
     const mm=Math.floor(timeLeft/60),ss=Math.floor(timeLeft%60);const tm=$('#b-timer',host);if(tm){tm.textContent=mm+':'+(ss<10?'0':'')+ss;tm.classList.toggle('crit',timeLeft<60);}}
 
   const fireWt=(pst.ship==='battleship'||pst.ship==='dreadnought'||pst.ship==='carrier')?'missile':'gatling';
@@ -1606,8 +1624,10 @@ function buyTokens(){
 }
 function targetCard(t,i){
   const r=RANKS[(t.rank||0)];const diff=t.diff;
-  const dlabel=diff==='easy'?'Favorable':diff==='even'?'Even Match':'Tough Raid';
-  const win=Math.round(attackPower())>=Math.round(t.def);
+  const pr=attackPower()/Math.max(1,t.def);
+  // honest odds label — mirrors the sim's actual difficulty curve
+  const dlabel=pr>=1.12?'Favorable':pr>=0.95?'Even Match':pr>=0.8?'Underdog':'Long Shot';
+  const win=pr>=0.95;
   return '<button class="traid '+diff+'" data-atk="'+i+'">'+
     '<img class="traid-cit" src="ships/ship-citadel.png" alt="">'+
     '<div class="traid-mid">'+
@@ -1622,16 +1642,18 @@ function targetCard(t,i){
   '</button>';
 }
 
-/* ---- raid via the canvas combat engine — SERVER decides win/loss in real PvP ---- */
+/* ---- raid via the canvas combat engine — the BATTLE decides win/loss ---- */
 function raid(t){
   if(S.tokens<=0){buyTokens();return;}
   if(!window.FRCombat){toast('Combat engine loading…');return;}
-  // OUTCOME = your Attack Power vs their Defense Value. Higher attack wins.
-  var win = Math.round(attackPower()) >= Math.round(t.def);
+  // Your Attack Power vs their Defense sets the battle's DIFFICULTY — the
+  // outcome is whatever actually happens in the arena. Kill the citadel in
+  // time and the win (and spoils) are yours, favourite or not.
+  var pr = attackPower()/Math.max(1,t.def);
   function play(spoilG,spoilP){
-    FRCombat.openAttack($('#battle'),{nm:t.nm,gold:spoilG,gal:spoilP,def:t.def,diff:t.diff,forceWin:win},S,{onResult:function(rz){
-      if(win){ S.gold+=spoilG; S.plasma+=spoilP; if(rz&&rz.pos)S.pos=rz.pos; save(); syncWallet(); toast('Victory · spoils banked'+(rz&&rz.pos?' · #'+rz.pos:''),true); }
-      else toast('Raid repelled — their defenses held');
+    FRCombat.openAttack($('#battle'),{nm:t.nm,gold:spoilG,gal:spoilP,def:t.def,diff:t.diff,pr:pr},S,{onResult:function(rz){
+      if(rz&&rz.win){ S.gold+=spoilG; S.plasma+=spoilP; if(rz.pos)S.pos=rz.pos; save(); syncWallet(); toast('Victory · spoils banked'+(rz.pos?' · #'+rz.pos:''),true); }
+      else if(rz) toast('Raid repelled — their defenses held');
       NET.targets=null; if(window.FRNET&&FRNET.enabled()){refreshLadder();refreshTargets();} setTab('attack');
     }});
   }

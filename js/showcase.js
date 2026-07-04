@@ -23,7 +23,7 @@
   // hull upgrade ladder — the ship gets visibly stronger every loop
   const HULLS = [
     ['cruiser', 'CRUISER'], ['battleship', 'BATTLESHIP'], ['dreadnought', 'DREADNOUGHT'],
-    ['carrier', 'CARRIER'], ['supercarrier', 'SUPER CARRIER'], ['titan', 'TITAN CARRIER'], ['mothership', 'MOTHERSHIP'],
+    ['carrier', 'CARRIER'], ['supercarrier', 'SUPER CARRIER'], ['titan', 'TITAN CARRIER'], ['mothership', 'MOTHERSHIP'], ['titansina', 'TITAN SINA'],
   ];
   let hullIdx = 0;
   const ship = new Image(); ship.src = 'ships/ship-' + HULLS[0][0] + '.png';
@@ -229,10 +229,10 @@
       if (p.ring) continue;
       p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92;
       ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.col;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (0.4 + p.life / p.max * 0.6), 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.1, p.r * (0.4 + p.life / p.max * 0.6)), 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    for (const p of parts) { if (!p.ring) continue; const k = 1 - p.life / p.max; ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.strokeStyle = p.col; ctx.lineWidth = 2 * (1 - k) + 0.5; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + k * 60, 0, 7); ctx.stroke(); }
+    for (const p of parts) { if (!p.ring) continue; const k = 1 - p.life / p.max; ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.strokeStyle = p.col; ctx.lineWidth = 2 * (1 - k) + 0.5; ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.1, p.r + k * 60), 0, 7); ctx.stroke(); }
     ctx.globalAlpha = 1;
 
     drawHero();
@@ -419,11 +419,22 @@
   // previews). queueFrame de-dupes scheduling; the watchdog steps the loop
   // manually whenever rAF stalls so the siege never freezes.
   let rafPending = false;
+  // perf: fully pause the battle when the phone mock is scrolled out of view
+  let onScreen = true;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) {
+      const was = onScreen;
+      onScreen = es[0].isIntersecting;
+      if (onScreen && !was) { last = performance.now(); queueFrame(); } // resume w/o dt spike
+    }, { rootMargin: '80px' }).observe(cv);
+  }
   function queueFrame() {
-    if (rafPending) return;
+    if (rafPending || !onScreen) return;
     rafPending = true;
     requestAnimationFrame(function (n) { rafPending = false; loop(n); });
   }
   queueFrame();
-  setInterval(function () { if (performance.now() - last > 90) loop(performance.now()); }, 100);
+  // watchdog only steps while the page is visible and the hero is on screen
+  setInterval(function () { if (!document.hidden && onScreen && performance.now() - last > 90) loop(performance.now()); }, 100);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { last = performance.now(); queueFrame(); } });
 })();

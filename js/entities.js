@@ -221,7 +221,7 @@
     takeHit(dmg, src) {
       if (this.dead || this.invuln > 0) return;
       // Warden aura damage reduction (set by game.js when stats refresh)
-      if (this.dmgReduce > 0) dmg *= 1 - Math.min(0.6, this.dmgReduce / 100);
+      if (this.dmgReduce > 0) dmg *= 1 - Math.min(0.8, this.dmgReduce / 100);
       // NO ONE-SHOTS: a single hit can never take more than 22% of max hull.
       // Sustained swarm pressure still kills — burst alone can't delete you.
       if (this.maxHp > 1) dmg = Math.min(dmg, this.maxHp * 0.22);

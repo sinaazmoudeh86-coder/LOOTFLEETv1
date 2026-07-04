@@ -1854,7 +1854,20 @@
   // LootCoins each, refreshing every hour on the hour.
   // PRIMORDIAL VAULT: ONE Primordial item for your level, 115,000 LootCoins,
   // refreshing daily at midnight CST (America/Chicago — DST-aware).
-  const LC_PRICES = { cosmic: 10000, prim: 115000 };
+  const LC_PRICES = { cosmic: 10000, prim: 115000, jackpot: 1000000 };
+  // COSMIC JACKPOT CACHE — the 100× premium gamble (1,000,000 LootCoins). Value
+  // sits BETWEEN Cosmic and Eternal on nearly every pull, with a tiny jackpot at
+  // the very top of the loot table: 0.2% for one of the final two tiers (0.1%
+  // Relic + 0.1% Artifact).
+  function rollJackpotRarity() {
+    const r = Math.random();
+    if (r < 0.001) return 13;   // 0.1%  — Artifact (the ultimate)
+    if (r < 0.002) return 12;   // +0.1% — Relic  → 0.2% for the final two tiers
+    const r2 = Math.random();   // 99.8% — between Cosmic and Eternal
+    if (r2 < 0.60) return 8;    // Cosmic
+    if (r2 < 0.90) return 9;    // Void
+    return 10;                  // Eternal
+  }
   function lcZone() { return Math.max(1, state.highestDungeonReached || 0, state.currentDungeon || 0); }
   function lcHourWindow() { return Math.floor(Date.now() / 3600000); }
   function nextChicagoMidnight() {
@@ -1878,6 +1891,11 @@
       lm.prim = { item: I.generate(lcZone(), 11), expiresAt: nextChicagoMidnight(), bought: false }; // Primordial
       save();
     }
+    // Cosmic Jackpot Cache — one pull per hourly rotation (rolled at purchase).
+    if (!lm.jackpot || lm.jackpot.window !== lcHourWindow()) {
+      lm.jackpot = { window: lcHourWindow(), bought: false };
+      save();
+    }
     return lm;
   }
   function lcCosmicTimeLeft() { return Math.max(0, Math.ceil(((lcHourWindow() + 1) * 3600000 - Date.now()) / 1000)); }
@@ -1889,6 +1907,16 @@
     if (kind === 'cosmic') {
       it = lm.cosmic.items[idx]; price = LC_PRICES.cosmic;
       if (!it || lm.cosmic.bought.includes(idx)) return { ok: false, reason: 'sold' };
+    } else if (kind === 'jackpot') {
+      price = LC_PRICES.jackpot;
+      if (lm.jackpot.bought) return { ok: false, reason: 'sold' };
+      if ((state.credits || 0) < price) return { ok: false, reason: 'credits' };
+      state.credits -= price;
+      lm.jackpot.bought = true;
+      it = I.generate(lcZone(), rollJackpotRarity());   // rolled AT purchase — the gamble
+      state.inventory.push(it);
+      save(); if (window.UI) window.UI.refreshAll();
+      return { ok: true, item: it, jackpot: true };
     } else {
       it = lm.prim.item; price = LC_PRICES.prim;
       if (!it || lm.prim.bought) return { ok: false, reason: 'sold' };
@@ -2141,6 +2169,8 @@
       const t = sysAt(id);
       if (tileCooldownLeft(id) > 0) return null;
       if (t && t.citadel && Math.random() < 0.85) return null; // citadels rarely fall to the sim
+      // player-built citadels: higher ranks are hardened vs the rival sim
+      if (hasMyCitadel(id) && Math.random() < (0.7 + 0.06 * citadelLevel(id))) return null;
       const name = rndRivalName();
       delete state.ownedSystems[id]; state.rivalTiles[id] = name;
       return { kind: 'lost', name, tile: id };
@@ -2355,6 +2385,8 @@
     if (rt.waves && rt.waves.claimTile) {
       if (!state.tileCd) state.tileCd = {};
       state.tileCd[rt.waves.claimTile] = Date.now() + 24 * 3600 * 1000;
+      razeCitadelTile(rt.waves.claimTile);     // the razed fortress becomes a plain, buildable tile
+      rt.razingClaim = true;                   // you razed it — keep the tile even if it was protected
       captureSystem();                         // the razed citadel becomes YOURS
     } else {
       if (!state.citadelCd) state.citadelCd = {};
@@ -2441,6 +2473,9 @@
   function captureSystem() {
     const k = state.currentSystem, tile = sysAt(k);
     if (!tile) { rt.siege = null; return; }
+    // You just razed a citadel on this tile → the claim is earned; don't let a
+    // stale server protection (the old owner's fortress) hand the tile back.
+    const razing = !!rt.razingClaim; rt.razingClaim = false;
     const fromRival = rivalOf(k);
     state.ownedSystems[k] = true;
     if (state.rivalTiles) delete state.rivalTiles[k];
@@ -2449,12 +2484,13 @@
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName(), tile.citadel ? 1440 : 15).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), tile.citadel ? 1440 : 15, razing ? { citadel: false, fleetScore: 0, force: true } : undefined).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
           rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0 };
-        } else if (res.reason && /protected|cooldown/i.test(res.reason)) {
-          // RACE LOST — another operator sealed the claim first
+        } else if (!razing && res.reason && /protected|cooldown/i.test(res.reason)) {
+          // RACE LOST — another operator sealed the claim first (never for a
+          // citadel you just razed — that tile is yours by conquest)
           delete state.ownedSystems[k];
           pushFeed('Beaten to ' + tile.name + ' — another operator sealed the claim first', true);
           if (window.UI) window.UI.unlockToast('⚔ Race lost — ' + tile.name + ' was claimed seconds before you');
@@ -2501,9 +2537,14 @@
   // scales hard with depth; cap of 5. Rival citadels are attackable — you fight a
   // CLONE scaled to the owner's fleet score and take the citadel on victory.
   // ===========================================================================
-  const CITADEL_MAX = 50, CITADEL_MULT = 10;
+  const CITADEL_MAX = 50, CITADEL_MULT = 10, CITADEL_LV_MAX = 5;
   function citadelCount() { return Object.keys(state.citadels || {}).length; }
   function hasMyCitadel(id) { return !!(state.citadels && state.citadels[id]); }
+  // Citadel RANK (1..5). Each rank multiplies output (10× per rank), raises the
+  // published defending fleet score (+25%/rank), and hardens it vs the rival sim.
+  function citadelLevel(id) { const c = state.citadels && state.citadels[id]; return c ? (c.lv || 1) : 0; }
+  function citadelOutputMult(id) { const lv = citadelLevel(id); return lv ? CITADEL_MULT * lv : 1; }
+  function citadelDefenseMult(lv) { return 1 + 0.25 * (Math.max(1, lv) - 1); }
   function citadelBuildCost(id) {
     const t = sysAt(id); if (!t) return null;
     // ~10 days of THIS tile's production — proportional, never astronomical.
@@ -2520,6 +2561,32 @@
     const t = sysAt(id);
     return !!(t && !t.home && isOwned(id) && !hasMyCitadel(id) && citadelCount() < CITADEL_MAX);
   }
+  // RANK-UP cost: upgrading rank L → L+1 costs the tile's build cost × L,
+  // so each rank is a real investment (1×, 2×, 3×, 4× the build price).
+  function citadelUpgradeCost(id) {
+    const lv = citadelLevel(id);
+    if (!lv || lv >= CITADEL_LV_MAX) return null;
+    const bc = citadelBuildCost(id); if (!bc) return null;
+    const cost = {};
+    Object.keys(bc).forEach((k) => { cost[k] = bc[k] * lv; });
+    return cost;
+  }
+  function upgradeCitadel(id) {
+    if (!hasMyCitadel(id)) return { ok: false, reason: 'none' };
+    const c = state.citadels[id];
+    const lv = c.lv || 1;
+    if (lv >= CITADEL_LV_MAX) return { ok: false, reason: 'max' };
+    const cost = citadelUpgradeCost(id);
+    if (!canAfford(cost)) return { ok: false, reason: 'resources' };
+    state.resources.fuel -= cost.fuel || 0; state.resources.iron -= cost.iron || 0; state.resources.plasma -= cost.plasma || 0;
+    c.lv = lv + 1;
+    // harder to take over: republish a rank-boosted defending fleet score
+    c.score = Math.round(score() * citadelDefenseMult(c.lv));
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: c.score }); } catch (e) {} }
+    pushFeed('Your Citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' reached Rank ' + c.lv);
+    save(); if (window.UI) window.UI.refreshAll();
+    return { ok: true, lv: c.lv };
+  }
   function buildCitadel(id) {
     if (!isOwned(id)) return { ok: false, reason: 'owned' };
     if (hasMyCitadel(id)) return { ok: false, reason: 'exists' };
@@ -2527,7 +2594,7 @@
     const cost = citadelBuildCost(id);
     if (!canAfford(cost)) return { ok: false, reason: 'resources' };
     state.resources.fuel -= cost.fuel; state.resources.iron -= cost.iron; state.resources.plasma -= cost.plasma;
-    state.citadels[id] = { score: Math.round(score()), builtAt: Date.now() };
+    state.citadels[id] = { score: Math.round(score()), builtAt: Date.now(), lv: 1 };
     if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: state.citadels[id].score }); } catch (e) {} }
     pushFeed('You raised a Citadel on ' + ((sysAt(id) || {}).name || 'a system'));
     save(); if (window.UI) window.UI.refreshAll();
@@ -2564,10 +2631,29 @@
   // win the now-plain tile and can build your OWN citadel on it afterward.
   function captureCitadel(id) {
     if (state.rivalCitadels) delete state.rivalCitadels[id];
+    razeCitadelTile(id);                              // strip any natural-citadel siege status → plain tile
+    rt.razingClaim = true;                            // you razed it — the tile is yours, no take-back
     captureSystem();                                  // claims the (citadel-less) tile + tows home
     // clear the shared citadel flag so everyone sees the fortress is gone
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: false, fleetScore: 0 }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: false, fleetScore: 0, force: true }); } catch (e) {} }
     save();
+  }
+  // Permanently demote a NATURAL citadel siege tile to a plain, buildable tile
+  // once you've razed it. Mutates the shared tile cache so the map, rates, entry
+  // logic and "build your own citadel" gate all immediately see a normal tile.
+  // (silent=true when re-applying saved razings on load.)
+  function razeCitadelTile(id, silent) {
+    if (!id) return;
+    if (!state.razedCitadels) state.razedCitadels = {};
+    state.razedCitadels[id] = true;
+    const t = sysAt(id);
+    if (t && t.citadel) {
+      t.citadel = false;
+      t.type = t.resource ? 'resource' : 'combat';
+      const mult = (GX && GX.CITADEL_RATE_MULT) || 100;
+      t.rate = Math.max(3, Math.round((t.rate || 0) / mult)); // drop the 100× citadel yield
+      if (typeof t.name === 'string') t.name = t.name.replace(/^Citadel\s+/, '');
+    }
   }
 
   function resourceRates() {
@@ -2576,7 +2662,7 @@
       const t = sysAt(k); if (!t || !t.rate) return;
       // citadel tiles already carry their 100× in t.rate; deep space adds ×25
       let rate = t.rate * (t.deep ? GX.DEEP_MULT.resource : 1);
-      if (state.citadels && state.citadels[k]) rate *= CITADEL_MULT;   // PLAYER CITADEL — 10×
+      if (state.citadels && state.citadels[k]) rate *= CITADEL_MULT * (state.citadels[k].lv || 1);   // PLAYER CITADEL — 10× per rank
       r[t.resource || 'fuel'] += rate;
     });
     return r;
@@ -2792,6 +2878,10 @@
     if (!state.citadelCd) state.citadelCd = {};
     if (!state.citadels) state.citadels = {};          // YOUR player-built citadels { tileId:{score} } (cap 5)
     if (!state.rivalCitadels) state.rivalCitadels = {}; // rival player citadels we can attack (sim + shared)
+    if (!state.razedCitadels) state.razedCitadels = {}; // natural citadel tiles you've razed → now plain tiles { tileId:true }
+    // Re-apply razings to the (regenerated) tile cache so a razed citadel stays a
+    // plain, buildable tile across reloads — no more permanent siege zone.
+    Object.keys(state.razedCitadels).forEach((id) => razeCitadelTile(id, true));
     // ---- ZONE-CAP: keep exactly 10 zones unlocked beyond the pilot's level (and
     // within the current 100-block). This both GRANTS the level+10 runway to fresh
     // pilots and CORRECTS saves from the old, looser unlock curve. Since pilot
@@ -3042,6 +3132,7 @@
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, hasMyCitadel, rivalCitadelScore,
+    citadelLevel, citadelUpgradeCost, upgradeCitadel,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,

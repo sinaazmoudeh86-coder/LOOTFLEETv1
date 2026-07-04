@@ -1,7 +1,7 @@
 /* =============================================================================
-   items.js — GrabAGun Idle Operator
-   Procedural loot: rarity rolls, real-firearm naming (GrabAGun-style catalog),
-   normal + rare SPECIAL stats (Life Steal, Multi-Shot), comparison & power.
+   items.js — LOOTFLEET
+   Procedural loot: rarity rolls, fleet-themed gear naming (weapon classes +
+   per-slot tech tiers), normal + rare SPECIAL stats, comparison & power.
    ============================================================================= */
 (function () {
   'use strict';
@@ -30,46 +30,50 @@
   }
 
   // ---------------------------------------------------------------------------
-  // REAL-FIREARM NAMING (GrabAGun catalog flavor).
+  // FLEET GEAR NAMING (LOOTFLEET catalog flavor).
   // Each slot has tiered name pools; higher rarity pulls from higher-end gear.
   // Rarity tier (0–10) → bucket 0 budget / 1 mid / 2 high / 3 elite.
   // ---------------------------------------------------------------------------
+  // FLEET-THEMED GEAR NAMING. Each slot maps to its in-fiction role — Munitions
+  // (arrows), Hull plating (armor), Thrusters (boots), Targeting computer
+  // (gloves), Shield Core (amulet). Four tiers: salvaged → standard → advanced →
+  // apex, pulled by rarity bucket so higher drops read as clearly better tech.
   const NAMES = {
-    bow: [ // primary firearm
-      ['Hi-Point C9', 'Taurus G3', 'SCCY CPX-2', 'Ruger EC9s', 'S&W SD9 VE', 'Canik TP9 SF'],
-      ['Glock 19 Gen5', 'SIG Sauer P320', 'S&W M&P Shield', 'Springfield Hellcat', 'Ruger 10/22', 'Mossberg 500'],
-      ['Daniel Defense DDM4', 'SIG P365 XL', 'Benelli M4', 'CZ Shadow 2', 'FN 509 Tactical', 'HK VP9'],
-      ['Barrett M82A1', 'Desert Eagle .50', 'FN SCAR 17S', 'Staccato 2011 XC', 'Wilson Combat EDC X9', 'Nighthawk Custom'],
+    bow: [ // legacy fallback (primaries now use WEAPON CLASS names — see below)
+      ['Scrap Autocannon', 'Surplus Blaster', 'Jury-Rigged Gun', 'Patchwork Cannon'],
+      ['Standard Autocannon Mk II', 'Service Blaster', 'Vector Cannon', 'Repeater Array'],
+      ['Overcharge Cannon X', 'Vanguard Blaster Prime', 'Storm Autocannon', 'Lance Battery'],
+      ['Annihilator Cannon', 'Sovereign Blaster Omega', 'Cataclysm Array', 'Apex Ordnance'],
     ],
-    arrows: [ // ammunition
-      ['PMC Bronze 9mm', 'Magtech FMJ', 'Blazer Brass', 'Wolf Steel-Case', 'Tula 7.62', 'Aguila Mini'],
-      ['Federal HST 9mm', 'CCI Blazer', 'Winchester USA', 'Remington UMC', 'Fiocchi Range', 'PMC X-TAC 5.56'],
-      ['Hornady Critical Duty', 'Speer Gold Dot', 'Federal Premium', 'Sig Elite V-Crown', 'Winchester PDX1'],
-      ['Hornady A-MAX Match', 'Federal Gold Medal', 'Barnes TAC-XPD', 'Black Hills MK262', 'Norma Match .308'],
+    arrows: [ // MUNITIONS — energy cells & ammunition feeds (fire rate / crit)
+      ['Scrap Cell Feed', 'Surplus Slug Belt', 'Loose Photon Clip', 'Rusty Autoloader', 'Salvaged Charge Pack'],
+      ['Ion Cell Magazine', 'Tracer Charge Belt', 'Rapid Feed Mk II', 'Kinetic Slug Rack', 'Pulse Cartridge Drum'],
+      ['Overcharge Cell Array', 'Hypercycle Autoloader', 'Plasma Round Cascade', 'Volt-Fed Munitions X', 'Accelerant Charge Core'],
+      ['Singularity Round Feed', 'Antimatter Cartridge Core', 'Zero-Point Autoloader', 'Nova Charge Cascade', 'Eternal Munition Engine'],
     ],
-    armor: [ // body armor / plate carrier
-      ['Surplus Flak Vest', 'Condor Sentry', 'Rothco MOLLE Rig', 'NcStar Carrier', 'VISM Plate Rig'],
-      ['5.11 TacTec', 'Condor MOPC', 'Blackhawk Carrier', 'AR500 Testudo', 'Spartan Plate Rig'],
-      ['Crye Precision JPC', 'Shellback Banshee', 'Ferro Slickster', 'AR500 Veritas', 'LBT Carrier'],
-      ['Crye Precision AVS', 'Eagle Ind. Plate', 'Velocity Systems SCARAB', 'S&S PreCURsor', 'Hoplite Composite'],
+    armor: [ // HULL — plating & bulkheads (health)
+      ['Dented Hull Plate', 'Scrap Armor Panel', 'Patchwork Bulkhead', 'Riveted Deck Plate', 'Surplus Ablator'],
+      ['Titanium Hull Plate', 'Reinforced Bulkhead', 'Composite Armor Mk II', 'Layered Deckplate', 'Ceramic Ablative Shell'],
+      ['Adamant Hull Lattice', 'Reactive Armor Prime', 'Nanoweave Bulkhead', 'Duranium Plate X', 'Kinetic Absorber Shell'],
+      ['Neutronium Hull Core', 'Living-Metal Carapace', 'Voidforged Bulkhead', 'Starplate Prime', 'Eternal Aegis Hull'],
     ],
-    boots: [ // tactical boots
-      ['Rothco Combat Boots', 'NcStar Boots', 'Surplus Jungle Boots', 'Generic Tac Boots'],
-      ['5.11 ATAC 2.0', 'Original SWAT Chase', 'Bates GX-8', 'Rocky S2V'],
-      ['Salomon Forces Quest', 'Belleville TR960', 'LOWA Zephyr GTX', 'Garmont T8'],
-      ['Salomon Forces Pro', 'Crispi Nevada Legend', 'Danner Acadia', 'LOWA Elite Mountain'],
+    boots: [ // THRUSTERS — maneuver drives (move speed)
+      ['Sputtering Ion Jets', 'Scrap Maneuver Thrust', 'Worn Vector Nozzles', 'Surplus Drift Jets', 'Patched Burn Pods'],
+      ['Ion Thruster Array', 'Vector Maneuver Jets', 'Fusion Burn Pods', 'Afterburn Drive Mk II', 'Gimbal Thrust Rig'],
+      ['Plasma Vector Drive', 'Overthrust Engine X', 'Slipstream Thrusters', 'Pulse Burn Array', 'Graviton Maneuver Core'],
+      ['Warp Vector Drive', 'Tachyon Burn Engine', 'Singularity Thrusters', 'Lightstep Drive Prime', 'Eternal Slipstream Core'],
     ],
-    gloves: [ // tactical gloves
-      ['Rothco Duty Gloves', 'NcStar Gloves', 'Surplus Work Gloves', 'Generic Shooters'],
-      ['Mechanix M-Pact', '5.11 Hard Times', 'Magpul Technical', 'Hatch Operator'],
-      ['Oakley SI Assault', 'PIG FDT Alpha', 'Mechanix Element', 'Outdoor Research'],
-      ['Crye Precision Combat', 'PIG FDT Delta', 'Arc\'teryx Assault', 'SKD PIG Charlie'],
+    gloves: [ // TARGETING — fire-control computers (fire rate / crit damage)
+      ['Cracked Targeting Chip', 'Surplus Aim Module', 'Jury-Rigged Sight Unit', 'Static Lock Sensor', 'Salvaged Fire Chip'],
+      ['Targeting Computer Mk II', 'Predictive Aim Core', 'Auto-Lock Processor', 'Ballistic Sync Unit', 'Vector Sight Array'],
+      ['Neural Targeting Core', 'Precognition Aim X', 'Quantum Lock Processor', 'Marksman AI Module', 'Deadeye Sensor Suite'],
+      ['Oracle Fire Control', 'Omniscient Aim Core', 'Hyperlock Prime AI', 'Bullseye Singularity', 'Eternal Targeting Nexus'],
     ],
-    amulet: [ // optic / sight
-      ['Bushnell TRS-25', 'NcStar Red Dot', 'UTG Reflex', 'Sightmark Ultra'],
-      ['Vortex Strikefire II', 'Holosun 403B', 'Sig Romeo5', 'Bushnell AR Optics'],
-      ['Holosun 507C X2', 'Vortex Venom', 'Trijicon RMR', 'EOTech 512'],
-      ['EOTech EXPS3', 'Trijicon ACOG', 'Aimpoint CompM5', 'Nightforce ATACR'],
+    amulet: [ // SHIELD CORE — deflector generators (crit)
+      ['Flickering Deflector', 'Scrap Shield Coil', 'Surplus Field Node', 'Cracked Barrier Core', 'Static Ward Emitter'],
+      ['Deflector Core Mk II', 'Kinetic Barrier Node', 'Phase Shield Coil', 'Aegis Field Emitter', 'Refractor Ward Core'],
+      ['Resonant Shield Core', 'Hardlight Barrier X', 'Prismatic Deflector', 'Overcharge Ward Prime', 'Graviton Shield Node'],
+      ['Singularity Shield Core', 'Absolute Deflector Prime', 'Voidward Barrier Engine', 'Nova Aegis Core', 'Eternal Bulwark Nexus'],
     ],
   };
   // ---------------------------------------------------------------------------

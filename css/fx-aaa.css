@@ -1,0 +1,419 @@
+/* =============================================================================
+   fx-aaa.css — "AAA POLISH PASS"
+   Loaded LAST. A pure presentation layer over the Operator Command Deck skin:
+   richer materials, cinematic arena framing, holo HUD, dark-glass toasts,
+   premium nav dock. Zero mechanics / markup changes (fx-aaa.js injects only
+   decorative, pointer-events:none elements).
+   Perf rules: transform/opacity animations only, no new backdrop-filters in
+   the battle loop's hot path, everything gated behind prefers-reduced-motion.
+   ============================================================================= */
+
+/* ------------------------------------------------------------ ARENA FRAME -- */
+/* injected by fx-aaa.js: <div class="aaa-frame"> with 4 corner brackets */
+.aaa-frame{ position:absolute; inset:0; pointer-events:none; z-index:4; }
+.aaa-frame i{
+  position:absolute; width:26px; height:26px; opacity:.5;
+  border:1.5px solid rgba(95,209,255,.65); filter:drop-shadow(0 0 6px rgba(95,209,255,.35));
+}
+.aaa-frame i:nth-child(1){ top:10px; left:10px;  border-right:0; border-bottom:0; border-radius:8px 0 0 0; }
+.aaa-frame i:nth-child(2){ top:10px; right:10px; border-left:0;  border-bottom:0; border-radius:0 8px 0 0; }
+.aaa-frame i:nth-child(3){ bottom:10px; left:10px;  border-right:0; border-top:0; border-radius:0 0 0 8px; }
+.aaa-frame i:nth-child(4){ bottom:10px; right:10px; border-left:0;  border-top:0; border-radius:0 0 8px 0; }
+@keyframes aaaFramePulse{ 0%,100%{ opacity:.32; } 50%{ opacity:.62; } }
+.aaa-frame i{ animation:aaaFramePulse 4.2s ease-in-out infinite; }
+
+/* drifting nebula sheet — one GPU layer, transform-only animation */
+.aaa-nebula{
+  position:absolute; inset:-30%; pointer-events:none; z-index:1; mix-blend-mode:screen;
+  background:
+    radial-gradient(42% 34% at 28% 34%, rgba(95,160,255,.10), transparent 70%),
+    radial-gradient(36% 30% at 72% 62%, rgba(186,110,255,.08), transparent 70%),
+    radial-gradient(30% 26% at 55% 20%, rgba(64,220,200,.05), transparent 70%);
+  animation:aaaNebDrift 46s ease-in-out infinite alternate;
+  will-change:transform;
+}
+@keyframes aaaNebDrift{
+  from{ transform:translate3d(-2.5%,-1.5%,0) scale(1); }
+  to  { transform:translate3d(2.5%,2%,0)  scale(1.08); }
+}
+
+/* ambient dust canvas injected by fx-aaa.js */
+.aaa-dust{ position:absolute; inset:0; pointer-events:none; z-index:2; mix-blend-mode:screen; }
+
+/* ------------------------------------------------------------ ZONE BANNER -- */
+#zone-banner{
+  background:linear-gradient(180deg, rgba(22,30,46,.78), rgba(10,15,26,.86)) !important;
+  border:1px solid rgba(120,170,230,.28) !important;
+  box-shadow:0 8px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.09);
+}
+#zone-banner .zn{ text-shadow:0 0 12px rgba(160,200,255,.35); }
+#zone-banner .zb-chev{ color:var(--gold,#f2b24b); }
+
+/* ---------------------------------------------------------------- HUD 2.0 -- */
+#hud{
+  background:
+    radial-gradient(90% 130% at 50% -30%, rgba(95,160,255,.10), transparent 60%),
+    linear-gradient(180deg,#151e2d,#0d1420) !important;
+  box-shadow:0 2px 18px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.045) !important;
+}
+
+/* holo ring behind the flagship thumbnail — anchored to .power-block so the
+   absolutely-positioned #pb-ship (left:9px, top:50%) keeps its containing block */
+.power-block{ position:relative; isolation:isolate; }
+.power-block::before{
+  content:''; position:absolute; left:4px; top:50%; width:48px; height:48px;
+  transform:translateY(-50%); border-radius:50%; z-index:-1;
+  background:conic-gradient(from 0deg, transparent 0 40%, rgba(95,209,255,.55) 50%, transparent 60% 100%);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+          mask:radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  animation:aaaHoloSpinPB 5s linear infinite; opacity:.85;
+}
+.power-block::after{
+  content:''; position:absolute; left:-3px; top:50%; width:62px; height:62px;
+  transform:translateY(-50%); border-radius:50%; z-index:-2; pointer-events:none;
+  background:radial-gradient(circle, rgba(95,160,255,.16), transparent 68%);
+}
+@keyframes aaaHoloSpinPB{ from{ transform:translateY(-50%) rotate(0deg); } to{ transform:translateY(-50%) rotate(360deg); } }
+.pb-fleet .flag{ filter:drop-shadow(0 4px 10px rgba(0,0,0,.6)) drop-shadow(0 0 8px rgba(95,180,255,.28)); }
+
+/* ship score value — bright metal gradient */
+.power-block .pb-val{
+  background:linear-gradient(180deg,#ffe9bd 20%, var(--gold,#f2b24b) 58%, #b87e2a);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  text-shadow:none; filter:drop-shadow(0 0 14px rgba(242,178,75,.4));
+}
+
+/* level badge — bevelled gold ring */
+.lvl-badge{
+  position:relative;
+  border-color:rgba(242,178,75,.4) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 10px rgba(0,0,0,.5), 0 0 14px -4px rgba(242,178,75,.55) !important;
+}
+
+/* progress bars — tick marks + rounded caps */
+.bar-wrap{ position:relative; }
+.bar-wrap::after{
+  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit;
+  background:repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(5,8,14,.55) calc(10% - 1px) 10%);
+}
+/* low-HP state (class toggled by fx-aaa.js) */
+@keyframes aaaHpPanic{ 0%,100%{ filter:none; } 50%{ filter:brightness(1.55) saturate(1.3); } }
+#app.aaa-hp-low #hp-fill{ animation:aaaHpPanic 0.9s ease-in-out infinite; }
+.aaa-hp-vignette{
+  position:absolute; inset:0; pointer-events:none; z-index:7; opacity:0;
+  background:radial-gradient(120% 100% at 50% 50%, transparent 55%, rgba(255,40,60,.22) 88%, rgba(255,30,50,.34) 100%);
+  transition:opacity .5s ease;
+}
+#app.aaa-hp-low .aaa-hp-vignette{ opacity:1; animation:aaaVigPulse 1.8s ease-in-out infinite; }
+@keyframes aaaVigPulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+
+/* ----------------------------------------------------------- WALLET CHIPS -- */
+.res-chip,.gold-chip{
+  background:linear-gradient(180deg, rgba(30,40,58,.85), rgba(15,21,33,.92)) !important;
+  border-color:rgba(120,150,200,.22) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 2px 6px rgba(0,0,0,.35);
+}
+/* LootCoin chip — permanent gold aura + tap affordance (it opens the LC shop) */
+.res-chip.chip-glow{
+  position:relative; cursor:pointer;
+  border-color:rgba(242,169,60,.55) !important;
+  animation:aaaLcAura 2.4s ease-in-out infinite !important;
+}
+.res-chip.chip-glow:active{ transform:scale(.94); }
+@keyframes aaaLcAura{
+  0%,100%{ box-shadow:0 0 6px rgba(242,169,60,.5), 0 0 14px rgba(242,169,60,.28), inset 0 1px 0 rgba(255,255,255,.08); }
+  50%    { box-shadow:0 0 10px rgba(242,169,60,.85), 0 0 24px rgba(242,169,60,.5), inset 0 1px 0 rgba(255,255,255,.10); }
+}
+@media (prefers-reduced-motion: reduce){
+  .res-chip.chip-glow{ animation:none !important;
+    box-shadow:0 0 8px rgba(242,169,60,.6), 0 0 18px rgba(242,169,60,.35) !important; }
+}
+
+/* ------------------------------------------------------------- NAV DOCK -- */
+#nav{
+  background:linear-gradient(180deg, rgba(19,27,41,.96), rgba(9,13,21,.99)) !important;
+  border-top:1px solid rgba(120,160,220,.16) !important;
+  box-shadow:0 -6px 26px rgba(0,0,0,.55) !important;
+}
+.nav-btn{ position:relative; }
+.nav-btn.active::after{
+  content:''; position:absolute; left:50%; top:50%; width:52px; height:52px;
+  transform:translate(-50%,-56%); border-radius:50%; pointer-events:none; z-index:-1;
+  background:radial-gradient(circle, rgba(242,178,75,.16), transparent 70%);
+}
+.nav-btn.active .nl{ color:var(--gold,#f2b24b); text-shadow:0 0 10px rgba(242,178,75,.45); }
+
+/* -------------------------------------------------------- BATTLE CONTROLS -- */
+.spd{ box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 3px 10px rgba(0,0,0,.45) !important; }
+.spd.active{
+  box-shadow:0 0 16px rgba(242,178,75,.45), inset 0 1px 0 rgba(255,255,255,.14) !important;
+}
+.auto-btn,.bail-btn{ box-shadow:0 4px 14px rgba(0,0,0,.4); }
+.auto-btn.on .led{ animation:aaaLed 1.6s ease-in-out infinite; }
+@keyframes aaaLed{ 0%,100%{ box-shadow:0 0 5px var(--good,#3fc56b); } 50%{ box-shadow:0 0 12px var(--good,#3fc56b), 0 0 20px rgba(63,197,107,.5); } }
+
+/* joystick — frosted glass ring + lit knob */
+#joystick{
+  background:radial-gradient(circle, rgba(70,100,150,.10), rgba(70,100,150,.20)) !important;
+  border:1px solid rgba(140,180,240,.35) !important;
+  box-shadow:0 0 0 4px rgba(10,16,28,.35), inset 0 0 24px rgba(95,160,255,.12);
+}
+#joystick .knob{
+  background:radial-gradient(circle at 38% 32%, #fdfeff, #b9c8dc 70%, #96a8c0) !important;
+  box-shadow:0 6px 14px rgba(0,0,0,.5), 0 0 12px rgba(160,200,255,.3), inset 0 -2px 4px rgba(60,80,110,.4) !important;
+}
+
+/* ------------------------------------------------------------ LOOT TOASTS -- */
+/* dated white pills → dark glass with rarity edge-light */
+.loot-toast{
+  background:linear-gradient(90deg, rgba(17,24,38,.94), rgba(13,19,30,.88)) !important;
+  border-color:rgba(120,150,200,.25) !important;
+  color:#dfe8f5;
+  box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  border-radius:8px !important;
+}
+.loot-toast.scrapped{ background:linear-gradient(90deg, rgba(24,27,33,.9), rgba(18,20,25,.85)) !important; color:#9aa3b2; }
+
+/* --------------------------------------------------------- LEVEL-UP BEAT -- */
+.lvl-toast{
+  font-size:34px !important;
+  background:linear-gradient(180deg,#fff3d2 15%, var(--gold,#f2b24b) 60%, #c07f22);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 22px rgba(242,178,75,.55)) drop-shadow(0 3px 6px rgba(0,0,0,.55));
+  text-shadow:none !important;
+}
+/* JS-injected expanding shockwave ring (#toast-layer prefix beats
+   fx-cinematic's `#toast-layer > *` toast animation override) */
+#toast-layer > .aaa-shock,
+.aaa-shock{
+  position:absolute; left:50%; top:38%; width:20px; height:20px; margin:-10px 0 0 -10px;
+  border-radius:50%; pointer-events:none; z-index:6;
+  border:3px solid rgba(255,214,120,.9);
+  box-shadow:0 0 24px rgba(242,178,75,.6), inset 0 0 18px rgba(242,178,75,.5);
+  animation:aaaShock .9s cubic-bezier(.16,.84,.36,1) forwards;
+}
+@keyframes aaaShock{
+  from{ transform:scale(.4); opacity:1; }
+  to  { transform:scale(15); opacity:0; border-width:1px; }
+}
+
+/* --------------------------------------------------------- BOSS WARNING -- */
+.aaa-warn{
+  position:absolute; left:0; right:0; top:26%; z-index:6; pointer-events:none;
+  display:flex; align-items:center; justify-content:center; height:52px; overflow:hidden;
+  opacity:0;
+}
+.aaa-warn.show{ animation:aaaWarnIn 2.4s ease forwards; }
+.aaa-warn::before,.aaa-warn::after{
+  content:''; position:absolute; left:-10%; right:-10%; height:1.5px;
+  background:linear-gradient(90deg, transparent, rgba(255,80,95,.9), transparent);
+}
+.aaa-warn::before{ top:4px; } .aaa-warn::after{ bottom:4px; }
+.aaa-warn span{
+  font-family:'Orbitron',sans-serif; font-weight:900; font-size:19px; letter-spacing:.42em;
+  padding-left:.42em; color:#ff5f72; text-shadow:0 0 18px rgba(255,60,80,.75);
+  background:linear-gradient(90deg, transparent, rgba(20,6,10,.72) 22% 78%, transparent);
+  padding-top:8px; padding-bottom:8px; width:100%; text-align:center;
+}
+@keyframes aaaWarnIn{
+  0%{ opacity:0; transform:scaleY(.2); }
+  10%{ opacity:1; transform:none; }
+  78%{ opacity:1; }
+  100%{ opacity:0; transform:scaleY(.4); }
+}
+
+/* ---------------------------------------------------------- SCREEN HEADS -- */
+.scr-head{ position:relative; overflow:hidden; }
+.scr-head::after{
+  content:''; position:absolute; left:0; right:0; bottom:0; height:1.5px;
+  background:linear-gradient(90deg, transparent, rgba(242,178,75,.65) 30% 45%, rgba(95,209,255,.5) 60%, transparent);
+  background-size:220% 100%;
+  animation:aaaHeadSweep 7s linear infinite;
+}
+@keyframes aaaHeadSweep{ from{ background-position:160% 0; } to{ background-position:-120% 0; } }
+
+/* -------------------------------------------------------------- POLISH -- */
+/* slimmer premium scrollbars */
+.scr-body::-webkit-scrollbar{ width:4px; }
+.scr-body::-webkit-scrollbar-thumb{ border-radius:4px; background:rgba(95,130,180,.4); }
+
+/* sheets — deeper glass */
+.sheet{ box-shadow:0 34px 90px rgba(0,0,0,.8), 0 0 0 1px rgba(120,160,220,.10), inset 0 1px 0 rgba(255,255,255,.06) !important; }
+
+/* card entrance stagger inside freshly-opened screens */
+@media (prefers-reduced-motion: no-preference){
+  .screen.overlay.active .scr-body > *{ animation:aaaRise .34s cubic-bezier(.22,1,.36,1) backwards; }
+  .screen.overlay.active .scr-body > *:nth-child(1){ animation-delay:.02s; }
+  .screen.overlay.active .scr-body > *:nth-child(2){ animation-delay:.05s; }
+  .screen.overlay.active .scr-body > *:nth-child(3){ animation-delay:.08s; }
+  .screen.overlay.active .scr-body > *:nth-child(4){ animation-delay:.11s; }
+  .screen.overlay.active .scr-body > *:nth-child(5){ animation-delay:.14s; }
+  .screen.overlay.active .scr-body > *:nth-child(n+6){ animation-delay:.17s; }
+}
+@keyframes aaaRise{ from{ opacity:0; transform:translateY(9px); } to{ opacity:1; transform:none; } }
+
+/* ------------------------------------------------------ ITEM ICONOGRAPHY -- */
+/* market card icon chips had NO svg sizing rule (icons rendered unsized →
+   invisible) and still used the old light-theme fill. Fixed here. */
+.store-card .sc-ico{
+  background:linear-gradient(180deg,#1d2839,#141c2a) !important;
+  border:1px solid var(--line-2,#37475f);
+}
+.sc-ico svg{ width:24px; height:24px; }
+.jkr-ic .sci svg{ width:42px; height:42px; }
+/* the .sci/.wcx wrappers centre their svg without adding box size */
+.sci{ display:inline-grid; place-items:center; line-height:0; }
+/* fleet loadout chips also had unsized svgs */
+.flc-ic{ display:inline-flex; align-items:center; }
+.flc-ic svg{ width:12px; height:12px; }
+.wcx{ display:inline-flex; vertical-align:-3px; }
+.wcx svg{ width:15px; height:15px; }
+/* legacy glyph fallback keeps its old look where a class svg is missing */
+.sci .wci{ line-height:1; }
+
+/* ------------------------------------------------------ ZONE GRIND JOURNEY -- */
+/* Zones read as a voyage: galaxy banners, planet orbs, a warp route running
+   down the chart, and light-year distances that grow as you push deeper. */
+.zj{ position:relative; }
+.zj::before{ /* the warp route line, visible in the gaps between rows */
+  content:''; position:absolute; left:33px; top:22px; bottom:12px; width:2px; z-index:0;
+  background:linear-gradient(180deg,
+    rgba(95,160,255,.30), rgba(120,220,180,.24) 22%,
+    rgba(255,150,80,.22) 42%, rgba(186,110,255,.24) 62%,
+    rgba(255,90,140,.20) 82%, rgba(140,120,255,.16));
+}
+.zj .zone-row{ position:relative; z-index:1; }
+
+/* galaxy banner */
+.zj-gal{
+  position:relative; overflow:hidden; z-index:1;
+  border-radius:13px; margin:16px 0 10px; padding:12px 14px;
+  border:1px solid hsl(var(--gh) 45% 42% / .5);
+  background:
+    radial-gradient(130% 170% at 12% -10%, hsl(var(--gh) 72% 56% / .26), transparent 55%),
+    radial-gradient(90% 130% at 88% 110%, hsl(calc(var(--gh) + 45) 72% 56% / .14), transparent 60%),
+    linear-gradient(180deg,#101a2c,#0a101d);
+  box-shadow:0 6px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.zj-gal::after{ /* star specks */
+  content:''; position:absolute; inset:0; pointer-events:none; opacity:.8;
+  background:
+    radial-gradient(1.3px 1.3px at 78% 26%, rgba(220,235,255,.8), transparent 60%),
+    radial-gradient(1.1px 1.1px at 62% 68%, rgba(220,235,255,.55), transparent 60%),
+    radial-gradient(1.4px 1.4px at 90% 60%, rgba(220,235,255,.65), transparent 60%),
+    radial-gradient(1px 1px at 45% 32%, rgba(220,235,255,.45), transparent 60%);
+}
+.zj-gal-name{
+  font-family:'Orbitron',sans-serif; font-weight:800; font-size:13.5px; letter-spacing:.09em;
+  color:hsl(var(--gh) 88% 80%); text-shadow:0 0 14px hsl(var(--gh) 90% 60% / .55);
+}
+.zj-gal-meta{ font-size:10.5px; color:#93a2ba; margin-top:3px; letter-spacing:.03em; }
+
+/* warp divider between galaxies */
+.zj-warp{
+  position:relative; z-index:1; text-align:center; margin:13px 0 3px;
+  font-family:'Rajdhani',sans-serif; font-size:10.5px; font-weight:700; letter-spacing:.16em;
+  text-transform:uppercase; color:#6f84a6;
+}
+
+/* planet orbs — layered CSS "terrain": specular sun-glint, night-side
+   terminator, per-type surface texture (gas bands / rocky mottling / ice caps),
+   atmosphere rim. Seeded per zone via --x1/--y1/--x2/--y2/--ba. */
+.z-orb{
+  position:relative; width:40px; height:40px; flex:none; border-radius:50%;
+  display:grid; place-items:center;
+  box-shadow:
+    inset -6px -7px 10px rgba(0,0,0,.62),          /* deep shadow limb */
+    inset 2px 2px 4px rgba(255,255,255,.14),       /* lit limb */
+    inset 0 0 6px hsl(var(--gh) 90% 68% / .3),     /* atmosphere rim  */
+    0 0 12px hsl(var(--gh) 82% 60% / .38);         /* space glow      */
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,.5), rgba(255,255,255,0) 28%),
+    radial-gradient(circle at 76% 82%, rgba(2,6,14,.8), rgba(2,6,14,0) 60%),
+    radial-gradient(circle at 34% 30%, hsl(var(--gh) 76% 70%), hsl(var(--gh) 64% 44%) 52%, hsl(var(--gh) 58% 13%) 100%);
+}
+/* GAS GIANT — latitude banding at a seeded tilt */
+.z-orb.gas{
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,.5), rgba(255,255,255,0) 28%),
+    radial-gradient(circle at 76% 82%, rgba(2,6,14,.8), rgba(2,6,14,0) 60%),
+    repeating-linear-gradient(var(--ba,18deg),
+      rgba(255,255,255,.12) 0 2px, transparent 2px 5.5px,
+      rgba(0,0,0,.18) 5.5px 8px, transparent 8px 11px),
+    radial-gradient(circle at 34% 30%, hsl(var(--gh) 76% 70%), hsl(var(--gh) 64% 44%) 52%, hsl(var(--gh) 58% 13%) 100%);
+}
+/* ROCKY — seeded maria + crater speckle */
+.z-orb.rock{
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,.45), rgba(255,255,255,0) 28%),
+    radial-gradient(circle at 76% 82%, rgba(2,6,14,.8), rgba(2,6,14,0) 60%),
+    radial-gradient(30% 24% at var(--x1,32%) var(--y1,40%), rgba(0,0,0,.34), transparent 72%),
+    radial-gradient(22% 18% at var(--x2,62%) var(--y2,58%), rgba(255,255,255,.14), transparent 70%),
+    radial-gradient(9% 8% at calc(100% - var(--x1,32%)) var(--y2,58%), rgba(0,0,0,.3), transparent 75%),
+    radial-gradient(circle at 34% 30%, hsl(var(--gh) 42% 62%), hsl(var(--gh) 34% 40%) 52%, hsl(var(--gh) 30% 12%) 100%);
+}
+/* ICE — bright polar caps over a pale, hazy body */
+.z-orb.ice{
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,.55), rgba(255,255,255,0) 30%),
+    radial-gradient(circle at 76% 82%, rgba(4,10,20,.72), rgba(4,10,20,0) 60%),
+    radial-gradient(64% 26% at 50% 2%, rgba(255,255,255,.55), transparent 75%),
+    radial-gradient(50% 20% at 50% 100%, rgba(255,255,255,.4), transparent 75%),
+    radial-gradient(26% 20% at var(--x1,32%) var(--y1,40%), rgba(255,255,255,.16), transparent 70%),
+    radial-gradient(circle at 34% 30%, hsl(var(--gh) 45% 80%), hsl(var(--gh) 42% 56%) 55%, hsl(var(--gh) 40% 18%) 100%);
+}
+.z-orb span{
+  font-family:'Orbitron',sans-serif; font-weight:800; font-size:11.5px; color:#fff;
+  text-shadow:0 1px 3px rgba(0,0,0,.95), 0 0 7px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,1);
+}
+.z-orb.ringed::before{
+  content:''; position:absolute; inset:-4px -11px; border-radius:50%;
+  border:2px solid hsl(var(--gh) 75% 74% / .55);
+  border-top-color:hsl(var(--gh) 75% 82% / .8);
+  box-shadow:0 0 6px hsl(var(--gh) 80% 65% / .35);
+  transform:rotate(-22deg) scaleY(.36); pointer-events:none;
+}
+.z-orb.cit{ box-shadow:inset -5px -6px 9px rgba(0,0,0,.55), 0 0 14px rgba(255,122,60,.55); }
+.z-orb.wav::after{
+  content:''; position:absolute; inset:-6px; border-radius:50%;
+  border:1px dashed rgba(158,197,255,.5); pointer-events:none;
+}
+.zone-row.locked .z-orb{ filter:grayscale(.7) brightness(.55); }
+.zone-row.active .z-orb{
+  outline:2px solid var(--gold,#f2b24b); outline-offset:2px;
+  animation:zjHere 1.8s ease-in-out infinite;
+}
+@keyframes zjHere{
+  0%,100%{ box-shadow:inset -5px -6px 9px rgba(0,0,0,.55), 0 0 10px rgba(242,178,75,.5); }
+  50%    { box-shadow:inset -5px -6px 9px rgba(0,0,0,.55), 0 0 22px rgba(242,178,75,.85); }
+}
+@media (prefers-reduced-motion: reduce){ .zone-row.active .z-orb{ animation:none; } }
+
+/* jump-to-recommended floating chip (zones journey chart is long) */
+#zones-body{ position:relative; }
+.zj-jump{
+  position:sticky; bottom:8px; left:50%; transform:translateX(-50%) translateY(8px); z-index:5;
+  display:flex; width:fit-content; align-items:center; gap:5px; pointer-events:none; opacity:0;
+  margin:-40px auto 0;
+  background:linear-gradient(180deg, rgba(35,28,10,.92), rgba(24,19,7,.95));
+  border:1px solid rgba(242,178,75,.65); color:#ffd98a; border-radius:99px; padding:8px 15px;
+  font-family:'Orbitron',sans-serif; font-weight:800; font-size:9.5px; letter-spacing:.1em;
+  box-shadow:0 6px 18px rgba(0,0,0,.5), 0 0 14px -4px rgba(242,178,75,.6);
+  backdrop-filter:blur(4px); cursor:pointer; transition:opacity .25s, transform .25s;
+}
+.zj-jump.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
+.zj-jump.up::before{ content:'↑ '; } .zj-jump:not(.up)::before{ content:'↓ '; }
+.zj-jump:active{ transform:translateX(-50%) scale(.95); }
+
+/* wrapper flex fixes found in the game-wide class audit */
+.fl-meta{ flex:1; min-width:0; }
+.gb-card-t{ flex:1; min-width:0; }
+
+/* -------------------------------------------------------- REDUCED MOTION -- */
+@media (prefers-reduced-motion: reduce){
+  .aaa-frame i,.aaa-nebula,.power-block::before,.auto-btn.on .led,
+  .scr-head::after,#app.aaa-hp-low #hp-fill,
+  #app.aaa-hp-low .aaa-hp-vignette{ animation:none !important; }
+  .aaa-nebula,.aaa-dust{ display:none; }
+  .aaa-shock,.aaa-warn.show{ animation-duration:.01s !important; }
+}

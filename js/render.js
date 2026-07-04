@@ -354,12 +354,17 @@
     support: { trail: '124,224,160', trailW: 2.0 },
     drone:   { trail: '130,255,205', trailW: 1.6 },
   };
+  // TITAN SINA — full-spectrum tracer palette (r,g,b strings, cheap to slot into rgba())
+  const SINA_COLS = ['255,80,80','255,170,60','255,235,90','120,255,130','80,210,255','150,130,255','255,110,235'];
   function drawArrow(ctx, p) {
     const wt = p.drone ? 'drone' : (WSTYLE[p.wtype] ? p.wtype : 'gatling');
     const st = WSTYLE[wt];
     const tnow = performance.now() / 1000;
+    // TITAN SINA — every player bolt becomes a rainbow gatling tracer
+    const sina = !p.drone && activeShipKey() === 'titansina';
     // trail (missiles leave smoke; energy weapons leave light) — fat additive bloom
-    const tCol = p.crit ? '255,210,80' : st.trail;
+    const tCol = sina ? SINA_COLS[Math.abs((p.x * 3 + p.y * 5) | 0) % SINA_COLS.length]
+                      : (p.crit ? '255,210,80' : st.trail);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
@@ -380,13 +385,22 @@
     const cs = (p.crit ? 1.45 : 1) * 1.6;            // bigger, beefier shots
     // additive bloom halo around every bolt head
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5;
-    ctx.fillStyle = 'rgba(' + (p.crit ? '255,210,80' : st.trail) + ',1)';
+    ctx.fillStyle = 'rgba(' + tCol + ',1)';
     ctx.beginPath(); ctx.arc(0, 0, 6 * cs, 0, 7); ctx.fill();
     ctx.globalAlpha = 0.85; ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(0, 0, 2.2 * cs, 0, 7); ctx.fill(); ctx.restore();
     // (all projectile styles below use layered alpha shapes — NO shadowBlur,
     // no per-bolt gradients: these run hundreds of times per frame)
-    if (wt === 'laser') {
+    if (sina) {
+      // TITAN SINA tracer — hot rainbow dash, hue shifts as the round flies
+      const col = 'rgb(' + tCol + ')';
+      ctx.globalAlpha = 0.45; ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 9 * cs, 3 * cs, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 6 * cs, 1.6 * cs, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(2.2 * cs, 0, 2 * cs, 1 * cs, 0, 0, 7); ctx.fill();
+    } else if (wt === 'laser') {
       // a searing light lance — dim wide pass + white-hot core
       const L = 26 * cs;
       ctx.lineCap = 'round';
@@ -723,9 +737,11 @@
   }
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
-  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5 };
+  const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
+    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
-  const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4 };
+  const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
+    dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';
@@ -735,7 +751,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }

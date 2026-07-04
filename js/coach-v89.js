@@ -93,16 +93,83 @@
       ],
     },
     galaxy: {
-      when: (s) => s.level >= 20,
+      when: (s) => s.level >= 25,
       dock: true,
       steps: [
-        { title: 'Level 20 — THE GALAXY is open', body: 'Beyond zone grinding lies the turf war: a shared galaxy of tiles to <b>conquer, farm and defend</b> against rival fleets.' },
+        { title: 'Level 25 — THE GALAXY is open', body: 'Beyond zone grinding lies the turf war: a shared galaxy of tiles to <b>conquer, farm and defend</b> against rival fleets.' },
         { target: NAV('galaxy'), tap: true, title: 'Open The Galaxy', body: 'Tap the highlighted button.' },
         { target: '#galaxy-body', title: 'Claim your turf', body: 'Capture tiles spreading out from your citadel — each one generates <b>⬢ fuel · ◆ iron · ✦ plasma every hour, even offline</b>. Richer rings pay more… and attract raiders. Hold your ground.' },
       ],
     },
+    supply: {
+      when: (s) => s.level >= 30,
+      dock: true,
+      steps: [
+        { title: 'Level 30 — GALAXY SUPPLY is open', body: 'Skip the RNG: supply crates let you <b>buy the exact gear tier you want</b> with the resources you farm — every tier crate is a 100% guaranteed drop.' },
+        { target: '#nav-command', tap: true, title: 'Open Command', body: 'Galaxy Supply lives in your Command console. Tap the highlighted button.' },
+        { target: '#mega .mega-card[data-go="boxes"]', tap: true, title: 'Open Galaxy Supply', body: 'Tap the crate card.' },
+        { target: '#boxes-body', title: 'Requisition your gear', body: 'Pick a rarity and buy it outright — crates roll <b>at your current zone</b>, so deeper pushes mean stronger requisitions. The <b>Cosmic Cache</b> is the only source of Artifact-tier relics.' },
+      ],
+    },
+    missions: {
+      when: (s) => s.level >= 3,
+      dock: true,
+      steps: [
+        { title: 'Daily orders are in 📋', body: 'Fleet Command issues <b>10 missions every day</b> — kills, bosses, scavenging, patrols. Each pays gold, resources, even LootCoins. Clear all 10 for the <b>Commander&#39;s Crate: 100 ◉ LootCoins</b>.' },
+        { target: '#nav-command', tap: true, title: 'Open Command', body: 'The mission board lives in your Command console. Tap it.' },
+        { target: '#mega .mega-card[data-go="missions"]', tap: true, title: 'Open Missions', body: 'Tap the Missions card.' },
+        { target: '#missions-body', title: 'Claim as you go', body: 'Progress counts automatically while you fight. When a bar fills, come back and hit <b>CLAIM</b>. The board resets at midnight — don&#39;t let a day&#39;s crate slip.' },
+      ],
+    },
+    push: {
+      when: (s) => s.level >= 5 && (s.highestUnlocked || 1) >= 2,
+      dock: false,
+      steps: [
+        { title: 'Don&#39;t farm one zone forever', body: 'Loot quality scales with <b>zone depth</b>, not time spent. If you&#39;re clearing easily, you&#39;re under-farming — push.' },
+        { target: NAV('zones'), tap: true, title: 'Open Zone Grind', body: 'Tap the highlighted button.' },
+        { target: '#zones-body .zone-row.rec', title: 'Follow the ★', body: 'The ★ RECOMMENDED row is tuned to your power. Wave zones (every 11th) and ⛴ citadel zones pay bonus loot — the journey chart shows how far you&#39;ve flown.' },
+      ],
+    },
+    prism: {
+      when: (s) => s.level >= 15,
+      dock: true,
+      steps: [
+        { title: 'Level 15 — PRISM MINING ◈', body: 'A new idle income: deploy into a Prism Field and your kills there refine into <b>◈ Prism Ingots</b> — the currency behind the strongest late-game gear.' },
+        { target: '#nav-command', tap: true, title: 'Open Command', body: 'Tap the highlighted button.' },
+        { target: '#mega .mega-card[data-go="prism"]', tap: true, title: 'Open Prism Mining', body: 'Tap the card.' },
+        { target: '#prism-body', title: 'Deploy and fight', body: 'Start a run, then battle inside the field — every kill refines ingots. Deeper zones refine faster.' },
+      ],
+    },
+    pilot: {
+      when: (s) => s.level >= 30,
+      dock: true,
+      steps: [
+        { title: 'Level 30 — PILOT TREE ◇', body: 'The Dreadnaught Hunt drops <b>◇ Dread Cores</b> — spend them here on <b>permanent ship-wide bonuses</b> that survive every refit.' },
+        { target: '#nav-command', tap: true, title: 'Open Command', body: 'Tap the highlighted button.' },
+        { target: '#mega .mega-card[data-go="pilot"]', tap: true, title: 'Open the Pilot Tree', body: 'Tap the card.' },
+      ],
+    },
+    dread: {
+      when: (s) => s.level >= 30,
+      dock: true,
+      steps: [
+        { title: 'THE DREADNAUGHT HUNT ⚔', body: 'A weekly raid boss stalks the deep zones. Hunt it down for <b>◇ Dread Cores</b> — the only fuel for your Pilot Tree.' },
+        { target: '#nav-command', tap: true, title: 'Open Command', body: 'Tap the highlighted button.' },
+        { target: '#mega .mega-card[data-go="dread"]', tap: true, title: 'Open Dreadnaught Hunt', body: 'Tap the card and read the week&#39;s intel — the hunt pays best on the first kill.' },
+      ],
+    },
+    moon: {
+      when: (s) => s.level >= 30,
+      dock: true,
+      steps: [
+        { title: 'Level 30 — MOON COLONY 🌙', body: 'You&#39;ve earned a moon. Build mines, refineries and defenses — it produces resources <b>24/7, even offline</b>. Terraform it fully and you can claim <b>more moons</b>.' },
+        { target: '#nav-command', tap: true, title: 'Open Command', body: 'Tap the highlighted button.' },
+        { target: '#mega .mega-card[data-go="moon"]', tap: true, title: 'Open Moon Colony', body: 'Tap the card.' },
+        { target: '#moon-body', title: 'Build — and DEFEND', body: 'Tap a <b>+ BUILD</b> slot to place your first mine. Warning: pirates raid every few hours — without enough 🛡 defense they knock your systems <b>offline</b> and you pay for repairs. Towers first, profits second.' },
+      ],
+    },
   };
-  const ORDER = ['welcome', 'loot', 'bagfull', 'skills', 'ships', 'galaxy'];
+  const ORDER = ['welcome', 'loot', 'bagfull', 'skills', 'missions', 'push', 'ships', 'prism', 'galaxy', 'pilot', 'dread', 'moon', 'supply'];
 
   // ---------------------------------------------------------------------------
   function init(game) {
@@ -115,6 +182,16 @@
       if (s.level >= 10) s.coach.seen.bagfull = true;
       if (s.level >= 12) s.coach.seen.ships = true;
       if (s.level >= 25) s.coach.seen.galaxy = true;
+      if (s.level >= 35) s.coach.seen.supply = true;
+      G.save();
+    }
+    // v3 migration — grandfather the NEW moments on veteran saves so they
+    // aren't spammed, while players approaching each gate still get coached
+    if (!s.coach.v3) {
+      s.coach.v3 = true;
+      if (s.level >= 10) { s.coach.seen.missions = true; s.coach.seen.push = true; }
+      if (s.level >= 22) s.coach.seen.prism = true;
+      if (s.level >= 38) { s.coach.seen.pilot = true; s.coach.seen.dread = true; s.coach.seen.moon = true; }
       G.save();
     }
     buildLayer();

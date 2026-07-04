@@ -158,6 +158,10 @@
     G().state.dreadCores -= def.cost;
     nodes()[key(q, r)] = 1;
     _aggDirty = true;
+    // Fold the new node's bonuses into live combat stats immediately — otherwise
+    // the pilot buffs (and the Ship/Fleet Score) don't update until some other
+    // event happens to recompute stats.
+    try { G().refreshStats && G().refreshStats(); } catch (e) {}
     try { G().save(); } catch (e) {}
     if (window.UI) window.UI.refreshAll();
     return true;
@@ -183,7 +187,7 @@
   }
   function combatMods() { return ensureAgg().combat; }
   function mult(k) { const v = ensureAgg().util[k] || 0; return 1 + v / 100; }
-  function dmgVs(e) { const c = ensureAgg().combat; let b = (c.bossDamage || 0); if (e && e.isSuper) b += (c.eliteDamage || 0); return 1 + b / 100; }
+  function dmgVs(e) { const c = ensureAgg().combat; if (!e) return 1; let b = (c.bossDamage || 0); const elite = e.isSuper || e.isDread || e.isCitadel || e.isClone; if (elite) b += (c.eliteDamage || 0); return 1 + b / 100; }
   function hasSpecial(name) { return !!ensureAgg().special[name]; }
 
   // pilot score + rank
@@ -307,7 +311,24 @@
     if (val) val.textContent = fmt(cores());
     if (chip) chip.style.display = (cores() > 0 || lvl() >= UNLOCK_LEVEL) ? '' : 'none';
     const cb = $('cmd-dread-badge');
-    if (cb) { const ready = huntsReady(); cb.style.display = ready > 0 ? 'flex' : 'none'; cb.textContent = ready; }
+    const dreadReady = huntsReady();
+    if (cb) { cb.style.display = dreadReady > 0 ? 'flex' : 'none'; cb.textContent = dreadReady; }
+    // ---- COMMAND-menu notifications: light up cards with pending actions ----
+    const setBadge = (id, n) => {
+      const e = $(id); if (!e) return;
+      e.style.display = n > 0 ? 'flex' : 'none';
+      e.textContent = n > 99 ? '99+' : n;
+    };
+    // Pilot Skills — unspent skill points to allocate
+    let skillPts = 0; try { skillPts = (G().state.skillPoints | 0) || 0; } catch (e) {}
+    setBadge('cmd-skills-badge', skillPts);
+    // Pilot Tree — Dread Cores ready to spend on an unlockable node
+    const pilotReady = (lvl() >= UNLOCK_LEVEL && cores() >= 1) ? cores() : 0;
+    setBadge('cmd-pilot-badge', pilotReady);
+    // Command nav button — aggregate count of sections that need attention
+    const sections = (skillPts > 0 ? 1 : 0) + (pilotReady > 0 ? 1 : 0) + (dreadReady > 0 ? 1 : 0);
+    const navB = $('cmd-badge');
+    if (navB) { navB.style.display = sections > 0 ? 'block' : 'none'; navB.textContent = sections; }
   }
   // number of tiers available to run right now (unlocked + off cooldown)
   function huntsReady() { let n = 0; for (let t = 1; t <= maxTier(); t++) if (canHunt(t)) n++; return n; }
@@ -707,6 +728,10 @@
     }, 1000);
     // recompute aggregate if a save loaded fresh nodes
     _aggDirty = true;
+    // Fold saved pilot nodes into combat stats once the engine is ready — the
+    // DREAD module boots after GAME.init(), so the first score render otherwise
+    // omits the pilot bonuses until the next stat recompute.
+    setTimeout(() => { try { if (window.GAME && window.GAME.refreshStats && Object.keys(nodes()).length) { window.GAME.refreshStats(); if (window.UI) window.UI.refreshAll(); } } catch (e) {} }, 700);
     setTimeout(updateHud, 600);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

@@ -53,7 +53,7 @@
      'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power','pb-ship','hud-fuel','hud-iron','hud-plasma','hud-lc','hud-fuel-rate','hud-iron-rate','hud-plasma-rate',
      'siege-bar','sg-fill','sg-label'].forEach((id) => el[id] = $(id));
     if (el['cargo-full']) el['cargo-full'].addEventListener('click', () => showScreen('bag'));
-    { const lcChip = document.querySelector('#statusbar .lc-chip'); if (lcChip) lcChip.addEventListener('click', () => openCredits()); }
+    { const lcChip = document.querySelector('#statusbar .lc-chip.chip-glow'); if (lcChip) { lcChip.style.cursor = 'pointer'; lcChip.addEventListener('click', () => openCredits()); } }
 
     // NOTE: #nav-command has NO data-screen — it opens the Command mega-menu, it
     // does not navigate. Only bind real screen buttons here, or showScreen(undefined)
@@ -113,6 +113,9 @@
     else if (name === 'skills') renderSkills();
     else if (name === 'pilot') { if (window.DREAD) window.DREAD.renderPilot(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
+    else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
+    else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
+    else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
     syncJoystickVisible();
   }
 
@@ -447,25 +450,61 @@
     const left = 20 - _msTaps;
     if (left <= 0) {
       _msTaps = 0;
-      const haveShip = G.state.ownedShips && G.state.ownedShips.mothership;
-      const gotShip = !haveShip && G.grantShip('mothership');
-      // the SAME trick is the only road to 10× speed
-      const gotSpeed = !G.state.secretSpeed;
-      if (gotSpeed) { G.state.secretSpeed = true; G.setGameSpeed(10); buildSpeedRow(); }
-      // EVERY completion banks 1,000,000 LootCoins — repeatable.
-      G.addCredits(1000000);
-      if (G.setLevel) G.setLevel(500);   // secret: instantly jump to Level 500
-      G.save();
-      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
-      t.innerHTML = (gotShip ? '✦ MOTHERSHIP UNLOCKED<br>' : '') +
-        (gotSpeed ? '<span style="color:#ffd24d">⚡ 10× SPEED UNLOCKED</span><br>' : '') +
-        '<span style="font-size:13px;color:#ffd7f3">' + (gotShip ? 'Fly it from Hangar → Ships &nbsp;·&nbsp; ' : '') + '<b style="color:#ffd24d">+1,000,000</b> LootCoins &nbsp;·&nbsp; <b style="color:#7cff9b">Level 500</b></span>';
-      el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 3200);
-      refreshAll();
-      if (screen === 'hero') renderHero();
+      promptSecretPassword();   // gate the prize behind a password
     } else if (_msTaps >= 8) {
       toast('✦ ' + left + ' more…', '#c77bff'); // whisper only once the streak is well underway
     }
+  }
+  // Password gate for the Ships-tab easter egg. Correct code → full jackpot.
+  function promptSecretPassword() {
+    const sheet = showSheet(`<div class="sheet-head">✦ Access Restricted</div><div class="sheet-body">
+      <p style="font-size:12.5px;color:#cbb8e6;line-height:1.5;margin-bottom:10px">You've triggered a classified fleet override. Enter the authorization code to unlock the vault.</p>
+      <input id="secret-pass" type="password" inputmode="numeric" autocomplete="off" placeholder="Authorization code"
+        style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a3160;background:#120c1e;color:#eaf0fa;font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:.18em;text-align:center;font-weight:700">
+      <div id="secret-err" style="display:none;color:var(--bad);font-size:11px;margin-top:7px;text-align:center">Incorrect code — access denied.</div>
+      <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button>
+        <button class="btn primary" data-ok>Authorize</button></div></div>`);
+    const input = sheet.querySelector('#secret-pass');
+    const err = sheet.querySelector('#secret-err');
+    if (input) setTimeout(() => { try { input.focus(); } catch (e) {} }, 60);
+    const submit = () => {
+      if ((input.value || '').trim() === '20042004') { closeSheet(); grantSecretJackpot(); }
+      else { err.style.display = 'block'; input.value = ''; try { input.focus(); } catch (e) {} }
+    };
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-ok]').addEventListener('click', submit);
+    if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
+  // The prize: current reward (Mothership + 10× speed + Level 500) PLUS one
+  // billion of EVERY resource — gold, LootCoins, Dread Cores, fuel, iron,
+  // plasma, and Prism Ingots.
+  function grantSecretJackpot() {
+    const BILLION = 1000000000;
+    const haveShip = G.state.ownedShips && G.state.ownedShips.mothership;
+    const gotShip = !haveShip && G.grantShip('mothership');
+    const gotSpeed = !G.state.secretSpeed;
+    if (gotSpeed) { G.state.secretSpeed = true; G.setGameSpeed(10); buildSpeedRow(); }
+    if (G.setLevel) G.setLevel(500);
+    // 1,000,000,000 of every resource
+    G.state.gold = (G.state.gold || 0) + BILLION;
+    G.state.dreadCores = (G.state.dreadCores || 0) + BILLION;
+    if (!G.state.resources) G.state.resources = { fuel: 0, iron: 0, plasma: 0 };
+    G.state.resources.fuel = (G.state.resources.fuel || 0) + BILLION;
+    G.state.resources.iron = (G.state.resources.iron || 0) + BILLION;
+    G.state.resources.plasma = (G.state.resources.plasma || 0) + BILLION;
+    if (G.state.prism) G.state.prism.ingots = (G.state.prism.ingots || 0) + BILLION;
+    try { const pf = window.PRISMFLEET && window.PRISMFLEET.P && window.PRISMFLEET.P(); if (pf) pf.cores = (pf.cores || 0) + 10; } catch (e) {}
+    G.addCredits(BILLION);   // LootCoins (also saves + refreshes)
+    G.save();
+    const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff6ad5'; t.style.fontSize = '24px';
+    t.innerHTML = (gotShip ? '✦ MOTHERSHIP UNLOCKED<br>' : '') +
+      (gotSpeed ? '<span style="color:#ffd24d">⚡ 10× SPEED UNLOCKED</span><br>' : '') +
+      '<span style="color:#7cff9b">💰 +1 BILLION OF EVERY RESOURCE</span><br>' +
+      '<span style="font-size:12px;color:#ffd7f3">Gold · LootCoins · Dread Cores · Fuel · Iron · Plasma · Prism &nbsp;·&nbsp; <b style="color:#7cff9b">Level 500</b></span>';
+    el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 4200);
+    if (window.DREAD && window.DREAD.updateHud) try { window.DREAD.updateHud(); } catch (e) {}
+    refreshAll();
+    if (screen === 'hero') renderHero();
   }
   function tapMyFleet() {
     // SECRET: tap your fleet in the HUD 20 times IN A ROW to unlock EVERY hull
@@ -516,7 +555,7 @@
     G.equipLayout().forEach(({ key, label, icon, item: it }) => {
       const d = document.createElement('div');
       d.className = 'equip-slot' + (it ? '' : ' empty');
-      d.innerHTML = `<div class="slot-icon ${it ? rc(it.rarity) : ''}" style="${it ? 'border-color:' + C.RARITY[it.rarity].color : ''}">${icon}</div>
+      d.innerHTML = `<div class="slot-icon ${it ? rc(it.rarity) : ''}" style="${it ? 'border-color:' + C.RARITY[it.rarity].color : ''}">${it ? itemIcon(it) : icon}</div>
         <div class="slot-meta"><div class="slot-label">${label}</div><div class="slot-item ${it ? rc(it.rarity) : ''}">${it ? it.name : 'Empty'}</div></div>`;
       if (it) d.addEventListener('click', () => openItem(it, 'equipped'));
       el['equip-grid'].appendChild(d);
@@ -670,7 +709,7 @@
           fitted++;
           const col = C.RARITY[it.rarity].color;
           const pc = it.rarity >= 11 ? ' flc-arc ' + rc(it.rarity) : '';
-          chips += `<div class="flc${pc}" data-fli="${key}:${sk}" style="border-color:${col}55"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n" style="color:${col}">${it.name}</span></div>`;
+          chips += `<div class="flc${pc}" data-fli="${key}:${sk}" style="border-color:${col}55"><span class="flc-ic">${itemIcon(it)}</span><span class="flc-n" style="color:${col}">${it.name}</span></div>`;
         } else {
           chips += `<div class="flc empty"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n">empty</span></div>`;
         }
@@ -1154,7 +1193,24 @@
     if (t.rivalCitadelScore != null && !t.owned) actionLabel = '⚔ Siege Citadel';
     let citBlock = '';
     if (t.myCitadel) {
-      citBlock = '<div class="ip-stat"><span class="ip-sname">⛓ Citadel</span><span class="v" style="color:#ffd24d">★ YOURS · 10× resources</span></div>';
+      const clv = G.citadelLevel ? G.citadelLevel(id) : 1;
+      const cmax = 5, cmult = 10 * clv;
+      const uc = G.citadelUpgradeCost ? G.citadelUpgradeCost(id) : null;
+      const pips = Array.from({ length: cmax }, (_, i) => '<span style="width:14px;height:5px;border-radius:3px;background:' + (i < clv ? '#ffd24d' : 'rgba(255,210,77,.18)') + '"></span>').join('');
+      let upgRow = '';
+      if (uc) {
+        const uaf = GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (uc[k2] || 0));
+        const uchips = GM.RES_KEYS.filter((k2) => uc[k2]).map((k2) => '<span style="color:' + ((myRes[k2] || 0) >= uc[k2] ? GM.RES[k2].color : 'var(--bad)') + '">' + GM.RES[k2].glyph + ' ' + G.formatNum(uc[k2]) + '</span>').join(' &nbsp; ');
+        upgRow = '<div style="font-size:12.5px;font-variant-numeric:tabular-nums;margin:7px 0;font-weight:700">' + uchips + '</div>' +
+          '<button class="btn gold" data-upg-cit="' + id + '" ' + (uaf ? '' : 'disabled') + ' style="width:100%">⬆ Rank Up → ' + (clv + 1) + ' · ' + (10 * (clv + 1)) + '× output</button>';
+      } else {
+        upgRow = '<div style="font-size:11px;color:#7ce0a0;margin-top:6px;text-align:center;font-weight:700">★ MAX RANK — fully fortified</div>';
+      }
+      citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
+        '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;align-items:center;gap:8px">⛓ Your Citadel · Rank ' + clv + '/' + cmax + '<span style="display:inline-flex;gap:3px">' + pips + '</span></div>' +
+        '<div style="font-size:11px;color:#9fb0c4;margin-top:5px">' + cmult + '× resource output · +' + (25 * (clv - 1)) + '% defense fleet' + (clv < cmax ? ' · each rank makes it costlier for rivals to raze' : '') + '</div>' +
+        upgRow +
+      '</div>';
     } else if (t.rivalCitadelScore != null) {
       citBlock = '<div class="ip-stat"><span class="ip-sname">⛓ Enemy Citadel</span><span class="v" style="color:#ff8a64">⚡' + G.formatNum(t.rivalCitadelScore) + ' clone fleet defends</span></div>';
     } else if (t.owned && G.citadelBuildCost) {
@@ -1190,6 +1246,11 @@
       if (r.ok) { closeSheet(); toast('⛓ Citadel raised — this tile now pays 10×!', '#ffd24d'); renderGalaxy(); }
       else toast(r.reason === 'max' ? 'Citadel limit reached (50)' : r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot build here', '#e23b4e');
     }));
+    sheet.querySelectorAll('[data-upg-cit]').forEach((b) => b.addEventListener('click', () => {
+      const r = G.upgradeCitadel(b.dataset.upgCit);
+      if (r.ok) { closeSheet(); toast('⬆ Citadel Rank ' + r.lv + ' — now paying ' + (10 * r.lv) + '×!', '#ffd24d'); renderGalaxy(); }
+      else toast(r.reason === 'max' ? 'Already max rank' : r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot rank up', '#e23b4e');
+    }));
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
       const r = G.warp(id);
@@ -1204,14 +1265,46 @@
     el['zones-sub'].textContent = 'Recommended: Zone ' + rec;
     const blockCap = C.zoneCap(s.highestDungeonReached);
     const top = Math.max(12, s.highestUnlocked + 3);
-    let html = '';
+    // —— GALACTIC JOURNEY —— zones group into named GALAXIES (one per 10-zone
+    // block, matching the gate cadence); each zone is a planet on a warp route
+    // that stretches further and further from home.
+    const GAL_NAMES = ['Azure Reach', 'Verdant Expanse', 'Ember Wastes', 'Violet Deep', 'Umbral Rift', 'Void Frontier', 'Primeval Drift', 'Eventide Abyss'];
+    const GAL_HUES = [212, 152, 26, 276, 322, 196, 46, 258];
+    const ROMAN = ['II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    const galInfo = (b) => {
+      const i = b % GAL_NAMES.length, cyc = Math.floor(b / GAL_NAMES.length);
+      return { name: GAL_NAMES[i] + (cyc ? ' ' + (ROMAN[cyc - 1] || (cyc + 1)) : ''), hue: GAL_HUES[i] };
+    };
+    const lyOf = (d) => Math.round(Math.pow(d, 1.6) * 3.2);
+    let html = '<div class="zj">';
     const safe = s.currentDungeon < 1;
     html += `<div class="zone-row safe ${safe?'active':''}" data-d="0">
         <div class="z-num" style="color:var(--hp)">⌂</div>
-        <div class="z-meta"><div class="z-name" style="color:var(--hp)">Your Hangar</div>
-          <div class="z-sub">Home bay · review &amp; refit your ship</div></div>
+        <div class="z-meta"><div class="z-name" style="color:var(--hp)">Home Station</div>
+          <div class="z-sub">Safe harbor · 0 ly · review &amp; refit your ship</div></div>
         <div class="z-go">${safe?'● DOCKED':'RETURN'}</div></div>`;
+    let lastBlock = -1;
     for (let d = 1; d <= top; d++) {
+      const gb = Math.floor((d - 1) / 10);
+      if (gb !== lastBlock) {
+        const gi = galInfo(gb);
+        if (gb > 0) {
+          const delta = lyOf(gb * 10 + 1) - lyOf(gb * 10);
+          html += `<div class="zj-warp">⟱ warp ${G.formatNum(delta)} ly deeper</div>`;
+        }
+        html += `<div class="zj-gal" style="--gh:${gi.hue}">
+          <div class="zj-gal-name">✦ ${gi.name}</div>
+          <div class="zj-gal-meta">Zones ${gb * 10 + 1}–${(gb + 1) * 10} · ≈ ${G.formatNum(lyOf(gb * 10 + 1))} light-years out${gb >= 5 ? ' · ☢ DEEP SPACE' : ''}</div>
+        </div>`;
+        lastBlock = gb;
+      }
+      const ghue = galInfo(gb).hue + (((d * 37) % 29) - 14); // per-planet hue drift
+      // seeded surface-texture vars so every planet looks distinct
+      const px1 = 18 + (d * 13) % 58, py1 = 22 + (d * 29) % 52;
+      const px2 = 30 + (d * 41) % 50, py2 = 30 + (d * 17) % 55;
+      const pba = -25 + (d * 47) % 50;
+      const ptype = ['gas', 'rock', 'ice'][d % 3];
+      const pvars = `--gh:${ghue};--ba:${pba}deg;--x1:${px1}%;--y1:${py1}%;--x2:${px2}%;--y2:${py2}%`;
       const locked = d > s.highestUnlocked, active = d === s.currentDungeon;
       const types = C.ENEMIES.filter((e) => d >= e.minDungeon), topType = types[types.length-1];
       const blocked = d > blockCap;
@@ -1226,18 +1319,35 @@
                     (citCd>0?`<span class="z-bon citcd">◷ rebuilds in ${fmtCd(citCd)}</span>`:'') +
                     (bz.density>1?`<span class="z-bon dens">⚔ ${bz.density}× density</span>`:'') +
                     (bz.quality>1?`<span class="z-bon qual">✦ ${bz.quality}× loot quality</span>`:'');
-      html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}">
-        <div class="z-num">${d}</div>
+      html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}" style="${pvars}">
+        <div class="z-orb ${ptype}${d % 5 === 0 ? ' ringed' : ''}${cit ? ' cit' : ''}${wave ? ' wav' : ''}"><span>${d}</span></div>
         <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}</div>
-          <div class="z-sub">Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
+          <div class="z-sub">${G.formatNum(lyOf(d))} ly · Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
           ${bonus?`<div class="z-bons">${bonus}</div>`:''}
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
         <div class="z-go">${locked ? lockLabel : citCd>0 ? '◷ ' + fmtCd(citCd) : active ? '● HERE' : (cit ? '⛴ BREACH' : wave ? '◎ ENTER' : (d===rec ? '★ DEPLOY' : 'DEPLOY'))}</div></div>`;
     }
+    html += '</div>';
     el['zones-body'].innerHTML = html;
     el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => { G.selectDungeon(+row.dataset.d); showScreen('battle'); }));
     const recRow = el['zones-body'].querySelector('.zone-row.rec');
     if (recRow) el['zones-body'].scrollTop = Math.max(0, recRow.offsetTop - 90);
+    // floating "jump to ★" chip — appears whenever the recommended zone is off-screen
+    if (recRow) {
+      const jump = document.createElement('button');
+      jump.className = 'zj-jump';
+      jump.innerHTML = '★ RECOMMENDED';
+      el['zones-body'].appendChild(jump);
+      const zb = el['zones-body'];
+      const syncJump = () => {
+        const vis = recRow.offsetTop > zb.scrollTop - 20 && recRow.offsetTop < zb.scrollTop + zb.clientHeight - 60;
+        jump.classList.toggle('show', !vis);
+        jump.classList.toggle('up', recRow.offsetTop < zb.scrollTop);
+      };
+      zb.addEventListener('scroll', syncJump, { passive: true });
+      jump.addEventListener('click', () => { zb.scrollTo({ top: Math.max(0, recRow.offsetTop - 90), behavior: 'smooth' }); });
+      syncJump();
+    }
   }
 
   // ==========================================================================
@@ -1373,6 +1483,7 @@
   function megaShipCard(key) {
     const ship = C.SHIP_BY_KEY[key]; const st = G.shipBuyState(key);
     const cls = 'sc-' + ship.cls.toLowerCase();
+    const sina = key === 'titansina';   // FINAL-CLASS showcase card
     const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
     const mods = modSummary(ship.mods);
     const lvl = G.state.level || 1;
@@ -1390,10 +1501,15 @@
         ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ <span style="color:#f2a93c">$</span> ${G.formatNum(u.cost.gold)} <span style="color:#c07bff">✦</span> ${G.formatNum(u.cost.plasma)}</button>`}
       </div>`;
     }
-    return `<div class="ship-card ${cls} apex dread ${st.active ? 'is-active' : ''}">
+    return `<div class="ship-card ${cls} apex dread ${sina ? 'sina ' : ''}${st.active ? 'is-active' : ''}">
+      ${sina ? `<div class="sina-hero">
+        <i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>
+        <img src="ships/ship-titansina.png" alt="" loading="lazy">
+        <span class="sina-callout">2× THE DREAD OMEGA · FULL-ZONE RANGE</span>
+      </div>` : ''}
       <div class="ship-top">
-        <div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>
-        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip dread">DREAD</span></div>
+        ${sina ? '' : `<div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>`}
+        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip ${sina ? 'sina' : 'dread'}">${sina ? 'FINAL CLASS' : 'DREAD'}</span></div>
           <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
           <div class="ship-layout">${layout}</div></div>
         <div class="ship-act">${action}</div>
@@ -1493,6 +1609,22 @@
     const active = stateCls === 'active';
     const lvl = (owned && G.shipUpInfo) ? G.shipUpInfo(key).level : 0;
     const badge = tileBadge(key, ship);
+    // TITAN SINA — full-row showcase tile in the ships grid
+    if (key === 'titansina') {
+      return `<button class="ship-tile st-sina ${stateCls}" data-ship-tile="${key}">
+        <div class="sts-art">
+          <i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>
+          <img src="ships/ship-${key}.png" alt="" loading="lazy">
+          ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}
+        </div>
+        <div class="sts-meta">
+          <div class="st-name">${ship.name} <span class="apex-chip sina">FINAL CLASS</span></div>
+          <div class="sts-callout">2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS</div>
+          <div class="st-stats"><span>⚔${ship.weapons}</span><span>⊕${ship.ammo}</span><span>⛨${ship.hull}</span><span class="dr">◎${ship.drones}</span></div>
+          ${owned ? '' : `<div class="st-badge">${badge}</div>`}
+        </div>
+      </button>`;
+    }
     return `<button class="ship-tile ${stateCls}" data-ship-tile="${key}">
       <div class="st-thumb"><img src="ships/ship-${key}.png" alt="" loading="lazy">
         ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}</div>
@@ -1571,23 +1703,36 @@
     </div>`;
   }
   // ==========================================================================
-  // ITEM ICONOGRAPHY — refreshed slot icons; weapons show their CLASS glyph
-  // color-coded with a matching glow (laser/gatling/missile/rail/plasma/warden).
+  // ITEM ICONOGRAPHY — each gear slot has a fleet-themed glyph + signature colour
+  // (Munitions amber, Hull steel, Thrusters teal, Targeting green, Shield violet)
+  // rendered with a matching glow. Weapons show their CLASS glyph & colour.
   // ==========================================================================
-  const SLOT_ICONS2 = {
-    bow:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17L14 6l4 4L7 21H3z"/><path d="M14 6l2-2 4 4-2 2"/><circle cx="19" cy="5" r="1"/></svg>',
-    arrows: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20V9l2-3.5L12 9v11"/><path d="M14 20V6l2-3 2 3v14"/><path d="M5.5 20h13"/></svg>',
-    armor:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9-8 11-4.6-2-8-6-8-11V5z"/><path d="M12 6.5l4 1.5v3.2c0 2.6-1.7 4.7-4 5.8-2.3-1.1-4-3.2-4-5.8V8z"/></svg>',
-    boots:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6l1.2 10H7.8z"/><path d="M7 12h10l1 4H6z"/><path d="M12 16v4M8.6 16l-1.6 4M15.4 16l1.6 4"/></svg>',
-    gloves: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><path d="M12 2v3.4M12 18.6V22M2 12h3.4M18.6 12H22"/></svg>',
-    amulet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z"/><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg>',
+  const SLOT_META = {
+    arrows: { color: '#ffc24d', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="4" width="11" height="16" rx="2"/><path d="M9.5 2.5h5"/><path d="M12.8 8l-2.6 4.2H13l-2 3.8"/></svg>' },
+    armor:  { color: '#8fb4d8', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v9L12 22l-8-6.5v-9z"/><path d="M12 6.5l4 2.3v4.6L12 17l-4-3.6V8.8z"/></svg>' },
+    boots:  { color: '#4fd0e0', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 8H8z"/><path d="M8 11h8l-1 4H9z"/><path d="M11.2 15l-1.5 6M12.8 15l1.5 6M12 15v6"/></svg>' },
+    gloves: { color: '#7ce06a', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>' },
+    amulet: { color: '#9d8bff', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z"/><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg>' },
   };
+  // Weapon-class icons — crisp inline SVGs (the old Unicode glyphs ⌶/⫷/✺
+  // are missing from many device fonts, so weapons often showed NO icon).
+  const WCLASS_ICONS = {
+    laser:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12" r="2.6"/><path d="M8.1 12H17"/><path d="M17 9.6l4.5 2.4L17 14.4z"/><path d="M10.5 9.2l1.6 1.6M10.5 14.8l1.6-1.6"/></svg>',
+    gatling: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="12" r="3.4"/><path d="M9.9 9.6h8.6M9.9 12h10.6M9.9 14.4h8.6"/><path d="M21.5 9.6v4.8"/></svg>',
+    missile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5c2.2 2.3 3.2 5.3 3.2 8.7l-1 5.8h-4.4l-1-5.8c0-3.4 1-6.4 3.2-8.7z"/><circle cx="12" cy="9" r="1.5"/><path d="M9.3 13.5L6.5 17M14.7 13.5L17.5 17M12 17v4"/></svg>',
+    rail:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5h15M3 15.5h15"/><rect x="8" y="10.4" width="7" height="3.2" rx="1.6"/><path d="M18.5 12h3"/></svg>',
+    plasma:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3M6.2 6.2l2.1 2.1M15.7 15.7l2.1 2.1M17.8 6.2l-2.1 2.1M8.3 15.7l-2.1 2.1"/></svg>',
+    support: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8.4v7.2M8.4 12h7.2"/></svg>',
+  };
+  function wclassIcon(wc) { return WCLASS_ICONS[wc.key] || ('<span class="wci">' + wc.glyph + '</span>'); }
   function itemIcon(it) {
     if (it && it.slot === 'bow' && window.ITEMS && window.ITEMS.weaponClassOf) {
       const wc = window.ITEMS.weaponClassOf(it);
-      return `<span class="wci" style="color:${wc.color};text-shadow:0 0 9px ${wc.color}">${wc.glyph}</span>`;
+      return `<span class="sci" style="color:${wc.color};filter:drop-shadow(0 0 5px ${wc.color}88)">${wclassIcon(wc)}</span>`;
     }
-    return (it && SLOT_ICONS2[it.slot]) || (it && it.icon) || '';
+    const m = it && SLOT_META[it.slot];
+    if (m) return `<span class="sci" style="color:${m.color};filter:drop-shadow(0 0 5px ${m.color}88)">${m.svg}</span>`;
+    return (it && it.icon) || '';
   }
   // —— LOOTCOIN —— the premium micro-transaction currency. One unique mark used
   // everywhere it appears: a hex coin, gold → violet, with a loot-gem facet cut
@@ -1626,6 +1771,8 @@
       const lm = G.getLCMarket(), lcHave = G.getCredits();
       const C2 = G.LC_PRICES || { cosmic: 10000, prim: 115000 };
       const fmtT = (sec) => { const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s2 = sec%60; return (h>0? h+':' : '') + (m<10&&h>0?'0':'')+m+':'+(s2<10?'0':'')+s2; };
+      // —— COSMIC JACKPOT CACHE removed from the market (July 2026) ——
+      //     Backend roll/purchase logic in game-v93.js is untouched.
       {
         const pit = lm.prim.item, pr = C.RARITY[pit.rarity];
         const sold = lm.prim.bought, afford = lcHave >= C2.prim;
@@ -1707,7 +1854,7 @@
           const au = window.ITEMS.supportAura(it);
           if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(60, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
         }
-        wcHTML = `<div class="ip-wclass" style="color:${wc.color}">${wc.glyph} ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`;
+        wcHTML = `<div class="ip-wclass" style="color:${wc.color}"><span class="wcx">${wclassIcon(wc)}</span> ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`;
       }
       return `<div class="ip-name ${rc(it.rarity)}">${it.name}</div>
         <div class="ip-type">${r.name} · ${C.SLOTS[it.slot].name} · matched to your level</div>
@@ -1740,13 +1887,68 @@
         else toast('Cannot buy', '#e23b4e');
       });
     }));
-    // live countdowns for the LootCoin market
+    // —— COSMIC JACKPOT CACHE — dramatic confirm → reveal ——
+    (function () {
+      const openJackpot = () => {
+        const lm = G.getLCMarket();
+        if (lm.jackpot && lm.jackpot.bought) { toast('Jackpot already pulled this rotation', '#c77bff'); return; }
+        const price = (G.LC_PRICES || {}).jackpot || 1000000;
+        const have = G.getCredits(), afford = have >= price;
+        const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Cosmic Jackpot</div><div class="sheet-body">
+          <div class="jkpt-confirm">
+            <div class="jkpt-chest big"><div class="jkpt-chest-glow"></div><span class="jkpt-chest-ic">🎁</span></div>
+            <p class="jkpt-cline">One high-roll pull. Value lands <b>between Cosmic and Eternal</b> — with a <b style="color:#ffd24d">0.2%</b> shot at the final two tiers (<b style="color:#c061ff">Relic</b> / <b style="color:#ff2330">Artifact</b>).</p>
+          </div>
+          <div class="ip-stat" style="margin-top:8px"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${G.formatNum(price)} LootCoins</span></div>
+          <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
+          ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
+          <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
+            <button class="btn gold" data-ok>${afford ? 'Pull the Jackpot' : 'Get LootCoins'}</button></div></div>`);
+        sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+        sheet.querySelector('[data-ok]').addEventListener('click', () => {
+          if (!afford) { closeSheet(); openCredits(); return; }
+          const res = G.buyLCMarket('jackpot');
+          if (!res.ok) {
+            closeSheet();
+            if (res.reason === 'full') toast('Loot hold is FULL — clear space first', '#e23b4e');
+            else if (res.reason === 'credits') { openCredits(); }
+            else toast('Cannot buy', '#e23b4e');
+            return;
+          }
+          revealJackpot(res.item);
+        });
+      };
+      // spin-up → reveal the pulled item with rarity flair
+      const revealJackpot = (it) => {
+        const r = C.RARITY[it.rarity];
+        const top = it.rarity >= 12; // Relic / Artifact — the jackpot tiers
+        const sheet = showSheet(`<div class="sheet-body jkpt-reveal">
+          <div class="jkr-stage" style="--rcol:${r.color};--rglow:${r.glow}">
+            <div class="jkr-burst"></div>
+            <div class="jkr-ring"></div>
+            <div class="jkr-ic ${rc(it.rarity)}">${itemIcon(it)}</div>
+          </div>
+          <div class="jkr-rarity" style="color:${r.color}">${top ? '★ JACKPOT ★ ' : ''}${r.name}</div>
+          <div class="jkr-name ${rc(it.rarity)}">${it.name}</div>
+          <div class="jkr-type">${C.SLOTS[it.slot].name} · matched to your level</div>
+          <div class="sheet-actions" style="margin-top:14px"><button class="btn primary" data-x>${top ? 'Incredible!' : 'To Loot hold'}</button></div></div>`);
+        sheet.classList.add('jkr-sheet');
+        if (top) sheet.classList.add('jkr-top');
+        // celebratory toast + confetti-ish flash
+        setTimeout(() => { try { toast((top ? '★ JACKPOT — ' : '✧ ') + r.name + ' ' + it.name, r.color); } catch (e) {} }, 250);
+        sheet.querySelector('[data-x]').addEventListener('click', () => { closeSheet(); renderStore(); });
+      };
+      const jc = el['store-body'].querySelector('[data-jackpot], [data-jackpot-buy]');
+      el['store-body'].querySelectorAll('[data-jackpot], [data-jackpot-buy]').forEach((n) =>
+        n.addEventListener('click', (e) => { e.stopPropagation(); openJackpot(); }));
+    })();
     if (storeCat === 'market') {
       clearInterval(_lcmTimer);
       _lcmTimer = setInterval(() => {
         if (screen !== 'store' || storeCat !== 'market') { clearInterval(_lcmTimer); return; }
         const fmtT = (sec) => { const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s2 = sec%60; return (h>0? h+':' : '') + (m<10&&h>0?'0':'')+m+':'+(s2<10?'0':'')+s2; };
         const cc = $('lc-cos-cd'); if (cc) cc.textContent = fmtT(G.lcCosmicTimeLeft());
+        const jc = $('lc-jkpt-cd'); if (jc) jc.textContent = fmtT(G.lcCosmicTimeLeft());
         const pc = $('lc-prim-cd'); if (pc) pc.textContent = fmtT(G.lcPrimTimeLeft());
         // rotation flipped → re-render with fresh stock
         if (G.lcCosmicTimeLeft() <= 0 || G.lcPrimTimeLeft() <= 0) renderStore();
@@ -1917,7 +2119,7 @@
     let grid = '';
     C.SLOT_KEYS.forEach((slot) => {
       const it = eq[slot], def = C.SLOTS[slot];
-      grid += `<div class="lo-slot ${it?bl(it.rarity):''}"><div class="lo-ic ${it?rc(it.rarity):''}">${def.icon}</div>
+      grid += `<div class="lo-slot ${it?bl(it.rarity):''}"><div class="lo-ic ${it?rc(it.rarity):''}">${it?itemIcon(it):def.icon}</div>
         <div style="min-width:0"><div class="lo-nm ${it?rc(it.rarity):''}">${it?it.name:'—'}</div><div class="lo-r">${it?C.RARITY[it.rarity].name:'empty'}</div></div></div>`;
     });
     const sheet = showSheet(`<div class="sheet-head">${p.isMe?'Your Loadout':p.name}</div><div class="sheet-body">
@@ -1969,7 +2171,7 @@
           const au = window.ITEMS.supportAura(item);
           if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(60, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
         }
-        return `<div class="ip-wclass" style="color:${wc.color}">${wc.glyph} ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`; })()}
+        return `<div class="ip-wclass" style="color:${wc.color}"><span class="wcx">${wclassIcon(wc)}</span> ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`; })()}
       ${statHTML}${cmpNote}${actions||'<div class="sheet-actions"><button class="btn" data-x>Close</button></div>'}</div></div>`);
     const eq = sheet.querySelector('[data-eq]'); if (eq) eq.addEventListener('click', () => { G.equip(item, 'primary'); closeSheet(); });
     const eq2 = sheet.querySelector('[data-eq2]'); if (eq2) eq2.addEventListener('click', () => { G.equip(item, 'secondary'); closeSheet(); });

@@ -433,6 +433,16 @@
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
       megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:15000000, dreadCores:60 } },
+    // TITAN SINA — the FINAL-CLASS hero ship. Double the Dread Omega in every
+    // stat, with weapon range that effectively covers the entire battle zone.
+    // Its fire renders as full-spectrum gatling tracers — lasers of all colors.
+    // Cost: 1T gold + 1B of each galaxy resource + 1,000 Void Credits (Dread
+    // Cores) + 100,000 LootCoins.
+    { key:'titansina', name:'Titan Sina', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:128,
+      mods:{ hpPct:5280, dmgPct:2970, multiShot:792, critChance:660, critDamage:2310, moveSpeed:496, atkSpeedPct:990, rangePct:4000, lifeSteal:146 },
+      tag:'FINAL CLASS · TITAN SINA', sinaTracers:true, reqLevel:200,
+      desc:'The final-class hero ship — twice the Dread Omega in every dimension. Its guns reach across the entire battle zone, spraying full-spectrum tracer fire.',
+      megaCost:{ gold:1e12, fuel:1e9, iron:1e9, plasma:1e9, credits:100000, dreadCores:1000 } },
   ];
   // Economy tuning: hulls cost 3× gold and demand 5× the kills to unlock.
   SHIPS.forEach((s) => {

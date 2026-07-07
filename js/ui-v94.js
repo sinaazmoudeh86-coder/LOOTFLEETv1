@@ -81,6 +81,10 @@
     {
       const pbf = document.getElementById('pb-fleet');
       if (pbf) { pbf.style.cursor = 'pointer'; pbf.addEventListener('click', tapMyFleet); }
+      const lcb = document.getElementById('hud-lcbuy');
+      if (lcb) lcb.addEventListener('click', openCredits);
+      const lcc = document.getElementById('hud-lc-chip');
+      if (lcc) lcc.addEventListener('click', openCredits);
     }
     document.querySelectorAll('#hangar-dock .hd-btn').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.screen === 'hero') tapMyShip();
@@ -317,6 +321,13 @@
       <p class="acct-hint" style="margin-bottom:6px">Get a text for big updates, heat resets &amp; exclusive drops.</p>
       <div class="acct-row"><input id="ac-phone" class="acct-in" type="tel" placeholder="+1 555 123 4567" value="${G.state.smsPhone || ''}"><button class="btn" id="ac-sms">${G.state.smsOptIn ? 'Update' : 'Sign up'}</button></div>
       ${G.state.smsOptIn ? '<p class="acct-hint" style="color:#7ce0a0">✓ Signed up — you can opt out anytime here.</p>' : ''}
+      <div class="lo-sect" style="margin-top:11px">🛠 Support</div>
+      <div class="acct-row"><a class="btn" href="support.html" target="_blank" rel="noopener" style="text-decoration:none;text-align:center;flex:1">Help &amp; Support</a></div>
+      ${(window.LF_FS && window.LF_FS.supported) ? `<div class="lo-sect" style="margin-top:11px">Display</div>
+      <div class="acct-row"><button class="btn" id="ac-fs" style="flex:1">⛶ ${(window.LF_FS.on && window.LF_FS.on()) ? 'Exit full screen' : 'Enter full screen'}</button></div>` : ''}
+      <div class="lo-sect" style="margin-top:11px;color:#ff8a96">Danger zone</div>
+      <p class="acct-hint" style="margin-bottom:6px">Permanently delete your account, save data and leaderboard entry. This cannot be undone.</p>
+      <div class="acct-row"><button class="btn" id="ac-delete" style="border-color:rgba(255,73,95,.5);color:#ff8a96">Delete account…</button></div>
       <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Close</button><button class="btn" id="ac-signout" style="border-color:rgba(255,73,95,.5);color:#ff8a96">⏻ Sign out</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const $s = (id) => sheet.querySelector('#' + id);
@@ -348,6 +359,28 @@
     });
     const so = $s('ac-signout'); if (so) so.addEventListener('click', () => {
       if (confirm('Sign out of ' + (s.name || 'this account') + '?')) { if (window.AUTH && window.AUTH.signOut) window.AUTH.signOut(); }
+    });
+    const del = $s('ac-delete'); if (del) del.addEventListener('click', () => { closeSheet(); openDeleteAccountSheet(s); });
+    const fs = $s('ac-fs'); if (fs) fs.addEventListener('click', () => { window.LF_FS.toggle(); closeSheet(); });
+  }
+  // ==========================================================================
+  // ACCOUNT DELETION (App Review 5.1.1(v)) — typed confirmation, then wipes
+  // cloud rows + local save + credentials and signs out. Fully in-app.
+  // ==========================================================================
+  function openDeleteAccountSheet(s) {
+    const sheet = showSheet(`<div class="sheet-head" style="color:#ff8a96">Delete account</div><div class="sheet-body">
+      <p style="font-size:12px;line-height:1.55;color:var(--muted)">This permanently deletes <b style="color:#fff">${s.name || 'this account'}</b>${s.email ? ' (' + s.email + ')' : ''} — your fleet, progress, LootCoins balance, cloud save and leaderboard entry. <b style="color:#ff8a96">This cannot be undone.</b></p>
+      <p style="font-size:11.5px;margin:10px 0 6px;color:var(--muted)">Type <b style="color:#ff8a96">DELETE</b> to confirm:</p>
+      <div class="acct-row"><input id="del-confirm" class="acct-in" autocomplete="off" placeholder="DELETE"></div>
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Cancel</button><button class="btn" id="del-go" disabled style="border-color:rgba(255,73,95,.5);color:#ff8a96;opacity:.5">Delete permanently</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const inp = sheet.querySelector('#del-confirm'), go = sheet.querySelector('#del-go');
+    inp.addEventListener('input', () => { const ok = inp.value.trim().toUpperCase() === 'DELETE'; go.disabled = !ok; go.style.opacity = ok ? '1' : '.5'; });
+    go.addEventListener('click', async () => {
+      if (go.disabled) return;
+      go.disabled = true; go.textContent = 'Deleting…';
+      try { if (window.AUTH && window.AUTH.deleteAccount) await window.AUTH.deleteAccount(); }
+      catch (e) { toast('Could not delete — try again or email support@lootfleet.com', '#e23b4e'); go.disabled = false; go.textContent = 'Delete permanently'; }
     });
   }
   function openProSheet() {
@@ -631,23 +664,21 @@
     let host = document.getElementById('ship-upgrade');
     if (!host){ host = document.createElement('div'); host.id = 'ship-upgrade'; const anchor = $('pro-banner') || document.getElementById('char-portrait'); if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(host, anchor); else return; }
     const body = inf.maxed
-      ? `<div style="text-align:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:13px;color:${col};letter-spacing:.06em">★ MAX HULL · APEX</div>`
-      : `<div style="display:flex;justify-content:space-between;font-size:11px;color:#93a2ba;margin-bottom:8px">
-           <span>Next level</span><span style="color:#46d27a;font-weight:700">+10% DMG · +12% HP · +5% Rate</span></div>
-         <button class="btn primary" id="ship-up-btn" ${inf.afford?'':'disabled'} style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;${inf.afford?'':'opacity:.5;filter:grayscale(.5);cursor:not-allowed'}">
+      ? `<div style="text-align:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:12px;color:${col};letter-spacing:.06em">★ MAX HULL · APEX</div>`
+      : `<button class="btn primary" id="ship-up-btn" ${inf.afford?'':'disabled'} style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:7px 10px;${inf.afford?'':'opacity:.5;filter:grayscale(.5);cursor:not-allowed'}">
            <span>⬆ Upgrade Hull</span>
            ${hullCostHTML(inf)}
          </button>
-         <div style="font-size:9.5px;color:#ff9a64;margin-top:7px;text-align:center;line-height:1.35">⚠ Destroyed hull resets to Lv 1 — upgrade resources are lost on death</div>`;
+         <div style="font-size:8.5px;color:#ff9a64;margin-top:5px;text-align:center;line-height:1.3">⚠ Destroyed hull resets to Lv 1 — upgrade resources are lost on death</div>`;
     host.innerHTML =
-      `<div style="background:linear-gradient(180deg,#172030,#131a28);border:1px solid ${col}55;border-radius:12px;padding:12px 13px;margin:0 12px 10px;box-shadow:0 0 18px ${col}22">
-         <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
-           <div style="width:30px;height:30px;border-radius:8px;background:${col}22;border:1px solid ${col};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:13px;color:${col}">${inf.level}</div>
-           <div style="flex:1;min-width:0">
-             <div style="font-family:Orbitron,sans-serif;font-weight:700;font-size:13px;color:#eaf0fa">${ship?ship.name:'Hull'} <span style="color:${col};font-size:10px;letter-spacing:.08em">· ${tier.name}</span></div>
-             <div style="font-size:10.5px;color:#46d27a;font-weight:700;margin-top:1px">+${inf.bonus.dmg}% DMG · +${inf.bonus.hp}% HP · +${inf.bonus.rate}% Rate</div>
+      `<div style="background:linear-gradient(180deg,#172030,#131a28);border:1px solid ${col}55;border-radius:11px;padding:8px 10px;margin:0 12px 8px;box-shadow:0 0 14px ${col}1c">
+         <div style="display:flex;align-items:center;gap:8px;margin-bottom:${inf.maxed?'0':'7px'}">
+           <div style="width:24px;height:24px;border-radius:7px;background:${col}22;border:1px solid ${col};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${col};flex:none">${inf.level}</div>
+           <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap">
+             <span style="font-family:Orbitron,sans-serif;font-weight:700;font-size:12px;color:#eaf0fa;white-space:nowrap">${ship?ship.name:'Hull'} <span style="color:${col};font-size:9px;letter-spacing:.08em">· ${tier.name}</span></span>
+             <span style="font-size:9.5px;color:#46d27a;font-weight:700;white-space:nowrap">+${inf.bonus.dmg}% DMG · +${inf.bonus.hp}% HP · +${inf.bonus.rate}% Rate</span>
            </div>
-           <div style="font-family:Orbitron,sans-serif;font-size:9px;letter-spacing:.14em;color:#6f7f99;text-transform:uppercase">Hull&nbsp;Lv</div>
+           ${inf.maxed?'':'<span style="font-size:9px;color:#93a2ba;white-space:nowrap">next: <b style="color:#46d27a">+10/+12/+5%</b></span>'}
          </div>
          ${body}
        </div>`;
@@ -1504,7 +1535,7 @@
     return `<div class="ship-card ${cls} apex dread ${sina ? 'sina ' : ''}${st.active ? 'is-active' : ''}">
       ${sina ? `<div class="sina-hero">
         <i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>
-        <img src="ships/ship-titansina.png" alt="" loading="lazy">
+        <img src="ships/ship-titansina.png" alt="" decoding="async">
         <span class="sina-callout">2× THE DREAD OMEGA · FULL-ZONE RANGE</span>
       </div>` : ''}
       <div class="ship-top">
@@ -1614,7 +1645,7 @@
       return `<button class="ship-tile st-sina ${stateCls}" data-ship-tile="${key}">
         <div class="sts-art">
           <i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>
-          <img src="ships/ship-${key}.png" alt="" loading="lazy">
+          <img src="ships/ship-${key}.png" alt="" decoding="async">
           ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}
         </div>
         <div class="sts-meta">
@@ -1740,6 +1771,9 @@
   const LC_ICON = '<svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".55" stop-color="#f2a93c"/><stop offset="1" stop-color="#b86adf"/></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg)" stroke="#2a1808" stroke-width="1.1"/><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"/><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg)"/><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"/></svg>';
   function renderStore() {
     let html = hangarTabsHTML(storeCat);
+    // ALWAYS-VISIBLE LootCoins storefront entry (App Review 2.1(b): IAPs must be
+    // locatable in-app — Hangar ▸ top banner ▸ pack sheet).
+    html += `<button class="lc-store-cta" data-getlc>${LC_ICON}<span><b>Get LootCoins</b><i>Packs: 25,000 · 50,000 · 75,000 · 100,000</i></span><em>SHOP ›</em></button>`;
     const cur = C.SHIP_BY_KEY[G.state.ship];
 
     if (storeCat === 'ships') {
@@ -1818,7 +1852,14 @@
       html += '</div>';
     }
 
-    el['store-body'].innerHTML = html;
+    {
+      // preserve scroll through re-renders (buying/upgrading shouldn't jump to top)
+      const sb = el['store-body'];
+      let _sc = sb; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
+      const _st = _sc ? _sc.scrollTop : 0;
+      sb.innerHTML = html;
+      if (_sc) _sc.scrollTop = _st;
+    }
     // featured LootCoin ship offer
     el['store-body'].querySelectorAll('[data-lcship]').forEach((b) => b.addEventListener('click', () => openShipLCBuy(b.dataset.lcship, +b.dataset.lcprice)));
     // render each card's icon as the ACTUAL battle hull (same renderer as combat)
@@ -1995,6 +2036,8 @@
     }));
     // hangar segment tabs (My Ship / store categories)
     wireHangarTabs(el['store-body']);
+    const glc = el['store-body'].querySelector('[data-getlc]');
+    if (glc) glc.addEventListener('click', openCredits);
     // live-refresh the construction countdown while a hull is building
     clearInterval(_buildTick); _buildTick = null;
     if (storeCat === 'ships' && G.getConstruction && G.getConstruction()) {
@@ -2447,5 +2490,36 @@
     sheet.querySelector('[data-x]').addEventListener('click', () => { closeSheet(); refreshAll(); });
   }
 
-  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet };
+  // ==========================================================================
+  // PURCHASE RESULT (all platforms — web/Stripe, iOS, Android): explicit
+  // confirmation screen after checkout. ok=true → thank-you; ok=false → sorry
+  // + retry/support. Called by js/payments-v91.js.
+  // ==========================================================================
+  function purchaseResult(ok, info) {
+    info = info || {};
+    const what = info.label || (info.credits ? info.credits.toLocaleString() + ' LootCoins' : 'your purchase');
+    if (ok) {
+      const sheet = showSheet(`<div class="sheet-head" style="color:#7ce0a0">✓ Purchase complete</div><div class="sheet-body" style="text-align:center">
+        <div style="font-size:44px;line-height:1;margin:6px 0 10px">🎉</div>
+        <p style="font-size:15px;font-weight:700;margin-bottom:6px">Thanks for purchasing ${what}!</p>
+        <p style="font-size:12px;color:var(--muted);line-height:1.55">${info.credits ? 'The coins are in your balance now — check the top bar.' : 'It\u2019s active on your account now.'} A receipt was sent to your payment email.</p>
+        <div class="sheet-actions" style="margin-top:14px;justify-content:center"><button class="btn gold" data-x>Awesome</button></div></div>`);
+      sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    } else {
+      const sheet = showSheet(`<div class="sheet-head" style="color:#ff8a96">Purchase not completed</div><div class="sheet-body">
+        <p style="font-size:14px;font-weight:700;margin-bottom:6px">Sorry — we couldn\u2019t confirm ${what}.</p>
+        <p style="font-size:12px;color:var(--muted);line-height:1.55">If you cancelled checkout, nothing was charged. If you <b>did</b> complete payment, don\u2019t worry — delivery can take a couple of minutes and will land automatically. You can also re-check now, or contact support with your receipt and we\u2019ll credit it manually.</p>
+        <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Close</button><button class="btn" data-retry>Check again</button><a class="btn" href="mailto:support@lootfleet.com?subject=Purchase%20issue" style="text-decoration:none;text-align:center">Contact support</a></div></div>`);
+      sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+      sheet.querySelector('[data-retry]').addEventListener('click', () => {
+        const b = sheet.querySelector('[data-retry]'); b.disabled = true; b.textContent = 'Checking…';
+        Promise.resolve(window.PAYMENTS && window.PAYMENTS.claimWallet && window.PAYMENTS.claimWallet()).then((row) => {
+          if (row && (row.credits > 0 || row.pro_until)) closeSheet();
+          else { b.disabled = false; b.textContent = 'Check again'; toast('No new purchase found yet — try again in a minute', '#ffcf7a'); }
+        });
+      });
+    }
+  }
+
+  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult };
 })();

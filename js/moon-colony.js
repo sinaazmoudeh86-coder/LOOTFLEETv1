@@ -109,7 +109,7 @@
   }
   function storageHours(mm) { let h = 8; active(mm).forEach((x) => { if (x.def.cat === 'storage') h += x.def.hrs * x.lv; }); return Math.min(30, h); }
   function defenseRating(mm) { let d = 10; active(mm).forEach((x) => { if (x.def.cat === 'defense') d += x.def.def * x.lv; }); return d; }
-  function raidPowerEst(mm) { return 20 + buildings(mm).reduce((a, x) => a + x.lv, 0) * 6 + 15; } // avg roll shown in UI
+  function raidPowerEst(mm) { return 10 + buildings(mm).reduce((a, x) => a + x.lv, 0) * 3 + 8; } // avg roll shown in UI
   function ratesPerHour(root, mi) {
     const mm = root.moons[mi];
     const bias = MOONCAT[mi] ? MOONCAT[mi].bias : {};
@@ -136,7 +136,7 @@
     if (now > mm.nextRaid && buildings(mm).length) {
       const rating = defenseRating(mm);
       const colonyLv = buildings(mm).reduce((a, x) => a + x.lv, 0);
-      const power = 20 + colonyLv * 6 + Math.random() * 30;
+      const power = 10 + colonyLv * 3 + Math.random() * 15;
       const ratio = Math.min(1, rating / power);
       const mname = (MOONCAT[mi] || {}).name || 'your moon';
       if (ratio >= 1) {
@@ -416,9 +416,13 @@
     if (mm.log.length) {
       html += '<div class="mn-log"><div class="mn-log-t">COLONY LOG — ' + MOONCAT[mi].name.toUpperCase() + '</div>' + mm.log.map((l) => '<div class="mn-log-r"><span>' + new Date(l.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' + l.txt + '</div>').join('') + '</div>';
     }
+    // keep the player's scroll position through re-renders (no jump-to-top "reload" feel)
+    let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
+    const _st = _sc ? _sc.scrollTop : 0;
     body.innerHTML = html;
     if (window.MOONSCENE) window.MOONSCENE.mount($('mn-scene-cv'));
     wire(body, root, mm);
+    if (_sc) _sc.scrollTop = _st;
   }
   function wire(body, root, mm) {
     const btn = body.querySelector('[data-mn-collect]');

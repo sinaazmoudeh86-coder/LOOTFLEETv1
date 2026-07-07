@@ -30,32 +30,131 @@
   'use strict';
   // PACK LADDER — $25 per 25,000 LootCoins at the base tier, then +5% BONUS
   // coins per additional tier. Four clean options, capped at $100.
+  // PACK LADDER — matches the App Store IAP products exactly:
+  // "Loot Coins 25000 / 50000 / 75000 / 100000". Names & amounts must stay in
+  // sync with App Store Connect so review can locate each product in-game.
   const PACKS = [
     { sku: 'lc_25',  usd: '25',  credits: 25000,  bonus: 0 },
-    { sku: 'lc_50',  usd: '50',  credits: 52500,  bonus: 5, tag: 'POPULAR' },
-    { sku: 'lc_75',  usd: '75',  credits: 82500,  bonus: 10 },
-    { sku: 'lc_100', usd: '100', credits: 115000, bonus: 15, tag: 'BEST VALUE' },
+    { sku: 'lc_50',  usd: '50',  credits: 50000,  bonus: 0, tag: 'POPULAR' },
+    { sku: 'lc_75',  usd: '75',  credits: 75000,  bonus: 0 },
+    { sku: 'lc_100', usd: '100', credits: 100000, bonus: 0, tag: 'BEST VALUE' },
   ];
   function linkFor(sku) {
     const links = (window.LOOTFLEET && window.LOOTFLEET.stripeLinks) || {};
     return links[sku] || null;
   }
+  // ---------------------------------------------------------------------------
+  // NATIVE STORE BILLING — platform product ids for the app wrappers.
+  // NOTE: ios lc_25 is intentionally 'com.leetfleet.lc_25' (leet, not loot) —
+  // confirmed correct as registered in App Store Connect. Do not "fix" it.
+  // The wrapper injects a bridge:
+  //   iOS:     window.webkit.messageHandlers.iap.postMessage({ action:'buy', productId })
+  //   Android: window.AndroidIAP.buy(productId)
+  // and reports back via window.PAYMENTS.onNativeResult({ ok, sku }).
+  // ---------------------------------------------------------------------------
+  const STORE_IDS = {
+    ios: {
+      lc_25: 'com.leetfleet.lc_25',
+      lc_50: 'com.lootfleet.lc_50',
+      lc_75: 'com.lootfleet.lc_75',
+      lc_100: 'com.lootfleet.lc_100',
+      pro_monthly: 'com.lootfleet.pro_monthly_v2',
+    },
+    android: {
+      lc_25: 'lc_25', lc_50: 'lc_50', lc_75: 'lc_75', lc_100: 'lc_100',
+      pro_monthly: 'pro_monthly',
+    },
+  };
+  function nativePlatform() {
+    try { if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.iap) return 'ios'; } catch (e) {}
+    if (window.AndroidIAP && typeof window.AndroidIAP.buy === 'function') return 'android';
+    return null;
+  }
+  function storeId(sku) {
+    const p = nativePlatform();
+    return (p && STORE_IDS[p][sku]) || sku;
+  }
+  function buyNative(sku) {
+    const p = nativePlatform(); if (!p) return false;
+    const pid = storeId(sku);
+    try {
+      if (p === 'ios') window.webkit.messageHandlers.iap.postMessage({ action: 'buy', productId: pid, sku });
+      else window.AndroidIAP.buy(pid);
+      _setPending(sku);
+      return true;
+    } catch (e) { return false; }
+  }
+  // Called by the native wrapper when the store sheet closes.
+  // { ok:true, sku } → credit + thank-you screen · { ok:false, sku } → sorry screen
+  function onNativeResult(res) {
+    res = res || {};
+    const sku = res.sku || (_getPending() || {}).sku;
+    const p = PACKS.find((x) => x.sku === sku);
+    _clearPending();
+    if (res.ok && p) {
+      const G = window.GAME;
+      if (G && G.state) { G.state.credits = (G.state.credits || 0) + p.credits; G.save(); if (window.UI) window.UI.refreshAll(); }
+      _result(true, { credits: p.credits });
+    } else if (res.ok && sku === PRO.sku) {
+      const G = window.GAME;
+      if (G && G.state) { G.state.proUntil = Math.max(G.state.proUntil || 0, Date.now()) + 31 * 864e5; G.save(); if (window.UI) window.UI.refreshAll(); }
+      _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
+    } else {
+      _result(false, p ? { credits: p.credits } : {});
+    }
+  }
   // LOOTFLEET PRO — $20/mo subscription (5× speed + 2× XP). Uses a recurring
   // Stripe Payment Link under the 'pro_monthly' sku.
   const PRO = { sku: 'pro_monthly', usd: '20' };
   function subscribe() { return buy(PRO.sku); }
-  function configured() { return PACKS.some((p) => linkFor(p.sku)); }
+  function configured() { return !!nativePlatform() || PACKS.some((p) => linkFor(p.sku)); }
   // Open Stripe checkout in a new tab, tagging the session with the player's
   // account id so the webhook knows whose wallet to credit.
   function buy(sku) {
+    if (buyNative(sku)) return { ok: true, native: true };   // App Store / Play billing
     const url = linkFor(sku);
     if (!url) return { ok: false, reason: 'unconfigured' };
     let uid = '';
     try { const s = window.AUTH && window.AUTH.session && window.AUTH.session(); uid = (s && s.id) || ''; } catch (e) {}
     window.open(url + (url.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(uid), '_blank');
+    _setPending(sku);      // watch for the confirmation screen
     _claimSoon();          // start polling — coins land moments after checkout
     return { ok: true };
   }
+
+  // ---------------------------------------------------------------------------
+  // PURCHASE CONFIRMATION SCREEN — every checkout ends in an explicit result:
+  // success ("thanks for purchasing …") when the wallet claim delivers, or a
+  // sorry/retry screen if nothing confirms within the watch window or the
+  // player returns from a cancelled checkout. Survives reloads via storage.
+  // ---------------------------------------------------------------------------
+  const PENDING_KEY = 'lf-pending-purchase';
+  function _setPending(sku) {
+    const p = PACKS.find((x) => x.sku === sku);
+    const rec = { sku, credits: p ? p.credits : 0, label: p ? p.credits.toLocaleString() + ' LootCoins' : (sku === 'pro_monthly' ? 'LootFleet Pro' : sku), at: Date.now() };
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(rec)); } catch (e) {}
+  }
+  function _getPending() { try { return JSON.parse(localStorage.getItem(PENDING_KEY)); } catch (e) { return null; } }
+  function _clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) {} }
+  function _result(ok, info) { if (window.UI && window.UI.purchaseResult) window.UI.purchaseResult(ok, info); }
+  // no-confirmation watchdog: if a checkout was started and nothing delivered
+  // within 4 minutes (while the tab is visible), show the sorry screen once.
+  setInterval(() => {
+    const p = _getPending();
+    if (!p || document.hidden) return;
+    if (Date.now() - p.at > 4 * 60000) { _clearPending(); _result(false, p); }
+  }, 5000);
+  // checkout redirect result (?purchase=success|cancel) — works when the
+  // Stripe Payment Link (or native store wrapper) redirects back to the game.
+  try {
+    const q = new URLSearchParams(location.search).get('purchase');
+    if (q) {
+      const p = _getPending() || {};
+      history.replaceState(null, '', location.pathname + location.hash);
+      if (/^(cancel|cancelled|canceled|fail|failed)$/i.test(q)) { _clearPending(); setTimeout(() => _result(false, p), 1200); }
+      else if (/^(success|paid|complete)$/i.test(q)) { _claimSoon(); }  // success sheet fires on actual delivery
+    }
+  } catch (e) {}
 
   // ---------------------------------------------------------------------------
   // AUTOMATIC FULFILMENT — the stripe-webhook Edge Function credits a wallets
@@ -80,13 +179,15 @@
       if (row.credits > 0) {
         G.state.credits = (G.state.credits || 0) + row.credits;
         changed = true;
-        if (window.UI && window.UI.unlockToast) window.UI.unlockToast('+' + row.credits.toLocaleString() + ' LootCoins delivered — thank you!');
+        const p = _getPending(); _clearPending();
+        _result(true, { credits: row.credits, label: (p && p.label) || null });
       }
       if (row.pro_until) {
         const t = new Date(row.pro_until).getTime();
         if (t > (G.state.proUntil || 0)) {
           G.state.proUntil = t; changed = true;
-          if (window.UI && window.UI.unlockToast) window.UI.unlockToast('LootFleet PRO active — 5× speed + 2× XP unlocked');
+          const p = _getPending(); if (p && p.sku === 'pro_monthly') _clearPending();
+          _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
         }
       }
       if (changed) { G.save(); if (window.UI) window.UI.refreshAll(); }
@@ -109,5 +210,5 @@
     else if (++_bootTries > 40) clearInterval(_bootTimer);
   }, 1500);
 
-  window.PAYMENTS = { PACKS, PRO, buy, subscribe, configured, linkFor, claimWallet };
+  window.PAYMENTS = { PACKS, PRO, buy, subscribe, configured, linkFor, claimWallet, storeId, onNativeResult };
 })();

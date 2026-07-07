@@ -38,6 +38,13 @@
     { id: 'zone2',   ic: '✈', name: 'Long Haul',          blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 6,                                  rw: (l, z) => ({ plasma: Math.round(110 * dayScale(z)), lc: 10 }) },
     { id: 'time2',   ic: '☉', name: 'Double Shift',       blurb: 'Fly {N} minutes of combat',          m: 'mins',   n: () => 45,                                 rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), fuel: Math.round(200 * dayScale(z)) }) },
     { id: 'loot2',   ic: '❖', name: 'Cargo Bay Bulge',    blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 30 + Math.min(30, Math.round(l / 3)), rw: (l, z) => ({ gold: Math.round(1800 * dayScale(z)), lc: 10 }) },
+    // ---- FEATURE-GATED MISSIONS — only issued once the feature is unlocked (req = min level) ----
+    { id: 'hull1',   ic: '⬡', name: 'Refit Order',        blurb: 'Upgrade ship hulls {N} times',       m: 'hulls',  n: () => 1,                                  rw: (l, z) => ({ iron: Math.round(100 * dayScale(z)), lc: 10 }), req: 12 },
+    { id: 'hull2',   ic: '⚙', name: 'Yard Overhaul',      blurb: 'Upgrade ship hulls {N} times',       m: 'hulls',  n: () => 3,                                  rw: (l, z) => ({ gold: Math.round(2200 * dayScale(z)), lc: 15 }), req: 12 },
+    { id: 'gal1',    ic: '⬢', name: 'Land Grab',          blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 2,                                  rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 10 }), req: 25 },
+    { id: 'gal2',    ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 20 }), req: 25 },
+    { id: 'moon1',   ic: '🌙', name: 'Colony Shipment',   blurb: 'Collect {N} resources from your Moon Colony', m: 'moon', n: (l, z) => Math.round(1500 * dayScale(z)), rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), lc: 10 }), req: 30 },
+    { id: 'moon2',   ic: '⛏', name: 'Colony Foreman',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 3,                              rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 15 }), req: 30 },
   ];
   const ALL_BONUS = { lc: 100 }; // + resource bundle computed at claim time
 
@@ -55,11 +62,13 @@
     const s = G.state;
     if (!s.missions || s.missions.day !== dayKey()) {
       const lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
-      const picks = seededShuffle(POOL, dayKey() + ':' + (s.playerName || 'cmdr')).slice(0, 10);
+      // feature-gated missions only enter the day's draw once unlocked
+      const eligible = POOL.filter((p) => !p.req || lvl >= p.req);
+      const picks = seededShuffle(eligible, dayKey() + ':' + (s.playerName || 'cmdr')).slice(0, 10);
       s.missions = {
         day: dayKey(),
         list: picks.map((p) => ({ id: p.id, n: p.n(lvl, z), done: 0, claimed: false })),
-        acc: { kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0 },
+        acc: { kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0 },
         seen: {}, // zones deployed today (for the 'zones' metric)
         base: null,
         allClaimed: false,
@@ -75,7 +84,28 @@
   function snapshot() {
     const s = G.state, r = s.resources || {};
     return { kills: s.totalKills || 0, gold: s.gold || 0, fuel: r.fuel || 0, iron: r.iron || 0, plasma: r.plasma || 0,
-             level: s.level || 1, play: s.playTime || 0, items: (s.inventory || []).length + (s.lifetimeLooted || 0), boss: bossCount() };
+             level: s.level || 1, play: s.playTime || 0, items: (s.inventory || []).length + (s.lifetimeLooted || 0), boss: bossCount(),
+             hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum() };
+  }
+  // sum of all per-ship hull levels (positive deltas = upgrades bought;
+  // death resets go DOWN and are ignored by the delta accumulator)
+  function hullLevelSum() {
+    const sl = G.state.shipLevels || {}; let t = 0;
+    for (const k in sl) t += sl[k] || 0;
+    return t;
+  }
+  // lifetime resources shipped home from all moon colonies
+  function moonLifetimeSum() {
+    const lt = (G.state.moon && G.state.moon.lifetime) || {}; let t = 0;
+    for (const k in lt) t += lt[k] || 0;
+    return t;
+  }
+  // total structure levels across all moons (build = +1, upgrade = +1)
+  function colonyLevelSum() {
+    const root = G.state.moon; if (!root || !root.moons) return 0;
+    let t = 0;
+    root.moons.forEach((mm) => { const b = mm.b || {}; for (const k in b) t += (b[k] && b[k].lv) || 0; });
+    return t;
   }
   function bossCount() {
     // bossKillsByZone exists per-save in some versions; fall back to a UI counter
@@ -88,7 +118,7 @@
   function watchBoss() {
     const bar = $('boss-bar'); let was = false;
     setInterval(() => {
-      const on = bar && bar.classList.contains('on');
+      const on = bar && bar.classList.contains('active'); // 'active' = boss alive (bar uses show/active, not 'on')
       if (was && !on) M._bossLocal++;
       was = on;
     }, 500);
@@ -107,6 +137,11 @@
     if (now.level > b.level) a.levels += now.level - b.level;
     if (now.boss > b.boss) a.bosses += now.boss - b.boss;
     if (now.items > b.items) a.loot += now.items - b.items;
+    // feature metrics (guard with ||0 so saves from before these existed keep working)
+    if (now.hulls > (b.hulls || 0)) a.hulls = (a.hulls || 0) + (now.hulls - (b.hulls || 0));
+    if (now.tiles > (b.tiles || 0)) a.tiles = (a.tiles || 0) + (now.tiles - (b.tiles || 0));
+    if (now.moon > (b.moon || 0)) a.moon = (a.moon || 0) + (now.moon - (b.moon || 0));
+    if (now.colony > (b.colony || 0)) a.colony = (a.colony || 0) + (now.colony - (b.colony || 0));
     if (G.state.currentDungeon >= 1) {
       a.mins += 1 / 60;
       const zk = 'z' + G.state.currentDungeon;
@@ -192,7 +227,11 @@
       '<div class="msn-b">Clear all 10 missions · <b>' + claimedN + '/10 claimed</b></div>' +
       '<div class="msn-rw">' + rwChips(bonusRw) + '</div></div>' +
       (ms.allClaimed ? '<div class="msn-done">✓</div>' : allDone ? '<button class="msn-claim gold" data-bonus="1">CLAIM</button>' : '<div class="msn-lockp">' + doneN + '/10</div>') + '</div>';
+    // preserve scroll through re-renders
+    let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
+    const _st = _sc ? _sc.scrollTop : 0;
     body.innerHTML = html;
+    if (_sc) _sc.scrollTop = _st;
     body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => {
       const mi = ms.list[+b.dataset.claim]; if (!mi || mi.claimed || mi.done < mi.n) return;
       const def = POOL.find((p) => p.id === mi.id);

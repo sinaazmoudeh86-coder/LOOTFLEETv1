@@ -43,6 +43,17 @@
     if (error) throw error;
   }
   async function signOut() { try { await client.auth.signOut(); } catch (e) {} }
+  // ---- account deletion (App Review 5.1.1(v)) --------------------------------
+  // Removes every row keyed to the user, then asks the delete-account Edge
+  // Function (service-role) to erase the auth user itself. Each step is
+  // best-effort so a missing table/function never blocks the wipe.
+  async function deleteAccountData(userId) {
+    try { await client.from('saves').delete().eq('user_id', userId); } catch (e) {}
+    try { await client.from('leaderboard').delete().eq('user_id', userId); } catch (e) {}
+    try { await client.from('wallets').delete().eq('user_id', userId); } catch (e) {}
+    try { await client.functions.invoke('delete-account'); } catch (e) {}
+    return true;
+  }
   async function getUser() {
     try { const { data } = await client.auth.getSession(); return data.session ? data.session.user : null; }
     catch (e) { return null; }
@@ -86,5 +97,5 @@
     } catch (e) { return null; }
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, getUser, pull, push, lbUpsert, lbTop };
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, push, lbUpsert, lbTop };
 })();

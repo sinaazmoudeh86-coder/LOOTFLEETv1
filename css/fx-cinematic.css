@@ -109,7 +109,7 @@
 }
 
 /* --- toasts / unlock banners ride in on a spring --- */
-#toast-layer > *, .toast, .unlock-toast {
+#toast-layer > :not(.lvl-toast):not(.aaa-shock), .toast, .unlock-toast {
   animation: fxToastIn .46s var(--fx-spring) both;
 }
 @keyframes fxToastIn {

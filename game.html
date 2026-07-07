@@ -26,10 +26,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css">
-<link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/web-v89.css?v=174">
-<link rel="stylesheet" href="css/fx-cinematic.css">
+<link rel="stylesheet" href="css/style-v2.css?v=180">
+<link rel="stylesheet" href="css/theme.css?v=180">
+<link rel="stylesheet" href="css/web-v89.css?v=184">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=180">
 <link rel="stylesheet" href="css/fx-primordial.css">
 <link rel="stylesheet" href="css/moon-colony.css?v=168">
 <link rel="stylesheet" href="css/fx-aaa.css?v=170">
@@ -199,19 +199,25 @@
           <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
           <div class="res-chip lc-chip pm-chip" id="prism-chip" style="--rc:#ff3a3a;display:none" title="Prism Ore"><span class="rg" style="color:#ff3a3a">◈</span><span id="hud-prism">0</span></div>
           <div class="res-chip lc-chip" id="hud-dread" style="--rc:#ff3a4a;display:none" title="Dread Cores"><span class="rg" style="color:#ff3a4a">◇</span><span id="hud-dread-v">0</span></div>
-          <div class="res-chip lc-chip chip-glow" style="--rc:#f2a93c" title="LootCoins"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
+          <div class="res-chip lc-chip chip-glow" id="hud-lc-chip" style="--rc:#f2a93c;cursor:pointer" title="LootCoins — tap to get more"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
         </div>
       </div>
 
       <!-- HUD -->
       <div id="hud">
         <div class="hud-top">
-          <div class="lvl-badge"><span class="lab">LVL</span><span class="num" id="hud-level">1</span></div>
           <div class="power-block">
             <div id="pb-fleet" class="pb-fleet"><img id="pb-ship" class="flag" src="ships/ship-frigate.png" alt=""></div>
-            <div class="pb-label">⚡ SHIP SCORE</div>
-            <div class="pb-val" id="hud-power">0</div>
+            <div class="pb-text">
+              <div class="pb-label">⚡ SHIP SCORE</div>
+              <div class="pb-val" id="hud-power">0</div>
+            </div>
           </div>
+          <div class="lvl-badge"><span class="lab">LVL</span><span class="num" id="hud-level">1</span></div>
+          <button id="hud-lcbuy" class="lc-cta" aria-label="Loot Coins on sale now" title="Loot Coins — On Sale Now">
+            <svg class="lch-gem" width="18" height="18" viewBox="0 0 24 24"><defs><linearGradient id="lchg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lchg)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lchg)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg>
+            <span class="lch-t"><span class="l1">◈ LOOT COINS</span><span class="l2">ON SALE NOW</span></span>
+          </button>
         </div>
         <div class="hud-bars">
           <div class="bar-wrap"><div class="bar-fill xp" id="xp-fill" style="width:0%"></div><div class="bar-label" id="xp-label">0 / 100 XP</div></div>
@@ -544,24 +550,24 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
 <script src="js/analytics.js?v=1"></script>
-<script src="js/cloud.js"></script>
+<script src="js/cloud.js?v=180"></script>
 <script src="js/account.js"></script>
 <script src="js/territory.js"></script>
-<script src="js/payments-v91.js"></script>
-<script src="js/game-v93.js?v=160"></script>
-<script src="js/ui-v94.js?v=172"></script>
+<script src="js/payments-v91.js?v=185"></script>
+<script src="js/game-v93.js?v=180"></script>
+<script src="js/ui-v94.js?v=184"></script>
 <script src="js/fx-cinematic.js?v=2"></script>
 <script src="js/fx-primordial.js"></script>
 <script src="js/fx-aaa.js?v=160"></script>
 <script src="js/moon-scene.js?v=166"></script>
-<script src="js/moon-colony.js?v=168"></script>
-<script src="js/missions.js?v=161"></script>
+<script src="js/moon-colony.js?v=180"></script>
+<script src="js/missions.js?v=185"></script>
 <script src="js/coach-v89.js?v=166"></script>
 <script src="js/prism-v5.js"></script>
 <script src="js/prism-fleet.js"></script>
 <script src="js/dreadnaught.js"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/auth.js"></script>
+<script src="js/auth.js?v=180"></script>
 <script id="auth-gate-glue">
   /* Presentational glue only — drives the new segmented control through the
      existing #lg-toggle that auth.js already wires. No auth logic added. */
@@ -693,6 +699,24 @@
 .chip-earn{animation:chipEarn .7s ease-out;}
 @keyframes chipEarn{0%{transform:scale(1);}22%{transform:scale(1.2);filter:brightness(1.7) saturate(1.3);}100%{transform:scale(1);filter:none;}}
 </style>
+<script>
+/* Full-screen support — the toggle lives in ⚙ Account (openAccountSheet wires
+   [data-fs-toggle] buttons to this). Hidden where the API is unsupported. */
+(function(){
+  var el=document.documentElement;
+  var ok=el.requestFullscreen||el.webkitRequestFullscreen;
+  function on(){ return !!(document.fullscreenElement||document.webkitFullscreenElement); }
+  window.LF_FS={
+    supported:!!ok,
+    on:on,
+    toggle:function(){
+      if(!ok) return;
+      if(on()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+      else{ (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+    }
+  };
+})();
+</script>
 <script>
 /* Currency FX — flash a wallet chip whenever its displayed value INCREASES
    (kills, sells, mining, etc). Spending decreases → no flash. */

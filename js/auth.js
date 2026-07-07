@@ -148,10 +148,28 @@
     try { localStorage.removeItem(SESS); } catch (e) {}
     location.reload();
   }
+  // ---- ACCOUNT DELETION (App Review 5.1.1(v)) --------------------------------
+  // Deletes cloud rows (save, leaderboard, wallet) + auth user (via the
+  // delete-account Edge Function when deployed), then wipes the local save,
+  // stored credentials and session. Irreversible.
+  async function deleteAccount() {
+    const s = getSession() || {};
+    try { if (cloudOn() && s.id && window.CLOUD.deleteAccountData) await window.CLOUD.deleteAccountData(s.id); } catch (e) {}
+    try {
+      const uidKey = s.id ? 'u_' + s.id : (s.name || 'guest').toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_.-]/g, '');
+      localStorage.removeItem('infinite-operator-save-v2::' + uidKey);
+      const users = getUsers();
+      [s.name, (s.name || '').toLowerCase()].forEach((k) => { if (k && users[k]) delete users[k]; });
+      setUsers(users);
+    } catch (e) {}
+    try { if (cloudOn()) await window.CLOUD.signOut(); } catch (e) {}
+    try { localStorage.removeItem(SESS); } catch (e) {}
+    location.reload();
+  }
   function name() { const s = getSession(); return s ? s.name : 'Operator'; }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 
-  window.AUTH = { signOut, name, session: getSession };
+  window.AUTH = { signOut, deleteAccount, name, session: getSession };
 })();

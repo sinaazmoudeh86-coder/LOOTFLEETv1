@@ -132,8 +132,8 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 .loot-toast{font-size:11px;font-weight:700;background:rgba(255,255,255,.94);border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:4px 9px;opacity:0;transform:translateX(-12px);animation:lootin .3s ease forwards,lootout .4s ease forwards 2.6s;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 @keyframes lootin{to{opacity:1;transform:none;}}@keyframes lootout{to{opacity:0;transform:translateX(-12px);}}
 #toast-layer{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden;}
-.lvl-toast{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) scale(.6);font-family:var(--font-display);font-weight:900;font-size:30px;color:var(--gold);text-shadow:0 0 18px rgba(47,111,237,.5),0 2px 6px rgba(0,0,0,.25);opacity:0;animation:lvlpop 1.6s ease forwards;white-space:nowrap;}
-@keyframes lvlpop{0%{opacity:0;transform:translate(-50%,-50%) scale(.4);}18%{opacity:1;transform:translate(-50%,-62%) scale(1.05);}78%{opacity:1;transform:translate(-50%,-80%) scale(1);}100%{opacity:0;transform:translate(-50%,-98%) scale(1);}}
+.lvl-toast{position:absolute;top:38%;left:0;right:0;margin:0 auto;width:max-content;max-width:94%;text-align:center;font-family:var(--font-display);font-weight:900;font-size:30px;color:var(--gold);text-shadow:0 0 18px rgba(47,111,237,.5),0 2px 6px rgba(0,0,0,.25);opacity:0;animation:lvlpop 1.6s ease forwards;white-space:nowrap;}
+@keyframes lvlpop{0%{opacity:0;transform:translateY(0) scale(.4);}18%{opacity:1;transform:translateY(-10px) scale(1.05);}78%{opacity:1;transform:translateY(-26px) scale(1);}100%{opacity:0;transform:translateY(-42px) scale(1);}}
 
 /* ============================ BOTTOM NAV ============================ */
 #nav{flex:none;height:60px;display:flex;background:linear-gradient(180deg,var(--panel-2),var(--panel));border-top:1px solid var(--line);}

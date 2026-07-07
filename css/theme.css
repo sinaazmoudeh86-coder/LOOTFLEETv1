@@ -360,7 +360,7 @@ html,body{ background:#05070d; }
 
 /* toasts pop with a soft spring */
 @keyframes toastPop{ 0%{ opacity:0; transform:translateY(10px) scale(.88); } 62%{ opacity:1; transform:translateY(-2px) scale(1.05); } 100%{ opacity:1; transform:none; } }
-.lvl-toast{ animation:toastPop .42s cubic-bezier(.18,1.4,.4,1); }
+/* (lvl-toast keeps its own lvlpop animation from style-v2.css — do not override) */
 
 /* nav icon pops when it becomes active */
 @keyframes navPop{ from{ transform:scale(.8); } to{ transform:scale(1); } }
@@ -412,3 +412,83 @@ button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focu
   text-shadow:none; filter:drop-shadow(0 0 26px rgba(242,178,75,.35));
   animation:lgShine 6s ease-in-out infinite;
 }
+
+/* --- LootCoins storefront entry (App Review 2.1(b)) --- */
+.lc-store-cta{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,210,77,.35);background:linear-gradient(90deg,rgba(255,210,77,.12),rgba(255,210,77,.03));color:var(--text,#e8eefb);cursor:pointer;font:inherit;text-align:left;}
+.lc-store-cta:hover{border-color:rgba(255,210,77,.6);}
+.lc-store-cta svg.lc{width:22px;height:22px;flex:none;}
+.lc-store-cta span{flex:1;display:flex;flex-direction:column;line-height:1.35;}
+.lc-store-cta b{font-size:13px;color:#ffd24d;}
+.lc-store-cta i{font-style:normal;font-size:10.5px;color:var(--muted,#8b96ad);}
+.lc-store-cta em{font-style:normal;font-weight:800;font-size:11px;color:#ffd24d;letter-spacing:.06em;}
+
+/* --- HUD top row v158: big flagship + escorts LEFT, score beside it,
+       level + Get-Coins hero square RIGHT --- */
+.hud-top{gap:8px;}
+.power-block{
+  flex:1;flex-direction:row;align-items:center;justify-content:flex-start;
+  gap:10px;padding:4px 12px;min-height:44px;
+}
+.power-block .pb-fleet{height:auto;margin:0;flex:none;align-items:center;gap:5px;}
+.power-block .pb-fleet img{height:28px;}
+.power-block .pb-fleet img.flag{height:36px;}
+.power-block .pb-fleet img.esc{height:18px;opacity:.85;align-self:center;}
+#pb-ship{position:static !important;transform:none !important;width:auto !important;height:36px !important;}
+.pb-text{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;min-width:0;}
+.pb-text .pb-label{margin-bottom:3px;white-space:nowrap;}
+.pb-text .pb-val{white-space:nowrap;}
+/* fx-aaa holo ring: follow the bigger flagship position */
+.power-block::before{left:8px;width:42px;height:42px;}
+.power-block::after{left:3px;width:54px;height:54px;}
+.lvl-badge{width:42px;height:44px;}
+
+/* --- HUD Loot Coins CTA (.lc-cta — own class; .lc-hero belongs to the pack
+       sheet banner in web-v89.css). Same design language as the score block:
+       dark panel, gold radial, slim horizontal pill. --- */
+.lc-cta{
+  flex:none;display:flex;flex-direction:row;align-items:center;gap:8px;
+  height:44px;padding:0 11px;border-radius:13px;
+  border:1px solid var(--line-2);
+  background:
+    radial-gradient(90% 130% at 80% -10%, rgba(184,106,223,.22), transparent 60%),
+    radial-gradient(120% 150% at 15% 0%, rgba(242,178,75,.18), transparent 70%),
+    linear-gradient(180deg,#141d33,#0d1322);
+  cursor:pointer;position:relative;overflow:hidden;font-family:inherit;
+  transition:transform .12s, box-shadow .2s;
+}
+.lc-cta:active{transform:scale(.97);box-shadow:inset 0 0 0 1px rgba(242,178,75,.4);}
+.lc-cta .lch-gem{width:18px;height:18px;flex:none;filter:drop-shadow(0 0 6px rgba(255,210,77,.45));}
+.lc-cta .lch-t{display:flex;flex-direction:column;align-items:flex-start;gap:3px;line-height:1;}
+.lc-cta .l1{font-size:7px;font-weight:700;letter-spacing:.18em;color:var(--gold);opacity:.85;white-space:nowrap;}
+.lc-cta .l2{font-family:var(--font-display);font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#ffe9b0;text-shadow:0 0 10px rgba(255,210,77,.35);white-space:nowrap;}
+.lc-cta::after{
+  content:'';position:absolute;top:-60%;left:-90%;width:40%;height:220%;
+  transform:rotate(24deg);pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,244,205,.32),transparent);
+  animation:lcCtaShine 3.4s ease-in-out infinite;
+}
+@keyframes lcCtaShine{0%,50%{left:-90%}82%,100%{left:140%}}
+@media (prefers-reduced-motion:reduce){.lc-cta::after{animation:none;}}
+
+.power-block .pb-val{font-size:24px;}
+.pb-text .pb-label{font-size:8px;margin-bottom:2px;}
+
+/* --- lc-cta deep-space effect: drifting starfield + twinkle + floating gem --- */
+.lc-cta::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 30%, rgba(255,255,255,.9), transparent 60%),
+    radial-gradient(1px 1px at 34% 68%, rgba(160,200,255,.8), transparent 60%),
+    radial-gradient(1.4px 1.4px at 58% 22%, rgba(255,226,150,.9), transparent 60%),
+    radial-gradient(1px 1px at 76% 55%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(1.1px 1.1px at 90% 28%, rgba(216,164,255,.8), transparent 60%),
+    radial-gradient(1px 1px at 22% 82%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.3px 1.3px at 68% 84%, rgba(160,200,255,.7), transparent 60%);
+  background-size:220% 100%;
+  animation:lcStarsDrift 14s linear infinite, lcStarsTwinkle 2.6s ease-in-out infinite;
+}
+@keyframes lcStarsDrift{from{background-position:0% 0%;}to{background-position:-220% 0%;}}
+@keyframes lcStarsTwinkle{0%,100%{opacity:.55;}50%{opacity:1;}}
+.lc-cta .lch-gem{animation:lcGemFloat 3.2s ease-in-out infinite;}
+@keyframes lcGemFloat{0%,100%{transform:translateY(1px) rotate(-3deg);}50%{transform:translateY(-2px) rotate(3deg);}}
+@media (prefers-reduced-motion:reduce){.lc-cta::before,.lc-cta .lch-gem{animation:none;}}

@@ -575,6 +575,7 @@
       const isSuper = !!e.isSuper;
       rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false; rt.lastBoss = rt.time;
       rt.bossTimer = rt.bossInit = 600 + Math.random() * 300; // reset 10–15 min
+      state.stats = state.stats || {}; state.stats.bossKills = (state.stats.bossKills || 0) + 1; // missions credit
       bossLoot(e, isSuper);
       // BLUEPRINT: this zone's boss may hold the schematics for a hull.
       grantBlueprintFor(state.currentDungeon);

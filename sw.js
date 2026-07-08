@@ -6,9 +6,10 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v170';
+const CACHE = 'lootfleet-v189';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
+  'support.html', 'privacy.html', 'terms.html', 'features.html',
   'guides/guide.css', 'guides/how-to-play.html', 'guides/zones-and-citadels.html',
   'guides/galaxy-territory.html', 'guides/ships-and-fleet.html', 'guides/loot-rarity.html', 'guides/weapon-classes.html',
   'icon-192.png', 'icon-512.png',

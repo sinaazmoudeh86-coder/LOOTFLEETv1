@@ -45,8 +45,9 @@
   }
   // ---------------------------------------------------------------------------
   // NATIVE STORE BILLING — platform product ids for the app wrappers.
-  // NOTE: ios lc_25 is intentionally 'com.leetfleet.lc_25' (leet, not loot) —
-  // confirmed correct as registered in App Store Connect. Do not "fix" it.
+  // NOTE: ids must match App Store Connect exactly — lc_25 and lc_100 were
+  // re-registered (2026-07): lc_25 is now com.lootfleet.lc_25 (was leetfleet),
+  // lc_100 is com.lootfleet.lc_100_v2.
   // The wrapper injects a bridge:
   //   iOS:     window.webkit.messageHandlers.iap.postMessage({ action:'buy', productId })
   //   Android: window.AndroidIAP.buy(productId)
@@ -54,10 +55,10 @@
   // ---------------------------------------------------------------------------
   const STORE_IDS = {
     ios: {
-      lc_25: 'com.leetfleet.lc_25',
+      lc_25: 'com.lootfleet.lc_25',
       lc_50: 'com.lootfleet.lc_50',
       lc_75: 'com.lootfleet.lc_75',
-      lc_100: 'com.lootfleet.lc_100',
+      lc_100: 'com.lootfleet.lc_100_v2',
       pro_monthly: 'com.lootfleet.pro_monthly_v2',
     },
     android: {

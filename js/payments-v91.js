@@ -75,6 +75,29 @@
     const p = nativePlatform();
     return (p && STORE_IDS[p][sku]) || sku;
   }
+  // ---------------------------------------------------------------------------
+  // NATIVE IAP INIT — tell the wrapper to initialize billing and preload all
+  // product ids AS SOON AS the game launches (StoreKit/Play Billing need the
+  // product list fetched before the first buy, and preloading makes the first
+  // purchase sheet instant). The bridge may be injected after page load, so
+  // retry briefly until it appears. Safe to call more than once — wrappers
+  // treat repeat inits as a no-op.
+  let _iapInitDone = false, _iapInitTries = 0;
+  function initNativeIAP() {
+    if (_iapInitDone) return true;
+    const p = nativePlatform(); if (!p) return false;
+    const ids = Object.keys(STORE_IDS[p]).map((sku) => STORE_IDS[p][sku]);
+    try {
+      if (p === 'ios') window.webkit.messageHandlers.iap.postMessage({ action: 'init', productIds: ids });
+      else if (window.AndroidIAP.init) window.AndroidIAP.init(JSON.stringify(ids));
+      _iapInitDone = true;
+      return true;
+    } catch (e) { return false; }
+  }
+  const _iapInitTimer = setInterval(() => {
+    if (initNativeIAP() || ++_iapInitTries > 20) clearInterval(_iapInitTimer);
+  }, 500);
+
   function buyNative(sku) {
     const p = nativePlatform(); if (!p) return false;
     const pid = storeId(sku);
@@ -85,11 +108,24 @@
       return true;
     } catch (e) { return false; }
   }
+  // Reverse-map a platform product id back to our internal sku. Wrappers
+  // (iOS + Android) report the STORE product id, not our sku — crediting must
+  // never depend on which one we get, nor on the pending record surviving.
+  function skuFromProductId(pid) {
+    if (!pid) return null;
+    for (const plat in STORE_IDS) {
+      const map = STORE_IDS[plat];
+      for (const sku in map) if (map[sku] === pid) return sku;
+    }
+    return null;
+  }
   // Called by the native wrapper when the store sheet closes.
   // { ok:true, sku } → credit + thank-you screen · { ok:false, sku } → sorry screen
+  // Accepts sku OR productId in either field (wrappers differ).
   function onNativeResult(res) {
     res = res || {};
-    const sku = res.sku || (_getPending() || {}).sku;
+    let sku = res.sku || res.productId || res.product_id || (_getPending() || {}).sku;
+    sku = skuFromProductId(sku) || sku;   // normalize store id → internal sku
     const p = PACKS.find((x) => x.sku === sku);
     _clearPending();
     if (res.ok && p) {
@@ -139,11 +175,15 @@
   function _clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) {} }
   function _result(ok, info) { if (window.UI && window.UI.purchaseResult) window.UI.purchaseResult(ok, info); }
   // no-confirmation watchdog: if a checkout was started and nothing delivered
-  // within 4 minutes (while the tab is visible), show the sorry screen once.
+  // within the watch window (while the tab is visible), show the sorry screen
+  // once. Native store sheets keep the page "visible" and can legitimately sit
+  // open for a long time (password prompts, slow App Store), so give native
+  // purchases 15 minutes vs 4 for web checkout in another tab.
   setInterval(() => {
     const p = _getPending();
     if (!p || document.hidden) return;
-    if (Date.now() - p.at > 4 * 60000) { _clearPending(); _result(false, p); }
+    const windowMs = nativePlatform() ? 15 * 60000 : 4 * 60000;
+    if (Date.now() - p.at > windowMs) { _clearPending(); _result(false, p); }
   }, 5000);
   // checkout redirect result (?purchase=success|cancel) — works when the
   // Stripe Payment Link (or native store wrapper) redirects back to the game.
@@ -211,5 +251,5 @@
     else if (++_bootTries > 40) clearInterval(_bootTimer);
   }, 1500);
 
-  window.PAYMENTS = { PACKS, PRO, buy, subscribe, configured, linkFor, claimWallet, storeId, onNativeResult };
+  window.PAYMENTS = { PACKS, PRO, buy, subscribe, configured, linkFor, claimWallet, storeId, skuFromProductId, initNativeIAP, onNativeResult };
 })();

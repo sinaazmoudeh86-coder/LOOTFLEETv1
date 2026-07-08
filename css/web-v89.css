@@ -45,13 +45,20 @@
    the fake status bar into a real top app bar with the signed-in account.
    ============================================================================= */
 
-html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:none; }
+html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:none;
+  -webkit-text-size-adjust:100%; text-size-adjust:100%;   /* stop Android WebView font boosting */
+  touch-action:manipulation;                               /* no double-tap zoom in webviews */
+  position:fixed; inset:0; width:100%; }                   /* pin the shell — no rubber-band drift */
 #stage{ padding:0; }
 #notch{ display:none !important; }
 
-/* the old #phone bezel becomes the app shell */
+/* the old #phone bezel becomes the app shell.
+   Sized off #stage (position:fixed; inset:0) rather than vh units, so it always
+   tracks the REAL viewport — WKWebView / Android WebView keyboard + chrome
+   resizes included. vh/dvh kept only as fallback for the media query below. */
 #phone{
-  width:100vw; height:100vh; height:100dvh;
+  position:absolute; inset:0;
+  width:100%; height:100%;
   max-width:none; max-height:none;
   background:none; border:none; border-radius:0; padding:0;
   box-shadow:none; transform:none !important;
@@ -67,7 +74,7 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 @media (min-width:560px){
   #stage{ padding:0; }
   #phone{
-    width:100vw; height:100vh; height:100dvh;
+    width:100%; height:100%;
     border-radius:0; overflow:hidden;
     border:none; box-shadow:none;
   }
@@ -81,6 +88,8 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
   height:auto; min-height:34px; flex:none;
   padding:7px 16px;
   padding-top:calc(7px + env(safe-area-inset-top));
+  padding-left:max(16px, env(safe-area-inset-left));
+  padding-right:max(16px, env(safe-area-inset-right));
   background:linear-gradient(180deg,#0e1622,#0b1018);
   border-bottom:1px solid var(--line);
   color:var(--text); position:relative; z-index:7;
@@ -103,7 +112,8 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 .acct-btn .pw{ color:var(--muted-2); font-size:13px; line-height:1; }
 
 /* safe-area breathing room for the bottom nav on notched phones */
-#nav{ padding-bottom:env(safe-area-inset-bottom); height:calc(60px + env(safe-area-inset-bottom)); }
+#nav{ padding-bottom:env(safe-area-inset-bottom); height:calc(60px + env(safe-area-inset-bottom));
+  padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
 
 /* login gate fills the real viewport too */
 #login{ border-radius:inherit; }

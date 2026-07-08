@@ -314,7 +314,7 @@
       <div class="acct-row"><input id="ac-name" class="acct-in" maxlength="18" placeholder="New pilot name"><button class="btn" id="ac-rename">Rename</button></div>
       <div class="lo-sect" style="margin-top:11px">★ LootFleet Pro</div>
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v" style="color:${pro ? '#7ce0a0' : 'var(--muted)'}">${pro ? 'ACTIVE · renews ' + new Date(G.state.proUntil).toLocaleDateString() : 'Not subscribed'}</span></div>
-      <div class="acct-row">${pro ? '<button class="btn" id="ac-manage">Manage / cancel subscription</button>' : '<button class="btn gold" id="ac-gopro">★ Go Pro — $20/mo</button>'}</div>
+      <div class="acct-row">${pro ? '<button class="btn" id="ac-manage">Manage / cancel subscription</button>' : '<button class="btn gold" id="ac-gopro">★ Go Pro — $19.99/mo</button>'}</div>
       <div class="lo-sect" style="margin-top:11px">Security</div>
       <div class="acct-row">${cloud && s.email ? '<button class="btn" id="ac-reset">Send password-reset email</button>' : '<span class="acct-hint">Password reset needs a cloud account — sign up with email to enable it.</span>'}</div>
       <div class="lo-sect" style="margin-top:11px">📱 Text alerts</div>
@@ -386,14 +386,21 @@
   function openProSheet() {
     const pro = G.isPro && G.isPro();
     const conf = window.PAYMENTS && window.PAYMENTS.linkFor && !!window.PAYMENTS.linkFor('pro_monthly');
+    // Apple Guideline 3.1.2 — the purchase sheet must state the subscription
+    // title, duration, price, what the user gets, and link Privacy + Terms.
     const sheet = showSheet(`<div class="sheet-head">★ LootFleet Pro</div><div class="sheet-body">
+      <div class="ip-stat"><span class="ip-sname">Subscription</span><span class="v">LootFleet Pro</span></div>
+      <div class="ip-stat"><span class="ip-sname">Duration</span><span class="v">Monthly · auto-renews</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">$19.99 / month</span></div>
+      <div class="lo-sect" style="margin-top:10px">What you get</div>
       <div class="ip-stat"><span class="ip-sname">⚡ Battle speed</span><span class="v">Exclusive 5× tier — Pro only</span></div>
       <div class="ip-stat"><span class="ip-sname">✨ Experience</span><span class="v">2× XP on every kill, account-wide</span></div>
-      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">$20 / month · cancel anytime</span></div>
+      <p style="font-size:10.5px;line-height:1.55;color:var(--muted);margin-top:10px">Payment is charged to your account at confirmation of purchase. The subscription renews automatically each month at $19.99 unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your account settings.</p>
+      <p style="font-size:11px;margin-top:8px"><a href="privacy.html" target="_blank" rel="noopener" style="color:#5fa8ff">Privacy Policy</a> · <a href="terms.html" target="_blank" rel="noopener" style="color:#5fa8ff">Terms of Use</a></p>
       ${pro ? `<p style="font-size:11px;color:#7ce0a0;margin-top:8px">✓ Active — renews ${new Date(G.state.proUntil).toLocaleDateString()}</p>` : ''}
       ${conf ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:8px">⚒ Subscriptions are not live yet — payments are being wired up.</p>'}
       <div class="sheet-actions"><button class="btn" data-x>Close</button>
-        ${pro ? '' : '<button class="btn gold" data-ok>★ Go Pro — $20/mo</button>'}</div></div>`);
+        ${pro ? '' : '<button class="btn gold" data-ok>★ Buy Subscription — $19.99/mo</button>'}</div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
@@ -577,7 +584,7 @@
         const pro = G.isPro && G.isPro();
         pb.innerHTML = pro
           ? `<div class="pro-offer active"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro · ACTIVE</div><div class="po-desc">⚡ 5× speed + ✨ 2× XP · renews ${new Date(G.state.proUntil).toLocaleDateString()}</div></div></div>`
-          : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">⚡ Exclusive 5× battle speed · ✨ 2× XP on every kill</div><button class="po-buy">$20 / month — Go Pro</button></div></div>`;
+          : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">⚡ Exclusive 5× battle speed · ✨ 2× XP on every kill</div><button class="po-buy">$19.99 / month — Go Pro</button></div></div>`;
         const cta = pb.querySelector('#pro-offer-cta');
         if (cta) cta.addEventListener('click', openProSheet);
       }

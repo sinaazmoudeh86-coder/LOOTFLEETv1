@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0b1018">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -26,9 +26,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=180">
+<link rel="stylesheet" href="css/style-v2.css?v=185">
 <link rel="stylesheet" href="css/theme.css?v=180">
-<link rel="stylesheet" href="css/web-v89.css?v=184">
+<link rel="stylesheet" href="css/web-v89.css?v=185">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=180">
 <link rel="stylesheet" href="css/fx-primordial.css">
 <link rel="stylesheet" href="css/moon-colony.css?v=168">
@@ -153,14 +153,14 @@
 .mega{position:absolute;inset:0;z-index:55;display:none;}
 .mega.open{display:block;}
 .mega-back{position:absolute;inset:0;background:rgba(5,8,14,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:bdIn .2s ease;}
-.mega-sheet{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px 78px;box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);overflow:hidden;}
+.mega-sheet{position:absolute;left:0;right:0;bottom:0;max-height:calc(100% - env(safe-area-inset-top,0px) - 34px);display:flex;flex-direction:column;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px calc(78px + env(safe-area-inset-bottom,0px));box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);overflow:hidden;}
 .mega-sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 100%;animation:prismShift 5s linear infinite;}
 @keyframes megaUp{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
 @keyframes prismShift{to{background-position:300% 50%;}}
 @keyframes prismPulse{0%,100%{opacity:.32;}50%{opacity:.6;}}
-.mega-grab{width:40px;height:4px;border-radius:3px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ffd450,#5fd1ff);background-size:250% 100%;margin:4px auto 12px;animation:prismShift 4s linear infinite;}
-.mega-title{font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin:0 4px 11px;background:linear-gradient(90deg,#7fe0ff,#c79bff,#ff8a98,#ffd97a,#8be0a6,#7fe0ff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 6s linear infinite;}
-.mega-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.mega-grab{flex:none;width:40px;height:4px;border-radius:3px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ffd450,#5fd1ff);background-size:250% 100%;margin:4px auto 12px;animation:prismShift 4s linear infinite;}
+.mega-title{flex:none;font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin:0 4px 11px;background:linear-gradient(90deg,#7fe0ff,#c79bff,#ff8a98,#ffd97a,#8be0a6,#7fe0ff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 6s linear infinite;}
+.mega-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;align-content:start;}
 .mega-card{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;border-radius:14px;padding:13px 12px;position:relative;cursor:pointer;transition:transform .12s,box-shadow .2s;}
 .mega-card::before{content:'';position:absolute;inset:0;border-radius:14px;padding:1px;background:linear-gradient(130deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 300%;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.34;animation:prismShift 6s linear infinite;pointer-events:none;}
 .mega-card:active{transform:scale(.97);box-shadow:0 6px 24px rgba(120,150,255,.28);}
@@ -553,9 +553,9 @@
 <script src="js/cloud.js?v=180"></script>
 <script src="js/account.js"></script>
 <script src="js/territory.js"></script>
-<script src="js/payments-v91.js?v=185"></script>
+<script src="js/payments-v91.js?v=186"></script>
 <script src="js/game-v93.js?v=180"></script>
-<script src="js/ui-v94.js?v=184"></script>
+<script src="js/ui-v94.js?v=186"></script>
 <script src="js/fx-cinematic.js?v=2"></script>
 <script src="js/fx-primordial.js"></script>
 <script src="js/fx-aaa.js?v=160"></script>

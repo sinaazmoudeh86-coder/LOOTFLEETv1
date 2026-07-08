@@ -103,9 +103,9 @@
       _result(false, p ? { credits: p.credits } : {});
     }
   }
-  // LOOTFLEET PRO — $20/mo subscription (5× speed + 2× XP). Uses a recurring
+  // LOOTFLEET PRO — $19.99/mo subscription (5× speed + 2× XP). Uses a recurring
   // Stripe Payment Link under the 'pro_monthly' sku.
-  const PRO = { sku: 'pro_monthly', usd: '20' };
+  const PRO = { sku: 'pro_monthly', usd: '19.99' };
   function subscribe() { return buy(PRO.sku); }
   function configured() { return !!nativePlatform() || PACKS.some((p) => linkFor(p.sku)); }
   // Open Stripe checkout in a new tab, tagging the session with the player's

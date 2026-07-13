@@ -606,6 +606,24 @@ html,body{background:#0b1018;}
 </div>
 
 <style id="fr-attack-redux">
+/* ---- UX clarity layer: next-best-action + how-it-works ---- */
+.nba{display:flex;align-items:center;gap:11px;width:100%;text-align:left;margin-bottom:13px;padding:12px 13px;border-radius:14px;
+  background:radial-gradient(120% 160% at 0% 0%,rgba(95,209,255,.14),transparent 60%),linear-gradient(180deg,#1a2231,#131a28);
+  border:1px solid rgba(95,209,255,.35);box-shadow:0 0 18px -8px rgba(95,209,255,.6);}
+.nba .ni{flex:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:17px;
+  background:rgba(95,209,255,.12);border:1px solid rgba(95,209,255,.35);}
+.nba .nm2{flex:1;min-width:0}
+.nba .nk{font-size:8.5px;font-weight:800;letter-spacing:.18em;color:var(--cyan);text-transform:uppercase;}
+.nba .nt{font-size:12px;font-weight:700;color:var(--text);line-height:1.35;margin-top:2px;}
+.nba .ngo{flex:none;font-family:var(--font-d);font-weight:800;font-size:10px;letter-spacing:.08em;color:#08131c;
+  background:linear-gradient(180deg,#8ff0ff,#4fc3ef);border-radius:9px;padding:9px 13px;}
+.hiw{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:13px;}
+.hiw button{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:9px 10px;border-radius:11px;
+  background:linear-gradient(180deg,#172030,#131a28);border:1px solid var(--line);}
+.hiw .hn{font-family:var(--font-d);font-weight:800;font-size:10px;color:var(--gold);}
+.hiw .ht{font-size:9.5px;font-weight:700;color:var(--muted);line-height:1.3;}
+.frtab .bn{position:absolute;top:2px;right:6px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;
+  background:var(--bad);color:#fff;font-size:9px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px #0e1420;}
 /* thin token bar */
 .tok-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
   background:linear-gradient(180deg,#141c2a,#0f1622);border:1px solid var(--line);
@@ -1320,7 +1338,7 @@ function buildScreen(){
   SUBTABS.forEach(t=>{
     const b=el('<button class="frtab'+(t.id==='base'?' active':'')+'" data-tab="'+t.id+'">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+t.ic+'</svg>'+
-      '<span class="ft">'+t.label+'</span>'+(t.id==='attack'&&S.tokens>0?'<span class="b"></span>':'')+'</button>');
+      '<span class="ft">'+t.label+'</span>'+(t.id==='attack'&&S.tokens>0?'<span class="bn">'+S.tokens+'</span>':'')+'</button>');
     b.onclick=()=>setTab(t.id);
     tabs.appendChild(b);
   });
@@ -1334,12 +1352,24 @@ function setTab(id){
   pullEconomy();
   S.rankIdx=curRank();
   document.querySelectorAll('.frtab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
+  // live token badge on the Attack tab
+  const atkTab=document.querySelector('.frtab[data-tab="attack"]');
+  if(atkTab){const old=atkTab.querySelector('.bn');if(old)old.remove();
+    if(S.tokens>0)atkTab.insertAdjacentHTML('beforeend','<span class="bn">'+S.tokens+'</span>');}
   $('#fr-crumb').textContent=SUBTABS.find(t=>t.id===id).crumb;
   const body=$('#fr-body');body.scrollTop=0;
   ({base:renderBase,defense:renderDefense,upgrade:renderUpgrade,attack:renderAttack,ranks:renderRanks})[id]();
 }
 
 /* ============================================================ BASE ======= */
+// NEXT BEST ACTION — one clear "do this now" so the loop is never a mystery
+function nextAction(){
+  if(!S.dailyClaimed)return{ic:'⚡',k:'Free · every day',t:'Claim your daily '+RANKS[S.rankIdx].n+' rewards',b:'CLAIM',fn:openDaily};
+  const emptyS=8-S.struct.filter(Boolean).length;
+  if(emptyS>0)return{ic:'⛨',k:'Defense first',t:emptyS+' empty defense node'+(emptyS>1?'s':'')+' — raiders loot weak citadels',b:'BUILD',fn:()=>setTab('defense')};
+  if(S.tokens>0)return{ic:'⚔',k:'Raids ready',t:S.tokens+' attack token'+(S.tokens>1?'s':'')+' — raid rivals for gold, galaxy loot & ladder position',b:'RAID',fn:()=>setTab('attack')};
+  return{ic:'⏳',k:'Tokens spent',t:'Attacks reset in '+cdStr()+' — upgrade your citadel meanwhile',b:'UPGRADE',fn:()=>setTab('upgrade')};
+}
 function renderBase(){
   const cit=CIT_LEVELS[S.citLvl-1];
   const rank=RANKS[S.rankIdx],next=RANKS[S.rankIdx+1];
@@ -1348,17 +1378,28 @@ function renderBase(){
 
   $('#fr-body').innerHTML=
   '<div class="subview">'+
+    // what should I do right now?
+    (function(){const na=nextAction();return '<button class="nba" id="nba">'+
+      '<span class="ni">'+na.ic+'</span><span class="nm2">'+
+      '<span class="nk">'+na.k+'</span><span class="nt" style="display:block">'+na.t+'</span></span>'+
+      '<span class="ngo">'+na.b+' ▸</span></button>';})()+
+    // the loop, in one glance — each step jumps to its tab
+    '<div class="hiw">'+
+      '<button data-hiw="defense"><span class="hn">1 · DEFEND</span><span class="ht">Build the grid that guards your loot</span></button>'+
+      '<button data-hiw="attack"><span class="hn">2 · RAID</span><span class="ht">Spend ⚔ tokens · win = spoils + position</span></button>'+
+      '<button data-hiw="ranks"><span class="hn">3 · EARN</span><span class="ht">Hold rank → daily gold &amp; galaxy payout</span></button>'+
+    '</div>'+
     // fleet power
     '<div class="fp-banner" id="fp-open"><div class="fp-l">'+
       '<div class="fp-lab">⚡ Fleet Power</div>'+
       '<div class="fp-val">'+fmt(fleetPower())+'</div>'+
-      '<div class="fp-trend">▲ +14.2M this week · tap for breakdown</div>'+
+      '<div class="fp-trend">Attack + Defense combined — decides your rank · tap for breakdown</div>'+
     '</div><span class="fp-chev">›</span></div>'+
 
     // attack / defense split (the two numbers that decide raids)
     '<div class="ad-split">'+
-      '<div class="ad atk"><div class="adl">⚔ Attack Power</div><div class="adv">'+fmt(attackPower())+'</div><div class="ads">your active fleet</div></div>'+
-      '<div class="ad def"><div class="adl">⛨ Defense Value</div><div class="adv">'+fmt(defenseValue())+'</div><div class="ads">structures + fleet</div></div>'+
+      '<div class="ad atk"><div class="adl">⚔ Attack Power</div><div class="adv">'+fmt(attackPower())+'</div><div class="ads">how hard YOUR raids hit</div></div>'+
+      '<div class="ad def"><div class="adl">⛨ Defense Value</div><div class="adv">'+fmt(defenseValue())+'</div><div class="ads">what raiders must break</div></div>'+
     '</div>'+
 
     // citadel hero
@@ -1415,6 +1456,8 @@ function renderBase(){
   '</div>';
 
   $('#fp-open').onclick=openBreakdown;
+  $('#nba').onclick=nextAction().fn;
+  document.querySelectorAll('[data-hiw]').forEach(b=>b.onclick=()=>setTab(b.dataset.hiw));
   $('#go-def').onclick=()=>setTab('defense');
   $('#go-ranks').onclick=()=>setTab('ranks');
   $('#go-payout').onclick=openDailyPayout;
@@ -1599,6 +1642,7 @@ function renderAttack(){
   $('#fr-body').innerHTML=
   '<div class="subview">'+
     tokenBar()+
+    '<div class="sec-blurb" style="margin-top:9px">Each raid costs <b>1 ⚔ token</b>. Beat their ⛨ defense in the arena to loot the gold &amp; galaxy shown — lose and it only costs the token. Tokens reset daily.</div>'+
     '<div class="sec-head"><h3>Raid Targets</h3><span class="more" id="reroll">↻ Refresh</span></div>'+
     (online?'':'<div class="sec-blurb" style="color:#ffd24d;border:1px solid rgba(242,178,75,.4);background:rgba(242,178,75,.08);border-radius:9px;padding:7px 11px;margin-bottom:9px">⚠ Preview opponents — sign in to raid <b>real</b> rival fleets.</div>')+
     '<div id="target-list">'+RAIDLIST.map((t,i)=>targetCard(t,i)).join('')+'</div>'+

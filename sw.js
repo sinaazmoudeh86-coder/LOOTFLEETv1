@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v189';
+const CACHE = 'lootfleet-v191';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -18,6 +18,9 @@ const CORE = [
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.live.js',
   'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v93.js', 'js/ui-v94.js', 'js/fx-cinematic.js', 'js/fx-primordial.js', 'js/coach-v89.js', 'js/auth.js', 'js/prism-v5.js', 'js/prism-fleet.js', 'js/dreadnaught.js', 'js/galaxy-box.js',
   'js/showcase.js', 'js/ships-inline.js',
+  'js/missions.js', 'js/moon-colony.js', 'js/moon-scene.js', 'js/fx-aaa.js',
+  'js/shipworks.js', 'js/ascension.js', 'js/casino.js', 'js/casino2.js',
+  'css/fx-aaa.css',
   'fleet-rank-embed.html',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',
   'ships/ship-heavycruiser.png', 'ships/ship-destroyer.png', 'ships/ship-battleship.png',
@@ -27,6 +30,7 @@ const CORE = [
   'ships/ship-oblivionspear.png', 'ships/ship-oblivionspearalpha.png', 'ships/ship-oblivionfinal.png',
   'ships/dread-1.png', 'ships/dread-2.png', 'ships/dread-3.png', 'ships/dread-4.png', 'ships/dread-5.png', 'ships/dread-6.png',
   'ships/ship-dread1.png', 'ships/ship-dread2.png', 'ships/ship-dread3.png', 'ships/ship-dread4.png', 'ships/ship-dread5.png', 'ships/ship-dread6.png',
+  'ships/ship-titansina.png',
 ];
 
 self.addEventListener('install', (e) => {

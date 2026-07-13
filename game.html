@@ -26,13 +26,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=185">
-<link rel="stylesheet" href="css/theme.css?v=180">
-<link rel="stylesheet" href="css/web-v89.css?v=185">
+<link rel="stylesheet" href="css/style-v2.css?v=186">
+<link rel="stylesheet" href="css/theme.css?v=181">
+<link rel="stylesheet" href="css/web-v89.css?v=186">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=180">
 <link rel="stylesheet" href="css/fx-primordial.css">
 <link rel="stylesheet" href="css/moon-colony.css?v=168">
-<link rel="stylesheet" href="css/fx-aaa.css?v=170">
+<link rel="stylesheet" href="css/fx-aaa.css?v=171">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -183,6 +183,46 @@
 .mega-card.cmd-prism .mc-ic{color:#c9a0ff;border-color:rgba(201,160,255,.5);background:radial-gradient(120% 120% at 50% 0%,#2a2046,#140e24);box-shadow:0 0 16px -2px rgba(201,160,255,.7);}
 .mega-card.cmd-prism .mc-n{background:linear-gradient(90deg,#d9c2ff,#ff9ec4,#ffe6a0,#8be0c0,#d9c2ff);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 5s linear infinite;}
 </style>
+<style id="cmd-palette">
+/* COMMAND PALETTE — one distinct hue per feature (overrides script-injected card styles) */
+.mega-grid .mega-card.cmd-rank{ background:linear-gradient(180deg,#221408,#140d08); }
+.mega-grid .mega-card.cmd-rank .mc-ic{ color:#ff8c42; border-color:rgba(255,140,66,.5); background:radial-gradient(120% 120% at 50% 0%,#2e1a0c,#140d08); box-shadow:0 0 14px -3px rgba(255,140,66,.7); }
+.mega-grid .mega-card.cmd-rank .mc-n{ color:#ffd9bd; }
+.mega-grid .mega-card.cmd-rank::before{ background:linear-gradient(130deg,#ff8c42,#ffb347,#ff5f2e,#ff8c42); background-size:250% 250%; }
+
+.mega-grid .mega-card.cmd-pilot{ background:linear-gradient(180deg,#220a1c,#130812); }
+.mega-grid .mega-card.cmd-pilot .mc-ic{ color:#ff5fd0; border-color:rgba(255,95,208,.5); background:radial-gradient(120% 120% at 50% 0%,#301027,#130812); box-shadow:0 0 14px -3px rgba(255,95,208,.7); }
+.mega-grid .mega-card.cmd-pilot .mc-n{ color:#ffd2f1; }
+.mega-grid .mega-card.cmd-pilot::before{ background:linear-gradient(130deg,#ff5fd0,#ff8ae2,#c936a8,#ff5fd0); background-size:250% 250%; }
+
+.mega-grid .mega-card.cmd-skills{ background:linear-gradient(180deg,#161f0b,#0e1308); }
+.mega-grid .mega-card.cmd-skills .mc-ic{ color:#b8e35a; border-color:rgba(184,227,90,.5); background:radial-gradient(120% 120% at 50% 0%,#22300f,#0e1308); box-shadow:0 0 14px -3px rgba(184,227,90,.7); }
+.mega-grid .mega-card.cmd-skills .mc-n{ color:#e4f5c0; }
+.mega-grid .mega-card.cmd-skills::before{ background:linear-gradient(130deg,#b8e35a,#7fd44a,#e3f06b,#b8e35a); background-size:250% 250%; }
+
+.mega-grid .mega-card.cmd-pfleet .mc-ic{ color:#ff7099; border-color:rgba(255,112,153,.5); background:radial-gradient(120% 120% at 50% 0%,#2e1220,#140a10); box-shadow:0 0 14px -3px rgba(255,112,153,.7); }
+.mega-grid .mega-card.cmd-pfleet{ background:linear-gradient(180deg,#251019,#150a10); }
+
+.mega-grid .mega-card.cmd-moon{ background:linear-gradient(180deg,#151a24,#0d1017); }
+.mega-grid .mega-card.cmd-moon .mc-ic{ color:#dbe7f8; border-color:rgba(219,231,248,.45); background:radial-gradient(120% 120% at 50% 0%,#232c3c,#0d1017); box-shadow:0 0 14px -3px rgba(219,231,248,.55); }
+.mega-grid .mega-card.cmd-moon .mc-n{ color:#eef4fd; }
+.mega-grid .mega-card.cmd-moon::before{ background:linear-gradient(130deg,#dbe7f8,#8fa5c4,#f4f8ff,#dbe7f8); background-size:250% 250%; }
+
+.mega-grid .mega-card.cmd-msn{ background:linear-gradient(180deg,#0a2015,#08130d); }
+.mega-grid .mega-card.cmd-msn .mc-ic{ color:#45e08c; border-color:rgba(69,224,140,.5); background:radial-gradient(120% 120% at 50% 0%,#0f2e1c,#08130d); box-shadow:0 0 14px -3px rgba(69,224,140,.7); }
+.mega-grid .mega-card.cmd-msn .mc-n{ color:#c6f5da; }
+.mega-grid .mega-card.cmd-msn::before{ background:linear-gradient(130deg,#45e08c,#22c76f,#8af5b8,#45e08c); background-size:250% 250%; }
+
+.mega-grid .mega-card.cmd-works{ background:linear-gradient(180deg,#0a1f1d,#081312); }
+.mega-grid .mega-card.cmd-works .mc-ic{ color:#2dd4bf; border-color:rgba(45,212,191,.5); background:radial-gradient(120% 120% at 50% 0%,#0e2c28,#081312); box-shadow:0 0 14px -3px rgba(45,212,191,.7); }
+.mega-grid .mega-card.cmd-works .mc-n{ color:#c2f2ea; }
+.mega-grid .mega-card.cmd-works::before{ background:linear-gradient(130deg,#2dd4bf,#14b8a6,#6ef2df,#2dd4bf); background-size:250% 250%; }
+
+.mega-grid .mega-card.cmd-ascend{ background:linear-gradient(180deg,#1e0b26,#120816); }
+.mega-grid .mega-card.cmd-ascend .mc-ic{ color:#e05bff; border-color:rgba(224,91,255,.5); background:radial-gradient(120% 120% at 50% 0%,#2c1038,#120816); box-shadow:0 0 14px -3px rgba(224,91,255,.7); }
+.mega-grid .mega-card.cmd-ascend .mc-n{ color:#f2d4ff; }
+.mega-grid .mega-card.cmd-ascend::before{ background:linear-gradient(130deg,#e05bff,#ff5fd0,#8b2fd6,#e05bff); background-size:250% 250%; }
+</style>
 </head>
 <body>
 <div id="stage">
@@ -318,7 +358,7 @@
 
         <!-- FLEET RANK (endgame PvP) -->
         <div class="screen overlay" id="screen-fleetrank" style="padding:0">
-          <iframe id="fr-frame" data-src="fleet-rank-embed.html" title="Fleet Rank" style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#0b1018"></iframe>
+          <iframe id="fr-frame" data-src="fleet-rank-embed.html?v=2" title="Fleet Rank" style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#0b1018"></iframe>
           <div class="lock-veil" id="lock-fleetrank"><div class="lock-card"><div class="lock-ic">🔒</div><h3>Fleet Rank</h3><p>The endgame PvP ladder — build a citadel, raid rivals, and climb for daily rewards.</p><div class="lock-lv">Unlocks at <b>Level 50</b> · you're Level <span id="lk-fr-cur">1</span></div></div></div>
         </div>
 
@@ -358,6 +398,24 @@
         <div class="screen overlay" id="screen-missions">
           <div class="scr-head"><span class="scr-title">Missions</span><span class="scr-sub" id="missions-sub"></span></div>
           <div class="scr-body" id="missions-body"></div>
+        </div>
+
+        <!-- SPACE CASINO (Command) -->
+        <div class="screen overlay" id="screen-casino" data-screen-label="Space Casino">
+          <div class="scr-head"><span class="scr-title">Space Casino</span><span class="scr-sub" id="casino-sub"></span></div>
+          <div class="scr-body" id="casino-body"></div>
+        </div>
+
+        <!-- SHIP ASCENSION (Command) -->
+        <div class="screen overlay" id="screen-ascend" data-screen-label="Ascension">
+          <div class="scr-head"><span class="scr-title">Ship Ascension</span><span class="scr-sub" id="ascend-sub"></span></div>
+          <div class="scr-body" id="ascend-body"></div>
+        </div>
+
+        <!-- SHIPWORKS (Command) -->
+        <div class="screen overlay" id="screen-shipworks" data-screen-label="Shipworks">
+          <div class="scr-head"><span class="scr-title">Shipworks</span><span class="scr-sub" id="shipworks-sub"></span></div>
+          <div class="scr-body" id="shipworks-body"></div>
         </div>
 
         <!-- GALAXY BOXES (Command) -->
@@ -428,6 +486,18 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M3 6.5L12 11l9-4.5M12 11v11"/></svg>
           <span class="nl">Galaxy Supply</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="shipworks">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 8v8M8 12h8"/></svg>
+          <span class="nl">Shipworks</span>
+        </button>
+        <button class="nav-btn nav-grouped" data-screen="ascend">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg>
+          <span class="nl">Ascension</span>
+        </button>
+        <button class="nav-btn nav-grouped" data-screen="casino">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.4"/><circle cx="15.5" cy="15.5" r="1.4"/><circle cx="15.5" cy="8.5" r="1.4"/><circle cx="8.5" cy="15.5" r="1.4"/></svg>
+          <span class="nl">Casino</span>
+        </button>
         <button class="nav-btn" id="nav-command" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 11h6M9 14h6M12 8v0"/></svg>
           <span class="nl">Command</span><span class="badge" id="cmd-badge" style="display:none">0</span>
@@ -446,7 +516,7 @@
               <div><div class="mc-n">My Galaxy</div><div class="mc-s">Conquer systems, hold citadels &amp; wage the turf war</div></div>
               <span class="mc-lock"></span>
             </div>
-            <div class="mega-card" data-go="fleetrank">
+            <div class="mega-card cmd-rank" data-go="fleetrank">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg></div>
               <div><div class="mc-n">Fleet Rank</div><div class="mc-s">Endgame PvP ladder · raid &amp; climb</div></div>
               <span class="mc-lock"></span>
@@ -461,7 +531,7 @@
               <div><div class="mc-n">Pilot Tree</div><div class="mc-s">Spend ◇ cores · permanent ship bonuses</div></div>
               <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-pilot-badge" style="display:none">0</span>
             </div>
-            <div class="mega-card" data-go="skills">
+            <div class="mega-card cmd-skills" data-go="skills">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M12 7.4v2.6M11.4 12l-3.6 3.8M12.6 12l3.6 3.8"/></svg></div>
               <div><div class="mc-n">Pilot Skills</div><div class="mc-s">Spend points on your tree</div></div>
               <span class="badge cmd-cardbadge" id="cmd-skills-badge" style="display:none">0</span>
@@ -471,7 +541,7 @@
               <div><div class="mc-n">Prism Mining</div><div class="mc-s">Deploy &amp; fight for ◈ Prism Ingots</div></div>
               <span class="mc-lock"></span>
             </div>
-            <div class="mega-card cmd-prism" data-go="prismfleet">
+            <div class="mega-card cmd-prism cmd-pfleet" data-go="prismfleet">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.4 1 6.2L12 20l-5.5 3 1-6.2L3 8.9 9 8z"/></svg></div>
               <div><div class="mc-n">Prism Fleet</div><div class="mc-s">Weekly boss gauntlet · forge a Prism Core</div></div>
               <span class="mc-lock"></span>
@@ -485,6 +555,21 @@
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg></div>
               <div><div class="mc-n">Missions</div><div class="mc-s">10 daily orders · resources, coins &amp; a bonus crate</div></div>
               <span class="badge cmd-cardbadge" id="cmd-msn-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-works" data-go="shipworks">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 8v8M8 12h8"/></svg></div>
+              <div><div class="mc-n">Shipworks</div><div class="mc-s">Open part crates &amp; assemble hulls — up to the Titan Sina</div></div>
+              <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-works-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-ascend" data-go="ascend">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg></div>
+              <div><div class="mc-n">Ship Ascension</div><div class="mc-s">Ascend hull modules — stars, tiers &amp; prismatic glory</div></div>
+              <span class="mc-lock"></span>
+            </div>
+            <div class="mega-card cmd-casino" data-go="casino">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.4"/><circle cx="15.5" cy="15.5" r="1.4"/><circle cx="15.5" cy="8.5" r="1.4"/><circle cx="8.5" cy="15.5" r="1.4"/></svg></div>
+              <div><div class="mc-n">Space Casino</div><div class="mc-s">Blackjack · hold’em · roulette · craps · slots — any currency</div></div>
+              <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-boxes" data-go="boxes">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M3 6.5L12 11l9-4.5M12 11v11"/></svg></div>
@@ -544,30 +629,35 @@
 <script src="js/config-v2.js"></script>
 <script src="js/items.js"></script>
 <script src="js/entities.js"></script>
-<script src="js/render.js"></script>
+<script src="js/render.js?v=3"></script>
 <script src="js/galaxy.js"></script>
 <script src="js/leaderboard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
 <script src="js/analytics.js?v=1"></script>
-<script src="js/cloud.js?v=180"></script>
-<script src="js/account.js"></script>
+<script src="js/cloud.js?v=181"></script>
+<script src="js/session-lock.js?v=1"></script>
+<script src="js/account.js?v=181"></script>
 <script src="js/territory.js"></script>
-<script src="js/payments-v91.js?v=188"></script>
-<script src="js/game-v93.js?v=180"></script>
-<script src="js/ui-v94.js?v=186"></script>
-<script src="js/fx-cinematic.js?v=2"></script>
+<script src="js/payments-v91.js?v=189"></script>
+<script src="js/game-v93.js?v=190"></script>
+<script src="js/ui-v94.js?v=193"></script>
+<script src="js/fx-cinematic.js?v=3"></script>
 <script src="js/fx-primordial.js"></script>
 <script src="js/fx-aaa.js?v=160"></script>
 <script src="js/moon-scene.js?v=166"></script>
-<script src="js/moon-colony.js?v=180"></script>
-<script src="js/missions.js?v=185"></script>
+<script src="js/moon-colony.js?v=182"></script>
+<script src="js/missions.js?v=187"></script>
 <script src="js/coach-v89.js?v=166"></script>
 <script src="js/prism-v5.js"></script>
 <script src="js/prism-fleet.js"></script>
 <script src="js/dreadnaught.js"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/auth.js?v=180"></script>
+<script src="js/shipworks.js?v=5"></script>
+<script src="js/ascension.js?v=9"></script>
+<script src="js/casino.js?v=5"></script>
+<script src="js/casino2.js?v=4"></script>
+<script src="js/auth.js?v=181"></script>
 <script id="auth-gate-glue">
   /* Presentational glue only — drives the new segmented control through the
      existing #lg-toggle that auth.js already wires. No auth logic added. */
@@ -648,7 +738,7 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,fleetrank:50,dread:30,pilot:30,boxes:30,moon:30};
+    const LOCKS={galaxy:25,fleetrank:50,dread:30,pilot:30,boxes:30,moon:30,casino:15};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -664,7 +754,7 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-pilot.active,#screen-boxes.active');
+      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();

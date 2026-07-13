@@ -29,14 +29,14 @@
   // Game boots from a stable, versioned key so lab/dev experimentation can
   // never leak volatile values into a player's session. The lab overrides this
   // via window.__FXCINE_STOREKEY to run in its own isolated sandbox.
-  var LS_KEY = (typeof window !== 'undefined' && window.__FXCINE_STOREKEY) || 'lf_fx_cine_v2';
+  var LS_KEY = (typeof window !== 'undefined' && window.__FXCINE_STOREKEY) || 'lf_fx_cine_v3';
   var reduceMotion = false;
   try { reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
 
   // -- tunables (persisted) --------------------------------------------------
   var DEFAULTS = {
     enabled: true,
-    bloom: 0.62,        // glow intensity
+    bloom: 0.45,        // glow intensity (hot pixels only — lasers/explosions)
     bloomRadius: 7,     // blur px at quarter-res
     grade: 0.45,        // color-grade strength (game already has a mild base grade)
     vignette: 0.40,     // edge darkening (stacks with game's existing soft vignette)
@@ -246,9 +246,12 @@
             sctx.globalAlpha = 1;
             sctx.clearRect(0, 0, small.width, small.height);
             sctx.drawImage(src, 0, 0, small.width, small.height);
-            // bright-pass: multiply the copy by itself so only hot pixels survive
+            // bright-pass: multiply the copy by itself TWICE so only genuinely
+            // hot pixels (lasers, explosions, cores) survive — ship/enemy hulls
+            // must NOT bloom or every model grows a ghost "reflection"
             sctx.globalCompositeOperation = 'multiply';
-            sctx.globalAlpha = 0.85;
+            sctx.globalAlpha = 0.9;
+            sctx.drawImage(small, 0, 0);
             sctx.drawImage(small, 0, 0);
             sctx.globalCompositeOperation = 'source-over';
             sctx.globalAlpha = 1;
@@ -261,17 +264,10 @@
           bctx.imageSmoothingEnabled = true;
           bctx.globalCompositeOperation = 'lighter';
           var amt = Math.min(1, S.bloom * (1 + impact * 0.35));
-          bctx.globalAlpha = amt * 0.7;
-          bctx.drawImage(small, 0, 0, W, H);                       // soft base
-          var spd = 0.04 * W;
-          bctx.globalAlpha = amt * 0.4;
-          bctx.drawImage(small, -spd, -spd, W + spd * 2, H + spd * 2); // halo
-          var ab = S.aberration * (1 + impact * 4) * (W / 900);     // chromatic
-          if (ab > 0.4) {
-            bctx.globalAlpha = amt * 0.28;
-            bctx.drawImage(small, -ab, 0, W, H);
-            bctx.drawImage(small, ab, 0, W, H);
-          }
+          bctx.globalAlpha = amt * 0.8;
+          bctx.drawImage(small, 0, 0, W, H);                       // soft, ALIGNED glow
+          // (no zoomed "halo" or shifted aberration copies — those displaced a
+          // ghost of every model, which read as a reflection beside each ship)
           bctx.restore();
         }
       } else { bctx.clearRect(0, 0, W, H); }

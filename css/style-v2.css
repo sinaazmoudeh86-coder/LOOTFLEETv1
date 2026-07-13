@@ -128,8 +128,9 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 #joystick.show{display:block;}
 #joystick .knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffffff,#cdd6e2);border:1px solid var(--gold-dim);}
 
-#loot-feed{position:absolute;bottom:96px;left:12px;z-index:4;display:flex;flex-direction:column;gap:4px;pointer-events:none;}
-.loot-toast{font-size:11px;font-weight:700;background:rgba(255,255,255,.94);border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:4px 9px;opacity:0;transform:translateX(-12px);animation:lootin .3s ease forwards,lootout .4s ease forwards 2.6s;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#loot-feed{position:absolute;bottom:96px;left:12px;z-index:4;display:flex;flex-direction:column;gap:3px;pointer-events:none;}
+.loot-toast{font-size:9.5px;font-weight:700;background:rgba(255,255,255,.82);border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:2px 7px;opacity:0;transform:translateX(-12px);animation:lootin .25s ease forwards,lootout .35s ease forwards 1.7s;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:max-content;}
+.loot-toast .lt-x{margin-left:5px;font-size:9px;font-weight:800;color:#5a6474;}
 @keyframes lootin{to{opacity:1;transform:none;}}@keyframes lootout{to{opacity:0;transform:translateX(-12px);}}
 #toast-layer{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden;}
 .lvl-toast{position:absolute;top:38%;left:0;right:0;margin:0 auto;width:max-content;max-width:94%;text-align:center;font-family:var(--font-display);font-weight:900;font-size:30px;color:var(--gold);text-shadow:0 0 18px rgba(47,111,237,.5),0 2px 6px rgba(0,0,0,.25);opacity:0;animation:lvlpop 1.6s ease forwards;white-space:nowrap;}

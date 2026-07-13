@@ -40,6 +40,7 @@
   let pending = null, timer = 0, lastSent = '';
   function push(state) {
     saveLocal(state);
+    if (window.__sessionKicked) return;   // kicked by a login elsewhere — never clobber the new device
     if (!cloudOn()) return;
     const s = session();
     if (!s || !s.id) return;            // only signed-in cloud users sync
@@ -48,6 +49,7 @@
   }
   async function flush() {
     clearTimeout(timer); timer = 0;
+    if (window.__sessionKicked) return;
     if (!cloudOn() || !pending) return;
     const s = session(); const data = pending; pending = null;
     if (!s || !s.id) return;

@@ -58,7 +58,7 @@
     violet:  { a:'#22103c', b:'#0d081c', neb:'176,92,255',  star:'#f0dcff', feat:'planet' },
     void:    { a:'#1c0826', b:'#06030c', neb:'235,64,200',  star:'#ffd6f4', feat:'blackhole' },
   };
-  const GAL_PROPS = ['asteroid', 'asteroid', 'debris', 'crystal'];
+  const GAL_PROPS = ['asteroid', 'asteroid', 'debris', 'crystal', 'wreck', 'satellite'];
 
   // starfield + drifting space debris, cached per zone+size
   let _spaceKey = '', _stars = [], _props = [], _featPos = null;
@@ -94,6 +94,24 @@
     } else if (p.type === 'debris') {
       ctx.fillStyle = '#3a3f४a'.replace('४','4'); ctx.fillStyle = '#3a3f4a';
       for (let i = 0; i < 4; i++) { const a = p.seed*9 + i*1.7; ctx.beginPath(); ctx.arc(Math.cos(a)*s*0.4, Math.sin(a)*s*0.3, s*0.13, 0, 7); ctx.fill(); }
+    } else if (p.type === 'wreck') {
+      // derelict ship carcass — snapped fuselage + broken wing
+      ctx.fillStyle = '#39404f'; ctx.strokeStyle = '#20242e'; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(-s*0.7, s*0.1); ctx.lineTo(s*0.15, -s*0.28); ctx.lineTo(s*0.55, -s*0.1); ctx.lineTo(s*0.3, s*0.22); ctx.lineTo(-s*0.4, s*0.32); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s*0.05, -s*0.2); ctx.lineTo(s*0.5, -s*0.75); ctx.lineTo(s*0.62, -s*0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,150,70,0.5)';
+      ctx.beginPath(); ctx.arc(-s*0.15, s*0.05, s*0.08, 0, 7); ctx.fill();   // dying ember
+      ctx.fillStyle = '#181b22';
+      ctx.beginPath(); ctx.arc(s*0.2, -s*0.05, s*0.1, 0, 7); ctx.fill();     // breach hole
+    } else if (p.type === 'satellite') {
+      // dead satellite — body + solar panels adrift
+      ctx.fillStyle = '#4a5163'; ctx.strokeStyle = '#262b36'; ctx.lineWidth = 1;
+      ctx.fillRect(-s*0.16, -s*0.22, s*0.32, s*0.44); ctx.strokeRect(-s*0.16, -s*0.22, s*0.32, s*0.44);
+      ctx.fillStyle = 'rgba(90,130,200,0.55)';
+      ctx.fillRect(-s*0.85, -s*0.14, s*0.6, s*0.28); ctx.strokeRect(-s*0.85, -s*0.14, s*0.6, s*0.28);
+      ctx.fillRect(s*0.25, -s*0.14, s*0.6, s*0.28); ctx.strokeRect(s*0.25, -s*0.14, s*0.6, s*0.28);
+      ctx.strokeStyle = '#6b7688';
+      ctx.beginPath(); ctx.moveTo(0, -s*0.22); ctx.lineTo(0, -s*0.5); ctx.stroke();
     } else { // asteroid
       const g = ctx.createRadialGradient(-s*0.2,-s*0.2,1,0,0,s*0.7); g.addColorStop(0,'#5b5550'); g.addColorStop(1,'#2b2723');
       ctx.fillStyle = g; ctx.strokeStyle = '#1c1916'; ctx.lineWidth = 1.2;
@@ -298,47 +316,186 @@
     }
   }
 
-  // alien vessel: hull tinted by e.tint, glowing core, fins; shape varies by type
+  // ENEMY VESSELS — each type is a distinct space silhouette, all tinted by
+  // e.tint and animated off e.walk (no shadowBlur in this hot path):
+  //   zombie   → derelict hulk drone (boxy, corroded, sputtering engine)
+  //   skeleton → raider dart fighter (needle fuselage, swept X-fins)
+  //   mutant   → asteroid rock-beast (tumbling rock, magma core, rubble moons)
+  //   alien    → organic alien vessel (the classic winged bio-ship)
+  //   dragon   → capital gunship (broad armored wedge, turrets, triple engines)
   function drawAlien(ctx, e, flash) {
-    const s = e.size, k = e.type.key, skin = fc(e.tint, flash);
-    const wob = Math.sin(e.walk * 2) * 0.06;
-    ctx.rotate(wob);
-    const winged = (k === 'dragon' || k === 'alien');
-    const long = (k === 'skeleton');
-    const bulky = (k === 'mutant' || k === 'dragon');
-    // engine glow trail (behind, +y is "back" toward where it came — just glow)
+    const k = e.type.key;
+    if (k === 'zombie') return drawDerelict(ctx, e, flash);
+    if (k === 'skeleton') return drawRaider(ctx, e, flash);
+    if (k === 'mutant') return drawRockBeast(ctx, e, flash);
+    if (k === 'dragon') return drawCapital(ctx, e, flash);
+    return drawOrganic(ctx, e, flash);
+  }
+
+  // organic alien bio-ship (the original vessel — alien type + fallback)
+  function drawOrganic(ctx, e, flash) {
+    const s = e.size, skin = fc(e.tint, flash);
+    ctx.rotate(Math.sin(e.walk * 2) * 0.06);
+    // engine glow trail
     ctx.fillStyle = rgba(lighten(skin, 0.2), 0.5);
     ctx.beginPath(); ctx.ellipse(0, s*0.85, s*0.3, s*0.5, 0, 0, 7); ctx.fill();
-    // wings/fins
-    if (winged) {
-      ctx.fillStyle = darken(skin, 0.35); ctx.strokeStyle = darken(skin, 0.55); ctx.lineWidth = 1.4;
-      [[-1],[1]].forEach(([d]) => { ctx.beginPath(); ctx.moveTo(d*s*0.2,-s*0.1); ctx.lineTo(d*s*1.3,s*0.2); ctx.lineTo(d*s*0.4,s*0.6); ctx.closePath(); ctx.fill(); ctx.stroke(); });
-    }
+    // wings
+    ctx.fillStyle = darken(skin, 0.35); ctx.strokeStyle = darken(skin, 0.55); ctx.lineWidth = 1.4;
+    [[-1],[1]].forEach(([d]) => { ctx.beginPath(); ctx.moveTo(d*s*0.2,-s*0.1); ctx.lineTo(d*s*1.3,s*0.2); ctx.lineTo(d*s*0.4,s*0.6); ctx.closePath(); ctx.fill(); ctx.stroke(); });
     // hull
     const g = ctx.createLinearGradient(-s*0.6,0,s*0.6,0);
     g.addColorStop(0, darken(skin,0.3)); g.addColorStop(0.5, skin); g.addColorStop(1, lighten(skin,0.16));
     ctx.fillStyle = g; ctx.strokeStyle = darken(skin,0.5); ctx.lineWidth = 1.5;
-    const hw = bulky ? 0.7 : long ? 0.42 : 0.56, hl = long ? 1.05 : 0.85;
     ctx.beginPath();
-    ctx.moveTo(0, -s*hl);                                    // nose
-    ctx.quadraticCurveTo(s*hw, -s*0.2, s*hw*0.8, s*0.7);
-    ctx.quadraticCurveTo(0, s*0.95, -s*hw*0.8, s*0.7);
-    ctx.quadraticCurveTo(-s*hw, -s*0.2, 0, -s*hl);
+    ctx.moveTo(0, -s*0.85);
+    ctx.quadraticCurveTo(s*0.56, -s*0.2, s*0.45, s*0.7);
+    ctx.quadraticCurveTo(0, s*0.95, -s*0.45, s*0.7);
+    ctx.quadraticCurveTo(-s*0.56, -s*0.2, 0, -s*0.85);
     ctx.closePath(); ctx.fill(); ctx.stroke();
     // plating ridge
-    ctx.strokeStyle = darken(skin, 0.32); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0,-s*hl*0.8); ctx.lineTo(0,s*0.7); ctx.stroke();
-    // glowing core / eye — cheap layered glow (no shadowBlur in per-enemy path)
-    const eyeCol = bulky ? '#ff6a3a' : '#7fe0ff';
-    ctx.globalAlpha = 0.45; ctx.fillStyle = eyeCol;
+    ctx.strokeStyle = darken(skin, 0.32); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0,-s*0.68); ctx.lineTo(0,s*0.7); ctx.stroke();
+    // glowing core
+    ctx.globalAlpha = 0.45; ctx.fillStyle = '#7fe0ff';
     ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.3, 0, 7); ctx.fill();
-    ctx.globalAlpha = 1; ctx.fillStyle = eyeCol;
+    ctx.globalAlpha = 1;
     ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.18, 0, 7); ctx.fill();
     ctx.fillStyle = '#0a0c10'; ctx.beginPath(); ctx.arc(0, -s*0.1, s*0.08, 0, 7); ctx.fill();
-    // spikes for stinger/alien
-    if (k === 'alien' || k === 'mutant') {
-      ctx.fillStyle = darken(skin, 0.2);
-      for (let i = -1; i <= 1; i += 2) { ctx.beginPath(); ctx.moveTo(i*s*0.3,-s*0.5); ctx.lineTo(i*s*0.55,-s*0.85); ctx.lineTo(i*s*0.2,-s*0.55); ctx.closePath(); ctx.fill(); }
+    // nose spikes
+    ctx.fillStyle = darken(skin, 0.2);
+    for (let i = -1; i <= 1; i += 2) { ctx.beginPath(); ctx.moveTo(i*s*0.3,-s*0.5); ctx.lineTo(i*s*0.55,-s*0.85); ctx.lineTo(i*s*0.2,-s*0.55); ctx.closePath(); ctx.fill(); }
+  }
+
+  // derelict hulk drone — corroded box hull, breach holes, sputtering engine
+  function drawDerelict(ctx, e, flash) {
+    const s = e.size, skin = fc(e.tint, flash), t = e.walk;
+    ctx.rotate(Math.sin(t * 1.3) * 0.09);
+    const flick = (Math.sin(t * 9) + Math.sin(t * 23)) > 0.6 ? 1 : 0.25;   // engine sputter
+    ctx.fillStyle = rgba('#ffb057', 0.5 * flick);
+    ctx.beginPath(); ctx.ellipse(0, s*0.8, s*0.26, s*0.5*flick, 0, 0, 7); ctx.fill();
+    // boxy corroded hull
+    const g = ctx.createLinearGradient(-s*0.6, 0, s*0.6, 0);
+    g.addColorStop(0, darken(skin, 0.4)); g.addColorStop(0.5, darken(skin, 0.1)); g.addColorStop(1, lighten(skin, 0.08));
+    ctx.fillStyle = g; ctx.strokeStyle = darken(skin, 0.55); ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-s*0.45, -s*0.75); ctx.lineTo(s*0.3, -s*0.85); ctx.lineTo(s*0.55, -s*0.3);
+    ctx.lineTo(s*0.5, s*0.6); ctx.lineTo(-s*0.35, s*0.7); ctx.lineTo(-s*0.6, s*0.1);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // breach holes
+    ctx.fillStyle = darken(skin, 0.5);
+    ctx.beginPath(); ctx.arc(s*0.18, s*0.25, s*0.16, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(-s*0.25, -s*0.3, s*0.1, 0, 7); ctx.fill();
+    // bent antenna
+    ctx.strokeStyle = darken(skin, 0.35); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-s*0.1, -s*0.8); ctx.lineTo(-s*0.3, -s*1.15); ctx.lineTo(-s*0.18, -s*1.3); ctx.stroke();
+    // dim flickering eye
+    ctx.globalAlpha = 0.4 * (0.5 + 0.5 * flick); ctx.fillStyle = '#ffcf6a';
+    ctx.beginPath(); ctx.arc(0, -s*0.15, s*0.28, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.5 + 0.5 * flick;
+    ctx.beginPath(); ctx.arc(0, -s*0.15, s*0.14, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // raider dart fighter — needle fuselage, swept X-fins, twin blue engines
+  function drawRaider(ctx, e, flash) {
+    const s = e.size, skin = fc(e.tint, flash);
+    ctx.rotate(Math.sin(e.walk * 2) * 0.05);
+    ctx.fillStyle = rgba('#7fd1ff', 0.55);
+    [[-0.3],[0.3]].forEach(([d]) => { ctx.beginPath(); ctx.ellipse(s*d, s*0.75, s*0.14, s*0.42, 0, 0, 7); ctx.fill(); });
+    // swept fins (X silhouette)
+    ctx.fillStyle = darken(skin, 0.3); ctx.strokeStyle = darken(skin, 0.5); ctx.lineWidth = 1.2;
+    [[-1],[1]].forEach(([d]) => {
+      ctx.beginPath(); ctx.moveTo(d*s*0.12, -s*0.2); ctx.lineTo(d*s*1.05, -s*0.55); ctx.lineTo(d*s*0.35, s*0.05); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(d*s*0.15, s*0.15); ctx.lineTo(d*s*0.9, s*0.7); ctx.lineTo(d*s*0.3, s*0.55); ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+    // needle fuselage
+    const g = ctx.createLinearGradient(-s*0.3, 0, s*0.3, 0);
+    g.addColorStop(0, darken(skin, 0.25)); g.addColorStop(0.5, skin); g.addColorStop(1, lighten(skin, 0.15));
+    ctx.fillStyle = g; ctx.strokeStyle = darken(skin, 0.45); ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(0, -s*1.15);
+    ctx.lineTo(s*0.22, -s*0.1); ctx.lineTo(s*0.28, s*0.65); ctx.lineTo(0, s*0.8);
+    ctx.lineTo(-s*0.28, s*0.65); ctx.lineTo(-s*0.22, -s*0.1);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // red cockpit slit
+    ctx.fillStyle = '#ff5f6b';
+    ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.ellipse(0, -s*0.45, s*0.18, s*0.42, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.ellipse(0, -s*0.45, s*0.09, s*0.3, 0, 0, 7); ctx.fill();
+  }
+
+  // asteroid rock-beast — tumbling rock body, pulsing magma core, rubble moons
+  function drawRockBeast(ctx, e, flash) {
+    const s = e.size, t = e.walk;
+    const rock = fc('#5a4c42', flash), glow = e.tint;
+    ctx.rotate(t * 0.3);
+    // irregular rock silhouette (deterministic per size)
+    ctx.fillStyle = rock; ctx.strokeStyle = darken(rock, 0.4); ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * Math.PI * 2;
+      const rr2 = s * (0.75 + 0.28 * Math.sin(i * 12.9898 + s));
+      const x = Math.cos(a) * rr2, y = Math.sin(a) * rr2;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // craters
+    ctx.fillStyle = darken(rock, 0.25);
+    ctx.beginPath(); ctx.arc(s*0.3, -s*0.15, s*0.18, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(-s*0.35, s*0.3, s*0.13, 0, 7); ctx.fill();
+    // magma cracks + core (pulsing, tinted)
+    const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+    ctx.strokeStyle = rgba(glow, 0.85 * pulse); ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(s*0.55, s*0.25);
+    ctx.moveTo(0, 0); ctx.lineTo(-s*0.5, s*0.1);
+    ctx.moveTo(0, 0); ctx.lineTo(s*0.1, -s*0.6);
+    ctx.stroke();
+    ctx.globalAlpha = 0.5 * pulse; ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, s*0.3, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = lighten(glow, 0.3);
+    ctx.beginPath(); ctx.arc(0, 0, s*0.15, 0, 7); ctx.fill();
+    // orbiting rubble moons
+    ctx.fillStyle = darken(rock, 0.15);
+    for (let i = 0; i < 3; i++) {
+      const a = t * 1.4 + i * 2.1;
+      ctx.beginPath(); ctx.arc(Math.cos(a)*s*1.25, Math.sin(a)*s*0.75, s*0.11, 0, 7); ctx.fill();
+    }
+  }
+
+  // capital gunship — broad armored wedge, batwing pylons, turrets, 3 engines
+  function drawCapital(ctx, e, flash) {
+    const s = e.size, skin = fc(e.tint, flash), t = e.walk;
+    ctx.rotate(Math.sin(t * 1.1) * 0.04);
+    // triple engine wash
+    ctx.fillStyle = rgba(lighten(skin, 0.25), 0.5);
+    [-0.45, 0, 0.45].forEach((d) => { ctx.beginPath(); ctx.ellipse(s*d, s*0.85, s*0.16, s*(d === 0 ? 0.55 : 0.45), 0, 0, 7); ctx.fill(); });
+    // batwing pylons
+    ctx.fillStyle = darken(skin, 0.35); ctx.strokeStyle = darken(skin, 0.55); ctx.lineWidth = 1.4;
+    [[-1],[1]].forEach(([d]) => {
+      ctx.beginPath(); ctx.moveTo(d*s*0.25, -s*0.35);
+      ctx.quadraticCurveTo(d*s*1.5, -s*0.15, d*s*1.25, s*0.55);
+      ctx.lineTo(d*s*0.45, s*0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+    // broad wedge hull
+    const g = ctx.createLinearGradient(-s*0.7, 0, s*0.7, 0);
+    g.addColorStop(0, darken(skin, 0.3)); g.addColorStop(0.5, skin); g.addColorStop(1, lighten(skin, 0.16));
+    ctx.fillStyle = g; ctx.strokeStyle = darken(skin, 0.5); ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -s*1.0);
+    ctx.lineTo(s*0.55, -s*0.3); ctx.lineTo(s*0.7, s*0.55); ctx.lineTo(s*0.3, s*0.8);
+    ctx.lineTo(-s*0.3, s*0.8); ctx.lineTo(-s*0.7, s*0.55); ctx.lineTo(-s*0.55, -s*0.3);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // armor ridges
+    ctx.strokeStyle = darken(skin, 0.3); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-s*0.35, -s*0.25); ctx.lineTo(-s*0.35, s*0.6); ctx.moveTo(s*0.35, -s*0.25); ctx.lineTo(s*0.35, s*0.6); ctx.stroke();
+    // turrets
+    ctx.fillStyle = darken(skin, 0.15);
+    [[-0.35, 0.1], [0.35, 0.1], [0, 0.45]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.arc(s*dx, s*dy, s*0.13, 0, 7); ctx.fill(); });
+    // menacing reactor core
+    const pulse = 0.7 + 0.3 * Math.sin(t * 4);
+    ctx.globalAlpha = 0.45 * pulse; ctx.fillStyle = '#ff6a3a';
+    ctx.beginPath(); ctx.arc(0, -s*0.25, s*0.32, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = '#ffd0a0';
+    ctx.beginPath(); ctx.arc(0, -s*0.25, s*0.14, 0, 7); ctx.fill();
   }
 
   // =========================================================================
@@ -493,10 +650,7 @@
     // PRISM AURA — escort carrying a Prism Core gets a (scaled-down) prismatic halo
     if (shipHasPrism(key)) drawPrismAura(ctx, t + x * 0.13, ds * 0.7, 0.7);
     if (key === 'oblivionfinal') drawGreenAura(ctx, t + x * 0.13, ds * 0.8, 0.9);
-    // engine glow
-    const eg = ctx.createRadialGradient(0, ds * 0.34, 1, 0, ds * 0.34, ds * 0.36);
-    eg.addColorStop(0, 'rgba(120,200,255,0.4)'); eg.addColorStop(1, 'rgba(120,200,255,0)');
-    ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, ds * 0.34, ds * 0.36, 0, 7); ctx.fill();
+    // (no under-ship engine-glow blob — it read as a "reflection" beside each escort)
     if (im) ctx.drawImage(im, -ds / 2, -ds / 2, ds, ds);
     else { ctx.fillStyle = '#9fb4d6'; ctx.beginPath(); ctx.moveTo(0, -ds * 0.4); ctx.lineTo(ds * 0.3, ds * 0.3); ctx.lineTo(-ds * 0.3, ds * 0.3); ctx.closePath(); ctx.fill(); }
     // Aegis repair pulse — expanding green ring
@@ -991,11 +1145,7 @@
     const _im = shipImg(activeShipKey());
     if (_im) {
       const ds = (42 + tier * 3) * shipScaleOf(activeShipKey());                 // sprite draw size (local units)
-      ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.beginPath(); ctx.ellipse(0, ds * 0.44, ds * 0.36, ds * 0.13, 0, 0, 7); ctx.fill();
-      const eg = ctx.createRadialGradient(0, ds * 0.36, 1, 0, ds * 0.36, ds * 0.42);
-      eg.addColorStop(0, 'rgba(120,200,255,0.45)'); eg.addColorStop(1, 'rgba(120,200,255,0)');
-      ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, ds * 0.36, ds * 0.42, 0, 7); ctx.fill();
+      // (no under-ship shadow/glow blob — it read as a weird "reflection" next to the hull)
       // animated engine plume — flickering twin thruster flames behind the hull
       {
         const flick = 0.62 + 0.38 * Math.sin(t * 17) + 0.12 * Math.sin(t * 41);
@@ -1015,13 +1165,7 @@
       const _tcol = (window.shipLvlColor && _lv >= 3) ? window.shipLvlColor(_lv) : null;
       const _drawn = _tcol ? lvlTint(_skinned, activeShipKey(), _lv, cosmeticsState().skin, _tcol) : _skinned;
       ctx.drawImage(_drawn, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
-      if (muzzle > 0) {
-        const mx = Math.cos(facing) * ds * 0.34, my = Math.sin(facing) * ds * 0.34 - ds * 0.12;
-        ctx.globalAlpha = Math.min(1, muzzle);
-        ctx.fillStyle = '#ffe6a0'; ctx.shadowColor = '#ffb43c'; ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.arc(mx, my, 2.6 + muzzle * 3, 0, 7); ctx.fill();
-        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-      }
+      // (no floating muzzle-flash dot — fire feedback comes from the spark particles)
     } else {
       ctx.rotate(facing + Math.PI / 2);
       ctx.translate(0, recoil * 2);

@@ -37,6 +37,8 @@
     return { user: data.user, session: data.session };
   }
   async function oauth(provider) {
+    // flag the post-redirect load as a FRESH login so session-lock claims the account
+    try { localStorage.setItem('lf-claim-next', '1'); } catch (e) {}
     const { error } = await client.auth.signInWithOAuth({
       provider, options: { redirectTo: location.origin + location.pathname },
     });

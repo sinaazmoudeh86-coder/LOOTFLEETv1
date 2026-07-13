@@ -8,6 +8,11 @@
    Rewards are deliberately mid-power: gold + galaxy resources + small LootCoin
    sums, scaled to the commander's level/zone. Clearing all 10 pays a bonus
    crate: 100 LootCoins + a resource bundle.
+
+   TIERS — claiming the Commander's Crate unlocks the NEXT tier the same day:
+   10 fresh missions with steeply higher targets (Tier 4 = very long, Tier 5+ =
+   nearly a full day of play). Every mission reward AND the crate DOUBLE per
+   tier — LootCoins ×2 each level, endlessly. Resets to Tier 1 at midnight.
 ============================================================================= */
 (function () {
   'use strict';
@@ -48,6 +53,18 @@
   ];
   const ALL_BONUS = { lc: 100 }; // + resource bundle computed at claim time
 
+  // ---- TIER SCALING ---------------------------------------------------------
+  // Targets: T1 ×1 · T2 ×2.4 · T3 ×6 · T4 ×15 (very long) · T5 ×38 (~a full
+  // day) · T6+ keeps growing ×2.5. Rewards double every tier (LC ×2 per level).
+  const TIER_TARGET = [1, 2.4, 6, 15, 38];
+  const targetMult = (t) => (t <= 5 ? TIER_TARGET[t - 1] : 38 * Math.pow(2.5, t - 5));
+  const rwMult = (t) => Math.pow(2, t - 1);
+  function scaleRw(rw, tier) {
+    const m = rwMult(tier), out = {};
+    for (const k in rw) out[k] = Math.round(rw[k] * m);
+    return out;
+  }
+
   // ---------------------------------------------------------------------------
   // STATE — s.missions = { day, list:[{id,n,done,claimed}], acc:{}, base:{}, allClaimed }
   // ---------------------------------------------------------------------------
@@ -58,24 +75,56 @@
     for (let i = a.length - 1; i > 0; i--) { s = (s * 1664525 + 1013904223) >>> 0; const j = s % (i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
   }
+  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0 });
+  // 10 fresh missions for a tier — same seeded draw, targets scaled by the tier
+  function buildList(tier) {
+    const s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
+    // feature-gated missions only enter the draw once unlocked
+    const eligible = POOL.filter((p) => !p.req || lvl >= p.req);
+    const picks = seededShuffle(eligible, dayKey() + ':t' + tier + ':' + (s.playerName || 'cmdr')).slice(0, 10);
+    const mult = targetMult(tier);
+    return picks.map((p) => {
+      let n = Math.max(1, Math.round(p.n(lvl, z) * mult));
+      // unique-zone targets can never exceed what the commander can actually reach
+      if (p.m === 'zones') n = Math.min(n, Math.max(4, s.highestUnlocked || 4));
+      return { id: p.id, n, done: 0, claimed: false };
+    });
+  }
   function ensureDay() {
     const s = G.state;
     if (!s.missions || s.missions.day !== dayKey()) {
-      const lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
-      // feature-gated missions only enter the day's draw once unlocked
-      const eligible = POOL.filter((p) => !p.req || lvl >= p.req);
-      const picks = seededShuffle(eligible, dayKey() + ':' + (s.playerName || 'cmdr')).slice(0, 10);
       s.missions = {
         day: dayKey(),
-        list: picks.map((p) => ({ id: p.id, n: p.n(lvl, z), done: 0, claimed: false })),
-        acc: { kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0 },
-        seen: {}, // zones deployed today (for the 'zones' metric)
+        tier: 1,                 // every day starts back at Tier 1
+        list: null,              // filled just below
+        acc: freshAcc(),
+        seen: {}, // zones deployed this tier (for the 'zones' metric)
         base: null,
         allClaimed: false,
       };
+      s.missions.list = buildList(1);
       G.save();
     }
+    if (!s.missions.tier) s.missions.tier = 1; // pre-tier saves
+    // self-heal: crate claimed but tier never advanced (older bug) → advance now
+    if (s.missions.allClaimed) advanceTier();
     return s.missions;
+  }
+  // TIER-UP — fresh board at the next tier: harder targets, all rewards ×2
+  function advanceTier() {
+    const ms = G.state.missions;
+    ms.tier++;
+    ms.list = buildList(ms.tier);
+    ms.acc = freshAcc(); ms.seen = {};
+    ms.allClaimed = false;
+    ms.base = null; // re-baseline so old deltas can't leak into the new board
+    G.save();
+    const tl = $('toast-layer');
+    if (tl) {
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#8fc4ff';
+      t.innerHTML = '⌁ MISSION TIER ' + ms.tier + ' UNLOCKED<br><span style="font-size:13px">10 new orders · all rewards ×' + G.formatNum(rwMult(ms.tier)) + '</span>';
+      tl.appendChild(t); setTimeout(() => t.remove(), 3600);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -196,15 +245,18 @@
     const body = $('missions-body'); if (!body) return;
     const ms = ensureDay();
     const lvl = G.state.level || 1, z = Math.max(1, G.state.highestUnlocked || 1);
+    const tier = ms.tier || 1, rm = rwMult(tier);
     const doneN = ms.list.filter((m) => m.done >= m.n).length;
     const claimedN = ms.list.filter((m) => m.claimed).length;
-    const sub = $('missions-sub'); if (sub) sub.textContent = doneN + '/10 complete · resets ' + fmtLeft();
-    let html = '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">DAILY MISSION BOARD</div>' +
-      '<div class="mh-s">10 fresh orders every day · ⟳ resets in <b>' + fmtLeft() + '</b></div></div>' +
-      '<div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
+    const sub = $('missions-sub'); if (sub) sub.textContent = 'Tier ' + tier + ' · ' + doneN + '/10 complete · resets ' + fmtLeft();
+    let html = '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">DAILY MISSION BOARD <span class="mh-tier">TIER ' + tier + '</span></div>' +
+      '<div class="mh-s">10 fresh orders every day · ⟳ resets in <b>' + fmtLeft() + '</b></div>' +
+      (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rm) + '</b> this tier · targets up steeply</div>'
+                : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>') +
+      '</div><div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
     ms.list.forEach((mi, i) => {
       const def = POOL.find((p) => p.id === mi.id); if (!def) return;
-      const rw = def.rw(lvl, z);
+      const rw = scaleRw(def.rw(lvl, z), tier);
       const pct = Math.min(100, mi.done / mi.n * 100);
       const done = mi.done >= mi.n;
       html += '<div class="msn-card ' + (mi.claimed ? 'claimed' : done ? 'ready' : '') + '">' +
@@ -220,11 +272,11 @@
     });
     // ALL-CLEAR bonus crate
     const allDone = doneN >= 10;
-    const bonusRw = { lc: ALL_BONUS.lc, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) };
+    const bonusRw = scaleRw({ lc: ALL_BONUS.lc, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) }, tier);
     html += '<div class="msn-bonus ' + (ms.allClaimed ? 'claimed' : allDone ? 'ready' : '') + '">' +
       '<div class="mb-glow"></div><div class="mb-ic">▣</div>' +
-      '<div class="msn-mid"><div class="msn-n">COMMANDER\'S CRATE</div>' +
-      '<div class="msn-b">Clear all 10 missions · <b>' + claimedN + '/10 claimed</b></div>' +
+      '<div class="msn-mid"><div class="msn-n">COMMANDER\'S CRATE · TIER ' + tier + '</div>' +
+      '<div class="msn-b">Clear all 10 · <b>' + claimedN + '/10 claimed</b> · claiming unlocks <b>TIER ' + (tier + 1) + '</b> (rewards ×2)</div>' +
       '<div class="msn-rw">' + rwChips(bonusRw) + '</div></div>' +
       (ms.allClaimed ? '<div class="msn-done">✓</div>' : allDone ? '<button class="msn-claim gold" data-bonus="1">CLAIM</button>' : '<div class="msn-lockp">' + doneN + '/10</div>') + '</div>';
     // preserve scroll through re-renders
@@ -235,15 +287,26 @@
     body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => {
       const mi = ms.list[+b.dataset.claim]; if (!mi || mi.claimed || mi.done < mi.n) return;
       const def = POOL.find((p) => p.id === mi.id);
-      mi.claimed = true; payout(def.rw(lvl, z)); render(); syncBadge();
+      mi.claimed = true; payout(scaleRw(def.rw(lvl, z), tier)); render(); syncBadge();
     }));
     const bb = body.querySelector('[data-bonus]');
     if (bb) bb.addEventListener('click', () => {
       if (ms.allClaimed || doneN < 10) return;
+      // auto-claim anything finished but unclaimed so the tier-up never eats rewards
+      ms.list.forEach((mi) => {
+        if (!mi.claimed && mi.done >= mi.n) {
+          const d = POOL.find((p) => p.id === mi.id);
+          mi.claimed = true; if (d) payout(scaleRw(d.rw(lvl, z), tier));
+        }
+      });
       ms.allClaimed = true; payout(bonusRw);
-      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d';
-      t.innerHTML = '▣ COMMANDER\'S CRATE<br><span style="font-size:13px">All 10 missions cleared · +100 ◉ LootCoins</span>';
-      $('toast-layer').appendChild(t); setTimeout(() => t.remove(), 3600);
+      const tl = $('toast-layer');
+      if (tl) {
+        const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d';
+        t.innerHTML = '▣ COMMANDER\'S CRATE · TIER ' + tier + '<br><span style="font-size:13px">All 10 cleared · +' + G.formatNum(bonusRw.lc) + ' ◉ LootCoins</span>';
+        tl.appendChild(t); setTimeout(() => t.remove(), 3600);
+      }
+      advanceTier();
       render(); syncBadge();
     });
   }
@@ -274,6 +337,8 @@
     background:radial-gradient(140% 180% at 10% -20%, rgba(95,160,255,.16), transparent 55%), linear-gradient(180deg,#131c2c,#0c1220);
     border:1px solid #2c3b56; border-radius:14px; padding:13px 15px; margin-bottom:12px; }
   .mh-t{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:.1em; color:#dbe8fa; }
+  .mh-tier{ display:inline-block; margin-left:7px; padding:2px 8px; border-radius:8px; font-size:10px; letter-spacing:.08em;
+    color:#ffd24d; background:rgba(255,210,77,.1); border:1px solid rgba(255,210,77,.4); vertical-align:1px; }
   .mh-s{ font-size:10.5px; color:#8fa2bd; margin-top:4px; } .mh-s b{ color:#cfe0f5; }
   .mh-ring{ width:54px; height:54px; flex:none; border-radius:50%; display:grid; place-items:center;
     background:conic-gradient(#59d98c var(--p,0deg), rgba(89,217,140,.12) 0); position:relative; }

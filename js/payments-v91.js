@@ -44,14 +44,17 @@
     return links[sku] || null;
   }
   // ---------------------------------------------------------------------------
-  // NATIVE STORE BILLING — platform product ids for the app wrappers.
-  // NOTE: ids must match App Store Connect exactly — lc_25 and lc_100 were
-  // re-registered (2026-07): lc_25 is now com.lootfleet.lc_25 (was leetfleet),
-  // lc_100 is com.lootfleet.lc_100_v2.
-  // The wrapper injects a bridge:
-  //   iOS:     window.webkit.messageHandlers.iap.postMessage({ action:'buy', productId })
-  //   Android: window.AndroidIAP.buy(productId)
-  // and reports back via window.PAYMENTS.onNativeResult({ ok, sku }).
+  // NATIVE STORE BILLING
+  //   Android app  → Google Play Billing   (Capacitor + cordova-plugin-purchase)
+  //   iOS app      → Apple StoreKit        (Capacitor + cordova-plugin-purchase)
+  //   Web browser  → Stripe Payment Links  (never used inside the native apps)
+  //
+  // Purchases are fulfilled SERVER-SIDE: the plugin's approved transaction is
+  // sent (receipt/purchaseToken + the player's Supabase JWT) to the
+  // `iap-validate` Edge Function, which verifies it with Apple/Google, dedupes
+  // it, and credits the wallet via grant_credits/grant_pro. The game then
+  // pulls the coins with claim_wallet — the same path Stripe fulfilment uses.
+  // Setup: see IAP-SETUP.md. Ids must match the store consoles exactly.
   // ---------------------------------------------------------------------------
   const STORE_IDS = {
     ios: {
@@ -66,40 +69,142 @@
       pro_monthly: 'pro_monthly',
     },
   };
-  function nativePlatform() {
+  // Capacitor native runtime (the real apps)
+  function capPlatform() {
+    try {
+      const c = window.Capacitor;
+      if (c && c.isNativePlatform && c.isNativePlatform()) {
+        const p = c.getPlatform();
+        if (p === 'ios' || p === 'android') return p;
+      }
+    } catch (e) {}
+    return null;
+  }
+  // legacy hand-rolled wrapper bridges (kept for older builds still in the wild)
+  function legacyBridgePlatform() {
     try { if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.iap) return 'ios'; } catch (e) {}
     if (window.AndroidIAP && typeof window.AndroidIAP.buy === 'function') return 'android';
     return null;
   }
+  function nativePlatform() { return capPlatform() || legacyBridgePlatform(); }
   function storeId(sku) {
     const p = nativePlatform();
     return (p && STORE_IDS[p][sku]) || sku;
   }
+
+  // ---- CAPACITOR / cordova-plugin-purchase (CdvPurchase v13) -----------------
+  let _store = null, _storeReady = false;
+  function _cpPlatform(CP, plat) {
+    return plat === 'ios' ? CP.Platform.APPLE_APPSTORE : CP.Platform.GOOGLE_PLAY;
+  }
+  function _initCapStore() {
+    const plat = capPlatform();
+    const CP = window.CdvPurchase;
+    if (!plat || !CP || !CP.store || _store) return !!_store;
+    const store = CP.store;
+    _store = store;
+    const sp = _cpPlatform(CP, plat);
+    const ids = STORE_IDS[plat];
+    store.register(Object.keys(ids).map((sku) => ({
+      id: ids[sku],
+      platform: sp,
+      type: sku === 'pro_monthly' ? CP.ProductType.PAID_SUBSCRIPTION : CP.ProductType.CONSUMABLE,
+    })));
+    // approved → validate on our backend → finish → claim the credited wallet
+    store.when().approved((tx) => { _validateAndFinish(tx, plat); });
+    store.error((err) => { try { console.warn('[IAP]', err && err.message); } catch (e) {} });
+    store.initialize([sp]).then(() => { _storeReady = true; });
+    return true;
+  }
+  // Send the approved transaction to the iap-validate Edge Function. The
+  // player's Supabase JWT tells the backend WHO to credit; Apple/Google
+  // receipts prove the purchase. Transaction stays unfinished until the
+  // backend confirms, so the plugin re-delivers it on next launch if the
+  // network dropped — nothing is ever lost or double-credited.
+  async function _validateAndFinish(tx, plat) {
+    let body;
+    try {
+      const prod = tx.products && tx.products[0];
+      const np = tx.nativePurchase || {};
+      const parent = tx.parentReceipt || {};
+      const nd = parent.nativeData || {};
+      body = {
+        platform: plat,
+        productId: (prod && prod.id) || null,
+        transactionId: tx.transactionId || null,
+        purchaseToken: np.purchaseToken || np.token || null,          // Google
+        receipt: nd.appStoreReceipt || null,                           // Apple
+      };
+    } catch (e) { return; }
+    const r = await _postValidate(body);
+    if (r && (r.ok || r.duplicate)) {
+      try { tx.finish(); } catch (e) {}
+      _clearPending();
+      if (r.ok) { _claimSoon(); claimWallet(); }   // wallet was credited server-side
+    } else if (r && r.invalid) {
+      // Store says this receipt is bad — don't retry forever
+      try { tx.finish(); } catch (e) {}
+      _clearPending(); _result(false, _getPending() || {});
+    }
+    // network/backend error → leave unfinished; plugin retries automatically
+  }
+  async function _postValidate(body) {
+    try {
+      const cfg = window.LOOTFLEET || {};
+      if (!cfg.supabaseUrl || !(window.CLOUD && window.CLOUD.client)) return null;
+      const { data } = await window.CLOUD.client.auth.getSession();
+      const tok = data && data.session && data.session.access_token;
+      if (!tok) return null;   // guest — retried after login (tx stays unfinished)
+      const res = await fetch(cfg.supabaseUrl + '/functions/v1/iap-validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok, apikey: cfg.supabaseAnonKey },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok && res.status >= 500) return null;   // backend hiccup → retry later
+      return await res.json();
+    } catch (e) { return null; }
+  }
+
   // ---------------------------------------------------------------------------
-  // NATIVE IAP INIT — tell the wrapper to initialize billing and preload all
-  // product ids AS SOON AS the game launches (StoreKit/Play Billing need the
-  // product list fetched before the first buy, and preloading makes the first
-  // purchase sheet instant). The bridge may be injected after page load, so
-  // retry briefly until it appears. Safe to call more than once — wrappers
-  // treat repeat inits as a no-op.
-  let _iapInitDone = false, _iapInitTries = 0;
+  // NATIVE IAP INIT — initialize billing + preload products AS SOON AS the game
+  // launches (StoreKit/Play Billing want the product list fetched before the
+  // first buy; it also makes the first purchase sheet instant). Plugins load
+  // after the page, so retry briefly until one appears.
+  // ---------------------------------------------------------------------------
+  let _legacyInitDone = false, _iapInitTries = 0;
   function initNativeIAP() {
-    if (_iapInitDone) return true;
-    const p = nativePlatform(); if (!p) return false;
+    if (_initCapStore()) return true;                 // Capacitor plugin path
+    const p = legacyBridgePlatform();                 // legacy wrapper path
+    if (!p || _legacyInitDone) return _legacyInitDone;
     const ids = Object.keys(STORE_IDS[p]).map((sku) => STORE_IDS[p][sku]);
     try {
       if (p === 'ios') window.webkit.messageHandlers.iap.postMessage({ action: 'init', productIds: ids });
       else if (window.AndroidIAP.init) window.AndroidIAP.init(JSON.stringify(ids));
-      _iapInitDone = true;
+      _legacyInitDone = true;
       return true;
     } catch (e) { return false; }
   }
   const _iapInitTimer = setInterval(() => {
-    if (initNativeIAP() || ++_iapInitTries > 20) clearInterval(_iapInitTimer);
+    if (initNativeIAP() || ++_iapInitTries > 40) clearInterval(_iapInitTimer);
   }, 500);
 
   function buyNative(sku) {
-    const p = nativePlatform(); if (!p) return false;
+    // Capacitor plugin (preferred)
+    const plat = capPlatform();
+    if (plat) {
+      if (!_store || !_storeReady) { _initCapStore(); return false; }  // store still warming up
+      try {
+        const CP = window.CdvPurchase;
+        const prod = _store.get(STORE_IDS[plat][sku], _cpPlatform(CP, plat));
+        const offer = prod && prod.getOffer();
+        if (!offer) return false;
+        _setPending(sku);
+        offer.order().then((err) => { if (err) { _clearPending(); _result(false, { label: sku }); } });
+        return true;
+      } catch (e) { return false; }
+    }
+    // legacy wrapper bridge
+    const p = legacyBridgePlatform(); if (!p) return false;
     const pid = storeId(sku);
     try {
       if (p === 'ios') window.webkit.messageHandlers.iap.postMessage({ action: 'buy', productId: pid, sku });
@@ -145,10 +250,14 @@
   const PRO = { sku: 'pro_monthly', usd: '19.99' };
   function subscribe() { return buy(PRO.sku); }
   function configured() { return !!nativePlatform() || PACKS.some((p) => linkFor(p.sku)); }
-  // Open Stripe checkout in a new tab, tagging the session with the player's
-  // account id so the webhook knows whose wallet to credit.
+  // Open checkout. NATIVE APPS use store billing ONLY — Stripe is never
+  // offered inside the iOS/Android apps (store policy). Web uses Stripe.
   function buy(sku) {
-    if (buyNative(sku)) return { ok: true, native: true };   // App Store / Play billing
+    if (nativePlatform()) {
+      return buyNative(sku)
+        ? { ok: true, native: true }
+        : { ok: false, reason: 'store-not-ready' };   // never fall through to Stripe
+    }
     const url = linkFor(sku);
     if (!url) return { ok: false, reason: 'unconfigured' };
     let uid = '';

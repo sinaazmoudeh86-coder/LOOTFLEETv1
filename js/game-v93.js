@@ -27,9 +27,13 @@
   function zoomFor(zone) { return Math.max(0.5, 0.92 - zone * 0.012); }
   // Zone unlocking — you can reach at most 10 zones ahead of your pilot level, so
   // you can't skip into wildly over-level zones and farm insane loot. Still also
-  // capped to the current 100-block.
-  const ZONE_LOOKAHEAD = 10;
-  function unlockCeil(level) { return level + ZONE_LOOKAHEAD; }
+  // ZONE LOOKAHEAD — how far past your level the Grind Zone list unlocks.
+  // Tightened 30% (powerleveling was too fast):
+  // <100 → +35 · <200 → +28 · <300 → +14 · <400 → +7 · <500 → +4 · 500+ → +0
+  function unlockCeil(level) {
+    const ahead = level < 100 ? 35 : level < 200 ? 28 : level < 300 ? 14 : level < 400 ? 7 : level < 500 ? 4 : 0;
+    return level + ahead;
+  }
   // Every 11th Grind Zone (11, 22, 33…) is a WAVE ZONE: 25 escalating waves of
   // extreme density ending in a boss (30% Super Boss). Classic free-play only.
   function isWaveZone(zone) { return zone > 0 && zone % 11 === 0; }
@@ -42,15 +46,19 @@
     return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
   }
   // ---- ZONE BONUSES ----------------------------------------------------------
-  // Every 10th zone (10,20,30…): 5× mob density. Every 25th (25,50,75…): 2× loot
-  // quality. Every 100th (100,200…): 5× loot quality. Quality bonuses STACK
-  // multiplicatively (e.g. Zone 100 = ×10 loot quality AND ×5 density).
-  function densityMult(zone) { return (zone > 0 && zone % 10 === 0) ? 5 : 1; }
+  // Every 10th zone (10,20,30…): SWARM ZONE — 20× mob density with relentless
+  // near-instant respawns, so it plays as endless waves that never stop.
+  // Every 25th (25,50,75…): 2× loot quality. Every 100th (100,200…): 5× loot
+  // quality. Quality bonuses STACK multiplicatively (e.g. Zone 100 = ×10 loot
+  // quality AND a swarm).
+  function densityMult(zone) { return (zone > 0 && zone % 10 === 0) ? 20 : 1; }
+  // SWARM ZONE — classic-grind only (wave zones at %11 build no nodes anyway)
+  function isSwarmZone(zone) { return zone > 0 && zone % 10 === 0 && !isWaveZone(zone); }
   function qualityMult(zone) { return (zone > 0 && zone % 25 === 0 ? 2 : 1) * (zone > 0 && zone % 100 === 0 ? 5 : 1); }
   function zoneBonuses(zone) { const d = densityMult(zone), q = qualityMult(zone); return { density: d, quality: q, prismatic: d > 1 || q > 1 }; }
   // Loot-quality multiplier = roll the rarity that many times, keep the best.
   function rollRarityBoosted(zone, mult) { let best = I.rollRarity(zone); for (let i = 1; i < mult; i++) { const r = I.rollRarity(zone); if (r > best) best = r; } return best; }
-  function nodeCount(zone) { const base = NODE_COUNT + Math.floor(zone * 0.7); return Math.min(densityMult(zone) > 1 ? 42 : 30, Math.round(base * densityMult(zone))); }
+  function nodeCount(zone) { const base = NODE_COUNT + Math.floor(zone * 0.7); return Math.min(densityMult(zone) > 1 ? 100 : 30, Math.round(base * densityMult(zone))); }
 
   // --------------------------------------------------------------------------
   // STATE (persisted)
@@ -137,6 +145,8 @@
     // ship passive modifiers
     const ship = C.SHIP_BY_KEY[state.ship] || C.SHIPS[0];
     const sm = ship.mods || {};
+    // ASCENSION — per-ship module bonuses (apply while flying that hull)
+    const am = (window.ASCEND && window.ASCEND.combatMods) ? window.ASCEND.combatMods(state.ship) : {};
     // FLEET: escorts contribute a share of their hull mods to the fleet score
     const fs = { dmgPct:0, hpPct:0, critChance:0, critDamage:0, atkSpeedPct:0, moveSpeed:0, lifeSteal:0, multiShot:0, rangePct:0 };
     const esc = fleetShips();
@@ -147,19 +157,19 @@
     // Warden arrays mount only on the Aegis — inert anywhere else (legacy saves)
     const aMul = ship.cls === 'Aegis' ? 2 : 0;
     s.regen = (aura ? aura.regen * aMul : 0) + (pm.regen || 0);
-    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0));
+    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0));
     if (aura) s.multiShot += aura.multiShot * aMul;
     // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
     const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
     const hlDmg = _hl * 10, hlHp = _hl * 12, hlAtk = _hl * 5;
     s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct + hlDmg) / 100);
-    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct + hlHp) / 100);
+    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct + hlHp + (am.hpPct || 0)) / 100);
     s.critChance += m.critChance + (sm.critChance||0) + fs.critChance;
     s.critDamage += m.critDamage + (sm.critDamage||0) + fs.critDamage;
     s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0) + fs.moveSpeed;
     s.lifeSteal += m.lifeSteal + (sm.lifeSteal||0) + fs.lifeSteal;
     s.multiShot += m.multiShot + (sm.multiShot||0) + fs.multiShot;
-    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk) / 100);
+    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0)) / 100);
     s.shipLevel = _hl + 1;
     s.critChance = Math.min(100, s.critChance);
     s.lifeSteal = Math.min(95, s.lifeSteal);
@@ -167,7 +177,7 @@
     s.maxHp = s.health;
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
     // weapon range — hull mod + fleet share + Warden aura all extend it
-    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0)) / 100);
+    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0)) / 100);
     s.fleetSize = esc.length;
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
     s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
@@ -251,6 +261,7 @@
   function gainXp(amount) {
     if (isPro()) amount *= 2;   // LootFleet Pro — 2× XP on every source, account-wide
     if (window.DREAD && window.DREAD.mult) amount *= window.DREAD.mult('xpGain');   // PILOT: XP Gain nodes
+    if (window.ASCEND && window.ASCEND.xpMult) amount *= window.ASCEND.xpMult();    // ASCENSION: Combat Computer
     state.xp += amount;
     let gained = 0;
     while (state.xp >= C.xpToNext(state.level)) { state.xp -= C.xpToNext(state.level); state.level++; gained++; }
@@ -296,7 +307,7 @@
     rt.nodes = [];
     if (state.currentDungeon < 1) return; // Safe Zone: zero threats, no spawns
     const cx = rt.worldW / 2, cy = rt.worldH / 2;
-    const count = Math.min(55, Math.round(nodeCount(state.currentDungeon) * (rt.tileDensity || 1)));
+    const count = Math.min(isSwarmZone(state.currentDungeon) && !state.currentSystem ? 110 : 55, Math.round(nodeCount(state.currentDungeon) * (rt.tileDensity || 1)));
     for (let i = 0; i < count; i++) {
       let x, y, tries = 0;
       do {
@@ -460,6 +471,77 @@
     }
     rt.particles.push(new E.Particle(src.x, src.y, { vx: 0, vy: 0, life: 0.2, size: 22, color: 'rgba(201,160,255,0.45)', glow: true, drag: 1 }));
   }
+  // ---- ASCENSION: STORM CONDUIT --------------------------------------------
+  // Chain-lightning proc rolled PER SECOND of combat (not per attack):
+  // P(dt) = 1-(1-p)^dt so any frame rate integrates to the published %/sec.
+  // A HUGE bolt drops from the sky onto the nearest ship for mult× your DPS,
+  // then bounces through nearly EVERY ship on the map (85% damage per hop).
+  // Bolts render as real canvas polylines (white core + cyan glow) in draw().
+  function stormTick(dt) {
+    if (!window.ASCEND || !window.ASCEND.storm) return;
+    const a = rt.archer; if (!a || a.dead || rt.awaitingRespawn) return;
+    const sc = window.ASCEND.storm(state.ship);
+    if (!sc || sc.chance <= 0) return;
+    if (Math.random() < 1 - Math.pow(1 - sc.chance / 100, dt)) rt.stormPending = true;
+    // a banked proc NEVER fizzles — if the guns wiped the map this frame, the
+    // strike waits and lands on the next ship that spawns
+    if (rt.stormPending) {
+      const first = nearestEnemy(Infinity);
+      if (first) { rt.stormPending = false; fireStorm(sc, first); }
+    }
+  }
+  function fireStorm(sc, first) {
+    const a = rt.archer;
+    if (!first) first = nearestEnemy(Infinity);   // the strike hunts across the whole map
+    if (!first) return;
+    rt.bolts = rt.bolts || [];
+    let dmg = Math.max(1, (rt.stats.theoryDps || 1) * sc.mult);
+    let fx = first.x, fy = first.y - Math.max(340, rt.h * 0.6), cur = first, jumps = 0;
+    const hit = new Set();
+    rt.shake = Math.min(9, (rt.shake || 0) + 7);
+    rt.stormFlash = 0.35;   // lingering full-screen flash
+    while (cur && jumps <= sc.chains) {
+      hit.add(cur);
+      pushBolt(fx, fy, cur.x, cur.y, jumps === 0 ? 1.6 : 1);
+      burst(cur.x, cur.y, '#bfe9ff', 22, { speed: 300, life: 0.5, glow: true });
+      const k = cur.takeDamage(dmg);
+      rt.dmgWindow.push({ t: rt.time, dmg });
+      // ⚡ numbers hang on screen much longer than gunfire floats
+      rt.floats.push(new E.FloatText(cur.x, cur.y - cur.size, '⚡' + formatNum(dmg), { color: '#8fe0ff', size: 50, crit: true, life: 2.6, vy: -16 }));
+      if (k) onKill(cur);
+      fx = cur.x; fy = cur.y;
+      let nxt = null, bd = Infinity;   // arcs bounce to the nearest un-struck ship ANYWHERE on the map
+      for (const o of rt.enemies) {
+        if (o.dying || o.dead || hit.has(o)) continue;
+        const d = (o.x - fx) ** 2 + (o.y - fy) ** 2;
+        if (d < bd) { bd = d; nxt = o; }
+      }
+      cur = nxt; jumps++; dmg = Math.max(1, dmg * 0.85);
+    }
+  }
+  // jagged polyline with 1-2 branch forks — stored on rt.bolts, drawn in draw()
+  function pushBolt(x1, y1, x2, y2, scale) {
+    const dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
+    const n = Math.max(5, Math.floor(dist / 34));
+    const pts = [[x1, y1]];
+    for (let i = 1; i < n; i++) {
+      const t = i / n, jag = (Math.random() - 0.5) * Math.min(64, dist * 0.22);
+      pts.push([x1 + dx * t - (dy / dist) * jag, y1 + dy * t + (dx / dist) * jag]);
+    }
+    pts.push([x2, y2]);
+    rt.bolts.push({ pts, life: 1.15, t: 1.15, w: 5.5 * (scale || 1) });
+    // forks: short offshoots from mid-points
+    for (let f = 0; f < 2; f++) {
+      const bi = 1 + Math.floor(Math.random() * (pts.length - 2));
+      const [bx, by] = pts[bi], fa = Math.random() * Math.PI * 2, fl = 30 + Math.random() * 70;
+      rt.bolts.push({ pts: [[bx, by], [bx + Math.cos(fa) * fl * 0.5 + (Math.random() - 0.5) * 24, by + Math.sin(fa) * fl * 0.5], [bx + Math.cos(fa) * fl, by + Math.sin(fa) * fl]], life: 0.8, t: 0.8, w: 2.2 });
+    }
+    // lingering ember trail along the bolt path
+    for (let i = 0; i < pts.length; i += 2) {
+      rt.particles.push(new E.Particle(pts[i][0], pts[i][1], { vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20, life: 1.1 + Math.random() * 0.5, size: 1.8 + Math.random() * 2, color: '#9fdcff', glow: true, drag: 0.96 }));
+    }
+    rt.particles.push(new E.Particle(x2, y2, { vx: 0, vy: 0, life: 0.6, size: 26, color: '#eaf9ff', glow: true, drag: 1 }));
+  }
   function resolveHit(p) {
     const e = p.target;
     if (!e || e.dead) return;
@@ -583,8 +665,12 @@
       return;
     }
 
-    // normal kill: free node + start respawn timer; kills hasten the boss
-    if (e.node) { e.node.enemy = null; e.node.respawnT = RESPAWN_SEC / (rt.tileRespawnMult || 1); }
+    // normal kill: free node + start respawn timer; kills hasten the boss.
+    // SWARM ZONES respawn near-instantly — the waves must never stop.
+    if (e.node) {
+      const swarm = isSwarmZone(state.currentDungeon) && !state.currentSystem;
+      e.node.enemy = null; e.node.respawnT = (swarm ? 1.2 : RESPAWN_SEC) / (rt.tileRespawnMult || 1);
+    }
     if (!rt.bossAlive) rt.bossTimer = Math.max(0, rt.bossTimer - 4);
     if (Math.random() < C.dropChance(state.currentDungeon)) {
       const _q = lootQ();
@@ -944,6 +1030,8 @@
       const tgt = nearestEnemy(rt.stats.fireRange || FIRE_RANGE);
       if (tgt) { fire(tgt); a.attackTimer = 1 / Math.max(0.1, rt.stats.attacksPerSec); }
     }
+    // ASCENSION: Storm Conduit — per-second chain-lightning proc
+    stormTick(dt);
 
     // enemies
     for (const e of rt.enemies) {
@@ -1033,6 +1121,9 @@
 
     // particles + floats (hard caps to bound per-frame draw cost)
     for (const p of rt.particles) p.update(dt); rt.particles = rt.particles.filter((p) => !p.dead);
+    // storm bolts fade fast; flash decays
+    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); }
+    if (rt.stormFlash > 0) rt.stormFlash -= dt;
     if (rt.particles.length > 320) rt.particles.splice(0, rt.particles.length - 320);
     for (const f of rt.floats) f.update(dt); rt.floats = rt.floats.filter((f) => !f.dead);
     if (rt.floats.length > 60) rt.floats.splice(0, rt.floats.length - 60);
@@ -1125,6 +1216,23 @@
       }
     }
     for (const p of rt.particles) R.drawParticle(ctx, p);
+    // STORM CONDUIT bolts — cyan glow pass + white-hot core pass
+    if (rt.bolts && rt.bolts.length) {
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (const b of rt.bolts) {
+        const a = Math.pow(Math.max(0, b.t / b.life), 0.6);   // slow perceived fade — bolts linger
+        ctx.shadowColor = '#7fd6ff'; ctx.shadowBlur = 22 * a;
+        ctx.strokeStyle = 'rgba(110,200,255,' + (0.75 * a) + ')'; ctx.lineWidth = b.w * 2.1;
+        ctx.beginPath(); ctx.moveTo(b.pts[0][0], b.pts[0][1]);
+        for (let i = 1; i < b.pts.length; i++) ctx.lineTo(b.pts[i][0], b.pts[i][1]);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.95 * a) + ')'; ctx.lineWidth = b.w * 0.75;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     drawGround(ctx);
     for (const e of rt.enemies) R.drawEnemy(ctx, e);
     for (const es of (rt.escorts || [])) R.drawEscort(ctx, es.key, es.x, es.y, rt.time, es.heal);
@@ -1141,6 +1249,13 @@
       ctx.fillText('DOWN', w/2, h/2 - 4);
       ctx.font = '600 14px Rajdhani'; ctx.fillStyle = '#ce9b78';
       ctx.fillText('Choose a zone to redeploy', w/2, h/2 + 22);
+    }
+    // STORM FLASH — whole-viewport lightning whiteout for a couple frames
+    if (rt.stormFlash > 0) {
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = 'rgba(200,235,255,' + Math.min(0.5, rt.stormFlash * 2.4) + ')';
+      ctx.fillRect(0, 0, rt.w * (window.devicePixelRatio || 1), rt.h * (window.devicePixelRatio || 1));
+      ctx.restore();
     }
     // LOW HP: red danger vignette breathes at the edges when hull is critical.
     if (!rt.archer.dead && rt.stats && rt.stats.maxHp > 0) {
@@ -1986,6 +2101,7 @@
     const u = Math.min(cap, unlockCeil(state.level));
     if (u > state.highestUnlocked) state.highestUnlocked = u;
     resetZone();
+    if (d >= 1 && isSwarmZone(d) && window.UI && window.UI.unlockToast) window.UI.unlockToast('☣ SWARM ZONE — 20× density · the waves don\u2019t stop');
     // Deploying to the safe Hangar bay (d=0, e.g. the Bail button) always ends
     // combat cleanly: revive the ship and top up health so you're never "downed"
     // while docked.
@@ -2025,7 +2141,8 @@
     // generous safety on redeploy: 4s invulnerability + a spawn grace window so
     // the player is never instantly swarmed after choosing a zone.
     rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 4;
-    rt.nodes.forEach((n, i) => { n.respawnT = 2.2 + i * 0.45; });
+    { const swarm = isSwarmZone(state.currentDungeon) && !state.currentSystem;
+      rt.nodes.forEach((n, i) => { n.respawnT = swarm ? 1.5 + i * 0.07 : 2.2 + i * 0.45; }); }
     if (window.UI) window.UI.refreshAll(); save();
   }
   function resetZone() {
@@ -2071,8 +2188,9 @@
     } else {
       rt.waves = null;
       buildNodes();
-      // stagger initial spawns
-      rt.nodes.forEach((n, i) => { n.respawnT = 0.2 + i * 0.25; });
+      // stagger initial spawns (swarm zones flood in fast)
+      { const swarm = isSwarmZone(state.currentDungeon) && !state.currentSystem;
+        rt.nodes.forEach((n, i) => { n.respawnT = swarm ? 0.3 + i * 0.06 : 0.2 + i * 0.25; }); }
       // boss meter: 10–15 min to first boss; min 5 min between bosses
       rt.bossInit = rt.bossTimer = 600 + Math.random() * 300;
       rt.bossAlive = false; rt.boss = null; rt.lastBoss = rt.time - 600;
@@ -2664,6 +2782,7 @@
       // citadel tiles already carry their 100× in t.rate; deep space adds ×25
       let rate = t.rate * (t.deep ? GX.DEEP_MULT.resource : 1);
       if (state.citadels && state.citadels[k]) rate *= CITADEL_MULT * (state.citadels[k].lv || 1);   // PLAYER CITADEL — 10× per rank
+      rate *= 25;   // GALAXY YIELD ×25 — holding territory is the resource engine
       r[t.resource || 'fuel'] += rate;
     });
     return r;
@@ -3122,7 +3241,7 @@
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
-    isCitadelZone, citadelCooldownLeft,
+    isCitadelZone, citadelCooldownLeft, isSwarmZone,
     getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,
     shipDroneCount, getDrones: () => state.drones, getShipKills: (k) => (state.shipKills[k] || 0),
     skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills,

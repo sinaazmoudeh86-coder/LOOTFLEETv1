@@ -879,3 +879,51 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   #nav{ height:calc(48px + env(safe-area-inset-bottom)); }
   .nav-btn svg{ width:16px; height:16px; }
 }
+
+
+/* ===== MY GALAXY — deep-space backdrop (starfield + nebula) ===== */
+#screen-galaxy{ background:#05080f; overflow:hidden; }
+#screen-galaxy .scr-head, #screen-galaxy .scr-body, #screen-galaxy .lock-veil{ position:relative; z-index:2; }
+#screen-galaxy::before, #screen-galaxy::after{ content:''; position:absolute; inset:0; pointer-events:none; z-index:0; }
+/* nebula washes */
+#screen-galaxy::before{
+  background:
+    radial-gradient(52% 38% at 78% 12%, rgba(47,111,237,.16), transparent 70%),
+    radial-gradient(46% 34% at 12% 58%, rgba(122,84,224,.13), transparent 70%),
+    radial-gradient(40% 30% at 62% 92%, rgba(232,163,74,.07), transparent 70%);
+  animation: gxNebula 14s ease-in-out infinite alternate;
+}
+/* starfield — two parallax layers drifting at different speeds */
+#screen-galaxy::after{
+  background-image:
+    radial-gradient(1.6px 1.6px at 22px 34px, rgba(255,255,255,.9), transparent 55%),
+    radial-gradient(1.3px 1.3px at 118px 87px, rgba(190,214,255,.85), transparent 55%),
+    radial-gradient(1.7px 1.7px at 197px 148px, rgba(255,255,255,.75), transparent 55%),
+    radial-gradient(1.2px 1.2px at 61px 181px, rgba(160,196,255,.7), transparent 55%),
+    radial-gradient(1px 1px at 157px 23px, rgba(255,236,200,.7), transparent 55%),
+    radial-gradient(1px 1px at 40px 120px, rgba(255,255,255,.55), transparent 55%),
+    radial-gradient(.9px .9px at 92px 209px, rgba(190,214,255,.5), transparent 55%),
+    radial-gradient(.8px .8px at 176px 64px, rgba(255,255,255,.45), transparent 55%),
+    radial-gradient(.8px .8px at 133px 190px, rgba(160,196,255,.4), transparent 55%),
+    radial-gradient(.7px .7px at 12px 76px, rgba(255,255,255,.35), transparent 55%);
+  background-size:230px 230px;
+  animation: gxStarsDrift 90s linear infinite, gxTwinkle 5s ease-in-out infinite alternate;
+}
+/* extra faint far layer painted on the scroll body itself so it parallaxes with content */
+#screen-galaxy .scr-body{
+  background-image:
+    radial-gradient(.9px .9px at 31px 47px, rgba(255,255,255,.28), transparent 55%),
+    radial-gradient(.8px .8px at 122px 133px, rgba(190,214,255,.22), transparent 55%),
+    radial-gradient(.7px .7px at 74px 15px, rgba(255,255,255,.18), transparent 55%),
+    radial-gradient(.7px .7px at 13px 102px, rgba(255,236,200,.16), transparent 55%);
+  background-size:150px 150px;
+}
+@keyframes gxStarsDrift{ from{ background-position:0 0; } to{ background-position:-230px 460px; } }
+@keyframes gxTwinkle{ from{ opacity:.65; } to{ opacity:1; } }
+@keyframes gxNebula{ from{ opacity:.75; transform:scale(1); } to{ opacity:1; transform:scale(1.06); } }
+/* let space read through the chrome a touch */
+#screen-galaxy .scr-head{ background:linear-gradient(180deg, rgba(18,26,39,.92), rgba(13,19,30,.88)); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); }
+#screen-galaxy .gx-map-wrap{ box-shadow:0 0 26px -8px rgba(47,111,237,.35), 0 0 0 1px rgba(47,111,237,.12); }
+@media (prefers-reduced-motion: reduce){
+  #screen-galaxy::before, #screen-galaxy::after{ animation:none; }
+}

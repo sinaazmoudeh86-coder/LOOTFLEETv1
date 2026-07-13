@@ -394,6 +394,7 @@
 .zj-jump{
   position:sticky; bottom:8px; left:50%; transform:translateX(-50%) translateY(8px); z-index:5;
   display:flex; width:fit-content; align-items:center; gap:5px; pointer-events:none; opacity:0;
+  animation:zjPulse 1.5s ease-in-out infinite;
   margin:-40px auto 0;
   background:linear-gradient(180deg, rgba(35,28,10,.92), rgba(24,19,7,.95));
   border:1px solid rgba(242,178,75,.65); color:#ffd98a; border-radius:99px; padding:8px 15px;
@@ -402,6 +403,7 @@
   backdrop-filter:blur(4px); cursor:pointer; transition:opacity .25s, transform .25s;
 }
 .zj-jump.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
+@keyframes zjPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(63,197,107,.5); } 50%{ box-shadow:0 0 16px 3px rgba(63,197,107,.55); } }
 .zj-jump.up::before{ content:'↑ '; } .zj-jump:not(.up)::before{ content:'↓ '; }
 .zj-jump:active{ transform:translateX(-50%) scale(.95); }
 

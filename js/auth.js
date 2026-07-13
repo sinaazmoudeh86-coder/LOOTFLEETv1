@@ -43,7 +43,11 @@
   }
 
   // ---- CLOUD finalize (after a successful Supabase auth) --------------------
-  async function finalizeCloud(user) {
+  async function finalizeCloud(user, fresh) {
+    // single-session rule: a fresh login claims the account (kicking any other
+    // device); a restored session first verifies it still owns the account.
+    try { if (window.SESSIONLOCK) await window.SESSIONLOCK.start(user, !!fresh); } catch (e) {}
+    if (window.__sessionKicked) return;   // lost the account mid-restore → kick screen is up
     const meta = user.user_metadata || {};
     const name = meta.name || meta.full_name || meta.user_name || (user.email ? user.email.split('@')[0] : 'Operator');
     setSession({ method: 'Supabase', name, id: user.id, email: user.email, at: Date.now() });
@@ -71,10 +75,10 @@
       if (mode === 'register') {
         const r = await window.CLOUD.signUp(email, p);
         if (r.needsConfirm) { setBusy(false); return err('Check your inbox to confirm your email, then log in.'); }
-        await finalizeCloud(r.user);
+        await finalizeCloud(r.user, true);
       } else {
         const r = await window.CLOUD.signIn(email, p);
-        await finalizeCloud(r.user);
+        await finalizeCloud(r.user, true);
       }
     } catch (ex) { setBusy(false); err(prettyAuthError(ex)); }
   }
@@ -117,7 +121,12 @@
   async function restoreCloud() {
     let user = null;
     try { user = await window.CLOUD.getUser(); } catch (e) {}
-    if (user) { await finalizeCloud(user); return; }
+    if (user) {
+      // OAuth redirect lands here — cloud.js flagged it as a fresh login
+      let fresh = false;
+      try { fresh = localStorage.getItem('lf-claim-next') === '1'; localStorage.removeItem('lf-claim-next'); } catch (e) {}
+      await finalizeCloud(user, fresh); return;
+    }
     const s = getSession();
     if (s && s.method === 'Guest') { boot(); reveal(false); return; }   // local guest world
     if (s && s.method === 'Supabase') { try { localStorage.removeItem(SESS); } catch (e) {} } // stale token

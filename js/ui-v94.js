@@ -118,6 +118,9 @@
     else if (name === 'pilot') { if (window.DREAD) window.DREAD.renderPilot(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
     else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
+    else if (name === 'shipworks') { if (window.SHIPWORKS) window.SHIPWORKS.render(); }
+    else if (name === 'ascend') { if (window.ASCEND) window.ASCEND.render(); }
+    else if (name === 'casino') { if (window.CASINO) window.CASINO.render(); }
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
     else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
     syncJoystickVisible();
@@ -1346,7 +1349,7 @@
       const locked = d > s.highestUnlocked, active = d === s.currentDungeon;
       const types = C.ENEMIES.filter((e) => d >= e.minDungeon), topType = types[types.length-1];
       const blocked = d > blockCap;
-      const reqLv = Math.max(1, d - 10);
+      const reqLv = Math.max(1, d - 20);
       const lockLabel = blocked ? '🔒 Clear Zone ' + (Math.floor((d - 1) / C.ZONE_BLOCK) * C.ZONE_BLOCK) : '🔒 Lv ' + reqLv;
       const bz = G.zoneBonuses(d);
       const wave = d % 11 === 0;
@@ -1355,11 +1358,11 @@
       const bonus = (wave?`<span class="z-bon wave">◎ WAVE ZONE · 25 waves → boss</span>`:'') +
                     (cit?`<span class="z-bon cit">⛴ CITADEL SIEGE · raze the fortress</span>`:'') +
                     (citCd>0?`<span class="z-bon citcd">◷ rebuilds in ${fmtCd(citCd)}</span>`:'') +
-                    (bz.density>1?`<span class="z-bon dens">⚔ ${bz.density}× density</span>`:'') +
+                    (bz.density>1?`<span class="z-bon dens">☣ SWARM · ${bz.density}× density · endless waves</span>`:'') +
                     (bz.quality>1?`<span class="z-bon qual">✦ ${bz.quality}× loot quality</span>`:'');
       html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}" style="${pvars}">
         <div class="z-orb ${ptype}${d % 5 === 0 ? ' ringed' : ''}${cit ? ' cit' : ''}${wave ? ' wav' : ''}"><span>${d}</span></div>
-        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}</div>
+        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${bz.density>1?' <span class="z-wtag" style="background:rgba(226,59,78,.16);color:#ff8090;border-color:rgba(226,59,78,.5)">SWARM</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}</div>
           <div class="z-sub">${G.formatNum(lyOf(d))} ly · Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
           ${bonus?`<div class="z-bons">${bonus}</div>`:''}
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
@@ -1367,9 +1370,30 @@
     }
     html += '</div>';
     el['zones-body'].innerHTML = html;
-    el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => { G.selectDungeon(+row.dataset.d); showScreen('battle'); }));
+    el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => {
+      const d = +row.dataset.d;
+      const deploy = () => { G.selectDungeon(d); showScreen('battle'); };
+      // HIGH-RISK WARNING — enemy level more than 5 above the pilot
+      const eLv = C.dungeonEnemyLevel(d), pLv = G.state.level, gap = eLv - pLv;
+      if (gap > 5) {
+        const sheet = showSheet(`<div class="sheet-head">⚠ High-Risk Zone</div><div class="sheet-body">
+          <p style="font-size:12.5px;line-height:1.6;margin:0 0 8px">Enemies in <b>${zoneName(d)}</b> are <b>Lv ${G.formatNum(eLv)}</b> — <b style="color:#ff6a78">${G.formatNum(gap)} levels above you</b> (you're Lv ${G.formatNum(pLv)}).</p>
+          <p style="font-size:12px;line-height:1.6;color:#ffcf7a;margin:0">If you die out there you can <b>lose items forever</b>, and your active ship's <b>hull upgrades reset to Lv 1</b> — every resource spent on them is forfeit.</p>
+          <div class="sheet-actions"><button class="btn" data-x>Stay Safe</button><button class="btn gold" data-ok>⚔ Deploy Anyway</button></div></div>`);
+        sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+        sheet.querySelector('[data-ok]').addEventListener('click', () => { closeSheet(); deploy(); });
+        return;
+      }
+      deploy();
+    }));
     const recRow = el['zones-body'].querySelector('.zone-row.rec');
-    if (recRow) el['zones-body'].scrollTop = Math.max(0, recRow.offsetTop - 90);
+    // always land CENTERED on the recommended zone, with a brief landing flash
+    if (recRow) {
+      const zb0 = el['zones-body'];
+      zb0.scrollTop = Math.max(0, recRow.offsetTop - Math.max(90, zb0.clientHeight * 0.38));
+      recRow.classList.add('rec-land');
+      setTimeout(() => recRow.classList.remove('rec-land'), 2000);
+    }
     // floating "jump to ★" chip — appears whenever the recommended zone is off-screen
     if (recRow) {
       const jump = document.createElement('button');
@@ -2362,8 +2386,8 @@
     _scrapT = now;
     const t = document.createElement('div'); t.className = 'loot-toast scrapped';
     t.innerHTML = `<span class="${rc(item.rarity)}">${item.name}</span><span class="lt-scrap">⚒ scrapped · hold full</span>`;
-    el['loot-feed'].appendChild(t); setTimeout(() => t.remove(), 3200);
-    while (el['loot-feed'].children.length > 5) el['loot-feed'].removeChild(el['loot-feed'].firstChild);
+    el['loot-feed'].appendChild(t); setTimeout(() => t.remove(), 2100);
+    while (el['loot-feed'].children.length > 3) el['loot-feed'].removeChild(el['loot-feed'].firstChild);
   }
   let _lastLootToast = 0, _bagDirty = false, _bagTimer = 0;
   function onCollect(item) {
@@ -2372,12 +2396,27 @@
     // rate-limit loot toasts (10x pickups would otherwise flood the DOM)
     if (now - _lastLootToast > 220) {
       _lastLootToast = now;
-      const t = document.createElement('div');
-      t.className = 'loot-toast ' + bl(item.rarity);
-      t.innerHTML = `<span class="${rc(item.rarity)}">${item.name}</span>`;
-      el['loot-feed'].appendChild(t);
-      setTimeout(() => t.remove(), 3200);
-      while (el['loot-feed'].children.length > 5) el['loot-feed'].removeChild(el['loot-feed'].firstChild);
+      const feed = el['loot-feed'];
+      // repeat pickup of the same item → bump a ×n counter on the last toast
+      const last = feed.lastElementChild;
+      if (last && last.dataset.loot === item.name) {
+        const n = (+last.dataset.n || 1) + 1; last.dataset.n = n;
+        let x = last.querySelector('.lt-x');
+        if (!x) { x = document.createElement('span'); x.className = 'lt-x'; last.appendChild(x); }
+        x.textContent = '×' + n;
+        clearTimeout(last._lootTimer);
+        last._lootTimer = setTimeout(() => last.remove(), 2100);
+        last.style.animation = 'none'; last.offsetHeight; // restart fade-out clock
+        last.style.animation = 'lootin .01s ease forwards,lootout .35s ease forwards 1.7s';
+      } else {
+        const t = document.createElement('div');
+        t.className = 'loot-toast ' + bl(item.rarity);
+        t.dataset.loot = item.name; t.dataset.n = 1;
+        t.innerHTML = `<span class="${rc(item.rarity)}">${item.name}</span>`;
+        feed.appendChild(t);
+        t._lootTimer = setTimeout(() => t.remove(), 2100);
+        while (feed.children.length > 3) feed.removeChild(feed.firstChild);
+      }
     }
     const n = G.state.inventory.length;
     el['bag-badge'].style.display = n > 0 ? 'block' : 'none'; el['bag-badge'].textContent = n;
@@ -2391,7 +2430,8 @@
     if (!_inited) return;
     const t = document.createElement('div'); t.className = 'loot-toast'; t.style.borderLeftColor = color;
     t.innerHTML = `<span style="color:${color}">${text}</span>`;
-    el['loot-feed'].appendChild(t); setTimeout(() => t.remove(), 3200);
+    el['loot-feed'].appendChild(t); setTimeout(() => t.remove(), 2100);
+    while (el['loot-feed'].children.length > 3) el['loot-feed'].removeChild(el['loot-feed'].firstChild);
   }
   function onLevelUp(level) {
     if (!_inited) return;

@@ -277,6 +277,81 @@
   }
 
   // ---------------------------------------------------------------------------
+  // SMART UPGRADE — plans a balanced wave of work on the CURRENT moon with the
+  // resources on hand: repairs first, then defense up to the raid requirement,
+  // then spread-the-levels round-robin (lowest level first, cheapest on ties).
+  // Returns { steps, agg, total, count } — nothing is spent until applied.
+  // ---------------------------------------------------------------------------
+  function planSmart(root, mm) {
+    const s = G.state, r = s.resources || {};
+    const budget = { gold: s.gold || 0, fuel: r.fuel || 0, iron: r.iron || 0, plasma: r.plasma || 0 };
+    const fits = (c) => Object.keys(c).every((k) => (budget[k] || 0) >= c[k]);
+    const take = (c, total) => Object.keys(c).forEach((k) => { budget[k] -= c[k]; total[k] = (total[k] || 0) + c[k]; });
+    const sim = {};   // key → simulated level
+    buildings(mm).forEach((x) => sim[x.key] = x.lv);
+    const dmg = {};   // key → still damaged in sim
+    buildings(mm).forEach((x) => { if (x.dmg) dmg[x.key] = true; });
+    const steps = [], total = {};
+
+    // 1 · REPAIRS — offline structures produce & defend nothing
+    buildings(mm).forEach((x) => {
+      if (!x.dmg) return;
+      const c = repairCost(B[x.kind], x.lv);
+      if (fits(c)) { take(c, total); steps.push({ type: 'fix', key: x.key, kind: x.kind }); delete dmg[x.key]; }
+    });
+
+    // helper — next upgrade candidates (never damaged-in-sim, never past LV_MAX)
+    const candidates = (filter) => buildings(mm)
+      .filter((x) => !dmg[x.key] && sim[x.key] < LV_MAX && (!filter || filter(x)))
+      .map((x) => ({ x, c: upCost(B[x.kind], sim[x.key]) }));
+
+    // 2 · DEFENSE — close the raid gap before anything else
+    let defR = defenseRating(mm) ;
+    // recompute with repaired defenses back online
+    defR = 10 + buildings(mm).filter((x) => x.def.cat === 'defense' && !dmg[x.key]).reduce((a, x) => a + x.def.def * sim[x.key], 0);
+    const needR = raidPowerEst(mm);
+    let guard = 0;
+    while (defR < needR && guard++ < 30) {
+      const list = candidates((x) => x.def.cat === 'defense').filter((o) => fits(o.c))
+        .sort((a, b) => sim[a.x.key] - sim[b.x.key] || a.c.gold - b.c.gold);
+      if (!list.length) break;
+      const o = list[0];
+      take(o.c, total); steps.push({ type: 'up', key: o.x.key, kind: o.x.kind });
+      sim[o.x.key]++; defR += o.x.def.def;
+    }
+
+    // 3 · BALANCED SPREAD — lowest simulated level first, cheapest on ties
+    guard = 0;
+    while (guard++ < 80) {
+      const list = candidates().filter((o) => fits(o.c))
+        .sort((a, b) => sim[a.x.key] - sim[b.x.key] || (a.c.gold || 0) - (b.c.gold || 0));
+      if (!list.length) break;
+      const o = list[0];
+      take(o.c, total); steps.push({ type: 'up', key: o.x.key, kind: o.x.kind });
+      sim[o.x.key]++;
+    }
+
+    // aggregate for display: key → { def, from, to, fixed }
+    const agg = {};
+    steps.forEach((st) => {
+      const bd = mm.b[st.key]; if (!bd) return;
+      if (!agg[st.key]) agg[st.key] = { def: B[st.kind], from: bd.lv, to: bd.lv, fixed: false };
+      if (st.type === 'fix') agg[st.key].fixed = true; else agg[st.key].to++;
+    });
+    return { steps, agg, total, count: steps.length };
+  }
+  function applySmart(mm, plan) {
+    let done = 0;
+    for (const st of plan.steps) {
+      const ok = st.type === 'fix' ? repair(mm, st.key) : upgrade(mm, st.key);
+      if (ok) done++;
+    }
+    if (done) logAdd(mm, '⚙ Smart Upgrade — ' + done + ' operations completed across the colony.');
+    G.save(); if (window.UI) window.UI.refreshAll();
+    return done;
+  }
+
+  // ---------------------------------------------------------------------------
   // RENDER
   // ---------------------------------------------------------------------------
   const fN = (v) => G.formatNum(Math.floor(v));
@@ -366,6 +441,26 @@
     html += '<div class="mn-raid ' + (under ? 'danger' : '') + '"><span>☠ Raid in <b>' + Math.floor(raidIn / 3600e3) + 'h ' + Math.floor((raidIn % 3600e3) / 60e3) + 'm</b></span>' +
       '<span>🛡 <b style="color:' + (under ? '#ff8f9c' : '#7ce0a0') + '">' + Math.round(defR) + '</b> / ~' + Math.round(needR) + ' needed' + (under ? ' — <b style="color:#ff8f9c">systems WILL be knocked offline</b>' : '') + '</span></div>';
 
+    // SMART UPGRADE — one tap plans a balanced wave with what you have
+    if (buildings(mm).length) {
+      const sp = planSmart(root, mm);
+      const on = sp.count > 0;
+      html += '<button data-mn-smart ' + (on ? '' : 'disabled') + ' style="width:100%;margin:0 0 10px;display:flex;align-items:center;gap:12px;text-align:left;cursor:' + (on ? 'pointer' : 'default') + ';' +
+        'background:linear-gradient(180deg,#0d2418,#0a1710);border:1px solid ' + (on ? 'rgba(124,224,160,.55)' : '#22334a') + ';border-radius:13px;padding:11px 13px;' +
+        (on ? 'box-shadow:0 0 18px -8px rgba(124,224,160,.8);' : 'opacity:.55;') + '">' +
+        '<span style="flex:none;width:38px;height:38px;display:grid;place-items:center;border-radius:10px;background:rgba(124,224,160,.12);border:1px solid rgba(124,224,160,.4);font-size:17px">⚙</span>' +
+        '<span style="flex:1;min-width:0">' +
+          '<span style="display:block;font-family:\'Orbitron\',sans-serif;font-weight:800;font-size:12px;letter-spacing:.08em;color:#9df0bb">SMART UPGRADE</span>' +
+          '<span style="display:block;font-size:10.5px;font-weight:700;color:#8fa8bd;margin-top:2px">' +
+            (on ? sp.count + ' ops · repairs → defense → lowest levels' : 'nothing affordable right now') + '</span>' +
+          (on ? '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' +
+            costChips(sp.total).split(' &nbsp;').map((c) => '<span style="background:#0b1119;border:1px solid #26364c;border-radius:7px;padding:3px 8px;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums">' + c + '</span>').join('') +
+          '</span>' : '') +
+        '</span>' +
+        (on ? '<span style="flex:none;font-family:\'Orbitron\',sans-serif;font-weight:800;font-size:10px;letter-spacing:.06em;color:#08131c;background:linear-gradient(180deg,#9df0bb,#5fd68b);border-radius:9px;padding:8px 12px">REVIEW ▸</span>' : '') +
+      '</button>';
+    }
+
     // SECTORS of the current moon
     for (let sec = 0; sec < mm.sectors; sec++) {
       const sd = SECTORS[sec];
@@ -443,6 +538,40 @@
     const ex = body.querySelector('[data-mn-expand]');
     if (ex) ex.addEventListener('click', () => { if (expand(mm)) render(); });
     body.querySelectorAll('[data-mn-slot]').forEach((b) => b.addEventListener('click', () => buildSheet(mm, b.dataset.mnSlot)));
+    const sm = body.querySelector('[data-mn-smart]');
+    if (sm) sm.addEventListener('click', () => smartSheet(root, mm));
+  }
+  // SMART UPGRADE confirm — itemized plan + total cost before a single coin moves
+  function smartSheet(root, mm) {
+    const plan = planSmart(root, mm);
+    if (!plan.count) return;
+    const old = $('mn-sheet'); if (old) old.remove();
+    const wrap = document.createElement('div'); wrap.id = 'mn-sheet'; wrap.className = 'mn-sheet-veil';
+    const rows = Object.values(plan.agg).map((a) =>
+      '<div class="mn-pick" style="pointer-events:none"><span class="mn-b-ic">' + a.def.ic + '</span>' +
+      '<span class="mn-pick-m"><b>' + a.def.name + '</b><i>' +
+      (a.fixed ? '🔧 repair · back online' + (a.to > a.from ? ' · then ' : '') : '') +
+      (a.to > a.from ? 'Lv ' + a.from + ' → <b style="color:#7ce0a0">Lv ' + a.to + '</b>' : '') +
+      '</i></span></div>').join('');
+    wrap.innerHTML = '<div class="mn-sheet"><div class="mn-sheet-t">⚙ SMART UPGRADE — ' + MOONCAT[root.cur].name.toUpperCase() + '</div>' +
+      '<div class="mn-b-d" style="margin:2px 2px 8px">Repairs first, then defense to raid-safe, then the lowest levels — balanced with what you can afford right now.</div>' +
+      rows +
+      '<div class="mn-pick" style="pointer-events:none;border-color:transparent"><span class="mn-b-ic">Σ</span>' +
+      '<span class="mn-pick-m"><b>' + plan.count + ' operations</b><em>' + costChips(plan.total) + '</em></span></div>' +
+      '<button class="mn-c-btn" style="width:100%" data-ok>CONFIRM — APPLY WAVE</button>' +
+      '<button class="mn-sheet-x">Cancel</button></div>';
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
+    wrap.querySelector('.mn-sheet-x').addEventListener('click', () => wrap.remove());
+    wrap.querySelector('[data-ok]').addEventListener('click', () => {
+      const done = applySmart(mm, plan);
+      wrap.remove();
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#9ecfff';
+      t.innerHTML = '⚙ SMART UPGRADE<br><span style="font-size:13px;color:#d8e8fa">' + done + ' operations completed</span>';
+      $('toast-layer').appendChild(t); setTimeout(() => t.remove(), 2800);
+      if (window.MOONSCENE) window.MOONSCENE.refresh();
+      render();
+    });
   }
   // next-moon purchase sheet
   function newMoonSheet(root) {

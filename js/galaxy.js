@@ -26,7 +26,9 @@
   const RINGS = 25;                 // conquerable rings beyond the center
   const DEEP_RING = 18;             // rings ≥ this are deep space
   const DEEP_MULT = { density: 20, rate: 3, loot: 10, resource: 25 };
-  const CITADEL_RATE_MULT = 100;    // a citadel pays 100× a normal tile
+  const CITADEL_RATE_MULT = 1000;  // a citadel pays 1000× a normal tile
+  const CITADEL_COST_MULT = 100;   // …but costs 100× to warp into
+  const TILE_VALUE_MULT = 50;      // global ×50 economy pass on every tile's yield
 
   // Ring → recommended level (spec curve for 1..8, then +20/ring, capped 500)
   const RING_LEVELS = [0, 10, 25, 30, 45, 50, 100, 125, 130];
@@ -86,7 +88,8 @@
       : `${a}${b} ${GREEK[(rnd() * GREEK.length) | 0]}-${1 + ((rnd() * 9) | 0)}`;
   }
 
-  // Per-tile resource yield per hour (before deep ×25 / citadel ×100 / rarity)
+  // Per-tile resource yield per hour (before deep ×25 / citadel ×1000 / rarity),
+  // then the global ×50 value pass is applied at the end of tileAt().
   function baseRate(ring, resKey) {
     const base = 8 + ring * 6;
     const mult = resKey === 'fuel' ? 1 : resKey === 'iron' ? 0.85 : 0.7;
@@ -130,6 +133,7 @@
     const typeMult = boss ? 1.5 : (type === 'resource' ? 1 : 0.4);
     let rate = Math.max(3, Math.round(baseRate(ring, resource) * (1 + rarity * 0.6) * typeMult));
     if (citadel) rate = Math.round(baseRate(ring, resource) * (1 + rarity * 0.6)) * CITADEL_RATE_MULT;
+    rate *= TILE_VALUE_MULT;
     const tile = {
       id, q: p.q, r: p.r, ring, type, home: false, boss, citadel, deep,
       resource, rarity, diff: ringDiff(ring), level: ringLevel(ring),
@@ -140,11 +144,15 @@
 
   // ENTRY COST — warping into a tile burns Galaxy Resources, and deep rings
   // get EXPENSIVE: fuel always, iron from ring 3, plasma from ring 6.
-  function entryCost(ring) {
+  // ENTRY COST — warping into a tile burns Galaxy Resources, and deep rings
+  // get EXPENSIVE: fuel always, iron from ring 3, plasma from ring 6.
+  // Citadel siege zones cost CITADEL_COST_MULT× (pass the tile as 2nd arg).
+  function entryCost(ring, tile) {
     if (ring <= 0) return null;
     const cost = { fuel: Math.round(30 * Math.pow(ring, 1.8)) };
     if (ring >= 3) cost.iron = Math.round(12 * Math.pow(ring - 2, 1.8));
     if (ring >= 6) cost.plasma = Math.round(10 * Math.pow(ring - 5, 1.9));
+    if (tile && tile.citadel) for (const k in cost) cost[k] *= CITADEL_COST_MULT;
     return cost;
   }
 
@@ -152,7 +160,7 @@
   function tileCount() { let n = 0; for (let r2 = 1; r2 <= RINGS; r2++) n += r2 * 6; return n; }
 
   window.GALAXYMAP = {
-    RES, RES_KEYS, RINGS, DEEP_RING, DEEP_MULT, CITADEL_RATE_MULT, HOME,
+    RES, RES_KEYS, RINGS, DEEP_RING, DEEP_MULT, CITADEL_RATE_MULT, CITADEL_COST_MULT, TILE_VALUE_MULT, HOME,
     tileId, parseId, ringOf, neighbors, ringCoords, ringTiles, tileAt, tileCount,
     ringLevel, ringDiff, pixel, unpixel, entryCost,
   };

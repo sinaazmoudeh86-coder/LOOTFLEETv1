@@ -20,7 +20,11 @@
   // ---------------------------------------------------------------------------
   // BALANCE
   // ---------------------------------------------------------------------------
-  const LV_MAX = 25;
+  // ENDLESS UPGRADES: no level cap. Cost grows 1.35×/level forever while output
+  // grows only ~lv^1.12 — so each level buys less than the last and deep
+  // upgrades become a pure prestige sink. The math itself enforces the
+  // diminishing returns; players decide when it stops being worth it.
+  const LV_MAX = Infinity;
   const SECTORS = [
     { name: 'Landing Basin',   slots: 3, cost: null },
     { name: 'Mare Ironshade',  slots: 3, cost: { gold: 8000,   fuel: 400,   iron: 250 } },
@@ -61,7 +65,7 @@
   const zScale = () => Math.max(1, Math.pow(Math.max(1, G.state.highestUnlocked || 1), 1.12));
   const upCost = (def, lv) => { const o = {}; Object.keys(def.cost).forEach((k) => o[k] = Math.round(def.cost[k] * Math.pow(1.35, lv))); return o; };
   const repairCost = (def, lv) => { const o = upCost(def, Math.max(0, lv - 1)); Object.keys(o).forEach((k) => o[k] = Math.round(o[k] * 0.5)); return o; };
-  const tierOf = (lv) => lv >= 25 ? 4 : lv >= 15 ? 3 : lv >= 8 ? 2 : 1;
+  const tierOf = (lv) => lv >= 60 ? 5 : lv >= 25 ? 4 : lv >= 15 ? 3 : lv >= 8 ? 2 : 1;
 
   const EVENTS = [
     { id: 'vein',   w: 30, ic: '◆', name: 'Rich Ore Vein',      txt: '2× production for 2h',            mult: 2,    hrs: 2 },

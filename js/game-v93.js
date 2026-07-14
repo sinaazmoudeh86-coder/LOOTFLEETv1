@@ -34,6 +34,15 @@
     const ahead = level < 100 ? 35 : level < 200 ? 28 : level < 300 ? 14 : level < 400 ? 7 : level < 500 ? 4 : 0;
     return level + ahead;
   }
+  // Inverse of unlockCeil: the LOWEST account level that unlocks zone d.
+  function zoneReqLevel(d) {
+    const bands = [[1, 100, 35], [100, 200, 28], [200, 300, 14], [300, 400, 7], [400, 500, 4], [500, Infinity, 0]];
+    for (const [lo, hi, ahead] of bands) {
+      const L = Math.max(1, d - ahead);
+      if (L >= lo && L < hi) return L;
+    }
+    return d;
+  }
   // Every 11th Grind Zone (11, 22, 33…) is a WAVE ZONE: 25 escalating waves of
   // extreme density ending in a boss (30% Super Boss). Classic free-play only.
   function isWaveZone(zone) { return zone > 0 && zone % 11 === 0; }
@@ -46,15 +55,21 @@
     return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
   }
   // ---- ZONE BONUSES ----------------------------------------------------------
-  // Every 10th zone (10,20,30…): SWARM ZONE — 20× mob density with relentless
+  // Every 30th zone (30,60,90…): SWARM ZONE — 20× mob density with relentless
   // near-instant respawns, so it plays as endless waves that never stop.
+  // TRADE-OFF: swarm loot is junk — low drop rate, low quality. Swarms are for
+  // kills/XP/gold volume, not gearing.
   // Every 25th (25,50,75…): 2× loot quality. Every 100th (100,200…): 5× loot
-  // quality. Quality bonuses STACK multiplicatively (e.g. Zone 100 = ×10 loot
-  // quality AND a swarm).
-  function densityMult(zone) { return (zone > 0 && zone % 10 === 0) ? 20 : 1; }
+  // quality. Quality bonuses STACK multiplicatively.
+  function densityMult(zone) { return (zone > 0 && zone % 30 === 0) ? 20 : 1; }
   // SWARM ZONE — classic-grind only (wave zones at %11 build no nodes anyway)
-  function isSwarmZone(zone) { return zone > 0 && zone % 10 === 0 && !isWaveZone(zone); }
-  function qualityMult(zone) { return (zone > 0 && zone % 25 === 0 ? 2 : 1) * (zone > 0 && zone % 100 === 0 ? 5 : 1); }
+  function isSwarmZone(zone) { return zone > 0 && zone % 30 === 0 && !isWaveZone(zone); }
+  // swarm loot penalties: 25% of normal drop rate, and drops roll 2 rarity
+  // tiers lower (min common)
+  const SWARM_DROP_MULT = 0.25, SWARM_RARITY_PENALTY = 2;
+  // Every 25th (25,50,75…): bonus loot quality — capped ×2 TOTAL (zones no
+  // longer stack past ×2; zone 100 is still ×2).
+  function qualityMult(zone) { return Math.min(2, (zone > 0 && zone % 25 === 0 ? 2 : 1) * (zone > 0 && zone % 100 === 0 ? 5 : 1)); }
   function zoneBonuses(zone) { const d = densityMult(zone), q = qualityMult(zone); return { density: d, quality: q, prismatic: d > 1 || q > 1 }; }
   // Loot-quality multiplier = roll the rarity that many times, keep the best.
   function rollRarityBoosted(zone, mult) { let best = I.rollRarity(zone); for (let i = 1; i < mult; i++) { const r = I.rollRarity(zone); if (r > best) best = r; } return best; }
@@ -672,9 +687,12 @@
       e.node.enemy = null; e.node.respawnT = (swarm ? 1.2 : RESPAWN_SEC) / (rt.tileRespawnMult || 1);
     }
     if (!rt.bossAlive) rt.bossTimer = Math.max(0, rt.bossTimer - 4);
-    if (Math.random() < C.dropChance(state.currentDungeon)) {
-      const _q = lootQ();
-      const item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
+    // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
+    const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
+    if (Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1)) {
+      const _q = _swarmKill ? 1 : lootQ();
+      let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
+      if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
       state.itemsFound++;
       lootBurst(e.x, e.y, item.rarity);
       rt.ground.push(new E.GroundItem(e.x, e.y, item, false));
@@ -867,7 +885,7 @@
   function bossLoot(e, isSuper) {
     const zone = state.currentDungeon;
     const drops = isSuper ? 12 : 5;
-    const qMul = Math.min(50, qualityMult(zone) * (rt.tileLoot || 1) * (isSuper ? 25 : 1));
+    const qMul = Math.min(2, qualityMult(zone) * (rt.tileLoot || 1) * (isSuper ? 2 : 1));
     const rcap = Math.min(10, C.rarityCap(zone) + 1); // bosses beat the zone cap by ONE tier, never more
     for (let i = 0; i < drops; i++) {
       const base = rollRarityBoosted(zone, qMul);
@@ -1492,7 +1510,7 @@
   // Ship-based equipment layout for the Hero screen: one descriptor per real
   // slot the current hull exposes, with a human label ("Cannon", "2nd Cannon"…).
   function equipLayout() {
-    const ORD = ['', '2nd ', '3rd ', '4th '];
+    const ORD = ['1st ', '2nd ', '3rd ', '4th '];
     const seen = {};
     return activeSlots().map((key) => {
       const base = C.slotBase(key);
@@ -1529,6 +1547,15 @@
     state.equipped[slot] = item; state.inventory.splice(idx, 1);
     if (prev) state.inventory.push(prev);
     refreshStats(); if (window.UI) window.UI.refreshAll(); save();
+  }
+  // UNEQUIP — pull an item off its hardpoint and back into the bag
+  function unequip(slotKey) {
+    const it = state.equipped[slotKey];
+    if (!it) return false;
+    state.equipped[slotKey] = null;
+    state.inventory.push(it);
+    refreshStats(); if (window.UI) window.UI.refreshAll(); save();
+    return true;
   }
   // Add an item's salvage roll into the player's galaxy resources, and (if an
   // accumulator is passed) tally what was gained so the UI can report it.
@@ -2101,7 +2128,7 @@
     const u = Math.min(cap, unlockCeil(state.level));
     if (u > state.highestUnlocked) state.highestUnlocked = u;
     resetZone();
-    if (d >= 1 && isSwarmZone(d) && window.UI && window.UI.unlockToast) window.UI.unlockToast('☣ SWARM ZONE — 20× density · the waves don\u2019t stop');
+    if (d >= 1 && isSwarmZone(d) && window.UI && window.UI.unlockToast) window.UI.unlockToast('☣ SWARM ZONE — 20× density · endless waves · ⚠ junk loot');
     // Deploying to the safe Hangar bay (d=0, e.g. the Bail button) always ends
     // combat cleanly: revive the ship and top up health so you're never "downed"
     // while docked.
@@ -2212,9 +2239,13 @@
     }
     return (state.rivalTiles && state.rivalTiles[k]) || null;
   }
-  // Seconds left on a tile's contest cooldown (15 min normal · 24 h citadels).
+  // Seconds left on a tile's contest cooldown. ANY attacked/captured tile is
+  // shielded for 24 h — merges the local clock with the multiplayer server's
+  // cooldown_until so real-player attacks respect it too.
   function tileCooldownLeft(k) {
-    const until = state.tileCd && state.tileCd[k];
+    let until = (state.tileCd && state.tileCd[k]) || 0;
+    const real = rt.realTiles && rt.realTiles[k];
+    if (real && real.cooldownUntil) { const t = new Date(real.cooldownUntil).getTime(); if (t > until) until = t; }
     return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
   }
   // Combat multipliers for the tile we're standing in — deep space rings give
@@ -2225,9 +2256,8 @@
     rt.tileRespawnMult = (tile && tile.deep) ? GX.DEEP_MULT.rate : 1;
     rt.deepDeath   = !!(tile && tile.deep);
   }
-  // Effective loot-quality roll multiplier for the current tile (capped so the
-  // keep-best rarity roll never loops absurdly).
-  function lootQ() { return Math.min(60, Math.max(1, Math.round(qualityMult(state.currentDungeon) * (rt.tileLoot || 1) * (window.DREAD ? window.DREAD.mult('lootQuality') : 1)))); }
+  // Effective loot-quality roll multiplier for the current tile — hard ×2 cap.
+  function lootQ() { return Math.min(2, Math.max(1, Math.round(qualityMult(state.currentDungeon) * (rt.tileLoot || 1) * (window.DREAD ? window.DREAD.mult('lootQuality') : 1)))); }
   function canAfford(cost) {
     return state.resources.fuel >= (cost.fuel || 0) && state.resources.iron >= (cost.iron || 0) && state.resources.plasma >= (cost.plasma || 0);
   }
@@ -2253,7 +2283,7 @@
     return Object.assign({}, t, {
       owned: isOwned(k), rival: rivalOf(k), active: state.currentSystem === k,
       cooldown: tileCooldownLeft(k),
-      myCitadel: hasMyCitadel(k), rivalCitadelScore: rivalCitadelScore(k),
+      myCitadel: hasMyCitadel(k) && isOwned(k), rivalCitadelScore: rivalCitadelScore(k),
       lootQ: (t.deep ? GX.DEEP_MULT.loot : 1),
       resMult: (t.deep ? GX.DEEP_MULT.resource : 1),
       locked: t.level > state.level + 10 && !isOwned(k),
@@ -2292,7 +2322,13 @@
       if (hasMyCitadel(id) && Math.random() < (0.7 + 0.06 * citadelLevel(id))) return null;
       const name = rndRivalName();
       delete state.ownedSystems[id]; state.rivalTiles[id] = name;
-      return { kind: 'lost', name, tile: id };
+      // a rival takeover RAZES any citadel you built there — and the tile is
+      // attack-shielded for 24 h (you can't instantly take it back)
+      const hadCit = !!(state.citadels && state.citadels[id]);
+      if (hadCit) delete state.citadels[id];
+      if (!state.tileCd) state.tileCd = {};
+      state.tileCd[id] = Date.now() + 24 * 3600 * 1000;
+      return { kind: 'lost', name, tile: id, razed: hadCit };
     }
     return null;
   }
@@ -2361,7 +2397,7 @@
   // Effective entry cost for a tile (your own territory warps at half price).
   function entryCostFor(k) {
     const t = sysAt(k); if (!t || t.home) return null;
-    const c = GX.entryCost(t.ring); if (!c) return null;
+    const c = GX.entryCost(t.ring, t); if (!c) return null;
     const disc = isOwned(k) ? 0.5 : 1;
     const eff = {};
     for (const ck in c) eff[ck] = Math.ceil(c[ck] * disc);
@@ -2372,7 +2408,8 @@
     if (tile.home) return { ok: false, reason: 'home' };       // the Home Citadel is neutral
     const owned = isOwned(k);
     if (!owned && tile.level > state.level + 10) return { ok: false, reason: 'locked' };
-    if (!owned && rivalOf(k) && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
+    // contest cooldown blocks EVERY non-owned warp-in (rival, neutral, citadel)
+    if (!owned && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
     // ENTRY COST — every warp burns resources; deeper rings are punishing
     const cost = entryCostFor(k);
     if (cost) {
@@ -2381,10 +2418,11 @@
       state.resources.iron -= cost.iron || 0;
       state.resources.plasma -= cost.plasma || 0;
     }
-    if (!owned && rivalOf(k)) {
+    if (!owned && (rivalOf(k) || tile.citadel)) {
       if (!state.tileCd) state.tileCd = {};
-      // attacking locks the tile — citadels can only be sieged once per DAY
-      state.tileCd[k] = Date.now() + (tile.citadel ? 24 * 3600 : 15 * 60) * 1000;
+      // ATTACK SHIELD — attacking an owned tile (or any citadel) seals it for
+      // 24 h: nobody can attack it again, win or lose
+      state.tileCd[k] = Date.now() + 24 * 3600 * 1000;
     }
     enterTile(k);
     save();
@@ -2488,7 +2526,7 @@
     // magnet vacuums every piece before the tow home.
     const drops = 8, zone = state.currentDungeon;
     for (let i = 0; i < drops; i++) {
-      const base = rollRarityBoosted(zone, Math.min(40, qualityMult(zone) * 4));
+      const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 4));
       const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
       state.itemsFound++;
       const a = Math.PI * 2 * (i / drops), r = 42 + Math.random() * 36;
@@ -2597,13 +2635,16 @@
     const razing = !!rt.razingClaim; rt.razingClaim = false;
     const fromRival = rivalOf(k);
     state.ownedSystems[k] = true;
+    // your fresh capture is attack-shielded for 24 h
+    if (!state.tileCd) state.tileCd = {};
+    state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + 24 * 3600 * 1000);
     if (state.rivalTiles) delete state.rivalTiles[k];
     pushFeed(fromRival ? ('You took ' + tile.name + ' from ' + fromRival) : ('You captured ' + tile.name));
     // REAL turf war: stake the claim on the shared server (server-authoritative,
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName(), tile.citadel ? 1440 : 15, razing ? { citadel: false, fleetScore: 0, force: true } : undefined).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, razing ? { citadel: false, fleetScore: 0, force: true } : undefined).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
           rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0 };
@@ -2691,6 +2732,7 @@
     return cost;
   }
   function upgradeCitadel(id) {
+    if (!isOwned(id)) return { ok: false, reason: 'owned' };   // only YOUR tiles upgrade
     if (!hasMyCitadel(id)) return { ok: false, reason: 'none' };
     const c = state.citadels[id];
     const lv = c.lv || 1;
@@ -2754,7 +2796,7 @@
     rt.razingClaim = true;                            // you razed it — the tile is yours, no take-back
     captureSystem();                                  // claims the (citadel-less) tile + tows home
     // clear the shared citadel flag so everyone sees the fortress is gone
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: false, fleetScore: 0, force: true }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: false, fleetScore: 0, force: true }); } catch (e) {} }
     save();
   }
   // Permanently demote a NATURAL citadel siege tile to a plain, buildable tile
@@ -2897,7 +2939,7 @@
     let found = 0, lostCount = 0; const newItems = [];
     const dropP = C.dropChance(d);
     for (let i = 0; i < kills; i++) {
-      if (Math.random() < dropP) { found++; const _q = qualityMult(d); if (newItems.length < 40) newItems.push(_q > 1 ? I.generate(d, rollRarityBoosted(d, _q)) : I.generate(d)); }
+      if (Math.random() < dropP * (isSwarmZone(d) ? SWARM_DROP_MULT : 1)) { found++; const _q = isSwarmZone(d) ? 1 : qualityMult(d); let _it = _q > 1 ? I.generate(d, rollRarityBoosted(d, _q)) : I.generate(d); if (isSwarmZone(d) && _it.rarity > 0) _it = I.generate(d, Math.max(0, _it.rarity - SWARM_RARITY_PENALTY)); if (newItems.length < 40) newItems.push(_it); }
     }
     newItems.forEach((it) => { if (!state.equipped[it.slot]) state.equipped[it.slot] = it; else if (state.inventory.length < invCap()) state.inventory.push(it); else addSalvage(it); });
     state.itemsFound += found;
@@ -3048,6 +3090,15 @@
       }
     } else {
       state.scaleVer = 2; // fresh account, already on the new curve
+    }
+    // ---- ONE-TIME crit nerf migration: compress item crit onto the new ladder ----
+    if (state.critVer !== 4) {
+      const capCrit = (it) => { if (it && it.stats && it.stats.critChance != null) it.stats.critChance = Math.min(it.stats.critChance, Math.round((0.005 + (it.rarity || 0) * 0.01) * 1180) / 1000, 1); };
+      Object.keys(state.equipped || {}).forEach((k) => capCrit(state.equipped[k]));
+      (state.inventory || []).forEach(capCrit);
+      Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => capCrit(fit[k])); });
+      state.critVer = 4;
+      if (loaded) save();
     }
 
     refreshStats();
@@ -3241,7 +3292,7 @@
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
-    isCitadelZone, citadelCooldownLeft, isSwarmZone,
+    isCitadelZone, citadelCooldownLeft, isSwarmZone, zoneReqLevel,
     getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,
     shipDroneCount, getDrones: () => state.drones, getShipKills: (k) => (state.shipKills[k] || 0),
     skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills,
@@ -3252,7 +3303,7 @@
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, hasMyCitadel, rivalCitadelScore,
-    citadelLevel, citadelUpgradeCost, upgradeCitadel,
+    citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,

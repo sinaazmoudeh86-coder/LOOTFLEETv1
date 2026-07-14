@@ -161,20 +161,23 @@
       if (el['hud-lc'].textContent !== v) el['hud-lc'].textContent = v;
     }
     // WALLET FIT GUARD — when balances grow long, drop the /h rates first, then
-    // compress the chips, so nothing ever clips or overlaps the name chip.
+    // compress the chips, and as a last resort WRAP to a second row — every
+    // currency is always fully visible, nothing clips or overlaps.
     {
       const w = document.querySelector('#statusbar .wallet');
       if (w) {
         const _pc = $('prism-chip');
         const sig = [el['hud-gold'], el['hud-fuel'], el['hud-iron'], el['hud-plasma'], el['hud-prism'], el['hud-lc'], el['hud-fuel-rate'], el['hud-iron-rate'], el['hud-plasma-rate']]
           .map((e2) => (e2 ? e2.textContent : '')).join('|')
-          + '|' + (_pc && _pc.style.display !== 'none' ? '◈' : '');   // re-fit when the Prism chip toggles on/off
+          + '|' + (_pc && _pc.style.display !== 'none' ? '◈' : '')   // re-fit when the Prism chip toggles on/off
+          + '|' + w.clientWidth;                                     // re-fit on any resize / rotation
         if (syncHUD._wsig !== sig) {
           syncHUD._wsig = sig;
-          w.classList.remove('tight', 'tighter', 'tightest');
+          w.classList.remove('tight', 'tighter', 'tightest', 'wrap');
           if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tight');
           if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tighter');
           if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tightest');
+          if (w.scrollWidth > w.clientWidth + 1) w.classList.add('wrap');   // final stage: 2 rows, all chips visible
         }
       }
     }
@@ -600,7 +603,7 @@
       d.className = 'equip-slot' + (it ? '' : ' empty');
       d.innerHTML = `<div class="slot-icon ${it ? rc(it.rarity) : ''}" style="${it ? 'border-color:' + C.RARITY[it.rarity].color : ''}">${it ? itemIcon(it) : icon}</div>
         <div class="slot-meta"><div class="slot-label">${label}</div><div class="slot-item ${it ? rc(it.rarity) : ''}">${it ? it.name : 'Empty'}</div></div>`;
-      if (it) d.addEventListener('click', () => openItem(it, 'equipped'));
+      if (it) d.addEventListener('click', () => openItem(it, 'equipped', key));
       el['equip-grid'].appendChild(d);
     });
     // PRISM CORE — a permanent prismatic loadout slot shown when the active hull carries an aura
@@ -1077,7 +1080,7 @@
         const owned = G.isOwned(id), rival = !owned && G.rivalOf(id);
         const locked = !owned && !t.home && t.level > lvl + 10;
         const active = G.state.currentSystem === id;
-        const cd = (t.citadel || rival || owned) ? G.tileCooldownLeft(id) : 0;
+        const cd = t.home ? 0 : G.tileCooldownLeft(id);
         // fill by state
         let fill, edge;
         if (t.home) { fill = '#2a2438'; edge = '#f2b24b'; }
@@ -1094,9 +1097,11 @@
         }
         ctx.closePath();
         ctx.fillStyle = fill; ctx.fill();
+        // contested lockout — dim the hex so "can't take this yet" reads at a glance
+        if (cd > 0 && !owned) { ctx.fillStyle = 'rgba(5,8,14,0.48)'; ctx.fill(); }
         // PLAYER CITADEL — themed fortress: BLUE if it's yours, RED if a rival's
         {
-          const myCit = G.hasMyCitadel && G.hasMyCitadel(id);
+          const myCit = owned && G.hasMyCitadel && G.hasMyCitadel(id);
           const rivCit = !myCit && G.rivalCitadelScore && G.rivalCitadelScore(id) != null;
           if (myCit || rivCit) {
             const cc = myCit ? [70, 150, 255] : [240, 60, 70];
@@ -1160,7 +1165,18 @@
           ctx.font = '800 8px Rajdhani, sans-serif';
           ctx.fillStyle = locked ? '#5a6270' : '#dfe9ff';
           ctx.fillText('L' + t.level, p.x, p.y + (t.citadel ? GX_HEX * 0.62 : (t.boss || t.resource) ? 9 : 3));
-          if (cd > 0) { ctx.font = '800 8px Rajdhani, sans-serif'; ctx.fillStyle = '#ffcf7a'; ctx.fillText('◷', p.x + GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
+          if (cd > 0 && !owned && showText) {
+            // CLEAR COUNTDOWN — dark pill + live ticking clock (h for citadels)
+            const txt = '◷ ' + (cd >= 3600 ? Math.floor(cd / 3600) + 'h' + Math.ceil((cd % 3600) / 60) + 'm' : Math.floor(cd / 60) + ':' + ((cd % 60) < 10 ? '0' : '') + (cd % 60));
+            ctx.font = '800 8.5px Rajdhani, sans-serif';
+            const tw = ctx.measureText(txt).width + 10;
+            const py = p.y + GX_HEX * 0.42;
+            ctx.fillStyle = 'rgba(8,11,18,0.92)';
+            ctx.beginPath(); ctx.roundRect(p.x - tw / 2, py, tw, 13, 6.5); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,207,122,0.7)'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = '#ffcf7a'; ctx.textAlign = 'center';
+            ctx.fillText(txt, p.x, py + 9.5);
+          } else if (cd > 0) { ctx.font = '800 8px Rajdhani, sans-serif'; ctx.fillStyle = '#ffcf7a'; ctx.fillText('◷', p.x + GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
           if (owned) { ctx.fillStyle = '#eaf3ff'; ctx.font = '800 7px Rajdhani, sans-serif'; ctx.fillText('★', p.x - GX_HEX * 0.45, p.y - GX_HEX * 0.4); }
         }
       }
@@ -1203,14 +1219,14 @@
       owned.forEach((k2) => { const tt = GM.tileAt(k2); if (!tt) return; if (tt.citadel) citN++; if (tt.deep) deepN++; if (tt.boss) bossN++; });
       const rows = GM.RES_KEYS.map((k2) => {
         const d = GM.RES[k2];
-        return `<div class="ip-stat"><span class="ip-sname" style="color:${d.color}">${d.glyph} ${d.name}</span><span class="v">+${G.formatNum(rates[k2] || 0)}/h</span></div>`;
+        return `<div class="ip-stat big"><span class="ip-sname" style="color:${d.color}">${d.glyph} ${d.name}</span><span class="v" style="color:${d.color}">+${G.formatNum(rates[k2] || 0)}<i class="perh">/hour</i></span></div>`;
       }).join('');
       const sheet = showSheet(`<div class="sheet-head">⌂ Home Citadel</div><div class="sheet-body">
         <p style="margin-bottom:8px">The neutral heart of the Galaxy — every operator's safe harbor. It cannot be conquered.</p>
         <div class="lo-sect">Your gathering operation</div>
         ${rows}
         <div class="ip-stat"><span class="ip-sname">Territory held</span><span class="v">${owned.length} tile${owned.length === 1 ? '' : 's'}${citN ? ` · ⛴ ${citN} citadel${citN > 1 ? 's' : ''}` : ''}${bossN ? ` · ☠ ${bossN}` : ''}${deepN ? ` · ☢ ${deepN} deep` : ''}</span></div>
-        ${owned.length === 0 ? '<p style="font-size:11px;color:var(--muted);margin-top:6px">Claim tiles on the map to start generating Galaxy Resources every hour — citadels pay 100×.</p>' : ''}
+        ${owned.length === 0 ? '<p style="font-size:12px;color:var(--muted);margin-top:6px">Claim tiles on the map to start generating Galaxy Resources every hour — citadels pay ' + GM.CITADEL_RATE_MULT + '×.</p>' : ''}
         <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn primary" data-ok>⌂ Dock</button></div></div>`);
       sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
       sheet.querySelector('[data-ok]').addEventListener('click', () => { closeSheet(); G.selectDungeon(0); showScreen('battle'); });
@@ -1220,13 +1236,24 @@
     const owner = t.owned ? 'You' : (t.rival || 'Unclaimed');
     const ownerCol = t.owned ? '#5fa8ff' : (t.rival ? '#e8a34a' : '#7fb4ff');
     const ratePerH = t.rate ? t.rate * (t.deep ? GM.DEEP_MULT.resource : 1) : 0;
-    const cdTxt = t.cooldown > 0 ? (t.citadel ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
-    const blocked = t.rival && t.cooldown > 0;
+    const cdTxt = t.cooldown > 0 ? (t.cooldown >= 3600 ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
+    const blocked = !t.owned && t.cooldown > 0;
     const action = t.owned ? 'Deploy' : t.rival ? (t.citadel ? 'Siege' : 'Attack') : (t.citadel ? 'Siege' : 'Capture');
     const obj = t.owned ? (t.boss || t.citadel ? 'Farm endless boss waves on your tile' : 'Farm your territory')
       : t.citadel ? 'Fight up through the garrison, raze the Void Citadel, and it becomes YOUR Citadel'
       : t.boss ? 'Clear 10 waves, then defeat the <b style="color:var(--hp)">BOSS</b>' : 'Clear 10 waves to capture';
     const ec = G.entryCostFor ? G.entryCostFor(id) : null;
+    // BIG VALUE HERO — what this tile pays per hour, with every multiplier spelled out
+    const valChips = [];
+    if (t.citadel) valChips.push('⛴ CITADEL ×' + GM.CITADEL_RATE_MULT);
+    if (t.deep) valChips.push('☢ DEEP SPACE ×' + GM.DEEP_MULT.resource);
+    if (t.rarity) valChips.push(t.rarity === 2 ? '★★ RARE' : '★ UNCOMMON');
+    const valueBlock = ratePerH ? `<div class="gx-value" style="--vc:${GM.RES[t.resource].color}">
+      <div class="gxv-k">${t.owned ? '▸ EARNING NOW' : 'VALUE IF HELD'}</div>
+      <div class="gxv-n">${GM.RES[t.resource].glyph} ${G.formatNum(ratePerH)}<i>${GM.RES[t.resource].name} / hour</i></div>
+      ${valChips.length ? '<div class="gxv-chips">' + valChips.map((c) => '<span>' + c + '</span>').join('') + '</div>' : ''}
+      <div class="gxv-sub">${t.owned ? 'auto-deposited to your Galaxy Resources every hour you hold it' : 'capture &amp; hold — pays automatically every hour'}</div>
+    </div>` : '';
     const myRes = G.getResources ? G.getResources() : {};
     const ecAfford = !ec || GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (ec[k2] || 0));
     const ecRow = ec ? `<div class="ip-stat"><span class="ip-sname">Entry cost</span><span class="v">${GM.RES_KEYS.filter((k2) => ec[k2]).map((k2) => `<span style="color:${(myRes[k2] || 0) >= ec[k2] ? GM.RES[k2].color : 'var(--bad)'}">${GM.RES[k2].glyph} ${G.formatNum(ec[k2])}</span>`).join(' ')}${t.owned ? ' <span style="color:var(--muted-2)">(½ — your territory)</span>' : ''}</span></div>` : '';
@@ -1267,20 +1294,22 @@
       '</div>';
     }
     const sheet = showSheet(`<div class="sheet-head">${t.rival ? 'Contest' : t.owned ? 'Your Tile' : 'Claim'} · ${t.name}</div><div class="sheet-body">
+      ${valueBlock}
       <div class="ip-stat"><span class="ip-sname">Ring · Level</span><span class="v">Ring ${t.ring} · Lv ${t.level}${t.deep ? ' · ☢ DEEP SPACE' : ''}</span></div>
       <div class="ip-stat"><span class="ip-sname">Type</span><span class="v">${typeName}${t.rarity ? ' · ' + (t.rarity === 2 ? '★★ Rare' : '★ Uncommon') : ''}</span></div>
       <div class="ip-stat"><span class="ip-sname">Owner</span><span class="v" style="color:${ownerCol}">${owner}</span></div>
-      ${ratePerH ? `<div class="ip-stat"><span class="ip-sname">Output / h</span><span class="v" style="color:${GM.RES[t.resource].color}">${GM.RES[t.resource].glyph} ${G.formatNum(ratePerH)} ${GM.RES[t.resource].name}${t.citadel ? ' · 100× CITADEL' : ''}</span></div>` : ''}
       <div class="ip-stat"><span class="ip-sname">Enemy difficulty</span><span class="v">Zone Lv ${t.diff}</span></div>
       <div class="ip-stat"><span class="ip-sname">Loot quality</span><span class="v">×${t.lootQ}${t.deep ? ' (deep space)' : ''}</span></div>
       ${ecRow}
-      <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Cooldown ') + cdTxt : (t.locked ? '🔒 Lv ' + Math.max(1, t.level - 10) + ' required' : '⚔ Open to attack')}</span></div>
+      ${cdTxt && !t.owned ? `<div class="gx-shield">🛡 <b>ATTACK SHIELD</b> — this tile was attacked recently. Nobody can attack it again for <b>${cdTxt}</b>.</div>` : ''}
+      ${cdTxt && t.owned ? `<div class="gx-shield mine">🛡 <b>PROTECTED</b> — your tile can't be attacked for <b>${cdTxt}</b>.</div>` : ''}
+      <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Attack shield ') + cdTxt : (t.locked ? '🔒 Lv ' + Math.max(1, t.level - 10) + ' required' : '⚔ Open to attack')}</span></div>
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
       ${citBlock}
-      ${t.citadel && !t.owned ? '<p style="font-size:11px;margin-top:6px;color:#ffb088">⛴ Citadels generate <b>100×</b> resources and can only be sieged <b>once per day</b>.</p>' : ''}
+      ${t.citadel && !t.owned ? '<p style="font-size:12px;margin-top:6px;color:#ffb088">⛴ Citadels pay <b>' + GM.CITADEL_RATE_MULT + '×</b> a normal tile — but warping in costs <b>' + GM.CITADEL_COST_MULT + '×</b> and sieges are limited to <b>once per day</b>.</p>' : ''}
       ${t.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
       ${!ecAfford ? '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough Galaxy Resources to warp this deep — farm or capture closer rings first.</p>' : ''}
-      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${actionLabel}</button></div></div>`);
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${blocked ? '◷ ' + cdTxt : actionLabel}</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     sheet.querySelectorAll('[data-build-cit]').forEach((b) => b.addEventListener('click', () => {
       const r = G.buildCitadel(b.dataset.buildCit);
@@ -1349,7 +1378,7 @@
       const locked = d > s.highestUnlocked, active = d === s.currentDungeon;
       const types = C.ENEMIES.filter((e) => d >= e.minDungeon), topType = types[types.length-1];
       const blocked = d > blockCap;
-      const reqLv = Math.max(1, d - 20);
+      const reqLv = G.zoneReqLevel ? G.zoneReqLevel(d) : Math.max(1, d - 20);
       const lockLabel = blocked ? '🔒 Clear Zone ' + (Math.floor((d - 1) / C.ZONE_BLOCK) * C.ZONE_BLOCK) : '🔒 Lv ' + reqLv;
       const bz = G.zoneBonuses(d);
       const wave = d % 11 === 0;
@@ -1358,7 +1387,7 @@
       const bonus = (wave?`<span class="z-bon wave">◎ WAVE ZONE · 25 waves → boss</span>`:'') +
                     (cit?`<span class="z-bon cit">⛴ CITADEL SIEGE · raze the fortress</span>`:'') +
                     (citCd>0?`<span class="z-bon citcd">◷ rebuilds in ${fmtCd(citCd)}</span>`:'') +
-                    (bz.density>1?`<span class="z-bon dens">☣ SWARM · ${bz.density}× density · endless waves</span>`:'') +
+                    (bz.density>1?`<span class="z-bon dens">☣ SWARM · ${bz.density}× density · endless waves · ⚠ junk loot</span>`:'') +
                     (bz.quality>1?`<span class="z-bon qual">✦ ${bz.quality}× loot quality</span>`:'');
       html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}" style="${pvars}">
         <div class="z-orb ${ptype}${d % 5 === 0 ? ' ringed' : ''}${cit ? ' cit' : ''}${wave ? ' wav' : ''}"><span>${d}</span></div>
@@ -1913,7 +1942,7 @@
       Object.keys(it.stats).forEach((k) => {
         const d = C.STATS[k]; if (!d) return;
         let cmpStr = '';
-        if (cmp && cmp[k]) { const up = cmp[k] > 0; cmpStr = ` <span style="font-size:11px;color:${up?'var(--good)':'var(--bad)'}">(${up?'+':''}${d.fmt==='flat'?G.formatNum(cmp[k]):(Math.round(cmp[k]*10)/10)}${d.fmt==='flat'?'':'%'})</span>`; }
+        if (cmp && cmp[k]) { const up = cmp[k] > 0; const mag = Math.abs(cmp[k]); const vs = d.fmt === 'flat' ? G.formatNum(mag) : (Math.round(mag * 100) / 100); cmpStr = ` <span style="font-size:11px;color:${up?'var(--good)':'var(--bad)'}">(${up?'+':'−'}${vs}${d.fmt==='flat'?'':'%'})</span>`; }
         statHTML += `<div class="ip-stat ${d.special?'special':''}"><span class="ip-sname">${d.name}</span><span class="v">${fmtStat(k, it.stats[k])}${cmpStr}</span></div>`;
       });
       let cmpNote = '';
@@ -2168,9 +2197,10 @@
     html += data.board.slice(0, 60).map((p, i) => `
       <div class="lb-row ${p.isMe?'me':''}" data-rank="${i}">
         <div class="lb-rank ${p.rank<=3?'top':''}">${p.rank}</div>
-        <div class="lb-nm"><div class="lb-name">${p.isMe?'★ ':''}${p.name}</div>
-          <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div>
-          <div class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</div></div>
+        <div class="lb-nm">
+          <div class="lb-topline"><span class="lb-name">${p.isMe?'★ ':''}${p.name}</span>
+            <span class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</span></div>
+          <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div></div>
         <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.power)}</div></div>`).join('');
     const _sc = el['board-body'].scrollTop;
     el['board-body'].innerHTML = html;
@@ -2214,7 +2244,7 @@
     return GM.RES_KEYS.filter((k) => salv[k]).map((k) =>
       `<span style="color:${GM.RES[k].color}">${GM.RES[k].glyph}\u202F${G.formatNum(salv[k])}</span>`).join('  ');
   }
-  function openItem(item, mode) {
+  function openItem(item, mode, slotKey) {
     const r = C.RARITY[item.rarity];
     const equipped = G.state.equipped[item.slot];
     const cmp = (mode === 'inventory' && equipped) ? G.compare(item, equipped) : null;
@@ -2222,7 +2252,7 @@
     Object.keys(item.stats).forEach((k) => {
       const d = C.STATS[k]; if (!d) return;
       let cmpStr = '';
-      if (cmp && cmp[k]) { const up = cmp[k] > 0; cmpStr = ` <span style="font-size:11px;color:${up?'var(--good)':'var(--bad)'}">(${up?'+':''}${d.fmt==='flat'?G.formatNum(cmp[k]):(Math.round(cmp[k]*10)/10)}${d.fmt==='flat'?'':'%'})</span>`; }
+      if (cmp && cmp[k]) { const up = cmp[k] > 0; const mag = Math.abs(cmp[k]); const vs = d.fmt === 'flat' ? G.formatNum(mag) : (Math.round(mag * 100) / 100); cmpStr = ` <span style="font-size:11px;color:${up?'var(--good)':'var(--bad)'}">(${up?'+':'−'}${vs}${d.fmt==='flat'?'':'%'})</span>`; }
       statHTML += `<div class="ip-stat ${d.special?'special':''}"><span class="ip-sname">${d.name}</span><span class="v">${fmtStat(k, item.stats[k])}${cmpStr}</span></div>`;
     });
     let cmpNote = '';
@@ -2234,7 +2264,7 @@
         (canSecond ? `<button class="btn gold" data-eq2>Equip 2nd</button>` : '') +
         `<button class="btn" data-sell>Sell <span class="coin">$</span> ${G.formatNum(C.sellValue(item))}</button></div>` +
         `<div class="ip-salvage">Scrapping may salvage <span style="color:${GM.RES.fuel.color}">${GM.RES.fuel.glyph}</span> <span style="color:${GM.RES.iron.color}">${GM.RES.iron.glyph}</span> <span style="color:${GM.RES.plasma.color}">${GM.RES.plasma.glyph}</span> for My Galaxy</div>`;
-    } else if (mode === 'equipped') actions = `<div class="sheet-actions"><button class="btn" data-x>Close</button></div>`;
+    } else if (mode === 'equipped') actions = `<div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-uneq>⬆ Unequip</button></div>`;
     const sheet = showSheet(`<div id="item-pop"><div class="sheet-body">
       <div class="ip-name ${rc(item.rarity)}">${item.name}</div>
       <div class="ip-type">${r.name} · ${C.SLOTS[item.slot].name} · Zone ${item.dungeon}</div>
@@ -2255,6 +2285,10 @@
         toast(`Sold for <b style="color:var(--gold)">${G.formatNum(r.gold)}g</b>${sv ? '  ·  ' + sv : ''}`, sv ? '#5bc0ff' : '#e6b566'); }
     });
     const x = sheet.querySelector('[data-x]'); if (x) x.addEventListener('click', closeSheet);
+    const uq = sheet.querySelector('[data-uneq]'); if (uq) uq.addEventListener('click', () => {
+      G.unequip(slotKey || item.slot); closeSheet();
+      toast('Unequipped — moved to your bag', '#9fc2dd');
+    });
   }
 
   // ==========================================================================

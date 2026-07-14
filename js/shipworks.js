@@ -95,10 +95,11 @@
   // ---- COST -----------------------------------------------------------------
   // L1/L2 gold scales with your deepest zone (like Galaxy Supply) so the entry
   // crates stay meaningful; upper levels are flat premium prices.
+  // Economy pass: L1–L3 are ×50 the original tuning.
   function unitCost(cr) {
-    if (cr.lvl === 1) { const s = C().dungeonScale(hz()); return { gold: Math.round(220000 * Math.pow(s, 0.7) + 120000) }; }
-    if (cr.lvl === 2) { const s = C().dungeonScale(hz()); return { gold: Math.round(900000 * Math.pow(s, 0.7) + 500000), iron: 250000 }; }
-    if (cr.lvl === 3) return { fuel: 900000, plasma: 450000 };
+    if (cr.lvl === 1) { const s = C().dungeonScale(hz()); return { gold: Math.round(11000000 * Math.pow(s, 0.7) + 6000000) }; }
+    if (cr.lvl === 2) { const s = C().dungeonScale(hz()); return { gold: Math.round(45000000 * Math.pow(s, 0.7) + 25000000), iron: 12500000 }; }
+    if (cr.lvl === 3) return { fuel: 45000000, plasma: 22500000 };
     if (cr.lvl === 4) return { credits: 15000 };
     return { credits: 60000, dreadCores: 500 };
   }

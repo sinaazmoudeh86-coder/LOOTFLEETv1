@@ -213,6 +213,28 @@
   function isLocked(t) { return lockOf(t)[t] === weekIndex(); }
   function canHunt(t) { return lvl() >= levelForTier(t) && !isLocked(t); }
 
+  // ---- PURCHASED RESPAWNS -------------------------------------------------
+  // Buy back a locked tier's attempt at a brutally escalating gold price:
+  // 1st respawn 100M → 2nd 100B → 3rd 100T → ×1000 each, PER TIER, resets weekly.
+  function respawnState() {
+    const st = G().state;
+    if (!st.dreadRespawn || st.dreadRespawn.week !== weekIndex()) st.dreadRespawn = { week: weekIndex(), n: {} };
+    return st.dreadRespawn;
+  }
+  function respawnCost(t) { return 100e6 * Math.pow(1000, (respawnState().n[t] || 0)); }
+  function buyRespawn(t) {
+    if (!isLocked(t)) return;
+    const cost = respawnCost(t), g = G();
+    if ((g.state.gold || 0) < cost) { toast('Need ' + fmt(cost) + ' gold to respawn this Dreadnaught'); return; }
+    g.state.gold -= cost;
+    const rs = respawnState(); rs.n[t] = (rs.n[t] || 0) + 1;
+    delete g.state.dreadLock[t];
+    g.save(); if (window.UI) window.UI.refreshAll();
+    toast('⟳ Dreadnaught T' + t + ' respawned — deploy when ready');
+    renderHunt();
+  }
+  function fmt(n) { try { return G().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n) + ''; } }
+
   function deploy(t) {
     if (lvl() < UNLOCK_LEVEL) { toast('Dreadnaught Hunt unlocks at Level ' + UNLOCK_LEVEL); return; }
     if (lvl() < levelForTier(t)) { toast('Reach Level ' + levelForTier(t) + ' to challenge this Dreadnaught'); return; }
@@ -631,7 +653,12 @@
       const spr = ((t - 1) % 6) + 1;
       let action, statusCls = '';
       if (!open) { action = '<span class="dh-lock">🔒 Lv ' + need + '</span>'; statusCls = 'soon'; }
-      else if (locked) { action = '<span class="dh-cd">⏱ <b data-reset="1">' + fmtDur(reset) + '</b></span>'; statusCls = 'cooldown'; }
+      else if (locked) {
+        const rc = respawnCost(t), afford = (G().state.gold || 0) >= rc;
+        action = '<span class="dh-cd">⏱ <b data-reset="1">' + fmtDur(reset) + '</b></span>' +
+          '<button class="dh-respawn" data-respawn="' + t + '"' + (afford ? '' : ' disabled') + '>⟳ Respawn · <b>$' + fmt(rc) + '</b></button>';
+        statusCls = 'cooldown';
+      }
       else { action = '<button class="dh-go" data-tier="' + t + '">Deploy</button>'; statusCls = 'ready'; }
       cards +=
         '<div class="dh-card ' + statusCls + '">' +
@@ -653,6 +680,7 @@
       '<div class="dh-list">' + cards + '</div>' +
       '<div class="dh-foot">Dread Cores forge your <b>Pilot Tree</b> — permanent bonuses for every ship. Higher tiers drop cores more often.</div>';
     body.querySelectorAll('[data-tier]').forEach((b) => b.addEventListener('click', () => deploy(+b.dataset.tier)));
+    body.querySelectorAll('[data-respawn]').forEach((b) => b.addEventListener('click', () => buyRespawn(+b.dataset.respawn)));
   }
 
   function fmtDur(ms) {
@@ -866,6 +894,12 @@
   .dh-card{ display:flex; align-items:center; gap:11px; background:linear-gradient(180deg,#141b27,#0f141e); border:1px solid #25303f; border-radius:14px; padding:10px 11px; position:relative; overflow:hidden; }
   .dh-card.ready{ border-color:#ff3a4a66; box-shadow:0 0 18px -10px ${ACCENT}; }
   .dh-card.cooldown{ opacity:.72; } .dh-card.soon{ opacity:.6; }
+  .dh-action{ display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
+  .dh-respawn{ border:1px solid rgba(255,58,74,.55); background:rgba(255,58,74,.1); color:#ff98a2; border-radius:8px; padding:5px 9px;
+    font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; letter-spacing:.03em; cursor:pointer; white-space:nowrap; }
+  .dh-respawn b{ color:#ffd24d; font-variant-numeric:tabular-nums; }
+  .dh-respawn:active{ transform:scale(.95); }
+  .dh-respawn:disabled{ opacity:.45; cursor:default; }
   .dh-art{ width:64px; height:48px; flex:none; display:grid; place-items:center; background:radial-gradient(120% 120% at 50% 30%,#241016,#0e0a0e); border:1px solid #3a1a22; border-radius:10px; }
   .dh-art img{ width:62px; height:46px; object-fit:contain; filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
   .dh-info{ flex:1; min-width:0; }

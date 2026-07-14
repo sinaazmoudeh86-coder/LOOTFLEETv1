@@ -12,7 +12,7 @@
 
   // ===========================================================================
   // CRAPS — full table from above: FIELD box, PASS LINE & DON'T PASS rails
-  // Don't Pass WINS on 12 here (Vegas pushes) — player-favored.
+  // Real Vegas rules: Don't Pass BARS 12 (pushes) on the come-out.
   // ===========================================================================
   let cr = null, crPick = 'pass', crHist = [], crRolling = false;
   function renderCR(host, rolling, d1, d2) {
@@ -22,7 +22,7 @@
       '<b' + (n === 2 || n === 12 ? ' class="x"' : '') + '>' + n + (n === 2 ? '<u>2×</u>' : n === 12 ? '<u>3×</u>' : '') + '</b>').join('');
     host.innerHTML =
       '<div class="cs-table crT">' +
-        '<div class="crT-rail-k">CRAPS · DON\u2019T PASS <b>WINS</b> ON 12 AT THIS TABLE</div>' +
+        '<div class="crT-rail-k">CRAPS · DON\u2019T PASS <b>BAR 12</b> — 12 PUSHES ON THE COME-OUT</div>' +
         '<div class="crT-center">' +
           '<div class="cs-puck ' + (inRound && cr.phase === 'point' ? 'on' : 'off') + '">' + (inRound && cr.phase === 'point' ? 'ON · ' + cr.point : 'OFF') + '</div>' +
           '<div class="cs-dice' + (rolling ? ' roll' : '') + '"><span>' + (d1 ? DFACE[d1 - 1] : '⚄') + '</span><span>' + (d2 ? DFACE[d2 - 1] : '⚂') + '</span>' +
@@ -32,7 +32,7 @@
         '<button class="crT-field' + (crPick === 'field' ? ' on' : '') + '"' + (inRound ? ' disabled' : '') + ' data-cb="field">' +
           '<span class="crT-lab">FIELD · ONE ROLL</span><span class="crT-nums">' + fieldNums + '</span>' +
           (crPick === 'field' ? '<span class="crT-chip">' + C.CUR[C.cas().cur].glyph + '</span>' : '') + '</button>' +
-        '<button class="crT-line dont' + (crPick === 'dont' ? ' on' : '') + '"' + (inRound ? ' disabled' : '') + ' data-cb="dont">DON\u2019T PASS BAR — <i>wins on 2 · 3 · 12</i>' +
+        '<button class="crT-line dont' + (crPick === 'dont' ? ' on' : '') + '"' + (inRound ? ' disabled' : '') + ' data-cb="dont">DON\u2019T PASS BAR — <i>wins on 2 · 3, bar 12</i>' +
           (crPick === 'dont' ? '<span class="crT-chip">' + C.CUR[C.cas().cur].glyph + '</span>' : '') + '</button>' +
         '<button class="crT-line pass' + (crPick === 'pass' ? ' on' : '') + '"' + (inRound ? ' disabled' : '') + ' data-cb="pass">P A S S &nbsp; L I N E' +
           (crPick === 'pass' ? '<span class="crT-chip">' + C.CUR[C.cas().cur].glyph + '</span>' : '') + '</button>' +
@@ -72,7 +72,7 @@
       } else if (cr.phase === 'comeout') {
         if (t === 7 || t === 11) { done = true; win = cr.type === 'pass'; if (win) ret = bet * 2; text = 'NATURAL ' + t; }
         else if (t === 2 || t === 3) { done = true; win = cr.type === 'dont'; if (win) ret = bet * 2; text = 'CRAPS ' + t; }
-        else if (t === 12) { done = true; win = cr.type === 'dont'; if (win) ret = bet * 2; text = 'CRAPS 12' + (win ? ' — DON\u2019T PASS WINS HERE' : ''); }
+        else if (t === 12) { done = true; if (cr.type === 'dont') { win = null; ret = bet; text = 'CRAPS 12 — BAR 12 · PUSH'; } else { win = false; text = 'CRAPS 12'; } }
         else { cr.phase = 'point'; cr.point = t; text = 'POINT SET · ' + t; }
       } else {
         if (t === cr.point) { done = true; win = cr.type === 'pass'; if (win) ret = bet * 2; text = 'POINT ' + t + ' MADE'; }
@@ -86,7 +86,7 @@
         cr = null;
         renderCR(host, false, a, b);
         C.syncLock();   // round over → unlock immediately
-        C.resultBanner('cs-res', win, text, win ? ret - bet : bet, curK);
+        C.resultBanner('cs-res', win, text, win === null ? 0 : (win ? ret - bet : bet), curK);
       } else {
         window.GAME.save();
         renderCR(host, false, a, b);
@@ -96,7 +96,7 @@
       }
     }, 950);
   }
-  CS().reg('cr', { name: 'Craps', icon: '⚄', edge: 'player-favored', render: (h) => renderCR(h), active: () => !!cr || crRolling });
+  CS().reg('cr', { name: 'Craps', icon: '⚄', edge: '1.4% house', render: (h) => renderCR(h), active: () => !!cr || crRolling });
 
   // ===========================================================================
   // NEBULA SLOTS — weighted outcome table · 99% RTP published
@@ -107,11 +107,11 @@
     { p: 50,  w: 0.2,   kind: 'trip', s: '◈', label: '◈◈◈ PRISM JACKPOT' },
     { p: 12,  w: 1,     kind: 'trip', s: '✦', label: '✦✦✦ PLASMA LINE' },
     { p: 6,   w: 2.5,   kind: 'trip', s: '◆', label: '◆◆◆ IRON LINE' },
-    { p: 3,   w: 6,     kind: 'trip', s: '⬢', label: '⬢⬢⬢ FUEL LINE' },
-    { p: 2,   w: 8,     kind: 'trip', s: '●', label: '●●● GOLD LINE' },
-    { p: 1,   w: 10,    kind: 'twostar', label: '★★ — BET BACK' },
-    { p: 0.5, w: 16,    kind: 'pair', label: 'PAIR — HALF BACK' },
-    { p: 0,   w: 56.26, kind: 'none', label: '' },
+    { p: 3,   w: 5.5,   kind: 'trip', s: '⬢', label: '⬢⬢⬢ FUEL LINE' },
+    { p: 2,   w: 7,     kind: 'trip', s: '●', label: '●●● GOLD LINE' },
+    { p: 1,   w: 8.5,   kind: 'twostar', label: '★★ — BET BACK' },
+    { p: 0.5, w: 13.5,  kind: 'pair', label: 'PAIR — HALF BACK' },
+    { p: 0,   w: 63.26, kind: 'none', label: '' },
   ];
   const SLOT_TW = SLOT_OUT.reduce((a, o) => a + o.w, 0);
   let slotLast = ['★', '◈', '✦'], slotShowPays = false, slSpinning = false;
@@ -134,7 +134,7 @@
     host.innerHTML =
       '<div class="cs-table slT">' +
         '<div class="slT-marquee">✦ N E B U L A &nbsp; S L O T S ✦</div>' +
-        '<div class="cs-felt-k" style="margin-top:6px">99% RETURN-TO-PLAYER — PUBLISHED · JACKPOT 250×</div>' +
+        '<div class="cs-felt-k" style="margin-top:6px">92% RETURN-TO-PLAYER — PUBLISHED · JACKPOT 250×</div>' +
         '<div class="slT-cab">' +
           '<div class="cs-reels">' + slotLast.map((s) => '<div class="cs-reel' + (spinning ? ' spin' : '') + '">' + s + '</div>').join('') + '</div>' +
           '<div class="cs-payline"></div>' +
@@ -175,7 +175,7 @@
       }, 1150);
     });
   }
-  CS().reg('sl', { name: 'Slots', icon: '✷', edge: '99% RTP', render: (h) => renderSL(h), active: () => slSpinning });
+  CS().reg('sl', { name: 'Slots', icon: '✷', edge: '92% RTP', render: (h) => renderSL(h), active: () => slSpinning });
 
   // ===========================================================================
   // HOLD'EM — oval poker table from above · ante → play or fold · no qualify
@@ -187,7 +187,7 @@
       host.innerHTML =
         '<div class="cs-table heT">' +
           '<div class="heT-brand">TEXAS HOLD\u2019EM · HEADS-UP</div>' +
-          '<div class="cs-felt-k">ANTE → SEE YOUR CARDS → PLAY (1× ANTE) OR FOLD · BEST 5 OF 7 · EVEN MONEY, NO QUALIFY RULE · TIES PUSH</div>' +
+          '<div class="cs-felt-k">ANTE → SEE YOUR CARDS → PLAY (1× ANTE) OR FOLD · BEST 5 OF 7 · EVEN MONEY · TIES PUSH</div>' +
           '<div class="heT-line"></div>' +
           '<div class="heT-spots"><span class="bjT-spot empty">ANTE</span><span class="bjT-spot empty">PLAY</span></div>' +
           '<div id="cs-res"></div>' +
@@ -258,7 +258,7 @@
       C2.resultBanner('cs-res', win, text, win === null ? 0 : (win ? ret - total : total), he.cur);
     }));
   }
-  CS().reg('he', { name: 'Hold\u2019em', icon: '♦', edge: 'no qualify rule', render: (h) => renderHE(h), active: () => !!he && he.stage !== 'over' });
+  CS().reg('he', { name: 'Hold\u2019em', icon: '♦', edge: '~2% house', render: (h) => renderHE(h), active: () => !!he && he.stage !== 'over' });
 
   // ---- CSS for these three tables ---------------------------------------------
   function boot() {

@@ -8,7 +8,7 @@
    Shell owns: wallet, chip bet-builder, floor plan, LootCoin real-money
    confirm guard, card engine + 7-card evaluator, result banners, core CSS.
    Blackjack & Roulette live here; Craps / Slots / Hold'em in casino2.js via
-   CASINO.reg(). All games run slightly player-favored vs Vegas rules.
+   CASINO.reg(). Every game runs REAL standard casino odds — no player edge.
    ========================================================================== */
 (function () {
   'use strict';
@@ -234,7 +234,7 @@
     if (!bj) {
       host.innerHTML =
         '<div class="cs-table bjT">' + trayHTML +
-          '<div class="bjT-arc-txt">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON <b>16</b></div>' +
+          '<div class="bjT-arc-txt">BLACKJACK PAYS 3 TO 2 · DEALER HITS TO <b>17</b></div>' +
           '<div class="bjT-spot empty">BET</div>' +
           '<div id="cs-res"></div>' +
           '<button class="cs-go" data-deal' + (betOK() ? '' : ' disabled') + '>DEAL — ' + CUR[cas().cur].glyph + ' ' + fmt(cas().bet) + '</button>' +
@@ -255,7 +255,7 @@
       '<div class="cs-table bjT">' + trayHTML +
         '<div class="cs-hand-l">DEALER' + (over ? ' · <b>' + dv + '</b>' : '') + '</div>' +
         '<div class="cs-hand">' + bj.d.map((c, i) => cardHTML(c, { hole: !over && i === 1 })).join('') + '</div>' +
-        '<div class="bjT-arc-txt">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON <b>16</b></div>' +
+        '<div class="bjT-arc-txt">BLACKJACK PAYS 3 TO 2 · DEALER HITS TO <b>17</b></div>' +
         '<div class="cs-hand">' + bj.p.map((c) => cardHTML(c)).join('') + '</div>' +
         '<div class="cs-hand-l">YOU · <b>' + pv + '</b>' + (bj.doubled ? ' · DOUBLED' : '') + '</div>' +
         '<div class="bjT-spot"><span class="cs-chipmini">' + CUR[bj.cur].glyph + '</span>' + fmt(bj.bet) + '</div>' +
@@ -276,7 +276,7 @@
   }
   function settleBJ(host, natural) {
     const pv = handVal(bj.p);
-    if (pv <= 21 && !natural) while (handVal(bj.d) < 16) bj.d.push(bj.deck.pop());
+    if (pv <= 21 && !natural) while (handVal(bj.d) < 17) bj.d.push(bj.deck.pop());
     const dv = handVal(bj.d);
     let win = null, ret = 0, text = '';
     if (natural) {
@@ -296,19 +296,19 @@
     syncLock();   // hand settled → wallet unlocks immediately
     resultBanner('cs-res', win, text, win === null ? 0 : (win ? ret - bj.bet : bj.bet), bj.cur);
   }
-  reg('bj', { name: 'Blackjack', icon: '♠', edge: 'player-favored', render: renderBJ, active: () => !!bj && !bj.over });
+  reg('bj', { name: 'Blackjack', icon: '♠', edge: '0.5% house', render: renderBJ, active: () => !!bj && !bj.over });
 
   // ===========================================================================
-  // ROULETTE — printed table layout from above · European + la partage
+  // ROULETTE — printed table layout from above · European single zero (2.7%)
   // ===========================================================================
   const RED = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
   const RU_OUT = [
-    { id: 'low',   n: '1–18',  pays: 2, even: true,  hit: (x) => x >= 1 && x <= 18 },
-    { id: 'even',  n: 'EVEN',  pays: 2, even: true,  hit: (x) => x > 0 && x % 2 === 0 },
-    { id: 'red',   n: '◆',     pays: 2, even: true,  hit: (x) => RED.includes(x), cls: 'r' },
-    { id: 'black', n: '◆',     pays: 2, even: true,  hit: (x) => x > 0 && !RED.includes(x), cls: 'k' },
-    { id: 'odd',   n: 'ODD',   pays: 2, even: true,  hit: (x) => x > 0 && x % 2 === 1 },
-    { id: 'high',  n: '19–36', pays: 2, even: true,  hit: (x) => x >= 19 },
+    { id: 'low',   n: '1–18',  pays: 2, hit: (x) => x >= 1 && x <= 18 },
+    { id: 'even',  n: 'EVEN',  pays: 2, hit: (x) => x > 0 && x % 2 === 0 },
+    { id: 'red',   n: '◆',     pays: 2, hit: (x) => RED.includes(x), cls: 'r' },
+    { id: 'black', n: '◆',     pays: 2, hit: (x) => x > 0 && !RED.includes(x), cls: 'k' },
+    { id: 'odd',   n: 'ODD',   pays: 2, hit: (x) => x > 0 && x % 2 === 1 },
+    { id: 'high',  n: '19–36', pays: 2, hit: (x) => x >= 19 },
   ];
   const RU_DOZ = [
     { id: 'dz1', n: '1st 12', pays: 3, hit: (x) => x >= 1 && x <= 12 },
@@ -321,14 +321,14 @@
   function renderRU(host, spinning, landed) {
     const pickedLabel = ru.pick === 'num' ? 'STRAIGHT #' + ru.num + ' · pays ×36'
       : (RU_OUT.concat(RU_DOZ).find((o) => o.id === ru.pick) || {}).id
-        ? (ru.pick.startsWith('dz') ? RU_DOZ.find((o) => o.id === ru.pick).n + ' · pays ×3' : ru.pick.toUpperCase() + ' · pays ×2 · la partage')
+        ? (ru.pick.startsWith('dz') ? RU_DOZ.find((o) => o.id === ru.pick).n + ' · pays ×3' : ru.pick.toUpperCase() + ' · pays ×2')
         : '';
     host.innerHTML =
       '<div class="cs-table ruT">' +
         '<div class="ruT-head">' +
           '<div class="cs-wheel sm' + (spinning ? ' spin' : '') + '"><span class="cs-wheel-n" style="color:' + (landed != null ? numCol(landed) : '#eaf2fb') + '">' + (landed != null ? landed : '·') + '</span></div>' +
           '<div class="ruT-head-r">' +
-            '<div class="cs-felt-k" style="margin:0 0 6px;text-align:left">EUROPEAN · SINGLE 0<br>ZERO REFUNDS ½ OF EVEN-MONEY BETS</div>' +
+            '<div class="cs-felt-k" style="margin:0 0 6px;text-align:left">EUROPEAN · SINGLE 0<br>STRAIGHT-UP PAYS 36×</div>' +
             (ru.history.length ? '<div class="cs-hist" style="justify-content:flex-start;margin:0">' + ru.history.slice(0, 8).map((x) => '<i style="color:' + numCol(x) + '">' + x + '</i>').join('') + '</div>' : '') +
           '</div>' +
         '</div>' +
@@ -359,24 +359,23 @@
         ruSpin = false;
         const x = Math.floor(Math.random() * 37);
         ru.history.unshift(x); if (ru.history.length > 20) ru.history.length = 20;
-        let ret = 0, win = false, partage = false;
+        let ret = 0, win = false;
         if (ru.pick === 'num') { if (x === ru.num) { ret = bet * 36; win = true; } }
         else {
           const b = RU_OUT.concat(RU_DOZ).find((o) => o.id === ru.pick);
           if (b.hit(x)) { ret = bet * b.pays; win = true; }
-          else if (x === 0 && b.even) { ret = Math.floor(bet / 2); partage = true; }
         }
         if (ret) payout(ret, curK);
         bookend(ret - bet);
         renderRU(host, false, x);
         syncLock();
-        resultBanner('cs-res', partage ? null : win,
-          (x === 0 ? '🟢 ZERO' : (RED.includes(x) ? '🔴 ' : '⚫ ') + x) + (partage ? ' — LA PARTAGE' : win ? ' — WINNER' : ' — house takes it'),
-          partage ? 0 : (win ? ret - bet : bet), curK);
+        resultBanner('cs-res', win,
+          (x === 0 ? '🟢 ZERO' : (RED.includes(x) ? '🔴 ' : '⚫ ') + x) + (win ? ' — WINNER' : ' — house takes it'),
+          win ? ret - bet : bet, curK);
       }, 1100);
     });
   }
-  reg('ru', { name: 'Roulette', icon: '◉', edge: '1.35% house', render: (h) => renderRU(h), active: () => ruSpin });
+  reg('ru', { name: 'Roulette', icon: '◉', edge: '2.7% house', render: (h) => renderRU(h), active: () => ruSpin });
 
   // ---- BOOT -------------------------------------------------------------------
   function boot() { injectCSS(); }

@@ -214,7 +214,11 @@
       const def = C.STATS[statKey];
       const variance = 0.82 + Math.random() * 0.36;
       let val;
-      if (def.fmt === 'flat') {
+      if (statKey === 'critChance') {
+        // CRIT is precious: rarity-driven ladder \u2014 Common ≈ 0.005%, +~0.01%/tier,
+        // Primordial ≈ 0.09–0.13%. The 1% cap is now purely theoretical.
+        val = Math.min(1, Math.round((0.005 + rarityIdx * 0.01) * variance * 1000) / 1000);
+      } else if (def.fmt === 'flat') {
         val = Math.max(1, Math.round(def.base * scale * rar.mult * variance));
       } else {
         const depthBonus = 1 + Math.log10(dungeon + 0.5) * 0.4;
@@ -298,7 +302,7 @@
         case 'attackDamage': p += (v / def.base) * 2.2; break; // primary DPS driver
         case 'health':       p += (v / def.base) * 1.1; break; // EHP
         case 'attackSpeed':  p += v * 0.9;  break;
-        case 'critChance':   p += v * 0.8;  break;
+        case 'critChance':   p += v * 10;   break; // 1% crit is now the pinnacle roll
         case 'critDamage':   p += v * 0.28; break;
         case 'moveSpeed':    p += v * 0.3;  break;
         case 'lifeSteal':    p += v * 1.4;  break;  // strong but not dominant

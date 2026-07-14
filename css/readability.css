@@ -1,0 +1,115 @@
+/* =============================================================================
+   readability.css — GLOBAL TYPE-SIZE FLOOR (loads LAST, wins with !important)
+   -----------------------------------------------------------------------------
+   One pass over every screen: information text never renders below ~11px.
+   Micro-kickers/badges stay compact but legible (≥9.5px). Decorative labels
+   are left alone only where space is genuinely fixed (bottom nav).
+   ========================================================================== */
+
+/* ---- screen headers & shell ---- */
+.scr-sub{ font-size:12.5px !important; }
+.mega-card .mc-s{ font-size:12px !important; line-height:1.45 !important; }
+.lock-tip{ font-size:12.5px !important; }
+.lock-card p{ font-size:13px !important; line-height:1.55 !important; }
+
+/* ---- sheets / popups: the game's main info surface ---- */
+.sheet-body p{ font-size:13px !important; line-height:1.6 !important; }
+.sheet-body .stat-block .sb-name{ font-size:12.5px !important; }
+.sheet-body .stat-block .sb-val{ font-size:13.5px !important; }
+#item-pop .ip-type{ font-size:11.5px !important; letter-spacing:.06em !important; }
+.ip-cmp{ font-size:11.5px !important; }
+.ip-salvage{ font-size:11.5px !important; }
+.ip-wclass{ font-size:12.5px !important; }
+.ip-wdesc{ font-size:11.5px !important; line-height:1.5 !important; }
+.ip-waura{ font-size:11.5px !important; line-height:1.55 !important; }
+
+/* ---- zone grind list ---- */
+.z-sub{ font-size:12px !important; }
+.z-bons .z-bon{ font-size:10.5px !important; }
+.z-wtag{ font-size:9.5px !important; }
+.z-rec{ font-size:10px !important; }
+.z-lock{ font-size:11px !important; }
+
+/* ---- galaxy ---- */
+.gx-legend{ font-size:11.5px !important; line-height:1.6 !important; }
+.gxf-row{ font-size:12px !important; }
+.gxf-h{ font-size:10.5px !important; }
+.gx-hud{ font-size:11px !important; }
+.rg-blurb{ font-size:12px !important; line-height:1.5 !important; }
+.rg-lv{ font-size:12px !important; }
+.rg-tag{ font-size:10px !important; }
+.gtile *{ font-size:11px; }
+
+/* ---- moon colony ---- */
+.mn-b-lv{ font-size:11px !important; }
+.mn-b-tier{ font-size:9.5px !important; }
+.mn-b-d{ font-size:11.5px !important; }
+.mn-b-cost{ font-size:12px !important; }
+.mn-b-n{ font-size:12.5px !important; }
+.mn-sheet-cat{ font-size:10.5px !important; }
+.mn-stat{ font-size:12px !important; }
+
+/* ---- shipworks ---- */
+.sw-intro{ font-size:13px !important; }
+.sw-band{ font-size:11.5px !important; }
+.sw-orow .sw-oname{ font-size:12px !important; }
+.sw-opct{ font-size:12px !important; }
+.sw-qchip{ font-size:11.5px !important; }
+.sw-odds-note{ font-size:10.5px !important; }
+.sw-row-cnt{ font-size:12px !important; }
+.sw-row-sub{ font-size:11px !important; }
+.sw-drop-name{ font-size:12px !important; }
+.sw-drop-prog{ font-size:11px !important; }
+.sw-c{ font-size:12px !important; }
+.sw-built-tag{ font-size:12px !important; }
+
+/* ---- ascension ---- */
+.asc-bonus{ font-size:12.5px !important; }
+.asc-tip{ font-size:11.5px !important; line-height:1.55 !important; }
+.asc-odds{ font-size:11.5px !important; }
+.asc-cost{ font-size:12.5px !important; }
+.asc-lvl{ font-size:11px !important; }
+
+/* ---- casino ---- */
+.cs-felt-k{ font-size:10px !important; line-height:1.65 !important; }
+.cs-cur-n{ font-size:9px !important; }
+.cs-cur-v{ font-size:13px !important; }
+.cs-lob-n{ font-size:10px !important; }
+.cs-lob-e{ font-size:8.5px !important; }
+.cs-result{ font-size:12px !important; }
+.cs-payrow{ font-size:11.5px !important; }
+.ruT-pick{ font-size:11.5px !important; }
+.cs-lc-t{ font-size:12.5px !important; }
+
+/* ---- dreadnaught hunt / pilot ---- */
+.dh-meta{ font-size:11.5px !important; }
+.dh-drop{ font-size:11.5px !important; }
+.dh-banner-s{ font-size:11.5px !important; }
+.dh-week{ font-size:11.5px !important; }
+.dh-foot{ font-size:11.5px !important; line-height:1.55 !important; }
+.dh-respawn{ font-size:11px !important; }
+
+/* ---- fleet / hero panel ---- */
+.fp-locked{ font-size:12px !important; line-height:1.55 !important; }
+.fps-n{ font-size:11px !important; }
+.fps-tag{ font-size:9.5px !important; }
+.ship-lock{ font-size:12px !important; line-height:1.5 !important; }
+.st-cls{ font-size:10.5px !important; }
+.st-name{ font-size:12px !important; }
+
+/* ---- skills ---- */
+.skt-sub{ font-size:10.5px !important; }
+.skp-meta{ font-size:11px !important; }
+.sk-node-d{ font-size:11.5px !important; }
+
+/* ---- leaderboard / loadout ---- */
+.lb-info{ font-size:12px !important; line-height:1.5 !important; }
+.lo-meta{ font-size:12px !important; }
+
+/* ---- toasts & feed ---- */
+.toast{ font-size:13px !important; }
+.loot-feed .lf-row{ font-size:12px !important; }
+
+/* ---- battle HUD sub-line ---- */
+.hud-sub{ font-size:12px !important; }
+.bar-label{ font-size:10.5px !important; }

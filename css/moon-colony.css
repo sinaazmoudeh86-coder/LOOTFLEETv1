@@ -99,6 +99,10 @@
 .mn-b-lv{ font-size:9px; color:#8fa2bd; font-weight:600; }
 .mn-b-tier{ font-size:8px; font-weight:800; letter-spacing:.08em; color:#ffd24d; border:1px solid rgba(255,210,77,.5); border-radius:5px; padding:1px 4px; }
 .mn-b.t4 .mn-b-tier{ color:#ff6ad5; border-color:rgba(255,106,213,.5); }
+/* T5 — endless-tier prestige (Lv 60+): prismatic */
+.mn-b.t5 .mn-b-ic{ color:#9ff5ff; border-color:rgba(159,245,255,.6); box-shadow:0 0 16px -2px rgba(159,245,255,.85); font-size:19px; }
+.mn-b.t5{ border-color:rgba(159,245,255,.45); }
+.mn-b.t5 .mn-b-tier{ color:#9ff5ff; border-color:rgba(159,245,255,.55); }
 .mn-b-d{ font-size:10px; color:#8fa2bd; margin-top:2px; }
 .mn-b-cost{ font-size:10.5px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
 .mn-b-max{ font-size:10px; font-weight:700; color:#ffd24d; margin-top:3px; }

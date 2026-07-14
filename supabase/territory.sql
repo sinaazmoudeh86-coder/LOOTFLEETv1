@@ -33,10 +33,10 @@ create policy "territory_read" on public.territory for select using (true);
 --   • RACE SEMANTICS: the row lock + protected-window check make claims atomic
 --     — when several players besiege the same tile, whoever completes the
 --     capture FIRST wins; everyone else's claim is rejected until the window ends
---   • protected window: 15 min for normal tiles, up to 24 h for citadels
---     (p_protect_minutes is clamped server-side to 15–1440)
+--   • protected window: 24 h for ALL tiles (attack shield) — the client always
+--     passes p_protect_minutes=1440; the clamp below allows 15–1440
 drop function if exists public.claim_tile(text, text);
-create or replace function public.claim_tile(p_tile_id text, p_owner_name text, p_protect_minutes integer default 15)
+create or replace function public.claim_tile(p_tile_id text, p_owner_name text, p_protect_minutes integer default 1440)
 returns public.territory
 language plpgsql
 security definer

@@ -61,9 +61,12 @@
   // kills/XP/gold volume, not gearing.
   // Every 25th (25,50,75…): 2× loot quality. Every 100th (100,200…): 5× loot
   // quality. Quality bonuses STACK multiplicatively.
-  function densityMult(zone) { return (zone > 0 && zone % 30 === 0) ? 20 : 1; }
-  // SWARM ZONE — classic-grind only (wave zones at %11 build no nodes anyway)
-  function isSwarmZone(zone) { return zone > 0 && zone % 30 === 0 && !isWaveZone(zone); }
+  // SWARM ZONES REMOVED (Jul 2026): every zone now spawns at normal density
+  // with normal loot. The helpers stay exported for compatibility but are
+  // permanently off.
+  function densityMult(zone) { return 1; }
+  // SWARM ZONE — removed; always false
+  function isSwarmZone(zone) { return false; }
   // swarm loot penalties: 25% of normal drop rate, and drops roll 2 rarity
   // tiers lower (min common)
   const SWARM_DROP_MULT = 0.25, SWARM_RARITY_PENALTY = 2;
@@ -1098,6 +1101,27 @@
 
     // carrier drones: orbit the ship and fire on nearby enemies
     updateDrones(dt);
+    // VERIDIAN RESONANCE AURA — constant burn to everything near the ship,
+    // scaling with the pilot's own DPS (35% of theoretical DPS across the field).
+    if (state.ship === 'veridian' && rt.archer && !rt.archer.dead) {
+      const R = 260, a = rt.archer;
+      const aps = ((rt.stats && rt.stats.theoryDps) || 0) * 0.35;
+      if (aps > 0) {
+        rt.vaFloatT = (rt.vaFloatT || 0) - dt;
+        for (const en of rt.enemies) {
+          if (en.dead || en.dying) continue;
+          if (Math.hypot(en.x - a.x, en.y - a.y) > R + en.size) continue;
+          const dmg = aps * dt;
+          const k = en.takeDamage(dmg);
+          rt.dmgWindow.push({ t: rt.time, dmg });
+          if (rt.vaFloatT <= 0 && rt.floats.length < 24) {
+            rt.floats.push(new E.FloatText(en.x, en.y - en.size, formatNum(aps) + '/s', { color: '#7dff9e', size: 22 }));
+            rt.vaFloatT = 0.7;
+          }
+          if (k) onKill(en);
+        }
+      }
+    }
     // FLEET escorts: formation flight, escort fire, Warden support pulses
     updateEscorts(dt);
     // PRISM MINING — defend-the-dig layer (ore field + miners) riding on top of
@@ -2527,9 +2551,14 @@
     applyTileMults(tile);
     const owned = isOwned(k);
     if (owned && (tile.boss || tile.citadel)) {
-      // owned Boss/Citadel tile → endless gauntlet, a boss every 10 waves
+      // owned Boss/Citadel tile → endless gauntlet; every 10th wave the boss is
+      // the EXACT clone of the fleet holding the tile — yours: your flagship
+      // model, your escorts, your ship score. (Sparring against your garrison.)
       rt.siege = null;
-      rt.waves = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false, bossTile: true };
+      const mySnap = defenseSnapshot();
+      let myNm = 'YOUR'; try { const s = window.AUTH && AUTH.session && AUTH.session(); if (s && s.name) myNm = s.name; } catch (e) {}
+      rt.waves = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false, bossTile: true,
+                   clone: true, cloneScore: mySnap.score, cloneDef: { name: myNm, real: true, score: mySnap.score, snap: mySnap } };
     } else if (owned) {
       rt.siege = null; rt.waves = null;
     } else if (rivalCitadelScore(k) != null) {
@@ -2897,7 +2926,8 @@
     const s = rt.stats || computeStats();
     return { ship: state.ship, nm: sh.name || 'Fleet', lvl: state.level | 0,
              score: Math.round(score()), hp: Math.round(s.maxHp || 0), dps: Math.round(s.theoryDps || 0),
-             esc: (typeof fleetShips === 'function' ? fleetShips().length : 0) };
+             esc: (typeof fleetShips === 'function' ? fleetShips().length : 0),
+             escKeys: (typeof fleetShips === 'function' ? fleetShips().map((f) => f.key) : []) };
   }
   // The DEFENDING FLEET of any rival-held tile: real players publish a snapshot
   // with their claim; simulated rivals get a deterministic pseudo-fleet seeded
@@ -2920,11 +2950,15 @@
     const ship = HULLS[band];
     const cit = !isOwned(id) && state.rivalCitadels && state.rivalCitadels[id] != null;
     const sc = cit ? state.rivalCitadels[id] : Math.max(400, Math.round(score() * (0.55 + rnd * 0.9)));
+    const nEsc = (h >> 7) % 5;
+    const escKeys = []; for (let i = 0; i < nEsc; i++) escKeys.push(HULLS[Math.max(0, band - 1 - (i % 2))]);
     return { name: nm, real: false, citadel: !!cit, score: sc,
-             snap: { ship, nm: (C.SHIP_BY_KEY[ship] || {}).name || ship, lvl: Math.max(3, (t ? t.level : 10) + ((h >> 4) % 21) - 10), score: sc, hp: 0, dps: 0, esc: (h >> 7) % 5 } };
+             snap: { ship, nm: (C.SHIP_BY_KEY[ship] || {}).name || ship, lvl: Math.max(3, (t ? t.level : 10) + ((h >> 4) % 21) - 10), score: sc, hp: 0, dps: 0, esc: nEsc, escKeys } };
   }
-  // CLONE FLAGSHIP boss — a defender built from its owner's published fleet
-  // snapshot: THEIR hull sprite, THEIR name, scaled to THEIR score vs yours.
+  // CLONE FLAGSHIP boss — the EXACT visual replica of the fleet holding the
+  // tile: THEIR flagship sprite, THEIR name, THEIR published ship score — and
+  // their ESCORT hulls spawn alongside as real combatants, each drawn with its
+  // own ship art. Beat the whole replica to take the zone.
   function spawnCloneBoss(cloneScore, def) {
     const pool = allowedEnemies(); const type = pool[pool.length - 1];
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
@@ -2932,11 +2966,18 @@
     b.isBoss = true; b.isSuper = true; b.isClone = true;
     const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
     const myS = Math.max(1, Math.round(score()));
-    const ratio = Math.max(0.5, Math.min(6, (cloneScore || myS) / myS));
-    b.maxHp = b.hp = Math.max(15000, Math.round(dps * 16 * ratio));
+    // EXACT score scaling — the fight is as hard as the defender is strong
+    // relative to you (wide sanity clamp only, no soft-capping).
+    const ratio = Math.max(0.3, Math.min(25, (cloneScore || myS) / myS));
+    const snap = def && def.snap;
+    // (guard: snap may be missing entirely — a bare `snap && snap.escKeys || []`
+    // chain left .slice() to crash the boss wave when a tile had no snapshot)
+    const escKeys = ((snap && Array.isArray(snap.escKeys) && snap.escKeys) || []).filter((k) => k && C.SHIP_BY_KEY[k]).slice(0, 4);
+    // the flagship holds ~70% of the replica's total strength; escorts the rest
+    const escShare = escKeys.length ? 0.3 : 0;
+    b.maxHp = b.hp = Math.max(15000, Math.round(dps * 16 * ratio * (1 - escShare)));
     b.damage = (b.damage || 10) * 2.5;
     b.speed *= 0.5; b.size = 124; b.ranged = true; b.range = 520; b.fireCd = 1.4; b.fireT = 1.1;
-    const snap = def && def.snap;
     if (snap && snap.ship) {
       const im = new Image(); im.src = 'ships/ship-' + snap.ship + '.png';
       b.spriteImg = im;                                   // render THEIR flagship
@@ -2944,6 +2985,21 @@
     b.tint = '#ffce8a';
     b.name = ((def && def.name) ? def.name.toUpperCase() + "'S FLEET" : 'ENEMY CLONE FLEET') + ' · ⚡' + formatNum(cloneScore || 0);
     rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    // ESCORT REPLICAS — their real fleet hulls, flanking the flagship
+    escKeys.forEach((key, i) => {
+      const ex = cx + (i % 2 === 0 ? -1 : 1) * (150 + Math.floor(i / 2) * 90);
+      const ey = cy + 70 + (i % 2) * 50;
+      const e2 = new E.Enemy(type, state.currentDungeon, ex, ey);
+      e2.isBoss = false; e2.isCloneEscort = true;
+      e2.maxHp = e2.hp = Math.max(4000, Math.round(dps * 16 * ratio * (escShare / escKeys.length)));
+      e2.damage = (e2.damage || 8) * 1.4;
+      e2.speed *= 0.65; e2.size = 62; e2.ranged = true; e2.range = 430; e2.fireCd = 1.9; e2.fireT = 0.7 + i * 0.4;
+      const im2 = new Image(); im2.src = 'ships/ship-' + key + '.png';
+      e2.spriteImg = im2;
+      e2.tint = '#ffce8a';
+      e2.name = ((C.SHIP_BY_KEY[key] || {}).name || key) + ' ESCORT';
+      rt.enemies.push(e2);
+    });
     burst(cx, cy, '#ffce8a', 90, { speed: 360, life: 1.2, glow: true });
     if (window.UI) window.UI.bossEvent('super');
     return b;
@@ -3443,6 +3499,7 @@
     }
   }
 
+  window.LOOTFLEET = Object.assign(window.LOOTFLEET || {}, { VERSION: '1.0.0-beta' });
   const GAME = {
     init, state, rt, save, computeStats, refreshStats,
     shipLevel, shipUpInfo, upgradeShip, spawnFleetBoss,

@@ -254,6 +254,8 @@
       (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rm) + '</b> this tier · targets up steeply</div>'
                 : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>') +
       '</div><div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
+    // ⌘ VERIDIAN — 1,000-lifetime-missions reward hull: hero banner + countdown + accept
+    html += veridianBanner();
     ms.list.forEach((mi, i) => {
       const def = POOL.find((p) => p.id === mi.id); if (!def) return;
       const rw = scaleRw(def.rw(lvl, z), tier);
@@ -291,16 +293,21 @@
     body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => {
       const mi = ms.list[+b.dataset.claim]; if (!mi || mi.claimed || mi.done < mi.n) return;
       const def = POOL.find((p) => p.id === mi.id);
-      mi.claimed = true; payout(scaleRw(def.rw(lvl, z), tier)); render(); syncBadge();
+      mi.claimed = true; G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
+      payout(scaleRw(def.rw(lvl, z), tier)); render(); syncBadge();
     }));
     const bb = body.querySelector('[data-bonus]');
+    // ⌘ VERIDIAN accept
+    const vb = body.querySelector('[data-veridian-accept]');
+    if (vb) vb.addEventListener('click', acceptVeridian);
     if (bb) bb.addEventListener('click', () => {
       if (ms.allClaimed || doneN < 10) return;
       // auto-claim anything finished but unclaimed so the tier-up never eats rewards
       ms.list.forEach((mi) => {
         if (!mi.claimed && mi.done >= mi.n) {
           const d = POOL.find((p) => p.id === mi.id);
-          mi.claimed = true; if (d) payout(scaleRw(d.rw(lvl, z), tier));
+          mi.claimed = true; G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
+          if (d) payout(scaleRw(d.rw(lvl, z), tier));
         }
       });
       ms.allClaimed = true; payout(bonusRw);
@@ -314,6 +321,42 @@
       render(); syncBadge();
     });
   }
+  // ===========================================================================
+  // ⌘ VERIDIAN — the 1,000-lifetime-missions reward hull
+  // ===========================================================================
+  const VERIDIAN_NEED = 1000;
+  function veridianBanner() {
+    const owned = !!(G.state.ownedShips && G.state.ownedShips.veridian);
+    const have = Math.min(VERIDIAN_NEED, G.state.lifetimeMissions | 0);
+    const left = VERIDIAN_NEED - have;
+    const ready = !owned && left <= 0;
+    let right;
+    if (owned) right = '<div class="vrd-owned">✓ IN YOUR HANGAR</div>';
+    else if (ready) right = '<button class="msn-claim gold vrd-accept" data-veridian-accept="1">⌘ ACCEPT SHIP</button>';
+    else right = '<div class="vrd-count"><b>' + left.toLocaleString() + '</b><span>missions to go</span></div>';
+    return '<div class="vrd-hero' + (ready ? ' ready' : '') + (owned ? ' owned' : '') + '">' +
+      '<div class="vrd-art"><img src="ships/ship-veridian.png" alt="Veridian" decoding="async"></div>' +
+      '<div class="vrd-mid">' +
+        '<div class="vrd-t">THE VERIDIAN <em>MISSION REWARD</em></div>' +
+        '<div class="vrd-s">Complete <b>1,000 lifetime missions</b> to earn this Battleship-grade hull. Its verdant <b>resonance aura</b> constantly damages everything within a few tiles — scaling with your fleet\u2019s DPS.</div>' +
+        '<div class="vrd-bar"><i style="width:' + (have / VERIDIAN_NEED * 100) + '%"></i><span>⌘ ' + have.toLocaleString() + ' / ' + VERIDIAN_NEED.toLocaleString() + ' lifetime missions</span></div>' +
+      '</div>' + right + '</div>';
+  }
+  function acceptVeridian() {
+    if (G.state.ownedShips && G.state.ownedShips.veridian) return;
+    if ((G.state.lifetimeMissions | 0) < VERIDIAN_NEED) return;
+    if (G.grantShip) G.grantShip('veridian');
+    G.save();
+    const tl = $('toast-layer');
+    if (tl) {
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#7dff9e'; t.style.fontSize = '24px';
+      t.innerHTML = '⌘ VERIDIAN ACCEPTED<br><span style="font-size:12px;color:#c9f5da">1,000 missions — the veteran\u2019s hull is yours. Equip it in the Hangar.</span>';
+      tl.appendChild(t); setTimeout(() => t.remove(), 4600);
+    }
+    if (window.UI) window.UI.refreshAll();
+    render();
+  }
+
   function syncBadge() {
     const ms = G.state.missions; if (!ms) return;
     const claimable = ms.list.filter((m) => m.done >= m.n && !m.claimed).length + ((ms.list.every((m) => m.done >= m.n) && !ms.allClaimed) ? 1 : 0);
@@ -402,6 +445,27 @@
   .msn-toast .mt-ic{ font-size:18px; color:#7ce0a0; }
   @keyframes msnToastIn{ from{ transform:translateY(14px) scale(.92); opacity:0; } }
   @media (prefers-reduced-motion: reduce){ .msn-claim,.mb-glow{ animation:none; } }
+  /* ⌘ VERIDIAN hero banner */
+  .vrd-hero{ display:flex; align-items:center; gap:12px; background:linear-gradient(115deg,#0d1f14,#0b1611 60%,#101d24); border:1.5px solid rgba(89,217,140,.4);
+    border-radius:14px; padding:12px; margin:0 0 12px; position:relative; overflow:hidden; }
+  .vrd-hero.ready{ border-color:rgba(165,242,196,.9); box-shadow:0 0 22px -5px rgba(89,217,140,.65); }
+  .vrd-hero.owned{ opacity:.78; }
+  .vrd-art{ flex:none; width:86px; height:64px; display:grid; place-items:center; }
+  .vrd-art img{ width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 0 12px rgba(89,217,140,.75)); }
+  .vrd-mid{ flex:1; min-width:0; }
+  .vrd-t{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.1em; color:#c9f5da; }
+  .vrd-t em{ font-style:normal; font-family:'Rajdhani',sans-serif; font-size:8.5px; font-weight:800; letter-spacing:.12em; color:#04240f;
+    background:linear-gradient(90deg,#a5f2c4,#59d98c); border-radius:5px; padding:2px 5px; margin-left:5px; vertical-align:2px; }
+  .vrd-s{ font-family:'Rajdhani',sans-serif; font-weight:600; font-size:11px; color:#9cc4ab; line-height:1.4; margin:3px 0 7px; }
+  .vrd-s b{ color:#d6ffe6; }
+  .vrd-bar{ position:relative; height:16px; border-radius:9px; background:#0e1a13; border:1px solid rgba(89,217,140,.3); overflow:hidden; }
+  .vrd-bar i{ display:block; height:100%; background:linear-gradient(90deg,#2f7d4f,#59d98c); box-shadow:0 0 10px rgba(89,217,140,.6); transition:width .3s; }
+  .vrd-bar span{ position:absolute; inset:0; display:grid; place-items:center; font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; color:#eafff2; text-shadow:0 1px 3px #000; }
+  .vrd-count{ flex:none; text-align:center; font-family:'Orbitron',sans-serif; color:#a5f2c4; padding:0 4px; }
+  .vrd-count b{ display:block; font-size:16px; }
+  .vrd-count span{ font-family:'Rajdhani',sans-serif; font-size:9px; font-weight:700; color:#7ba98d; letter-spacing:.06em; }
+  .vrd-owned{ flex:none; font-family:'Orbitron',sans-serif; font-weight:800; font-size:10px; letter-spacing:.08em; color:#7ce0a0; border:1.5px solid rgba(89,217,140,.5); border-radius:9px; padding:8px 10px; }
+  .vrd-accept{ font-size:11px !important; padding:11px 14px !important; }
   `;
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
 })();

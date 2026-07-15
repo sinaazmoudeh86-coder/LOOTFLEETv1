@@ -1048,24 +1048,24 @@
   // =========================================================================
   const CSS = `
   /* ---- Command mega-card: featured live event ---- */
-  .mega-card.cmd-sdread{ grid-column:1 / -1; background:linear-gradient(180deg,#1c1030,#120a1e); padding:14px 16px; min-height:78px;
+  .mega-card.cmd-sdread{ background:linear-gradient(180deg,#1c1030,#120a1e);
     border-color:rgba(176,77,255,.55); box-shadow:0 0 26px -5px rgba(176,77,255,.55), 0 0 0 1px rgba(176,77,255,.22) inset; animation:sdCardAura 3s ease-in-out infinite; }
   @keyframes sdCardAura{ 0%,100%{ box-shadow:0 0 20px -6px rgba(176,77,255,.45), 0 0 0 1px rgba(176,77,255,.2) inset; } 50%{ box-shadow:0 0 36px -2px rgba(176,77,255,.8), 0 0 0 1px rgba(176,77,255,.4) inset; } }
   @media (prefers-reduced-motion:reduce){ .mega-card.cmd-sdread{ animation:none; } }
   .mega-card.cmd-sdread .mc-ic{ width:46px; height:46px; color:#d9a0ff; border-color:rgba(176,77,255,.6); background:radial-gradient(120% 120% at 50% 0%,#2a1444,#120a1e); box-shadow:0 0 18px -2px rgba(176,77,255,.8); }
-  .mega-card.cmd-sdread .mc-n{ color:#f0dcff; font-size:15.5px; }
+  .mega-card.cmd-sdread .mc-n{ color:#f0dcff; font-size:13.5px; }
   .mega-card.cmd-sdread .mc-s{ color:#b79ad6; }
   .mega-card.cmd-sdread::before{ background:linear-gradient(130deg,#b04dff,#ff4adf,#6a5bff,#b04dff); background-size:260% 260%; opacity:.5; }
   .sd-live-tag{ font-style:normal; font-family:'Rajdhani',sans-serif; font-size:8.5px; font-weight:800; letter-spacing:.12em; color:#0e0716;
     background:linear-gradient(90deg,#ff4adf,#b04dff); border-radius:5px; padding:2px 5px; margin-left:6px; vertical-align:2px; animation:sdLivePulse 1.6s ease-in-out infinite; }
   @keyframes sdLivePulse{ 0%,100%{ opacity:1; } 50%{ opacity:.6; } }
-  .sd-card-cd{ font-family:'Rajdhani',sans-serif; font-size:10.5px; font-weight:700; color:#8d7aab; margin-top:4px; }
+  .sd-card-cd{ font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; color:#8d7aab; margin-top:2px; }
   .sd-card-cd b{ color:#ffd24d; }
   #cmd-sdread-badge{ position:absolute; top:6px; right:8px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:${ACCENT}; color:#fff;
     font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; line-height:16px; text-align:center; box-shadow:0 0 8px ${ACCENT}; z-index:2; }
 
   /* ---- screen ---- */
-  #sdread-body{ padding:12px 12px 110px; display:flex; flex-direction:column; gap:10px; max-width:820px; width:100%; margin:0 auto; }
+  #sdread-body{ padding:12px 12px calc(130px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; gap:10px; max-width:820px; width:100%; margin:0 auto; }
   .sd-season{ display:flex; align-items:center; gap:8px; background:linear-gradient(90deg,#1c1030,#140b22); border:1px solid #3c2560; border-radius:12px; padding:8px 11px; }
   .sd-season-tag{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:9px; letter-spacing:.12em; color:#0e0716; background:linear-gradient(90deg,#ff4adf,#b04dff); border-radius:5px; padding:2px 6px; white-space:nowrap; }
   .sd-season-boss{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:14px; letter-spacing:.1em; color:#f0dcff; text-shadow:0 0 12px rgba(176,77,255,.7); }
@@ -1333,7 +1333,7 @@
   .vm-note b{ color:#ffd24d; }
   .vm-note.owned{ color:#7ce0a0; background:rgba(70,210,122,.07); border-color:rgba(70,210,122,.3); }
   /* Command-card boss art */
-  .mega-card.cmd-sdread .mc-ic.mc-vm{ width:56px; height:46px; padding:3px; }
+  .mega-card.cmd-sdread .mc-ic.mc-vm{ padding:3px; }
   .mega-card.cmd-sdread .mc-ic.mc-vm img{ width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 0 7px rgba(176,77,255,.9)); }
   `;
 })();

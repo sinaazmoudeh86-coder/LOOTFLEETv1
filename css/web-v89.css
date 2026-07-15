@@ -518,15 +518,53 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   color:#2a0820; background:linear-gradient(90deg,#ff9de2,#ff7bd5,#8ab4ff); }
 .hero-offer.lcf[data-lcship="chromafang"] .ho-ship, .hero-offer.lcf[data-lcship="chromaregent"] .ho-ship{
   filter:drop-shadow(0 0 14px rgba(255,123,213,.6)); }
-/* Titan Sina FINAL CLASS banner — full-spectrum */
-.hero-offer.lcf[data-lcship="titansina"]{
-  border-color:rgba(255,210,77,.6);
-  background:linear-gradient(115deg, rgba(255,90,104,.14), rgba(255,210,77,.12) 40%, rgba(122,92,255,.14) 80%, #10172333);
-  box-shadow:0 0 26px -8px rgba(255,210,77,.55); }
-.hero-offer.lcf[data-lcship="titansina"] .ho-tag{
+/* Titan Sina FINAL CLASS banner — full-spectrum SHOWCASE (3× the normal banner:
+   towering art, rotating spectrum edge, sweeping beams, shimmering name) */
+.hero-offer.lcf.ho-sina{
+  flex-direction:column-reverse; align-items:stretch; text-align:center; gap:6px;
+  min-height:340px; padding:20px 16px 22px; margin:6px 0 14px;
+  border:none; border-radius:18px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255,210,77,.14), transparent 55%),
+    linear-gradient(115deg, rgba(255,90,104,.16), rgba(255,210,77,.12) 30%, rgba(140,224,138,.10) 55%, rgba(122,184,255,.12) 75%, rgba(201,138,255,.16)),
+    #0e1119;
+  box-shadow:0 0 44px -8px rgba(255,210,77,.55);
+  animation:sinaBannerGlow 3.2s ease-in-out infinite; }
+.hero-offer.lcf.ho-sina::before{
+  content:''; position:absolute; inset:0; border-radius:18px; padding:2px; pointer-events:none;
+  background:linear-gradient(130deg,#ff8a80,#ffd24d,#8ce08a,#7ab8ff,#c98aff,#ff8a80); background-size:300% 300%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+  animation:sinaEdgeShift 4s linear infinite; }
+.hero-offer.lcf.ho-sina::after{
+  content:''; position:absolute; inset:-40% -20%; pointer-events:none;
+  background:conic-gradient(from 0deg, transparent 0 40deg, rgba(255,210,77,.10) 55deg, transparent 70deg, transparent 160deg, rgba(122,184,255,.10) 175deg, transparent 190deg, transparent 280deg, rgba(255,138,128,.10) 295deg, transparent 310deg);
+  animation:sinaBeams 9s linear infinite; }
+@keyframes sinaEdgeShift{ 0%{ background-position:0% 50%; } 100%{ background-position:300% 50%; } }
+@keyframes sinaBeams{ to{ transform:rotate(360deg); } }
+@keyframes sinaBannerGlow{ 0%,100%{ box-shadow:0 0 34px -10px rgba(255,210,77,.45); } 50%{ box-shadow:0 0 60px -4px rgba(255,210,77,.8), 0 0 34px -8px rgba(201,138,255,.5); } }
+.hero-offer.lcf.ho-sina .ho-main{ align-items:center; gap:6px; position:relative; z-index:1; }
+.hero-offer.lcf.ho-sina .ho-name{
+  font-size:26px; letter-spacing:.08em;
+  background:linear-gradient(90deg,#ff8a80,#ffd24d,#8ce08a,#7ab8ff,#c98aff,#ff8a80); background-size:250% 100%;
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:sinaEdgeShift 5s linear infinite; text-shadow:none; }
+.hero-offer.lcf.ho-sina .ho-desc{ font-size:12px; max-width:420px; margin:0 auto; color:#cfd8ea; }
+.hero-offer.lcf.ho-sina .ho-buy{
+  align-self:center; font-size:14px; padding:12px 26px; margin-top:8px;
+  color:#241205; border:none; background:linear-gradient(180deg,#ffe27a,#f2a93c);
+  box-shadow:0 8px 26px -8px rgba(255,210,77,.9); animation:msnClaimPulse 1.8s ease-in-out infinite; }
+.hero-offer.lcf.ho-sina .ho-tag{
+  top:12px; right:14px; font-size:9.5px; padding:3px 9px;
   color:#241205; background:linear-gradient(90deg,#ff8a80,#ffd24d,#8ce08a,#7ab8ff,#c98aff); }
-.hero-offer.lcf[data-lcship="titansina"] .ho-ship{
-  filter:drop-shadow(0 0 16px rgba(255,210,77,.7)); }
+.hero-offer.lcf.ho-sina .ho-ship{
+  width:min(420px,80%); height:190px; margin:0 auto; position:relative; z-index:1;
+  filter:drop-shadow(0 0 26px rgba(255,210,77,.8)) drop-shadow(0 0 60px rgba(201,138,255,.4));
+  animation:sinaShipFloat 4.5s ease-in-out infinite; }
+@keyframes sinaShipFloat{ 0%,100%{ transform:translateY(3px); } 50%{ transform:translateY(-9px); } }
+@media (prefers-reduced-motion:reduce){
+  .hero-offer.lcf.ho-sina, .hero-offer.lcf.ho-sina::before,
+  .hero-offer.lcf.ho-sina::after, .hero-offer.lcf.ho-sina .ho-name,
+  .hero-offer.lcf.ho-sina .ho-ship, .hero-offer.lcf.ho-sina .ho-buy{ animation:none; } }
 /* FrostyFrost cryo banner */
 .hero-offer.lcf[data-lcship="frostyfrost"]{
   border-color:rgba(140,210,255,.55);
@@ -806,38 +844,45 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   background-size:200% 100%; animation:pf-shift 2.4s linear infinite; }
 @media (prefers-reduced-motion:reduce){
   .ship-card.apex.sina::after,.sina-hero img,.sina-hero::after,.sina-beam,.sina-callout,.apex-chip.sina,
-  .ship-tile.st-sina::before,.ship-tile.st-sina .sts-art img{ animation:none !important; }
+  .ship-tile.st-sina,.ship-tile.st-sina::before,.ship-tile.st-sina::after,.ship-tile.st-sina .st-name,.ship-tile.st-sina .sts-art img{ animation:none !important; }
   .sina-beam{ opacity:.5; }
 }
 
 /* ===== TITAN SINA — full-row showcase TILE in the ships grid ===== */
 .ship-tile.st-sina{ grid-column:1 / -1; position:relative; display:flex; flex-direction:row; align-items:stretch; gap:0;
-  padding:0; overflow:hidden; text-align:left; min-height:118px;
+  padding:0; overflow:hidden; text-align:left; min-height:340px;
   background:linear-gradient(180deg,#131a2e,#0a0e1c) !important;
-  border:1px solid transparent !important; border-radius:14px; }
+  border:1px solid transparent !important; border-radius:18px;
+  animation:sinaBannerGlow 3.2s ease-in-out infinite; }
+/* sweeping conic light beams across the whole tile (same as the Market showcase) */
+.ship-tile.st-sina::after{ content:''; position:absolute; inset:-40% -20%; pointer-events:none; z-index:0;
+  background:conic-gradient(from 0deg, transparent 0 40deg, rgba(255,210,77,.10) 55deg, transparent 70deg, transparent 160deg, rgba(122,184,255,.10) 175deg, transparent 190deg, transparent 280deg, rgba(255,138,128,.10) 295deg, transparent 310deg);
+  animation:sinaBeams 9s linear infinite; }
 /* animated rainbow border (reuses pf-shift) */
-.ship-tile.st-sina::before{ content:''; position:absolute; inset:0; border-radius:inherit; padding:1px; pointer-events:none; z-index:3;
+.ship-tile.st-sina::before{ content:''; position:absolute; inset:0; border-radius:inherit; padding:2px; pointer-events:none; z-index:3;
   background:linear-gradient(120deg,#ff5050,#ffaa3c,#ffe95a,#78ff82,#50d2ff,#9682ff,#ff6eeb,#ff5050);
   background-size:400% 400%; animation:pf-shift 3s linear infinite; opacity:.9;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; }
-.sts-art{ position:relative; flex:0 0 46%; width:46%; max-width:46%; min-height:118px; overflow:hidden;
+.sts-art{ position:relative; flex:0 0 46%; width:46%; max-width:46%; min-height:340px; overflow:hidden;
   background:
     radial-gradient(1.4px 1.4px at 22% 28%, rgba(200,220,255,.55), transparent 60%),
     radial-gradient(1.3px 1.3px at 70% 20%, rgba(200,220,255,.4), transparent 60%),
     radial-gradient(1.3px 1.3px at 52% 74%, rgba(200,220,255,.35), transparent 60%),
     radial-gradient(90% 110% at 50% 30%, #1c2748, #0a0e1c 80%); }
-.sts-art img{ position:absolute; left:50%; top:50%; width:88%; max-width:210px; max-height:86%; object-fit:contain; z-index:1;
+.sts-art img{ position:absolute; left:50%; top:50%; width:92%; max-width:460px; max-height:88%; object-fit:contain; z-index:1;
   transform:translate(-50%,-50%) rotate(-1.4deg);
-  filter:drop-shadow(0 10px 18px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(120,180,255,.35));
+  filter:drop-shadow(0 14px 26px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(255,210,77,.55)) drop-shadow(0 0 60px rgba(201,138,255,.35));
   animation:sina-float 4.5s ease-in-out infinite; }
-.sts-art .sina-beam{ width:44%; }
+.sts-art .sina-beam{ width:44%; height:3px; }
 .sts-art .st-flag,.sts-art .st-lvl{ position:absolute; top:6px; left:6px; z-index:2; }
-.sts-meta{ flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:5px; padding:10px 12px; position:relative; z-index:1; }
-.ship-tile.st-sina .st-name{ font-size:13px; white-space:normal; }
-.sts-callout{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:7.5px; letter-spacing:.13em; color:#9ecbff;
+.sts-meta{ flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:9px; padding:18px 20px; position:relative; z-index:1; }
+.ship-tile.st-sina .st-name{ font-size:24px; white-space:normal; letter-spacing:.06em;
+  background:linear-gradient(90deg,#ff8a80,#ffd24d,#8ce08a,#7ab8ff,#c98aff,#ff8a80); background-size:250% 100%;
+  -webkit-background-clip:text; background-clip:text; color:transparent; animation:pf-shift 5s linear infinite; }
+.sts-callout{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.13em; color:#9ecbff;
   text-shadow:0 0 8px rgba(120,180,255,.6); }
 .ship-tile.st-sina .st-stats{ justify-content:flex-start; }
-.ship-tile.st-sina .st-badge{ align-self:flex-start; }
+.ship-tile.st-sina .st-badge{ align-self:flex-start; font-size:13px; padding:9px 18px; }
 
 /* ===== COSMIC JACKPOT CACHE — the 100× premium gamble ===== */
 .jkpt{ position:relative; overflow:hidden; border-radius:16px; padding:16px 15px 15px;

@@ -5,7 +5,7 @@
    resource sink.
 
      • Every OWNED hull has four permanent modules:
-         Combat Computer   → +2% XP per kill / level
+         Combat Computer   → +0.5% XP per kill / level
          Targeting Matrix  → +1% attack range / level
          Reactor Core      → +1% attack speed / level
          Hull Optimization → +3% hull HP & +0.15 damage reduction / level (DR cap +20)
@@ -43,9 +43,9 @@
   // ---- MODULES ---------------------------------------------------------------
   const MODS = [
     { id: 'cc', name: 'Combat Computer', res: 'plasma',
-      tip: 'Boosts every XP source while flying this hull. +2% XP per completed level — stacks with Pro and Pilot Tree bonuses.',
-      bonus: (st) => '+' + (st * 2) + '% XP per kill',
-      next:  (st) => '+' + ((st + 1) * 2) + '%',
+      tip: 'Boosts every XP source while flying this hull. +0.5% XP per completed level — stacks with Pro and Pilot Tree bonuses.',
+      bonus: (st) => '+' + (st * 0.5) + '% XP per kill',
+      next:  (st) => '+' + ((st + 1) * 0.5) + '%',
       icon: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 9h6v6H9zM12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5L19 19M19 5l-2.5 2.5M7.5 16.5L5 19"/>' },
     { id: 'tm', name: 'Targeting Matrix', res: 'iron',
       tip: 'Extends your weapons\u2019 engagement radius — open fire before enemies close in. +1% attack range per level.',
@@ -104,7 +104,7 @@
     } catch (e) { return null; }
   }
   function xpMult() {
-    try { return 1 + steps(peek(G().state.ship, 'cc')) * 2 / 100; } catch (e) { return 1; }
+    try { return 1 + steps(peek(G().state.ship, 'cc')) * 0.5 / 100; } catch (e) { return 1; }
   }
 
   // ---- SUCCESS CHANCE (published) ---------------------------------------------
@@ -123,9 +123,12 @@
 
   // ---- COST -------------------------------------------------------------------
   // Exponential sink (×10 economy pass): ship factor × tier jump × in-tier growth. Resource = gold/100.
+  // LATE-STAR WALL (Jul 2026): past the first 3 stars of a tier, cost jumps ×5
+  // per additional star — ★★★★ costs 5×, ★★★★★ costs 25× the ★★★ price.
   function shipF(key) { const s = C().SHIP_BY_KEY[key]; return 1 + (((s && s.tier) || 1) - 1) * 0.55; }
   function cost(shipKey, m) {
-    const gold = Math.round(100000 * shipF(shipKey) * Math.pow(2.6, m.t) * Math.pow(1.045, m.s * 5 + m.l - 1));
+    const lateStars = Math.max(0, m.s - 3);
+    const gold = Math.round(100000 * shipF(shipKey) * Math.pow(2.6, m.t) * Math.pow(1.045, m.s * 5 + m.l - 1) * Math.pow(5, lateStars));
     return { gold, res: Math.max(1000, Math.round(gold / 100)) };
   }
   function bank(res) {
@@ -232,8 +235,9 @@
             '<div class="asc-btns">' +
               '<button class="asc-btn" data-asc="' + key + ':' + md.id + ':1"' + (afford ? '' : ' disabled') + '>ASCEND</button>' +
               '<button class="asc-btn x10" data-asc="' + key + ':' + md.id + ':10"' + (afford ? '' : ' disabled') + '>×10</button>' +
+              '<button class="asc-btn x10 x100" data-asc="' + key + ':' + md.id + ':100"' + (afford ? '' : ' disabled') + '>×100</button>' +
             '</div>' +
-            '<div class="asc-fail-note">Fail → resets to +1 of this star · ×10 rolls until broke, star-up or tier-up</div>' +
+            '<div class="asc-fail-note">Fail → resets to +1 of this star · ×10/×100 roll until broke, star-up or tier-up</div>' +
           '</div>') +
     '</div>';
   }
@@ -438,7 +442,8 @@
   .asc-btn{ flex:1; border:none; border-radius:10px; padding:11px; cursor:pointer;
     font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.14em; color:#08131c;
     background:linear-gradient(180deg, color-mix(in srgb,var(--tc) 85%,#fff), var(--tc)); box-shadow:0 6px 18px -8px var(--tc); transition:transform .08s; }
-  .asc-btn.x10{ flex:0 0 30%; color:var(--tc); background:color-mix(in srgb,var(--tc) 12%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 60%,transparent); box-shadow:none; }
+  .asc-btn.x10{ flex:0 0 22%; color:var(--tc); background:color-mix(in srgb,var(--tc) 12%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 60%,transparent); box-shadow:none; }
+  .asc-btn.x100{ flex:0 0 26%; }
   .asc-btn:active{ transform:scale(.97); }
   .asc-btn:disabled{ opacity:.38; cursor:default; }
   .asc-fail-note{ margin-top:6px; text-align:center; font-size:8.5px; color:#66798d; letter-spacing:.04em; }

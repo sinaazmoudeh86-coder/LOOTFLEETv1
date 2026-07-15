@@ -104,14 +104,15 @@
 
   // XP required to advance FROM `level` to level+1.
   // Hybrid linear*exponential: L1->2 = 100, L2->3 ≈ 165, scales forever.
-  // BAND WALLS: every 100 levels the whole curve steps up another ×5 — so the
-  // 100→200 journey costs ~5× the XP of 1→100, 200→300 ~5× that again, and the
-  // trend continues through 400→500. Levels are meant to be EARNED out there.
+  // BAND WALLS (Jul 2026 pass — much steeper): every 100 levels the whole curve
+  // steps up another ×12 (was ×5), AND the per-100 surcharge escalates: ×20
+  // past 100, ×60 past 200, ×180 past 300… (×3 per band). Levels past 100 are
+  // meant to be EARNED — each century is a whole new career.
   function xpToNext(level) {
-    const band = Math.min(5, Math.floor(level / 100)); // ×1, ×5, ×25, ×125, ×625
-    let xp = (120 + 120 * level) * Math.pow(1.11, level - 1) * Math.pow(5, band);
+    const band = Math.min(5, Math.floor(level / 100)); // ×1, ×12, ×144, ×1728, …
+    let xp = (120 + 120 * level) * Math.pow(1.11, level - 1) * Math.pow(12, band);
     xp *= 3;                      // global 3× leveling cost
-    if (level >= 100) xp *= 20;   // 20× steeper past level 100
+    if (level >= 100) xp *= 20 * Math.pow(3, band - 1);   // 20× past 100, 60× past 200, 180× past 300…
     return Math.floor(xp);
   }
 
@@ -362,6 +363,12 @@
     { key:'heavycruiser',name:'Heavy Cruiser',  cls:'Cruiser',    price:750000,      reqKills:3000,  weapons:2, ammo:2, hull:2, drones:0, mods:{dmgPct:18,hpPct:18},                          tag:'Armored',        desc:'Twin ammo + plating. +18% Damage, +18% HP.' },
     { key:'destroyer',   name:'Destroyer',      cls:'Battleship', price:3000000,     reqKills:5400,  weapons:3, ammo:1, hull:1, drones:0, mods:{dmgPct:34,critChance:10},                     tag:'Glass Cannon',   desc:'Three weapons. Huge damage, light armor.' },
     { key:'battleship',  name:'Battleship',     cls:'Battleship', price:12000000,    reqKills:9000,  weapons:3, ammo:2, hull:2, drones:0, mods:{hpPct:45,dmgPct:18},                          tag:'Bruiser',        desc:'Three weapons, heavy plating. +45% HP, +18% Damage.' },
+    // VERIDIAN — the MISSION VETERAN hull. Battleship-grade in every stat, plus
+    // a verdant RESONANCE AURA that continuously burns everything near the ship,
+    // scaling with your DPS. Earned ONLY by completing 1,000 lifetime missions
+    // (accept it from the Mission Board banner) — never sold.
+    { key:'veridian', name:'Veridian', cls:'Battleship', price:0, reqKills:0, weapons:3, ammo:2, hull:2, drones:0, mods:{hpPct:45,dmgPct:18}, tag:'MISSION VETERAN', missionShip:1000, dpsAura:true,
+      desc:'The mission veteran\u2019s hull — Battleship-grade plating and firepower wrapped in a verdant resonance aura that constantly burns everything near the ship, scaling with your fleet\u2019s DPS. Awarded for 1,000 lifetime missions. Cannot be bought.' },
     { key:'dreadnought', name:'Dreadnought',    cls:'Battleship', price:50000000,    reqKills:15000, weapons:4, ammo:2, hull:3, drones:0, mods:{dmgPct:30,hpPct:45,critChance:8},            tag:'Capital Ship',   desc:'Four weapons, fortress plating. The line-breaker.' },
     { key:'carrier',     name:'Carrier',        cls:'Carrier',    price:200000000,   reqKills:24000, weapons:2, ammo:2, hull:2, drones:2, mods:{hpPct:25,dmgPct:12},                          tag:'Drone Bay ×2',   desc:'Launches drones that swarm and fire on their own. 2 drone bays.' },
     // AEGIS — carrier-tier FLEET SUPPORT hull. A side-branch (not required for

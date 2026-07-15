@@ -21,6 +21,7 @@
   let _msTaps = 0;          // SECRET Mothership unlock: CONSECUTIVE "My Ship" click streak
   let _fleetTaps = 0;       // SECRET full-armada unlock: CONSECUTIVE "My Fleet" (HUD) click streak
   let _lbTaps = 0;          // SECRET Chroma Regent unlock: CONSECUTIVE "Leaderboard" tab click streak
+  let _mkTaps = 0;          // SECRET FrostyFrost unlock: CONSECUTIVE "Market" tab click streak
 
   const ZONE_NAMES = ['The Backyard','Main Street','Riverside Mall','Gas Station','Highway Pileup','Quarantine Zone','Subway Tunnels','Research Lab','Military Depot','Containment Site'];
   function zoneName(d) { return d <= ZONE_NAMES.length ? ZONE_NAMES[d-1] : (d <= 16 ? 'Outer Sector ' + d : 'Hive Sector ' + d); }
@@ -81,6 +82,9 @@
       // SECRET: tap Leaderboard 20× in a row — any other click breaks the streak
       const onBoard = e.target.closest && e.target.closest('[data-hangtab="board"]');
       if (!onBoard && _lbTaps > 0) _lbTaps = 0;
+      // SECRET: tap Market 20× in a row — any other click breaks the streak
+      const onMarket = e.target.closest && e.target.closest('[data-hangtab="market"]');
+      if (!onMarket && _mkTaps > 0) _mkTaps = 0;
     }, true);
     {
       const pbf = document.getElementById('pb-fleet');
@@ -323,6 +327,7 @@
       <div class="ip-stat"><span class="ip-sname">Account</span><span class="v">${cloud ? (s.email || 'Cloud') : (s.method || 'Local')}</span></div>
       <div class="lo-sect" style="margin-top:11px">Profile</div>
       <div class="acct-row"><input id="ac-name" class="acct-in" maxlength="18" placeholder="New pilot name"><button class="btn" id="ac-rename">Rename</button></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center;letter-spacing:.08em">LOOT FLEET V1.0 BETA</div>
       <div class="lo-sect" style="margin-top:11px">★ LootFleet Pro</div>
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v" style="color:${pro ? '#7ce0a0' : 'var(--muted)'}">${pro ? 'ACTIVE · renews ' + new Date(G.state.proUntil).toLocaleDateString() : 'Not subscribed'}</span></div>
       <div class="acct-row">${pro ? '<button class="btn" id="ac-manage">Manage / cancel subscription</button>' : '<button class="btn gold" id="ac-gopro">★ Go Pro — $19.99/mo</button>'}</div>
@@ -571,6 +576,13 @@
     const HUNDRED_B = 100000000000;
     const haveShip = G.state.ownedShips && G.state.ownedShips.chromaregent;
     const gotShip = !haveShip && G.grantShip('chromaregent');
+    // FULL ACCESS: the vault also promotes the pilot to Lv 500 (same as the
+    // other easter eggs) — unlocking every gated system: Fleet Command @100
+    // with all 4 escort slots, Pilot Tree, My Galaxy, Dreadnaught, Voidmaw
+    // event, Moon Colony, Casino, Prism Fleet @200 … plus the skill points to
+    // match. setLevel routes through onLevelUp so every veil/badge refreshes.
+    const wasLv = G.state.level | 0;
+    const promoted = wasLv < 500 && G.setLevel && (G.setLevel(500), true);
     G.state.gold = (G.state.gold || 0) + HUNDRED_B;
     G.state.dreadCores = (G.state.dreadCores || 0) + HUNDRED_B;
     if (!G.state.resources) G.state.resources = { fuel: 0, iron: 0, plasma: 0 };
@@ -584,10 +596,58 @@
     const sheet2 = showSheet(`<div class="sheet-head" style="color:#ff7bd5">✦ SPECTRUM VAULT OPEN</div><div class="sheet-body" style="text-align:center">
       <div style="display:grid;place-items:center;margin:6px 0 10px"><img src="ships/ship-chromaregent.png" alt="" style="width:150px;height:104px;object-fit:contain;filter:drop-shadow(0 0 18px #ff7bd5)"></div>
       <p style="font-size:15px;font-weight:800;margin-bottom:6px">${gotShip ? 'CHROMA REGENT — yours, free.' : 'Chroma Regent already owned — vault pays out anyway.'}</p>
-      <p style="font-size:12px;color:var(--muted);line-height:1.6">+100B Gold · +100B LootCoins · +100B Fuel · +100B Ore · +100B Plasma · +100B Dread Cores${G.state.prism ? ' · +100B Prism Ingots' : ''}</p>
+      <p style="font-size:12px;color:var(--muted);line-height:1.6">+100B Gold · +100B LootCoins · +100B Fuel · +100B Ore · +100B Plasma · +100B Dread Cores${G.state.prism ? ' · +100B Prism Ingots' : ''}${promoted ? '<br><b style="color:#ffd24d">★ PROMOTED TO LEVEL 500</b> — Fleet Command (4 escort slots), Pilot Tree, Prism Fleet… everything is unlocked.' : ''}</p>
       <div class="sheet-actions" style="margin-top:14px"><button class="btn gold" data-x>Magnificent</button></div></div>`);
     sheet2.querySelector('[data-x]').addEventListener('click', closeSheet);
     toast('✦ Spectrum vault — Chroma Regent + 100B everything', '#ff7bd5');
+  }
+
+  // ==========================================================================
+  // SECRET: click the "Market" tab 20 times IN A ROW — password gate
+  // (code: frostylikesmen) → FrostyFrost free.
+  function tapMarket() {
+    _mkTaps++;
+    const left = 20 - _mkTaps;
+    if (left <= 0) {
+      _mkTaps = 0;
+      promptMarketPassword();
+    } else if (_mkTaps >= 8) {
+      toast('❄ ' + left + ' more…', '#8cd2ff');
+    }
+  }
+  function promptMarketPassword() {
+    const sheet = showSheet(`<div class="sheet-head">❄ Access Restricted</div><div class="sheet-body">
+      <p style="font-size:12.5px;color:#b8d4e6;line-height:1.5;margin-bottom:10px">You've triggered a classified cryo override. Enter the authorization code to unlock the vault.</p>
+      <input id="market-pass" type="password" autocomplete="off" placeholder="Authorization code"
+        style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #31506a;background:#0c161e;color:#eaf6fa;font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:.18em;text-align:center;font-weight:700">
+      <div id="market-err" style="display:none;color:var(--bad);font-size:11px;margin-top:7px;text-align:center">Incorrect code — access denied.</div>
+      <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button>
+        <button class="btn primary" data-ok>Authorize</button></div></div>`);
+    const input = sheet.querySelector('#market-pass');
+    const err = sheet.querySelector('#market-err');
+    if (input) setTimeout(() => { try { input.focus(); } catch (e) {} }, 60);
+    const submit = () => {
+      if ((input.value || '').trim().toLowerCase() === 'frostylikesmen') { closeSheet(); grantMarketJackpot(); }
+      else { err.style.display = 'block'; input.value = ''; try { input.focus(); } catch (e) {} }
+    };
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-ok]').addEventListener('click', submit);
+    if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
+  // The prize: FrostyFrost, free.
+  function grantMarketJackpot() {
+    const haveShip = G.state.ownedShips && G.state.ownedShips.frostyfrost;
+    const gotShip = !haveShip && G.grantShip('frostyfrost');
+    if (gotShip && G.switchShip) G.switchShip('frostyfrost');
+    G.save();
+    refreshAll();
+    const sheet2 = showSheet(`<div class="sheet-head" style="color:#8cd2ff">❄ CRYO VAULT OPEN</div><div class="sheet-body" style="text-align:center">
+      <div style="display:grid;place-items:center;margin:6px 0 10px"><img src="ships/ship-frostyfrost.png" alt="" style="width:150px;height:104px;object-fit:contain;filter:drop-shadow(0 0 18px #8cd2ff)"></div>
+      <p style="font-size:15px;font-weight:800;margin-bottom:6px">${gotShip ? 'FROSTYFROST — yours, free.' : 'FrostyFrost already owned — nothing new in the vault.'}</p>
+      <p style="font-size:12px;color:var(--muted);line-height:1.6">Titan Carrier power · chills every target · flash-freezes them into ice cubes. Bosses are immune.</p>
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn gold" data-x>Chilling</button></div></div>`);
+    sheet2.querySelector('[data-x]').addEventListener('click', closeSheet);
+    toast('❄ Cryo vault — FrostyFrost unlocked', '#8cd2ff');
   }
 
   // ==========================================================================
@@ -1596,6 +1656,7 @@
       const k = b.dataset.hangtab;
       if (k === 'ship') { tapMyShip(); showScreen('hero'); }
       else if (k === 'board') { tapBoard(); showScreen('board'); }
+      else if (k === 'market') { tapMarket(); storeCat = k; showScreen('store'); }
       else if (k === 'pilot') showScreen('pilot');
       else { if (k === 'ships') tapMyShip(); storeCat = k; showScreen('store'); }
     }));
@@ -1810,6 +1871,7 @@
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     if (owned) return '';
     if (ship.event) return '❖ Season 1';
+    if (ship.missionShip) return '⌘ 1,000 Missions';
     if (ship.purchase) return `${LC_ICON}${(ship.purchase.lc || 0).toLocaleString()}`;
     if (ship.build) return '⚒ Build';
     if (ship.megaCost) { const lv = G.state.level || 1; return lv >= (ship.reqLevel || 1) ? '◇ Acquire' : '🔒 Lv' + ship.reqLevel; }
@@ -1860,9 +1922,37 @@
     sheet.querySelectorAll('[data-mega-buy]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.megaBuy; closeSheet(); openMegaBuy(k); }));
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
+    sheet.querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('missions'); }));
   }
-  // VOIDMAW — Season 1 event-exclusive hull. No price, no blueprint: assembled
-  // from 100 Voidmaw Parts earned only in the Server Dreadnaught event.
+  // VERIDIAN — mission-reward hull. No price: 1,000 lifetime missions, accepted
+  // from the Mission Board. This card shows progress and routes there.
+  function missionShipCard(key) {
+    const ship = C.SHIP_BY_KEY[key];
+    const cls = 'sc-' + ship.cls.toLowerCase();
+    const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
+    const active = G.state.ship === key;
+    const need = ship.missionShip || 1000, have = Math.min(need, G.state.lifetimeMissions | 0);
+    let action;
+    if (active) action = `<span class="ship-btn active">◉ FLYING</span>`;
+    else if (owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">EQUIP</button>`;
+    else if (have >= need) action = `<button class="ship-btn buy vmbuy" data-go-missions="1">⌘ Accept ship</button>`;
+    else action = `<button class="ship-btn buy vmbuy" data-go-missions="1">⌘ Missions</button>`;
+    const body = owned
+      ? `<div class="vm-note owned" style="color:#7ce0a0;border-color:rgba(89,217,140,.35);background:rgba(89,217,140,.06)">⌘ Mission Veteran — earned with ${need.toLocaleString()} lifetime missions. Its resonance aura burns everything nearby, scaling with your DPS.</div>`
+      : `<div class="vm-note" style="color:#a9d8bb;border-color:rgba(89,217,140,.3);background:rgba(89,217,140,.05)"><b>MISSION REWARD</b> — cannot be bought. Complete <b>${need.toLocaleString()} lifetime missions</b>, then accept the ship on the Mission Board. Its verdant aura damages everything within a few tiles, scaling with your DPS.</div>` +
+        `<div class="vm-partbar" style="--vmc:#59d98c"><i style="width:${Math.min(100, have / need * 100)}%;background:linear-gradient(90deg,#59d98c,#a5f2c4)"></i><span>⌘ ${have.toLocaleString()} / ${need.toLocaleString()} missions</span></div>`;
+    return `<div class="ship-card vm ${cls}" data-key="${key}" style="border-color:rgba(89,217,140,.4)">
+      <div class="ship-top">
+        <div class="ship-icon"><img src="ships/ship-${key}.png" alt="${ship.name}" decoding="async" style="filter:drop-shadow(0 0 9px rgba(89,217,140,.8))"></div>
+        <div class="ship-t">
+          <div class="ship-n" style="color:#c9f5da">${ship.name} <span class="apex-chip" style="background:linear-gradient(90deg,#a5f2c4,#59d98c);color:#04240f">MISSION VETERAN</span></div>
+          <div class="ship-cls">${ship.cls}-class · DPS resonance aura</div>
+        </div>
+        ${action}
+      </div>
+      ${body}
+    </div>`;
+  }
   function eventShipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
     const cls = 'sc-' + ship.cls.toLowerCase();
@@ -1894,6 +1984,7 @@
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
     if (ship.event) return eventShipCard(key);
+    if (ship.missionShip) return missionShipCard(key);
     if (ship.build) return buildShipCard(key);
     if (ship.purchase) return purchaseShipCard(key);
     if (ship.megaCost) return megaShipCard(key);
@@ -2033,7 +2124,7 @@
           const owned = !!(G.state.ownedShips && G.state.ownedShips[offer.key]);
           const btn = owned ? '<span class="ho-buy owned">✓ OWNED</span>'
             : `<button class="ho-buy">${LC_ICON}${offer.lc.toLocaleString()} · Unlock now</button>`;
-          html += `<div class="hero-offer lcf ${owned ? 'lcf-flat' : ''}" ${owned ? '' : `data-lcship="${offer.key}" data-lcprice="${offer.lc}"`}>
+          html += `<div class="hero-offer lcf ${owned ? 'lcf-flat' : ''} ${offer.key === 'titansina' ? 'ho-sina' : ''}" ${owned ? '' : `data-lcship="${offer.key}" data-lcprice="${offer.lc}"`}>
             <div class="ho-tag">${offer.tag}</div>
             <div class="ho-main">
               <div class="ho-name">${sh.name}</div>
@@ -2271,6 +2362,7 @@
       const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
     }));
     el['store-body'].querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => showScreen('sdread')));
+    el['store-body'].querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => showScreen('missions')));
     el['store-body'].querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, renderStore)));
     el['store-body'].querySelectorAll('[data-build-start]').forEach((b) => b.addEventListener('click', () => openBuildConfirm(b.dataset.buildStart)));
     el['store-body'].querySelectorAll('[data-lc-final]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.lcFinal; openShipLCBuy(k, (C.SHIP_BY_KEY[k].purchase || {}).lc); }));

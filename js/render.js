@@ -937,7 +937,7 @@
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
-    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5 };
+    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
   const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
     dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4 };
@@ -950,7 +950,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent','frostyfrost'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent','frostyfrost','veridian'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }
@@ -1182,6 +1182,21 @@
 
     // PRISM AURA — significant prismatic halo when this hull carries a Prism Core
     if (shipHasPrism(activeShipKey())) drawPrismAura(ctx, t, 30 + tier * 4, 1);
+    // VERIDIAN RESONANCE AURA — the damage field made visible: a breathing
+    // verdant ring at the aura's true radius (world-space, so drawn unscaled
+    // relative to the ship's local frame: radius / scale keeps it accurate).
+    if (activeShipKey() === 'veridian') {
+      const R = 260 / Math.max(0.0001, scale);
+      const pulse = 0.5 + 0.5 * Math.sin(t * 2.6);
+      const g2 = ctx.createRadialGradient(0, 0, R * 0.55, 0, 0, R);
+      g2.addColorStop(0, 'rgba(90,230,140,0)');
+      g2.addColorStop(0.82, 'rgba(90,230,140,' + (0.05 + 0.04 * pulse) + ')');
+      g2.addColorStop(1, 'rgba(90,230,140,' + (0.16 + 0.10 * pulse) + ')');
+      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,255,170,' + (0.30 + 0.22 * pulse) + ')'; ctx.lineWidth = 1.6;
+      ctx.setLineDash([10, 14]); ctx.lineDashOffset = -t * 26;
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    }
     // GREEN REACTOR AURA — the Oblivion Final's signature glow
     if (activeShipKey() === 'oblivionfinal') drawGreenAura(ctx, t, 46 + tier * 5, 1.4);
 

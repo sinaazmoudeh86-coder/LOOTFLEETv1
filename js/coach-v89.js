@@ -6,7 +6,7 @@
    most progression screens now live inside the bottom-nav COMMAND menu:
 
      BOTTOM NAV (always visible): Battle · Zone Grind · Loot · Hangar · Command
-     COMMAND MENU cards [data-go]: My Galaxy · Fleet Rank · Dreadnaught Hunt ·
+     COMMAND MENU cards [data-go]: My Galaxy · Dreadnaught Hunt ·
        Pilot Tree · Pilot Skills · Prism Mining · Prism Fleet
 
    Moments + their unlock gates (kept in lock-step with game.html LOCKS and the
@@ -22,7 +22,6 @@
      citadel    · own a 2nd system       → Command ▸ My Galaxy (build a Citadel)
      pilot      · level 30               → Command ▸ Pilot Tree (◇ Dread Cores)
      dread      · level 30               → Command ▸ Dreadnaught Hunt (weekly raid)
-     fleetrank  · level 50               → Command ▸ Fleet Rank (PvP ladder)
      prismfleet · level 200              → Command ▸ Prism Fleet (boss gauntlet)
 
    Anything reached through Command is taught in two hops: spotlight the COMMAND

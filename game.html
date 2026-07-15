@@ -388,6 +388,12 @@
           <div class="scr-body" id="dread-body"></div>
         </div>
 
+        <!-- SERVER DREADNAUGHT (Command · seasonal world boss) -->
+        <div class="screen overlay" id="screen-sdread" data-screen-label="Server Dreadnaught">
+          <div class="scr-head"><span class="scr-title">Server Dreadnaught</span><span class="scr-sub" id="sdread-sub"></span></div>
+          <div class="scr-body" id="sdread-body"></div>
+        </div>
+
         <!-- MOON COLONY (Command) -->
         <div class="screen overlay" id="screen-moon">
           <div class="scr-head"><span class="scr-title">Moon Colony</span><span class="scr-sub" id="moon-sub"></span></div>
@@ -475,6 +481,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg>
           <span class="nl">Dreadnaught</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="sdread">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 5v6l-9 9-9-9V7z"/><path d="M8.5 10.5h2v2h-2zM13.5 10.5h2v2h-2zM9 17l3-2 3 2"/></svg>
+          <span class="nl">Server Dreadnaught</span>
+        </button>
         <button class="nav-btn nav-grouped" data-screen="moon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           <span class="nl">Moon Colony</span>
@@ -512,6 +522,11 @@
           <div class="mega-grab"></div>
           <div class="mega-title">⬡ Command</div>
           <div class="mega-grid">
+            <div class="mega-card cmd-sdread" data-go="sdread">
+              <div class="mc-ic mc-vm"><img src="ships/ship-voidmaw.png" alt="Voidmaw"></div>
+              <div><div class="mc-n">Season 1: Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
+              <span class="mc-lock"></span><span class="badge" id="cmd-sdread-badge" style="display:none">0</span>
+            </div>
             <div class="mega-card cmd-galaxy" data-go="galaxy">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
               <div><div class="mc-n">My Galaxy</div><div class="mc-s">Conquer systems, hold citadels &amp; wage the turf war</div></div>
@@ -653,6 +668,7 @@
 <script src="js/prism-v5.js?v=4"></script>
 <script src="js/prism-fleet.js"></script>
 <script src="js/dreadnaught.js?v=2"></script>
+<script src="js/server-dreadnaught.js?v=1"></script>
 <script src="js/galaxy-box.js"></script>
 <script src="js/shipworks.js?v=6"></script>
 <script src="js/ascension.js?v=9"></script>
@@ -739,7 +755,7 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,fleetrank:50,dread:30,pilot:30,boxes:30,moon:30,casino:15};
+    const LOCKS={galaxy:25,fleetrank:50,dread:30,sdread:50,pilot:30,boxes:30,moon:30,casino:15};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -755,7 +771,7 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
+      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();

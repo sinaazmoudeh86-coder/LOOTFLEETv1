@@ -1078,10 +1078,21 @@
     if (state.prismFleetRun && state.prismFleetRun.active && window.PRISMFLEET && window.PRISMFLEET.tick) { try { window.PRISMFLEET.tick(dt, rt); } catch (e) {} }
     // DREADNAUGHT HUNT — raid-boss phase logic (adds, novas, enrage) on the real sim.
     if (state.dreadRun && state.dreadRun.active && window.DREAD && window.DREAD.tick) { try { window.DREAD.tick(dt, rt); } catch (e) {} }
+    // SERVER DREADNAUGHT — seasonal world-boss run (timer, stages, boss scaling).
+    if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineTick) { try { window.SDREAD.engineTick(dt, rt); } catch (e) {} }
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
       a.justDied = false;
+      // SERVER DREADNAUGHT — the world boss is DESIGNED to kill you eventually:
+      // an event death ends the run with NO penalty (no item loss, no hull reset).
+      if (rt.sdrun && rt.sdrun.active) {
+        rt.sdrun = null;
+        burst(a.x, a.y, '#b04dff', 44, { speed: 240, life: 1.0 });
+        respawnAt(0);
+        if (window.SDREAD && window.SDREAD.onDeath) { try { window.SDREAD.onDeath(); } catch (e) {} }
+        return;
+      }
       const killer = a.killer;
       const killerName = killer ? (killer.isBoss ? killer.name : killer.type.name) : 'the swarm';
       const diedZone = state.currentDungeon;
@@ -1323,6 +1334,8 @@
     drawPortrait();
     // DREADNAUGHT raid-boss phase FX (telegraphs, novas) — drawn over the arena.
     if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
+    // SERVER DREADNAUGHT — void aura + weak-point FX over the arena.
+    if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineRender) { try { window.SDREAD.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
     if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
   }
@@ -2120,6 +2133,7 @@
     state.currentDungeon = d;
     state.currentSystem = null;   // classic free-play deploy (not a galaxy tile)
     state.dreadRun = null;        // a normal deploy ends any Dreadnaught Hunt
+    rt.sdrun = null;              // …and any Server Dreadnaught event run
     rt.siege = null;
     rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
@@ -2156,13 +2170,58 @@
     if (window.UI) window.UI.refreshAll(); save();
     return true;
   }
+  // SERVER DREADNAUGHT deploy — the seasonal world boss on the REAL battle
+  // engine. A clean arena (no wave gauntlet, no zone nodes) with one
+  // effectively-unkillable boss; window.SDREAD.engineTick owns the run timer,
+  // stage scaling and rewards. Boss stats are (re)applied by the module.
+  function startServerDread() {
+    const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, state.level));
+    state.currentDungeon = zone;
+    state.currentSystem = null;
+    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null; rt.siege = null; rt.waves = null;
+    resetZone();
+    // boss-only arena — strip zone spawns; the event owns the encounter
+    rt.nodes = []; rt.enemies = []; rt.ground = [];
+    rt.bossInit = rt.bossTimer = 1e9;
+    rt.sdrun = { active: true, started: Date.now() };
+    const b = spawnServerDreadBoss();
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 3;
+    if (window.UI) window.UI.refreshAll(); save();
+    return b;
+  }
+  // ---- SERVER DREADNAUGHT boss art — the Voidmaw (Season 1) ---------------
+  let _vmBossImg = null;
+  function voidmawImg() { if (!_vmBossImg) { _vmBossImg = new Image(); _vmBossImg.src = 'ships/ship-voidmaw.png'; } return _vmBossImg; }
+  function spawnServerDreadBoss() {
+    const pool = allowedEnemies();
+    const type = pool[pool.length - 1];
+    const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
+    const b = new E.Enemy(type, state.currentDungeon, cx, cy);
+    b.isBoss = true; b.isSuper = true; b.isServerDread = true;
+    // effectively unlimited HP — anchored to ~an hour of the player's own DPS so
+    // the bar barely moves in a 2:30 run; the module tops it back up besides.
+    const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
+    b.maxHp = b.hp = Math.max(1e9, Math.round(dps * 3600));
+    b.speed *= 0.4; b.size = 132;
+    b.ranged = true; b.range = 600; b.fireCd = 1.5; b.fireT = 1.6;
+    b.tint = '#b04dff';
+    b.spriteImg = voidmawImg();
+    b.name = 'VOIDMAW';
+    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    burst(cx, cy, '#b04dff', 110, { speed: 380, life: 1.3, glow: true });
+    if (window.UI) window.UI.bossEvent('super');
+    return b;
+  }
   function respawnAt(d) {
     if (d > state.highestUnlocked) d = state.highestUnlocked;
     state.currentDungeon = d;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
     rt.awaitingRespawn = false;
     rt.archer.dead = false; rt.archer.killer = null;
-    rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    rt.waves = null; rt.sdrun = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null;
     resetZone();
     // generous safety on redeploy: 4s invulnerability + a spawn grace window so
@@ -2869,7 +2928,7 @@
   }
   // LOOTCOIN FAST-TRACK — hero-banner ship offers (Ships tab). Carrier first;
   // once owned, the banner upgrades to the Mothership.
-  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 75000, oblivionfinal: 1000000 };
+  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 75000, oblivionfinal: 1000000, chromafang: 500, chromaregent: 75000 };
   function buyShipLC(key) {
     const ship = C.SHIP_BY_KEY[key];
     const price = LC_SHIP_OFFERS[key];
@@ -3312,7 +3371,7 @@
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
     buyCosmetic, setCosmetic, addCredits,
     getCredits: () => state.credits || 0, getCosmetics: () => state.cosmetics,
-    startDreadHunt, dreadLevelFor,
+    startDreadHunt, dreadLevelFor, startServerDread,
     setLevel,
     getDreadCores: () => state.dreadCores || 0,
     addDreadCores: (n) => { state.dreadCores = (state.dreadCores || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); },

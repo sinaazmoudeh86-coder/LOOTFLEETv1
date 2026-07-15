@@ -99,5 +99,36 @@
     } catch (e) { return null; }
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, push, lbUpsert, lbTop };
+  // ---- Server Dreadnaught seasonal boards (one row per user per season) ------
+  async function sdUpsert(p) {
+    try {
+      if (!enabled || !p) return;
+      await client.rpc('sdread_upsert', {
+        p_name: p.name || 'Operator', p_season: p.season || 1, p_day: p.day || 0,
+        p_best: Math.round(p.best || 0), p_total: Math.round(p.total || 0), p_stage: p.stage || 1,
+      });
+    } catch (e) {}
+  }
+  async function sdDaily(season, day, n) {
+    try {
+      if (!enabled) return null;
+      const { data, error } = await client.from('sdread_scores')
+        .select('user_id,name,best_day,total,stage')
+        .eq('season', season || 1).eq('day', day || 0).gt('best_day', 0)
+        .order('best_day', { ascending: false }).limit(n || 100);
+      return error ? null : (data || null);
+    } catch (e) { return null; }
+  }
+  async function sdSeason(season, n) {
+    try {
+      if (!enabled) return null;
+      const { data, error } = await client.from('sdread_scores')
+        .select('user_id,name,best_day,total,stage')
+        .eq('season', season || 1).gt('total', 0)
+        .order('total', { ascending: false }).limit(n || 100);
+      return error ? null : (data || null);
+    } catch (e) { return null; }
+  }
+
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, push, lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
 })();

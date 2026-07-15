@@ -353,6 +353,10 @@
     { key:'frigate',     name:'Frigate',        cls:'Frigate',    price:0,           reqKills:0,     weapons:1, ammo:1, hull:1, drones:0, mods:{moveSpeed:18},                                  tag:'Starter · Fast', desc:'Nimble starter hull. Quick thrusters, one of everything.' },
     { key:'interceptor', name:'Interceptor',    cls:'Frigate',    price:25000,       reqKills:600,   weapons:1, ammo:1, hull:1, drones:0, mods:{moveSpeed:34,critChance:6,dmgPct:6},            tag:'Fast Attack',    desc:'Even faster strike hull. +34% Move, +6% Crit & Damage.' },
     { key:'cruiser',     name:'Cruiser',        cls:'Cruiser',    price:150000,      reqKills:1500,  weapons:2, ammo:1, hull:1, drones:0, mods:{dmgPct:14},                                    tag:'Twin Cannons',   desc:'Second weapon hardpoint. +14% Damage.' },
+    // CHROMA FANG — LootCoin cruiser with SPECTRUM cannons: every bolt fires as
+    // a vibrant rainbow streak (same tracer tech as the Titan Sina).
+    { key:'chromafang', name:'Chroma Fang', cls:'Cruiser', price:0, reqKills:0, weapons:2, ammo:1, hull:1, drones:0, mods:{dmgPct:14}, tag:'SPECTRUM TECH', purchase:{ lc:500 },
+      desc:'A crystalline pink raider tuned to cruiser performance — its cannons fire pure spectrum: vibrant rainbow lasers streak from every hardpoint.' },
     { key:'heavycruiser',name:'Heavy Cruiser',  cls:'Cruiser',    price:750000,      reqKills:3000,  weapons:2, ammo:2, hull:2, drones:0, mods:{dmgPct:18,hpPct:18},                          tag:'Armored',        desc:'Twin ammo + plating. +18% Damage, +18% HP.' },
     { key:'destroyer',   name:'Destroyer',      cls:'Battleship', price:3000000,     reqKills:5400,  weapons:3, ammo:1, hull:1, drones:0, mods:{dmgPct:34,critChance:10},                     tag:'Glass Cannon',   desc:'Three weapons. Huge damage, light armor.' },
     { key:'battleship',  name:'Battleship',     cls:'Battleship', price:12000000,    reqKills:9000,  weapons:3, ammo:2, hull:2, drones:0, mods:{hpPct:45,dmgPct:18},                          tag:'Bruiser',        desc:'Three weapons, heavy plating. +45% HP, +18% Damage.' },
@@ -369,6 +373,14 @@
     // hardpoints (7 total), increased natural weapon range, top-tier built-in
     // modifiers and superior base stats.
     { key:'mothership',  name:'Mothership',     cls:'Carrier',    price:0, resPrice:{ fuel:500000, iron:200000, plasma:120000 }, reqKills:90000, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:4}, tag:'MOTHERSHIP', desc:'The ultimate faction vessel — 7 weapons, extended weapon range, 12 drone bays and superior base stats. Acquired exclusively with Galaxy Resources.' },
+    // VOIDMAW — the Season 1 Server Dreadnaught event exclusive. Mothership-grade
+    // stats. NEVER purchasable: assembled from 100 Voidmaw Parts earned only in
+    // the event (stage drops, leaderboard ranks, Voidmaw Store).
+    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:4}, tag:'SEASON 1 EXCLUSIVE', event:'sdread', desc:'The Server Dreadnaught itself, refit for your fleet — Mothership-grade performance with a void-light hull. Assembled ONLY from Voidmaw Parts earned in the Season 1: Voidmaw event. When the season ends, so does the chance.' },
+    // CHROMA REGENT — LootCoin mothership at Titan Carrier performance, firing
+    // the same full-spectrum rainbow cannons as the Chroma Fang.
+    { key:'chromaregent', name:'Chroma Regent', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'SPECTRUM MOTHERSHIP', purchase:{ lc:75000 },
+      desc:'The Chroma line\u2019s crown — a rose-quartz mothership tuned to Titan Carrier performance. Every cannon fires streaks of vibrant rainbow light.' },
     // OBLIVION SPEAR T1 — a forbidden new class one tier ABOVE the Mothership,
     // with roughly DOUBLE its combat performance. It can't be bought: you must
     // recover its blueprint (a 1% drop from a Lv300+ Void Citadel explosion in

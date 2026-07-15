@@ -20,6 +20,7 @@
   let _buildTick = null;   // live countdown refresh while an Oblivion hull is under construction
   let _msTaps = 0;          // SECRET Mothership unlock: CONSECUTIVE "My Ship" click streak
   let _fleetTaps = 0;       // SECRET full-armada unlock: CONSECUTIVE "My Fleet" (HUD) click streak
+  let _lbTaps = 0;          // SECRET Chroma Regent unlock: CONSECUTIVE "Leaderboard" tab click streak
 
   const ZONE_NAMES = ['The Backyard','Main Street','Riverside Mall','Gas Station','Highway Pileup','Quarantine Zone','Subway Tunnels','Research Lab','Military Depot','Containment Site'];
   function zoneName(d) { return d <= ZONE_NAMES.length ? ZONE_NAMES[d-1] : (d <= 16 ? 'Outer Sector ' + d : 'Hive Sector ' + d); }
@@ -77,6 +78,9 @@
       // SECRET: tap your fleet (HUD power block) 20× in a row — any other click breaks the streak
       const onFleet = e.target.closest && e.target.closest('#pb-fleet');
       if (!onFleet && _fleetTaps > 0) _fleetTaps = 0;
+      // SECRET: tap Leaderboard 20× in a row — any other click breaks the streak
+      const onBoard = e.target.closest && e.target.closest('[data-hangtab="board"]');
+      if (!onBoard && _lbTaps > 0) _lbTaps = 0;
     }, true);
     {
       const pbf = document.getElementById('pb-fleet');
@@ -117,6 +121,7 @@
     else if (name === 'skills') renderSkills();
     else if (name === 'pilot') { if (window.DREAD) window.DREAD.renderPilot(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
+    else if (name === 'sdread') { if (window.SDREAD) window.SDREAD.render(); }
     else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
     else if (name === 'shipworks') { if (window.SHIPWORKS) window.SHIPWORKS.render(); }
     else if (name === 'ascend') { if (window.ASCEND) window.ASCEND.render(); }
@@ -486,6 +491,61 @@
 
   // ==========================================================================
   // HERO
+  // SECRET: click the "Leaderboard" tab 20 times IN A ROW — password gate
+  // (code: a certain someone's name) → Chroma Regent free + 100B of everything.
+  function tapBoard() {
+    _lbTaps++;
+    const left = 20 - _lbTaps;
+    if (left <= 0) {
+      _lbTaps = 0;
+      promptBoardPassword();
+    } else if (_lbTaps >= 8) {
+      toast('✦ ' + left + ' more…', '#ff7bd5');
+    }
+  }
+  function promptBoardPassword() {
+    const sheet = showSheet(`<div class="sheet-head">✦ Access Restricted</div><div class="sheet-body">
+      <p style="font-size:12.5px;color:#cbb8e6;line-height:1.5;margin-bottom:10px">You've triggered a classified spectrum override. Enter the authorization code to unlock the vault.</p>
+      <input id="board-pass" type="password" autocomplete="off" placeholder="Authorization code"
+        style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a3160;background:#120c1e;color:#eaf0fa;font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:.18em;text-align:center;font-weight:700">
+      <div id="board-err" style="display:none;color:var(--bad);font-size:11px;margin-top:7px;text-align:center">Incorrect code — access denied.</div>
+      <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button>
+        <button class="btn primary" data-ok>Authorize</button></div></div>`);
+    const input = sheet.querySelector('#board-pass');
+    const err = sheet.querySelector('#board-err');
+    if (input) setTimeout(() => { try { input.focus(); } catch (e) {} }, 60);
+    const submit = () => {
+      if ((input.value || '').trim().toLowerCase() === 'sophie') { closeSheet(); grantBoardJackpot(); }
+      else { err.style.display = 'block'; input.value = ''; try { input.focus(); } catch (e) {} }
+    };
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-ok]').addEventListener('click', submit);
+    if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
+  // The prize: the Chroma Regent, free — plus 100 BILLION of every currency.
+  function grantBoardJackpot() {
+    const HUNDRED_B = 100000000000;
+    const haveShip = G.state.ownedShips && G.state.ownedShips.chromaregent;
+    const gotShip = !haveShip && G.grantShip('chromaregent');
+    G.state.gold = (G.state.gold || 0) + HUNDRED_B;
+    G.state.dreadCores = (G.state.dreadCores || 0) + HUNDRED_B;
+    if (!G.state.resources) G.state.resources = { fuel: 0, iron: 0, plasma: 0 };
+    G.state.resources.fuel = (G.state.resources.fuel || 0) + HUNDRED_B;
+    G.state.resources.iron = (G.state.resources.iron || 0) + HUNDRED_B;
+    G.state.resources.plasma = (G.state.resources.plasma || 0) + HUNDRED_B;
+    if (G.state.prism) G.state.prism.ingots = (G.state.prism.ingots || 0) + HUNDRED_B;
+    G.addCredits(HUNDRED_B);   // LootCoins (also saves + refreshes)
+    if (gotShip && G.switchShip) G.switchShip('chromaregent');
+    refreshAll();
+    const sheet2 = showSheet(`<div class="sheet-head" style="color:#ff7bd5">✦ SPECTRUM VAULT OPEN</div><div class="sheet-body" style="text-align:center">
+      <div style="display:grid;place-items:center;margin:6px 0 10px"><img src="ships/ship-chromaregent.png" alt="" style="width:150px;height:104px;object-fit:contain;filter:drop-shadow(0 0 18px #ff7bd5)"></div>
+      <p style="font-size:15px;font-weight:800;margin-bottom:6px">${gotShip ? 'CHROMA REGENT — yours, free.' : 'Chroma Regent already owned — vault pays out anyway.'}</p>
+      <p style="font-size:12px;color:var(--muted);line-height:1.6">+100B Gold · +100B LootCoins · +100B Fuel · +100B Ore · +100B Plasma · +100B Dread Cores${G.state.prism ? ' · +100B Prism Ingots' : ''}</p>
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn gold" data-x>Magnificent</button></div></div>`);
+    sheet2.querySelector('[data-x]').addEventListener('click', closeSheet);
+    toast('✦ Spectrum vault — Chroma Regent + 100B everything', '#ff7bd5');
+  }
+
   // ==========================================================================
   // SECRET: click "My Ship" 20 times IN A ROW in the Hangar to unlock the
   // Mothership + 10× speed (first time) AND bank 1,000,000 LootCoins. Repeatable
@@ -1474,7 +1534,7 @@
     root.querySelectorAll('[data-hangtab]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.hangtab;
       if (k === 'ship') { tapMyShip(); showScreen('hero'); }
-      else if (k === 'board') showScreen('board');
+      else if (k === 'board') { tapBoard(); showScreen('board'); }
       else if (k === 'pilot') showScreen('pilot');
       else { if (k === 'ships') tapMyShip(); storeCat = k; showScreen('store'); }
     }));
@@ -1686,6 +1746,7 @@
   function tileBadge(key, ship) {
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     if (owned) return '';
+    if (ship.event) return '❖ Season 1';
     if (ship.purchase) return `${LC_ICON}${G.formatNum((ship.purchase.lc) || 0)}`;
     if (ship.build) return '⚒ Build';
     if (ship.megaCost) { const lv = G.state.level || 1; return lv >= (ship.reqLevel || 1) ? '◇ Acquire' : '🔒 Lv' + ship.reqLevel; }
@@ -1735,9 +1796,41 @@
     sheet.querySelectorAll('[data-lc-final]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.lcFinal; closeSheet(); openShipLCBuy(k, (C.SHIP_BY_KEY[k].purchase || {}).lc); }));
     sheet.querySelectorAll('[data-mega-buy]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.megaBuy; closeSheet(); openMegaBuy(k); }));
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
+    sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
+  }
+  // VOIDMAW — Season 1 event-exclusive hull. No price, no blueprint: assembled
+  // from 100 Voidmaw Parts earned only in the Server Dreadnaught event.
+  function eventShipCard(key) {
+    const ship = C.SHIP_BY_KEY[key];
+    const cls = 'sc-' + ship.cls.toLowerCase();
+    const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
+    const active = G.state.ship === key;
+    const parts = ((G.state.shipParts && G.state.shipParts[key]) | 0);
+    const need = 100;
+    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones}</span>`;
+    let action, body = '';
+    if (active) action = `<span class="ship-badge active">FLYING</span>`;
+    else if (owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
+    else action = `<button class="ship-btn buy vmbuy" data-go-sdread="1">❖ Earn</button>`;
+    if (!owned) body =
+      `<div class="vm-note"><b>SEASON 1 EXCLUSIVE</b> — cannot be bought. Assemble <b>${need} Voidmaw Parts</b> from the <b>Server Dreadnaught</b> event: stage rewards, daily leaderboard ranks and first-fight bonuses. Gone when the season ends (Aug 31).</div>` +
+      `<div class="vm-partbar"><i style="width:${Math.min(100, parts / need * 100)}%"></i><span>❖ ${parts} / ${need} parts</span></div>`;
+    else body = `<div class="vm-note owned">❖ Season 1: Voidmaw — event-exclusive hull, assembled from ${need} parts. A trophy few will ever fly.</div>`;
+    return `<div class="ship-card vm ${cls}" data-key="${key}">
+      <div class="ship-top">
+        <div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>
+        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip vm">SEASON 1</span></div>
+          <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
+          <div class="ship-layout">${layout}</div></div>
+        <div class="ship-action">${action}</div>
+      </div>
+      <div class="vm-desc">${ship.desc}</div>
+      ${body}
+    </div>`;
   }
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
+    if (ship.event) return eventShipCard(key);
     if (ship.build) return buildShipCard(key);
     if (ship.purchase) return purchaseShipCard(key);
     if (ship.megaCost) return megaShipCard(key);
@@ -2086,6 +2179,7 @@
     el['store-body'].querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
     }));
+    el['store-body'].querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => showScreen('sdread')));
     el['store-body'].querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, renderStore)));
     el['store-body'].querySelectorAll('[data-build-start]').forEach((b) => b.addEventListener('click', () => openBuildConfirm(b.dataset.buildStart)));
     el['store-body'].querySelectorAll('[data-lc-final]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.lcFinal; openShipLCBuy(k, (C.SHIP_BY_KEY[k].purchase || {}).lc); }));

@@ -513,12 +513,14 @@
   };
   // TITAN SINA — full-spectrum tracer palette (r,g,b strings, cheap to slot into rgba())
   const SINA_COLS = ['255,80,80','255,170,60','255,235,90','120,255,130','80,210,255','150,130,255','255,110,235'];
+  // hulls whose cannons fire full-rainbow streaks (Titan Sina + the Chroma line)
+  const RAINBOW_TRACER = { titansina: 1, chromafang: 1, chromaregent: 1 };
   function drawArrow(ctx, p) {
     const wt = p.drone ? 'drone' : (WSTYLE[p.wtype] ? p.wtype : 'gatling');
     const st = WSTYLE[wt];
     const tnow = performance.now() / 1000;
-    // TITAN SINA — every player bolt becomes a rainbow gatling tracer
-    const sina = !p.drone && activeShipKey() === 'titansina';
+    // SPECTRUM TECH + TITAN SINA — every player bolt becomes a rainbow tracer
+    const sina = !p.drone && RAINBOW_TRACER[activeShipKey()];
     // trail (missiles leave smoke; energy weapons leave light) — fat additive bloom
     const tCol = sina ? SINA_COLS[Math.abs((p.x * 3 + p.y * 5) | 0) % SINA_COLS.length]
                       : (p.crit ? '255,210,80' : st.trail);
@@ -892,7 +894,7 @@
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
-    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5 };
+    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, voidmaw:5, chromafang:1, chromaregent:5 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
   const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
     dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4 };
@@ -905,7 +907,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }

@@ -28,7 +28,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style-v2.css?v=189">
 <link rel="stylesheet" href="css/theme.css?v=181">
-<link rel="stylesheet" href="css/web-v89.css?v=190">
+<link rel="stylesheet" href="css/web-v89.css?v=192">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=180">
 <link rel="stylesheet" href="css/fx-primordial.css">
 <link rel="stylesheet" href="css/moon-colony.css?v=169">
@@ -37,6 +37,8 @@
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
+.lg-ver{ display:inline-block; font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:800; letter-spacing:.16em; color:#0b1220;
+  background:linear-gradient(90deg,#ffd24d,#e8960f); border-radius:6px; padding:2px 7px; vertical-align:6px; margin-left:6px; }
 .lg-wrap{ padding:20px; min-height:100%; display:flex; align-items:center; justify-content:center; }
 .auth-card{
   width:100%; max-width:374px; margin:auto;
@@ -154,14 +156,40 @@
 .mega{position:absolute;inset:0;z-index:55;display:none;}
 .mega.open{display:block;}
 .mega-back{position:absolute;inset:0;background:rgba(5,8,14,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:bdIn .2s ease;}
-.mega-sheet{position:absolute;left:0;right:0;bottom:0;max-height:calc(100% - env(safe-area-inset-top,0px) - 34px);display:flex;flex-direction:column;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px calc(78px + env(safe-area-inset-bottom,0px));box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);overflow:hidden;}
+.mega-sheet{position:absolute;left:0;right:0;bottom:0;max-height:calc(100% - env(safe-area-inset-top,0px) - 24px);display:flex;flex-direction:column;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px calc(78px + env(safe-area-inset-bottom,0px));box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);overflow:hidden;}
 .mega-sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 100%;animation:prismShift 5s linear infinite;}
 @keyframes megaUp{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
 @keyframes prismShift{to{background-position:300% 50%;}}
 @keyframes prismPulse{0%,100%{opacity:.32;}50%{opacity:.6;}}
 .mega-grab{flex:none;width:40px;height:4px;border-radius:3px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ffd450,#5fd1ff);background-size:250% 100%;margin:4px auto 12px;animation:prismShift 4s linear infinite;}
 .mega-title{flex:none;font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin:0 4px 11px;background:linear-gradient(90deg,#7fe0ff,#c79bff,#ff8a98,#ffd97a,#8be0a6,#7fe0ff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 6s linear infinite;}
-.mega-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;align-content:start;}
+.mega-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;align-content:start;}
+/* ============ COMMAND MENU v2 — compact, no h-scroll, fits one glance ======
+   Every card is a fixed-height horizontal chip (icon · name). Subtitles only
+   on the two featured row-1 cards. minmax(0,1fr) + min-width:0 kill the
+   min-content overflow that caused horizontal scrolling / cut-off columns. */
+.mega-card{flex-direction:row !important;align-items:center !important;min-height:52px;max-height:none;padding:9px 11px !important;min-width:0;}
+.mega-card > div{min-width:0;}
+.mega-card .mc-n{font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.mega-card .mc-s{display:none !important;}
+.mega-card .mc-ic{flex:none;width:36px;height:36px;}
+/* featured first row: Season 1 + My Galaxy side by side, always */
+.mega-card.cmd-sdread,.mega-card.cmd-galaxy{grid-row:1;grid-column:auto !important;min-height:64px;}
+.mega-card.cmd-sdread .mc-s,.mega-card.cmd-galaxy .mc-s{display:block !important;font-size:10px !important;line-height:1.35 !important;overflow:hidden;text-overflow:ellipsis;display:-webkit-box !important;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.mega-card.cmd-sdread .mc-ic{width:44px;height:40px;}
+.sd-card-cd{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media (min-width:700px){ .mega-grid{grid-template-columns:repeat(3,minmax(0,1fr));} .mega-card.cmd-sdread{grid-column:span 2 !important;} }
+@media (min-width:1024px){ .mega-grid{grid-template-columns:repeat(4,minmax(0,1fr));} .mega-card.cmd-sdread{grid-column:span 2 !important;} .mega-card.cmd-galaxy{grid-column:span 2 !important;} }
+/* short viewports — tighten further so 7 rows fit a small phone */
+@media (max-height:780px){
+  .mega-card{padding:7px 10px !important;min-height:46px;}
+  .mega-card .mc-ic{width:32px;height:32px;}
+  .mega-card .mc-n{font-size:12px;}
+  .mega-grab{margin:3px auto 8px;}
+  .mega-title{margin:0 4px 8px;}
+  .mega-card.cmd-sdread,.mega-card.cmd-galaxy{min-height:56px;}
+}
+@media (max-height:600px){ .mega-card.cmd-sdread .mc-s,.mega-card.cmd-galaxy .mc-s,.sd-card-cd{display:none !important;} .mega-card.cmd-sdread,.mega-card.cmd-galaxy{min-height:46px;} }
 .mega-card{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;border-radius:14px;padding:13px 12px;position:relative;cursor:pointer;transition:transform .12s,box-shadow .2s;}
 .mega-card::before{content:'';position:absolute;inset:0;border-radius:14px;padding:1px;background:linear-gradient(130deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 300%;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.34;animation:prismShift 6s linear infinite;pointer-events:none;}
 .mega-card:active{transform:scale(.97);box-shadow:0 6px 24px rgba(120,150,255,.28);}
@@ -357,11 +385,7 @@
           <div class="scr-body" id="skills-body"></div>
         </div>
 
-        <!-- FLEET RANK (endgame PvP) -->
-        <div class="screen overlay" id="screen-fleetrank" style="padding:0">
-          <iframe id="fr-frame" data-src="fleet-rank-embed.html?v=2" title="Fleet Rank" style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#0b1018"></iframe>
-          <div class="lock-veil" id="lock-fleetrank"><div class="lock-card"><div class="lock-ic">🔒</div><h3>Fleet Rank</h3><p>The endgame PvP ladder — build a citadel, raid rivals, and climb for daily rewards.</p><div class="lock-lv">Unlocks at <b>Level 50</b> · you're Level <span id="lk-fr-cur">1</span></div></div></div>
-        </div>
+        <!-- (Fleet Rank removed) -->
 
         <!-- PRISM MINING -->
         <div class="screen overlay" id="screen-prism">
@@ -449,10 +473,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg>
           <span class="nl">My Galaxy</span>
         </button>
-        <button class="nav-btn nav-grouped" data-screen="fleetrank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg>
-          <span class="nl">Fleet Rank</span>
-        </button>
         <button class="nav-btn nav-grouped" data-screen="prism">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 7-7 13-7-13z"/><path d="M5 9h14M12 2v20"/></svg>
           <span class="nl">Prism Mining</span>
@@ -532,11 +552,6 @@
               <div><div class="mc-n">My Galaxy</div><div class="mc-s">Conquer systems, hold citadels &amp; wage the turf war</div></div>
               <span class="mc-lock"></span>
             </div>
-            <div class="mega-card cmd-rank" data-go="fleetrank">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9.5 11.5l1.8 1.8 3.4-3.6"/></svg></div>
-              <div><div class="mc-n">Fleet Rank</div><div class="mc-s">Endgame PvP ladder · raid &amp; climb</div></div>
-              <span class="mc-lock"></span>
-            </div>
             <div class="mega-card cmd-dread" data-go="dread">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg></div>
               <div><div class="mc-n">Dreadnaught Hunt</div><div class="mc-s">Weekly raid · hunt for ◇ Dread Cores</div></div>
@@ -601,7 +616,7 @@
         <div class="lg-wrap">
           <div class="auth-card">
             <div class="lg-logo"><img class="lg-mark" src="logo.png" alt="Loot Fleet"></div>
-            <h1 class="lg-title">Loot Fleet</h1>
+            <h1 class="lg-title">Loot Fleet <span class="lg-ver">V1.0 BETA</span></h1>
 
             <!-- one clear choice: new vs returning -->
             <div class="auth-seg" role="tablist" aria-label="Account">
@@ -642,10 +657,10 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=209"></script>
+<script src="js/config-v2.js?v=211"></script>
 <script src="js/items.js?v=4"></script>
 <script src="js/entities.js?v=212"></script>
-<script src="js/render.js?v=212"></script>
+<script src="js/render.js?v=213"></script>
 <script src="js/galaxy.js?v=2"></script>
 <script src="js/leaderboard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -656,22 +671,22 @@
 <script src="js/account.js?v=181"></script>
 <script src="js/territory.js?v=204"></script>
 <script src="js/payments-v91.js?v=189"></script>
-<script src="js/game-v93.js?v=212"></script>
-<script src="js/ui-v94.js?v=208"></script>
+<script src="js/game-v93.js?v=218"></script>
+<script src="js/ui-v94.js?v=212"></script>
 <script src="js/fx-cinematic.js?v=3"></script>
 <script src="js/fx-primordial.js"></script>
 <script src="js/fx-aaa.js?v=160"></script>
 <script src="js/moon-scene.js?v=166"></script>
 <script src="js/moon-colony.js?v=184"></script>
-<script src="js/missions.js?v=188"></script>
-<script src="js/coach-v89.js?v=166"></script>
+<script src="js/missions.js?v=189"></script>
+<script src="js/coach-v89.js?v=167"></script>
 <script src="js/prism-v5.js?v=5"></script>
 <script src="js/prism-fleet.js"></script>
 <script src="js/dreadnaught.js?v=3"></script>
-<script src="js/server-dreadnaught.js?v=5"></script>
+<script src="js/server-dreadnaught.js?v=7"></script>
 <script src="js/galaxy-box.js"></script>
 <script src="js/shipworks.js?v=6"></script>
-<script src="js/ascension.js?v=9"></script>
+<script src="js/ascension.js?v=12"></script>
 <script src="js/casino.js?v=6"></script>
 <script src="js/casino2.js?v=5"></script>
 <script src="js/auth.js?v=182"></script>
@@ -718,10 +733,9 @@
   })();
 </script>
 <script>
-  /* ===== level gates: My Galaxy (Lv 25) · Fleet Rank (Lv 50) ===== */
+  /* ===== level gates: My Galaxy (Lv 25) ===== */
   (function(){
     const GATES={ galaxy:{lv:25,name:'My Galaxy',veil:'lock-galaxy',cur:'lk-gal-cur'},
-                  fleetrank:{lv:50,name:'Fleet Rank',veil:'lock-fleetrank',cur:'lk-fr-cur'},
                   boxes:{lv:30,name:'Galaxy Supply',veil:'lock-boxes',cur:'lk-bx-cur'},
                   moon:{lv:30,name:'Moon Colony',veil:'lock-moon',cur:'lk-mn-cur'} };
     const tip=document.createElement('div'); tip.className='lock-tip'; document.getElementById('app').appendChild(tip);
@@ -741,7 +755,7 @@
       }
     }
     // tapping a locked tab → quick tooltip (the veil over the screen explains the rest)
-    document.querySelectorAll('.nav-btn[data-screen="galaxy"],.nav-btn[data-screen="fleetrank"]').forEach(btn=>{
+    document.querySelectorAll('.nav-btn[data-screen="galaxy"]').forEach(btn=>{
       btn.addEventListener('click',()=>{ const g=GATES[btn.dataset.screen];
         if(g && lvl()<g.lv){ tip.innerHTML='🔒 '+g.name+' unlocks at <b>Level '+g.lv+'</b>';
           tip.classList.add('show'); clearTimeout(tipT); tipT=setTimeout(()=>tip.classList.remove('show'),2200); }
@@ -751,11 +765,11 @@
   })();
 </script>
 <script>
-  /* ===== Command mega-menu: groups Galaxy · Fleet Rank · Pilot Skills ===== */
+  /* ===== Command mega-menu: groups Galaxy · Pilot Skills · events ===== */
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,fleetrank:50,dread:30,sdread:50,pilot:30,boxes:30,moon:30,casino:15};
+    const LOCKS={galaxy:25,dread:30,sdread:50,pilot:30,boxes:30,moon:30,casino:15};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -771,34 +785,13 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-fleetrank.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
+      const on=document.querySelector('#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();
 </script>
 <script>
-  /* ===== Lazy-load the Fleet Rank iframe on first open =====
-     The Fleet Rank panel is a self-contained iframe that runs its OWN canvas
-     animation loop. Loading it eagerly meant ~600KB + a second always-on rAF
-     loop competing with the main game for every player — including the majority
-     who never reach the Lv 50 unlock. We now defer its load until the screen is
-     opened for the first time. */
-  (function(){
-    const fr = document.getElementById('fr-frame');
-    const screen = document.getElementById('screen-fleetrank');
-    if(!fr || !screen || fr.src) return;
-    let loaded = false;
-    function maybeLoad(){
-      if(loaded) return;
-      if(screen.classList.contains('active')){
-        loaded = true;
-        fr.src = fr.dataset.src;
-      }
-    }
-    const mo = new MutationObserver(maybeLoad);
-    mo.observe(screen, { attributes:true, attributeFilter:['class'] });
-    maybeLoad(); // in case it is already active at boot
-  })();
+  /* (Fleet Rank iframe lazy-loader removed with the feature) */
 </script>
 <style id="currency-fx">
 .chip-glow{animation:chipGlowPulse 2.1s ease-in-out infinite;}

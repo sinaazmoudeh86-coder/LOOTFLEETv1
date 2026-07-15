@@ -1,4 +1,4 @@
-# Loot Fleet — Deploy v166 FINAL (Season 1: Voidmaw + PvP defense + balance)
+# LOOT FLEET V1.0 BETA — Deploy v166 (Season 1: Voidmaw + PvP defense + balance)
 
 Static front-end redeploy + **up to THREE one-time SQL migrations** (run the
 ones you haven't yet — all are safe to re-run). No Stripe / auth / pricing

@@ -1,87 +1,86 @@
-# Loot Fleet — Deploy v166 (Season 1: Voidmaw + Chroma/Frost hulls)
+# Loot Fleet — Deploy v166 FINAL (Season 1: Voidmaw + PvP defense + balance)
 
-**Static front-end redeploy only — no new database migration in this final cut
-IF you already ran `supabase/server-dreadnaught.sql`.** (It shipped mid-cycle;
-verified live and working — the event boards are already ranking real players.)
-No Stripe / auth / pricing changes. Existing saves and tables untouched.
-
----
-
-## What's in this release
-
-**Season 1: Voidmaw — Server Dreadnaught world-boss event** (Command ▸ Lv 50)
-- Global seasonal boss, real fights in the zone-grind engine: manual flight
-  only (auto-pilot disabled), 1× speed forced, 3× weapon range.
-- **Stages are per-run** — every attempt starts at Stage 1; season damage still
-  accumulates. Red blinking void-collapse zones → 5s black holes burning
-  **75% hull/second** inside.
-- 2 attempts/day (+1 Pro), extra attempts ◈100 tripling per buy, daily reset.
-- Grand prize: assemble the **Voidmaw** (Mothership-grade) from 100 parts —
-  first-fight-of-day bonus, stage drops (2.5–9%, stage 5+), Event Store.
-- **✦ Event Coins economy**: daily ranks pay 2,500/1,500/1,000/500 ✦ (+25/15/10/5 ◈);
-  season finals 25,000/10,000/5,000/2,500 ✦ (+250/100/50/25 ◈). Claim-based
-  🎁 collect flow.
-- **✦ Event Store** in-event: Voidmaw Shard 1,000✦, Titan Sina 2,500✦,
-  Dread-class 2,000✦, Oblivion Final/Alpha/Spear 1,800/1,400/1,200✦,
-  Mothership 800✦, Titan Carrier 600✦ — all land as real ship parts.
-- **LIVE cross-account leaderboards** (daily best-run + season total), 5s
-  auto-refresh while open, mid-run scores publish every 15s.
-- Intro popup on first event entry, coaching for sub-50 players.
-
-**New hulls**
-- **Voidmaw** — Season-1-exclusive event hull (Ships tab card + parts bar).
-- **Chroma Fang** ◈500 (cruiser-grade) + **Chroma Regent** ◈75,000 (Titan
-  Carrier-grade) — rainbow spectrum tracers.
-- **FrostyFrost** ◈50,000 (Titan Carrier-grade) — chills targets (slow),
-  12% flash-freeze into an ice cube; bosses immune.
-- **Marketplace "LootCoin Fleet"**: hero banners for all 4 LC-direct hulls
-  (500 / 50,000 / 75,000 / 1,000,000 — full comma formatting, no level gates;
-  Oblivion Final's Lv-200 gate removed).
-
-**Misc**: Leaderboard-tab easter egg (20 taps → password `sophie` → Chroma
-Regent + 100B currencies). SW cache `lootfleet-v195` with new sprites precached.
+Static front-end redeploy + **up to THREE one-time SQL migrations** (run the
+ones you haven't yet — all are safe to re-run). No Stripe / auth / pricing
+changes. SW cache `lootfleet-v205`.
 
 ---
 
-## 1. Database — one migration, run ONCE (skip if already done)
+## 1. Database migrations (Supabase → SQL Editor → run each ONCE)
 
-If you haven't yet: Supabase Dashboard → **SQL Editor → New query** → paste
-**`supabase/server-dreadnaught.sql`** → **Run**. Safe to re-run; it's
-idempotent.
+| File | What | Skip if… |
+|---|---|---|
+| `supabase/server-dreadnaught.sql` | Event leaderboards table + RPC | already ran it (event boards show 🌐 LIVE) |
+| `supabase/server-dreadnaught-bignum.sql` | **REQUIRED FIX** — converts scores to `numeric`; endgame damage (>9.2e18) was rejected by bigint, so big players never appeared/updated on the event boards | never — run it |
+| `supabase/territory-defense.sql` | Adds `defense` jsonb + extended `claim_tile` — publishes each owner's fleet snapshot for the My Galaxy clone-defense feature | fine to defer: clients fall back to fleet_score-only defenders |
 
-Already ran it mid-cycle? **Nothing to do** — the deployed SQL is unchanged
-since, and the live table already has real player rows.
+## 2. Redeploy the site
 
-How to tell: in the event, Leaderboards should show
-"🌐 LIVE — real server standings". If it says "Syncing…" forever for a
-signed-in player, the migration is missing.
+Push `deploy-v166/` contents to GitHub → Vercel. Players pick it up on next
+load (SW v201).
 
-## 2. Redeploy the site (GitHub push → Vercel)
+## 3. What changed since the last push (full list)
 
-Copy the contents of `deploy-v166/` over the repo → push. That's it —
-`sw.js` is bumped (v195) so players pick the build up on next load without
-clearing anything.
+**Season 1: Voidmaw event**
+- Real-DB leaderboards: bignum publish fix, guest messaging ("read-only — sign
+  in to publish" + once-a-day toast after guest runs), "you're the only
+  operator published" note, sim-rival fallback while connecting, hung-fetch
+  auto-recovery, 5s live auto-refresh, mid-run publishing every 15s.
+- Per-run stages (every attempt starts at Stage 1; best stage tracked),
+  black holes burn 75% hull/s, manual flight only, ✦ Event Coin economy
+  (daily 2,500/1,500/1,000/500 + ◈25/15/10/5; season 25,000/10,000/5,000/2,500
+  + ◈250/100/50/25), Event Store (Voidmaw Shard 1,000✦ · Titan Sina 2,500✦ ·
+  Dread/Oblivion/Mothership/Titan shards), claim-based prize collection,
+  game speed restored after runs (fixes "everything slow after event").
 
-Changed vs v165: `game.html`, `sw.js`, `js/server-dreadnaught.js` (new),
-`js/ui-v94.js`, `js/game-v93.js`, `js/config-v2.js`, `js/render.js`,
-`js/entities.js`, `js/cloud.js`, `css/web-v89.css`,
-`ships/ship-voidmaw.png` + `ship-chromafang.png` + `ship-chromaregent.png` +
-`ship-frostyfrost.png` (new), `supabase/server-dreadnaught.sql` (new).
+**My Galaxy — clone fleet defense (new)**
+- Claims publish your fleet snapshot; rival tiles show a "⛨ DEFENDING FLEET"
+  panel (their hull art + stats) BEFORE you attack.
+- Taking a rival zone = escort waves → their CLONE flagship (their sprite,
+  their name/score) → and if they built a citadel, "NAME'S CITADEL" phase 2.
+  Neutral tiles unchanged.
 
-## 3. Smoke-test (2 minutes)
+**Dreadnaught Hunt**
+- Hard weekly limit: the attempt is consumed ON LAUNCH (win or lose), killing
+  the bail-and-refarm loophole. Gold respawns still buy attempts back.
 
-1. Hard-refresh → Command shows the **Season 1: Voidmaw** card + countdown.
-2. Fight: deploys to the arena at 1×, auto-pilot hidden, red zones → black
-   holes; every run starts at Stage 1.
-3. Leaderboards: "🌐 LIVE" tag; a second signed-in account's run appears
-   within ~5s while the sheet is open.
-4. Event Store opens with ✦ balance; daily claim pays ✦ + ◈.
-5. Market: 4 hero banners with comma prices; FrostyFrost freezes zone enemies
-   (never bosses); Chroma hulls fire rainbow tracers.
+**Ships & market**
+- FrostyFrost ◈50,000 (Titan-grade cryo: chills, 12% ice-cube freeze, bosses
+  immune) with ❄ banner; Titan Sina ◈1,000,000 FLAT (no level gate) with
+  ✦ FINAL CLASS banner; Oblivion Final ◈300,000 (was 1M, level gate removed);
+  Mothership fast-track ◈100,000; Dread-class LootCoin components rescaled
+  350K–900K (were 1.5M–15M). Market shows all 5 LC banners with comma prices.
 
-## 4. Season rollover (Aug 31 UTC)
+**Balance & feel (latest patch)**
+- Zone-grind rebalance: mob HP baseline +27%, zones 1–25 band ~doubled, 32+
+  climbs to 2.5× by ~zone 91; damage nudged up with a mild deep-zone climb.
+- **Endgame DPS floor**: trash mobs floor at ~0.55s of the pilot's own DPS
+  (× type HP mod) — 800B-score fleets no longer one-shot whole screens.
+  Bosses ×8/×16 on top (≈4.5–9s fights); citadels clamped to ~45s of DPS.
+  Kill XP/gold unchanged, so farm rate cools naturally.
+- High-speed smoothness: adaptive sim stepping (≤35ms sub-steps), projectile
+  trails sub-sampled (no more dotted tracers), FrostyFrost cryo visuals calmed
+  + 5s refreeze immunity (the "ghost ships flickering" at 3×+).
 
-`SEASON` constant in `js/server-dreadnaught.js` (num, boss, label, end).
-After end: event locks, finals stage as claims, claims stay collectible.
-For Season 2 just update the constant and redeploy — `sdread_scores` keys by
-season automatically.
+**QoL / fixes**
+- WASD + arrow-key flight on desktop (takes over from auto-pilot, releases on
+  blur, never fires while typing).
+- Adaptive sim stepping: 4×/5×/10× speed no longer runs 4/5/10 full sim passes
+  per frame — smooth movement at high speed, same wall-clock speed.
+- Flicker fixes: leaderboard 4s refresh diffs before repainting; missions
+  countdown ticks in place; moon-colony upgrades keep the live diorama canvas.
+- Prism mining: orphaned-run guard (frozen PRISM pill / invisible mining after
+  zone changes) + event no longer leaves the game stuck at 1×.
+- First-login name gate: brand-new accounts pick their commander name as their
+  first action (once ever; veterans skipped).
+
+## 4. Smoke-test (90s)
+
+1. Event ▸ Leaderboards: 🌐 LIVE; a signed-in friend's run appears in ~5s
+   (after the bignum migration).
+2. My Galaxy ▸ tap a rival tile: ⛨ DEFENDING FLEET panel; attack → clone
+   flagship uses their hull art.
+3. Dread Hunt: deploy a tier, bail — it's locked for the week.
+4. Market: 5 banners (500 / 50K / 75K / 300K / 1M), comma-formatted.
+5. Desktop: WASD flies the ship; 5× speed feels smooth (continuous tracers,
+   no ghost strobing); zone mobs take several volleys even with an endgame fleet.

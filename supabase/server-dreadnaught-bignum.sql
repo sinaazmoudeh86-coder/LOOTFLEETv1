@@ -1,36 +1,17 @@
 -- =============================================================================
---  Loot Fleet — SERVER DREADNAUGHT (Season leaderboards, real cross-account)
---  Run in Supabase: Dashboard → SQL Editor → New query → Run. Safe to re-run.
+--  Loot Fleet — SERVER DREADNAUGHT: BIG-NUMBER FIX (run once, safe to re-run)
+--  Supabase → SQL Editor → New query → paste → Run.
 --
---  One row per operator per season. The client publishes after every event run
---  via sdread_upsert (identity is always auth.uid()); the two boards read:
---    DAILY  — where season+day match, ranked by best_day (best single run)
---    SEASON — where season matches,   ranked by total (cumulative damage)
---  Same self-reported trust model as `leaderboard`/`saves`.
+--  Endgame damage exceeds bigint (max ≈9.2e18) — players past ~9 quintillion
+--  damage failed to publish with "invalid input syntax for type bigint", so
+--  their rows never appeared / stopped updating on the event leaderboards.
+--  numeric has no such ceiling.
 -- =============================================================================
 
-create table if not exists public.sdread_scores (
-  user_id    uuid primary key references auth.users(id) on delete cascade,
-  name       text   not null default 'Operator',
-  season     int    not null default 1,
-  day        int    not null default 0,          -- UTC day index of best_day
-  best_day   numeric not null default 0,         -- best single run that day
-  total      numeric not null default 0,         -- season cumulative damage
-  stage      int    not null default 1,
-  updated_at timestamptz not null default now()
-);
-create index if not exists sdread_daily_idx  on public.sdread_scores (season, day, best_day desc);
-create index if not exists sdread_season_idx on public.sdread_scores (season, total desc);
+alter table public.sdread_scores
+  alter column best_day type numeric using best_day::numeric,
+  alter column total    type numeric using total::numeric;
 
-alter table public.sdread_scores enable row level security;
-
--- Everyone can READ the boards …
-drop policy if exists "sdread_read" on public.sdread_scores;
-create policy "sdread_read" on public.sdread_scores for select using (true);
-
--- … writes only via the function below (owner is always auth.uid()).
--- Server-side guards: best_day resets when the day changes, otherwise only
--- climbs; total and stage only climb (a stale client can never wipe progress).
 drop function if exists public.sdread_upsert(text, int, int, bigint, bigint, int);
 drop function if exists public.sdread_upsert(text, int, int, numeric, numeric, int);
 create or replace function public.sdread_upsert(

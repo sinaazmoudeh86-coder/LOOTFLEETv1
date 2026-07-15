@@ -427,8 +427,8 @@
     const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Unlock ${sh.name}</div><div class="sheet-body">
       <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">${sh.desc}</p>
       <div class="ip-stat"><span class="ip-sname">Fast-track</span><span class="v">No blueprint · no kill requirement · yours instantly</span></div>
-      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(price)} LootCoins</span></div>
-      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${price.toLocaleString()} LootCoins</span></div>
+      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${Math.floor(have).toLocaleString()}</span></div>
       ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
       <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
         <button class="btn gold" data-ok>${afford ? 'Unlock ' + sh.name : 'Get LootCoins'}</button></div></div>`);
@@ -1711,7 +1711,7 @@
     if (active) action = `<span class="ship-badge active">● ACTIVE</span>`;
     else if (owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
     else if (lvl < reqL) { action = `<span class="ship-badge locked">🔒</span>`; body = `<div class="ship-lock"><span class="lk-ic">🔒</span><span>Reach <b>account Level ${reqL}</b> to purchase — you're Level <b>${lvl}</b></span></div>`; }
-    else { action = `<button class="ship-btn buy lcbuy" data-lc-final="${key}">${LC_ICON} ${G.formatNum(price)}</button>`; body = `<div class="ship-lock ready"><span class="lk-ic">◈</span><span>Available now · <b>${G.formatNum(price)} LootCoins</b></span></div>`; }
+    else { action = `<button class="ship-btn buy lcbuy" data-lc-final="${key}">${LC_ICON} ${price.toLocaleString()}</button>`; body = `<div class="ship-lock ready"><span class="lk-ic">◈</span><span>Available now · <b>${price.toLocaleString()} LootCoins</b></span></div>`; }
     let upg = '';
     if (owned && G.shipUpInfo) {
       const u = G.shipUpInfo(key); const tcol = (window.shipLvlColor ? window.shipLvlColor(u.level) : '#9aa7b8');
@@ -1747,7 +1747,7 @@
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     if (owned) return '';
     if (ship.event) return '❖ Season 1';
-    if (ship.purchase) return `${LC_ICON}${G.formatNum((ship.purchase.lc) || 0)}`;
+    if (ship.purchase) return `${LC_ICON}${(ship.purchase.lc || 0).toLocaleString()}`;
     if (ship.build) return '⚒ Build';
     if (ship.megaCost) { const lv = G.state.level || 1; return lv >= (ship.reqLevel || 1) ? '◇ Acquire' : '🔒 Lv' + ship.reqLevel; }
     const st = G.shipBuyState ? G.shipBuyState(key) : {};
@@ -1942,7 +1942,7 @@
             <div class="ho-main">
               <div class="ho-name">${sh.name}</div>
               <div class="ho-desc">${offer.key === 'carrier' ? 'Skip the grind — instant drone-bay command.' : 'The ultimate hull. Skip the entire chain.'}</div>
-              <button class="ho-buy">${LC_ICON}${(G.formatNumRaw || G.formatNum)(offer.lc)} · Unlock now</button>
+              <button class="ho-buy">${LC_ICON}${offer.lc.toLocaleString()} · Unlock now</button>
             </div>
             <img class="ho-ship" src="ships/ship-${offer.key}.png" alt="">
           </div>`;
@@ -1954,6 +1954,33 @@
     }
 
     if (storeCat === 'market') {
+      // —— LOOTCOIN FLEET — hero banners for the 3 direct-purchase hulls ——
+      {
+        const LC_FLEET = [
+          { key: 'chromafang',   lc: 500,     tag: '✼ SPECTRUM', desc: 'Cruiser-grade raider — fires vibrant rainbow lasers.' },
+          { key: 'frostyfrost',  lc: 50000,   tag: '❄ CRYO',     desc: 'Titan Carrier power — chills targets and flash-freezes them into ice cubes. Bosses are immune.' },
+          { key: 'chromaregent', lc: 75000,   tag: '✼ SPECTRUM', desc: 'Titan Carrier power — every cannon streaks the full spectrum.' },
+          { key: 'oblivionfinal', lc: 1000000, tag: '★ APEX',    desc: 'The final hull. 2.5× the Oblivion Spear in every dimension.' },
+        ];
+        html += `<div class="store-sec">${storeHead(STORE_ICONS.ship, 'LootCoin Fleet', 'Direct purchase · no blueprint')}`;
+        html += `<div class="sec-blurb">Bought outright with ${LC_ICON} LootCoins — no blueprint, no kill chain, no level gate. Yours instantly.</div>`;
+        LC_FLEET.forEach((offer) => {
+          const sh = C.SHIP_BY_KEY[offer.key]; if (!sh) return;
+          const owned = !!(G.state.ownedShips && G.state.ownedShips[offer.key]);
+          const btn = owned ? '<span class="ho-buy owned">✓ OWNED</span>'
+            : `<button class="ho-buy">${LC_ICON}${offer.lc.toLocaleString()} · Unlock now</button>`;
+          html += `<div class="hero-offer lcf ${owned ? 'lcf-flat' : ''}" ${owned ? '' : `data-lcship="${offer.key}" data-lcprice="${offer.lc}"`}>
+            <div class="ho-tag">${offer.tag}</div>
+            <div class="ho-main">
+              <div class="ho-name">${sh.name}</div>
+              <div class="ho-desc">${offer.desc}</div>
+              ${btn}
+            </div>
+            <img class="ho-ship" src="ships/ship-${offer.key}.png" alt="">
+          </div>`;
+        });
+        html += '</div>';
+      }
       // —— PRIMORDIAL VAULT + COSMIC CACHE (LootCoins) ——
       const lm = G.getLCMarket(), lcHave = G.getCredits();
       const C2 = G.LC_PRICES || { cosmic: 10000, prim: 115000 };

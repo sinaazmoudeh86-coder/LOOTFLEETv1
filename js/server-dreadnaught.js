@@ -158,9 +158,9 @@
       st.gold += bg; out.push({ t: '$' + fmt(bg) + ' Bonus Gold', c: '#e6b566' });
     }
     // VOIDMAW PART — the season's grand-prize hull, dripped from stage 5 up.
-    // TUNED for ~a month of consistent play: ≈0.05–0.18 per stage cleared, plus
-    // 2+/day from leaderboard tiers, 1/day first-fight bonus, and the store.
-    if (!vmOwned() && stage >= 5 && Math.random() < Math.min(0.18, 0.05 + stage * 0.004)) {
+    // ≈0.025–0.09 per stage cleared (halved Jul 2026), plus daily leaderboard
+    // tiers and the first-fight bonus.
+    if (!vmOwned() && stage >= 5 && Math.random() < Math.min(0.09, 0.025 + stage * 0.002)) {
       addPart(VM_KEY, 1);
       out.push({ t: '❖ 1× VOIDMAW PART (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff', jackpot: true });
     }
@@ -213,21 +213,22 @@
     _seasonBots = list; return list;
   }
   function seasonRankFor(total) { if (!total) return null; let r = 1; seasonBots().forEach((b) => { if (b.dmg > total) r++; }); return r; }
-  // DAILY leaderboard prizes — VOIDMAW PART focused (the daily pacing pillar)
+  // DAILY leaderboard prizes — ✦ EVENT COINS + ◈ LootCoins (spend in the Event Store)
   const LB_TIERS = [
-    { max: 1,   name: '#1',      gold: 50e9,  cores: 5, parts: 12 },
-    { max: 10,  name: 'Top 10',  gold: 10e9,  cores: 2, parts: 7 },
-    { max: 100, name: 'Top 100', gold: 2e9,   cores: 1, parts: 4 },
-    { max: 1e9, name: 'Ranked',  gold: 200e6, cores: 0, parts: 3 },
+    { max: 1,   name: '#1',      coins: 2500, lc: 25 },
+    { max: 10,  name: 'Top 10',  coins: 1500, lc: 15 },
+    { max: 100, name: 'Top 100', coins: 1000, lc: 10 },
+    { max: 1e9, name: 'Ranked',  coins: 500,  lc: 5 },
   ];
   function tierFor(rank) { for (const t of LB_TIERS) if (rank <= t.max) return t; return LB_TIERS[3]; }
-  // SEASON final rewards — TITAN SINA focused (the long-horizon flex)
+  // SEASON final rewards — the big Event Coin payout
   const SEASON_TIERS = [
-    { max: 1,   name: '#1',      txt: '★ 10 Titan Sina Parts · 20 ◇ · $500B', grant: (g, s) => { addPart('titansina', 10); g.state.dreadCores = (g.state.dreadCores || 0) + 20; g.state.gold += 500e9; } },
-    { max: 10,  name: 'Top 10',  txt: '★ 5 Titan Sina Parts · 10 ◇ · $100B',  grant: (g, s) => { addPart('titansina', 5); g.state.dreadCores = (g.state.dreadCores || 0) + 10; g.state.gold += 100e9; } },
-    { max: 100, name: 'Top 100', txt: '★ 2 Titan Sina Parts · 5 ◇ · $20B',    grant: (g, s) => { addPart('titansina', 2); g.state.dreadCores = (g.state.dreadCores || 0) + 5; g.state.gold += 20e9; } },
-    { max: 1e9, name: 'Ranked',  txt: '★ 1 Titan Sina Part · $2B',             grant: (g, s) => { addPart('titansina', 1); g.state.gold += 2e9; } },
+    { max: 1,   name: '#1',      coins: 25000, lc: 250 },
+    { max: 10,  name: 'Top 10',  coins: 10000, lc: 100 },
+    { max: 100, name: 'Top 100', coins: 5000,  lc: 50 },
+    { max: 1e9, name: 'Ranked',  coins: 2500,  lc: 25 },
   ];
+  const tierTxt = (t) => '✦ ' + t.coins.toLocaleString() + ' Event Coins · ◈ ' + t.lc + ' LootCoins';
   // one-time end-of-season settlement — stages a CLAIM (collected by the player)
   function settleSeason(s) {
     if (!ended() || s.seasonDone || !s.total) return;
@@ -245,7 +246,7 @@
     if (Date.UTC(1970, 0, 1) + s.day * 864e5 >= SEASON.end) return;          // season was over
     const rank = (s.lbRank && s.lbRank.day === s.day) ? s.lbRank.rank : rankFor(s.day, s.bestDay), t = tierFor(rank);
     if (!s.claims) s.claims = [];
-    s.claims.push({ t: 'd', rank, name: t.name, parts: t.parts || 0, gold: t.gold, cores: t.cores || 0, made: Date.now() });
+    s.claims.push({ t: 'd', rank, name: t.name, coins: t.coins, lc: t.lc, made: Date.now() });
     s.pendingToast = '🏆 Server Dreadnaught — yesterday you placed #' + rank + '. Collect your rewards in the event.';
   }
   // collect EVERYTHING staged — the one button that pays out daily + season prizes
@@ -254,7 +255,12 @@
     const g = G(), lines = [];
     s.claims.forEach((c) => {
       let txt;
-      if (c.t === 'd') {
+      if (c.t === 'd' && c.coins != null) {
+        s.coins = (s.coins | 0) + c.coins;
+        g.state.credits = (g.state.credits || 0) + (c.lc || 0);
+        txt = '🏆 Daily rank #' + c.rank + ' (' + c.name + ') — ✦ ' + c.coins.toLocaleString() + ' Event Coins · ◈ ' + (c.lc || 0) + ' LootCoins';
+      } else if (c.t === 'd') {
+        // legacy claim shape (pre–Event Coin): gold / cores / parts
         g.state.gold = (g.state.gold || 0) + (c.gold || 0);
         if (c.cores) g.state.dreadCores = (g.state.dreadCores || 0) + c.cores;
         let ptxt = '';
@@ -262,8 +268,9 @@
         txt = '🏆 Daily rank #' + c.rank + ' (' + c.name + ') — ' + ptxt + '$' + fmt(c.gold || 0) + (c.cores ? ' · ◇' + c.cores : '');
       } else {
         const t = SEASON_TIERS[c.idx] || SEASON_TIERS[3];
-        try { t.grant(g, s); } catch (e) {}
-        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — rank #' + c.rank + ' (' + t.name + '): ' + t.txt;
+        s.coins = (s.coins | 0) + t.coins;
+        g.state.credits = (g.state.credits || 0) + t.lc;
+        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — rank #' + c.rank + ' (' + t.name + '): ' + tierTxt(t);
       }
       s.hist.unshift({ d: Date.now(), s: 0, txt }); lines.push(txt);
     });
@@ -282,6 +289,55 @@
   }
 
   // =========================================================================
+  // ✦ EVENT STORE — spend Event Coins on high-end ship shards
+  // =========================================================================
+  const COIN = '✦';
+  function storeItems() {
+    return [
+      { id: 'vmpart', ic: '❖', name: 'Voidmaw Shard',       sub: 'grand prize · ' + VM_NEED + ' assemble the ship', cost: 1000, key: VM_KEY,        hide: () => vmOwned() },
+      { id: 'sina',   ic: '★', name: 'Titan Sina Shard',    sub: 'the apex hull · rainbow tracers',               cost: 2500, key: 'titansina' },
+      { id: 'dread',  ic: '◈', name: 'Dread-class Shard',   sub: 'random recovered Dreadnaught hull',              cost: 2000, key: () => 'dread' + (1 + (Math.random() * 6 | 0)) },
+      { id: 'obfin',  ic: '⬡', name: 'Oblivion Final Shard', sub: 'the final Oblivion hull',                       cost: 1800, key: 'oblivionfinal' },
+      { id: 'obalpha',ic: '⬡', name: 'Oblivion Alpha Shard', sub: 'Oblivion Spear Alpha',                          cost: 1400, key: 'oblivionspearalpha' },
+      { id: 'obspear',ic: '⬡', name: 'Oblivion Spear Shard', sub: 'the first Oblivion hull',                       cost: 1200, key: 'oblivionspear' },
+      { id: 'mother', ic: '⬢', name: 'Mothership Shard',     sub: 'endgame faction carrier',                       cost: 800,  key: 'mothership' },
+      { id: 'titan',  ic: '⬢', name: 'Titan Carrier Shard',  sub: 'flagship drone carrier',                        cost: 600,  key: 'titan' },
+    ];
+  }
+  function buyStoreItem(id) {
+    const s = sd(); if (!s) return;
+    const it = storeItems().find((x) => x.id === id); if (!it) return;
+    if ((s.coins | 0) < it.cost) { toast('Need ' + COIN + ' ' + (it.cost - (s.coins | 0)).toLocaleString() + ' more Event Coins'); return; }
+    s.coins = (s.coins | 0) - it.cost;
+    const key = typeof it.key === 'function' ? it.key() : it.key;
+    addPart(key, 1);
+    const got = '1× ' + shipName(key) + ' shard';
+    s.hist.unshift({ d: Date.now(), s: -1, txt: '✦ Event Store — ' + it.name + ': ' + got + ' (' + COIN + ' ' + it.cost.toLocaleString() + ')' });
+    if (s.hist.length > 40) s.hist.length = 40;
+    try { G().save(); } catch (e) {}
+    if (window.UI) window.UI.refreshAll();
+    toast(COIN + ' ' + got);
+    openStore();
+  }
+  function openStore() {
+    const s = sd();
+    const items = storeItems().filter((it) => !(it.hide && it.hide()));
+    sheet(
+      '<div class="sdm-kicker">SEASON ' + SEASON.num + ' · EVENT STORE</div>' +
+      '<div class="sdm-title small">' + COIN + ' EVENT STORE</div>' +
+      '<div class="sdm-cd">Balance <b>' + COIN + ' ' + (s.coins | 0).toLocaleString() + '</b> Event Coins · earned from daily + season ranks</div>' +
+      '<div class="sds-list">' + items.map((it) =>
+        '<div class="sds-row' + ((s.coins | 0) >= it.cost ? '' : ' cant') + '"><span class="sds-ic">' + it.ic + '</span>' +
+        '<div class="sds-t"><b>' + it.name + '</b><span>' + it.sub + '</span></div>' +
+        '<button class="sds-buy" data-buy="' + it.id + '"' + ((s.coins | 0) >= it.cost ? '' : ' disabled') + '>' + COIN + ' ' + it.cost.toLocaleString() + '</button></div>').join('') +
+      '</div>' +
+      '<div class="sdm-locknote soft">Shards land in your <b>ship parts</b> inventory — the same parts Shipworks assembles hulls from. Rank daily to bankroll the grind: even "Ranked" pays ' + COIN + ' 500 + ◈ 5 every day.</div>' +
+      '<button class="sdm-ok" id="sdm-ok">Close</button>'
+    );
+    _modal.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => buyStoreItem(b.dataset.buy)));
+    _modal.querySelector('#sdm-ok').addEventListener('click', () => { closeModal(); render(); });
+  }
+
   // =========================================================================
   // BATTLE SIM — 2:30 auto-combat vs the season boss, on real player stats
   // =========================================================================
@@ -335,7 +391,7 @@
     if (!b) { toast('Deploy failed — try again'); return; }
     s.att = (s.att | 0) + 1; s.runs = (s.runs | 0) + 1;
     try { G().save(); } catch (e) {}
-    applyBossStage(b, stageInfo(s.total).stage);
+    applyBossStage(b, 1);                       // every attempt starts back at STAGE 1
     run = { left: RUN_SECS, dealt: 0, drops: [], boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 7, zoneWarned: false, prevAuto };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
@@ -348,7 +404,9 @@
     if (!run) { rt.sdrun = null; return; }
     const s = sd(), b = run.boss;
     if (!b) return endRun('time');
-    const before = stageInfo(s.total).stage;
+    // STAGES ARE PER-RUN: every attempt starts at stage 1 and climbs on THIS
+    // run's damage alone. Season total still accumulates for the season board.
+    const before = stageInfo(run.dealt).stage;
     // damage dealt = boss HP delta (the engine resolved the real hits)
     const delta = Math.max(0, run.lastHp - b.hp);
     if (delta > 0) { run.dealt += delta; s.total += delta; }
@@ -356,15 +414,23 @@
     if (b.hp <= 0 || b.dying) { b.hp = b.maxHp * 0.96; b.dying = false; }
     run.lastHp = b.hp;
     // stage crossings → instant loot; the boss evolves & hits harder
-    const info = stageInfo(s.total);
+    const info = stageInfo(run.dealt);
     if (info.stage > before) {
       let last = null;
       for (let st = before; st < info.stage; st++) { last = grantStageReward(st); run.drops.push({ stage: st, drops: last }); }
       applyBossStage(b, info.stage);
+      if (info.stage > (s.bestStage | 0)) s.bestStage = info.stage;   // record the deepest push
       rt.shake = Math.min(6, (rt.shake || 0) + 3);
       bbanner('STAGE ' + (info.stage - 1) + ' CLEARED', last.map((x) => x.t).join(' · '), true);
     }
     run.left -= dt;
+    // LIVE PUBLISH — push my in-progress score every 15s so other players'
+    // open leaderboards see this run climbing in near-real-time.
+    run.pubT = (run.pubT || 0) + dt;
+    if (run.pubT >= 15 && cloudOn()) {
+      run.pubT = 0;
+      try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: Math.max(s.bestDay | 0, Math.floor(run.dealt)), total: Math.floor(s.total), stage: Math.max(s.bestStage | 0, stageInfo(run.dealt).stage) }); } catch (e) {}
+    }
     // MANUAL FLIGHT ONLY — the event disables auto-pilot for its whole duration
     try { if (G().getAuto()) G().setAuto(false); } catch (e) {}
     // EXTENDED ENGAGEMENT RANGE — 3× weapon range vs the world boss so the fight
@@ -382,7 +448,7 @@
         run.zones.push({ x: a.x + Math.cos(ang) * off, y: a.y + Math.sin(ang) * off, r: 150 + Math.min(70, info.stage), t: 6.0, total: 6.0, phase: 0, hole: 0 });
       }
       run.zoneT = Math.max(6, 11 - info.stage * 0.05);
-      if (!run.zoneWarned) { run.zoneWarned = true; bbanner('⚠ VOID COLLAPSE', 'Fly OUT of the red blinking area — it becomes a black hole: 25% hull per second inside'); }
+      if (!run.zoneWarned) { run.zoneWarned = true; bbanner('⚠ VOID COLLAPSE', 'Fly OUT of the red blinking area — it becomes a black hole: 75% hull per second inside'); }
     }
     for (const z of run.zones) {
       if (z.hole > 0) {
@@ -390,7 +456,7 @@
         z.hole -= dt;
         z.phase += dt * 3;
         if (a && !a.dead && (a.invuln || 0) <= 0 && Math.hypot(a.x - z.x, a.y - z.y) <= z.r) {
-          const burn = (rt.stats.maxHp || 100) * 0.25 * dt;
+          const burn = (rt.stats.maxHp || 100) * 0.75 * dt;   // 75% of max hull per second
           a.hp -= burn; a.hurtFlash = 1;
           if (!z.warned) { z.warned = true; rt.shake = Math.min(6, (rt.shake || 0) + 2); }
           if (a.hp <= 0) { a.hp = 0; a.dead = true; a.justDied = true; a.killer = run.boss || null; }
@@ -452,7 +518,7 @@
       ctx.fillText('⚠', z.x, z.y);
       ctx.restore();
     });
-    const s = sd(), stage = stageInfo(s.total).stage;
+    const s = sd(), stage = run ? stageInfo(run.dealt).stage : Math.max(1, s.bestStage | 0);
     const tint = eraTint(stage);
     const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
     ctx.save();
@@ -581,7 +647,7 @@
     if (s && !s.seen) { s.seen = 1; try { G().save(); } catch (e) {} setTimeout(() => openHowTo(true), 350); }
     body.innerHTML = run ? runView() : idleView();
     wire(body);
-    syncBossArt(stageInfo(s.total).stage);
+    syncBossArt(run ? stageInfo(run.dealt).stage : Math.max(1, s.bestStage | 0));
   }
 
   function seasonBar() {
@@ -590,15 +656,17 @@
       '<span class="sd-season-cd">' + (ended() ? 'SEASON ENDED' : 'Ends ' + SEASON.endsTxt + ' · <b data-sdcd>' + fmtDur(SEASON.end - Date.now()) + '</b> left') + '</span></div>';
   }
   function arenaBlock(idle) {
-    const s = sd(), info = stageInfo(s.total);
+    const s = sd();
+    const stage = run ? stageInfo(run.dealt).stage : Math.max(1, s.bestStage | 0);
+    const rinfo = run ? stageInfo(run.dealt) : null;
     return '<div class="sd-arena' + (idle ? ' idle' : '') + '">' +
       '<div class="sd-arena-sky"></div>' +
-      '<div class="sd-stage-badge" id="sd-stage-badge">STAGE ' + info.stage + '</div>' +
-      '<div class="sd-bosswrap" id="sd-bosswrap"><div class="sd-aura"></div><img class="sd-boss-img" id="sd-boss-img" src="' + bossSprite(info.stage) + '" alt="Voidmaw">' +
+      '<div class="sd-stage-badge" id="sd-stage-badge">' + (run ? 'STAGE ' + stage : (s.bestStage ? 'BEST STAGE ' + s.bestStage : 'STAGE 1')) + '</div>' +
+      '<div class="sd-bosswrap" id="sd-bosswrap"><div class="sd-aura"></div><img class="sd-boss-img" id="sd-boss-img" src="' + bossSprite(stage) + '" alt="Voidmaw">' +
         '<div class="sd-weakpoints" id="sd-weakpoints"></div></div>' +
-      (idle
-        ? '<div class="sd-arena-foot"><span>NEXT STAGE · ' + fmt(info.need) + '</span><div class="sd-prog"><i style="width:' + clamp(info.into / info.span * 100, 0, 100) + '%"></i></div><span class="sub">' + fmt(Math.max(0, info.need - s.total)) + ' to go</span></div>'
-        : '') +
+      (idle && !run
+        ? '<div class="sd-arena-foot"><span>EVERY RUN STARTS AT STAGE 1 · ' + fmt(threshold(1)) + ' dmg clears it</span><span class="sub">' + (s.bestStage ? 'your record: stage ' + s.bestStage : 'set your first record') + '</span></div>'
+        : (rinfo ? '<div class="sd-arena-foot"><span>NEXT STAGE · ' + fmt(rinfo.need) + '</span><div class="sd-prog"><i style="width:' + clamp(rinfo.into / rinfo.span * 100, 0, 100) + '%"></i></div><span class="sub">' + fmt(Math.max(0, rinfo.need - run.dealt)) + ' to go</span></div>' : '')) +
       '</div>';
   }
 
@@ -628,8 +696,9 @@
         statCard('Best Run Ever', s.bestEver ? fmt(s.bestEver) : '—', 'season ' + SEASON.num) +
       '</div>' +
       vmStrip() +
-      '<div class="sd-btnrow three">' +
+      '<div class="sd-btnrow">' +
         '<button class="sd-btn" id="sd-lb">🏆 Leaderboards</button>' +
+        '<button class="sd-btn" id="sd-store">✦ Event Store <b>' + (s.coins | 0).toLocaleString() + '</b></button>' +
         '<button class="sd-btn" id="sd-hist">📜 History</button>' +
         '<button class="sd-btn ghost" id="sd-how">❔ How it works</button>' +
       '</div>' +
@@ -642,7 +711,7 @@
     return '<div class="sd-vm" id="sd-vmstrip">' +
       '<img src="ships/ship-voidmaw.png" alt="">' +
       '<div class="sd-vm-t"><b>THE VOIDMAW — SEASON 1 GRAND PRIZE</b>' +
-        '<span>Mothership-grade hull. Parts drop from stages 5+, daily leaderboard ranks and your first fight each day — <b>≈ a month of consistent play</b>. Event-only, gone after ' + SEASON.endsTxt + '.</span>' +
+        '<span>Mothership-grade hull. Parts drop from stages 5+, your first fight each day and the ✦ Event Store — <b>≈ a month of consistent play</b>. Event-only, gone after ' + SEASON.endsTxt + '.</span>' +
         (owned
           ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
           : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / VM_NEED * 100) + '%"></i><span>❖ ' + parts + ' / ' + VM_NEED + ' parts</span></div>') +
@@ -685,11 +754,12 @@
     return '<div class="sd-coach"><button class="sd-coach-h" id="sd-coach-t">💡 Commander Coaching <span>' + (_coachOpen ? '▾' : '▸') + '</span></button>' +
       (_coachOpen ? '<ul>' +
         '<li><b>Survive longer, climb higher.</b> Voidmaw hits a % of your max HP — Hull, Shield Regen and Life Steal extend runs more than raw damage alone.</li>' +
-        '<li><b>Dodge the red zones — manually.</b> They collapse into black holes that burn 25% of your hull per second. Auto-pilot is disabled in the event; the joystick is your life.</li>' +
+        '<li><b>Dodge the red zones — manually.</b> They collapse into black holes that burn <b>75% of your hull per second</b>. Auto-pilot is disabled in the event; the joystick is your life.</li>' +
         '<li><b>Every point of DPS counts.</b> Damage is cumulative for the whole season — upgrades today pay on every future run.</li>' +
         '<li><b>Never bank attempts.</b> They reset daily. Even a weak run clears stages and pays loot.</li>' +
         '<li><b>Leaderboard = best single run.</b> One great run beats three average ones.</li>' +
-        '<li><b>Fight every day.</b> Your first fight of the day always drops a ❖ Voidmaw Part, and every daily leaderboard tier pays 3–12 more — miss a day, lose the pace.</li>' +
+        '<li><b>Fight every day.</b> Your first fight of the day always drops a ❖ Voidmaw Part, and every daily rank pays ✦ Event Coins — the store converts them into more parts and shards.</li>' +
+        '<li><b>Spend ✦ in the Event Store.</b> Voidmaw Parts, ★ Titan Sina shards (2,500 ✦) and other high-end ship shards — daily placements bankroll the grind.</li>' +
         '<li><b>Stage 40+.</b> A tiny chance at ★ Titan Sina parts begins. The grind is real — so is the ship.</li>' +
       '</ul>' : '') + '</div>';
   }
@@ -718,10 +788,10 @@
       '<div class="sdm-art small"><img src="' + bossSprite(1) + '" alt=""></div>' +
       '<div class="sdm-intro">One server-wide boss with unlimited HP. Everyone falls eventually — better fleets fall later.</div>' +
       '<div class="sdm-rules">' +
-        rule('❖', 'Grand prize: the VOIDMAW', 'Collect <b>' + VM_NEED + ' parts</b> to assemble the boss itself. Stages, daily ranks and your first fight each day pay parts — <b>≈ a month of daily play</b>.') +
+        rule('❖', 'Grand prize: the VOIDMAW', 'Collect <b>' + VM_NEED + ' parts</b> to assemble the boss itself. Stage drops, your first fight each day and the ✦ Event Store pay parts — <b>≈ a month of daily play</b>.') +
         rule('⚔', String(BASE_ATTEMPTS) + ' attempts a day', '2:30 auto-combat runs (+1 for Pro, more with ◈). Damage is <b>cumulative all season</b> — every stage crossed drops loot instantly.') +
-        rule('🔴', 'Dodge the red zones', 'They blink faster and faster, then collapse into a <b>black hole</b> for 5 seconds — <b>25% of your hull per second</b> inside. Auto-pilot is disabled: you fly out with the joystick.') +
-        rule('🏆', 'Two boards', 'Daily = best single run → <b>❖ Voidmaw Parts</b>. Season = total damage → <b>★ Titan Sina Parts</b>.') +
+        rule('🔴', 'Dodge the red zones', 'They blink faster and faster, then collapse into a <b>black hole</b> for 5 seconds — <b>75% of your hull per second</b> inside. Auto-pilot is disabled: you fly out with the joystick.') +
+        rule('🏆', 'Two boards, one store', 'Daily = best single run · Season = total damage. Both pay <b>✦ Event Coins + ◈ LootCoins</b> — spend coins in the Event Store on Titan Sina shards and other high-end ship parts.') +
       '</div>' +
       (locked ? '<div class="sdm-locknote">🔒 Minimum level to join: <b>' + UNLOCK + '</b> — you are Level ' + lvl() + '. The event runs until ' + SEASON.endsTxt + ', so there is time.</div>' : '') +
       '<button class="sdm-ok" id="sdm-ok">' + (locked ? 'Got it' : first ? '⚔ Enter the fight' : 'Close') + '</button>'
@@ -765,7 +835,7 @@
     if (_cl.inflight || (!force && Date.now() - _cl.t < 8000)) { return; }
     _cl.inflight = true; _cl.t = Date.now();
     Promise.all([window.CLOUD.sdDaily(SEASON.num, s.day, 100), window.CLOUD.sdSeason(SEASON.num, 100)]).then(([d, se]) => {
-      _cl.inflight = false;
+      _cl.inflight = false; _cl.ok = !!(d || se);
       if (d) _cl.day = d;
       if (se) _cl.season = se;
       syncRanks();
@@ -785,7 +855,7 @@
   function publishScore() {
     if (!cloudOn()) return;
     const s = sd(); if (!s) return;
-    try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: s.bestDay, total: Math.floor(s.total), stage: stageInfo(s.total).stage }); } catch (e) {}
+    try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: s.bestDay, total: Math.floor(s.total), stage: Math.max(1, s.bestStage | 0) }); } catch (e) {}
     setTimeout(() => ensureCloud(null, true), 1500);
   }
 
@@ -806,25 +876,21 @@
     if (me && !inserted && myRank > 100) rows.push('<div class="sdl-gap">···</div><div class="sdl-row me"><span class="sdl-r">' + myRank + '</span><span class="sdl-n">YOU</span><span class="sdl-d">' + fmt(me) + '</span></div>');
     return rows.join('');
   }
-  function openLB() {
+  // ---- leaderboard sheet content (rebuilt on every live refresh) ----
+  function lbSheetBody() {
     const s = sd();
     const live = cloudOn();
-    if (live) ensureCloud(() => { if (_modal && _modal.querySelector('.sdl-cols')) openLB(); });
     const meDay = s.bestDay || 0, meSea = Math.floor(s.total) || 0;
     const myDayRank = meDay ? ((live && liveDailyRank()) || rankFor(s.day, meDay)) : null;
     const mySeaRank = meSea ? ((live && liveSeasonRank()) || seasonRankFor(meSea)) : null;
     const dayList = live ? cloudOthers(_cl.day).map((r) => ({ name: r.name || 'Operator', dmg: r.best_day || 0 })) : botsFor(s.day);
     const seaList = live ? cloudOthers(_cl.season).map((r) => ({ name: r.name || 'Operator', dmg: r.total || 0 })) : seasonBots();
     const liveNote = live
-      ? ((_cl.day || _cl.season)
-          ? '<div class="sdl-live">🌐 LIVE — real server standings' + (_cl.inflight ? ' · syncing…' : '') + '</div>'
+      ? (_cl.ok
+          ? '<div class="sdl-live">🌐 LIVE — real server standings · auto-updates<span class="sdl-pulse"></span></div>'
           : '<div class="sdl-live">🌐 Syncing live standings…</div>')
       : '<div class="sdl-live off">Offline — simulated rivals shown until you sign in</div>';
-    sheet(
-      '<div class="sdm-kicker">LEADERBOARDS</div>' +
-      '<div class="sdm-title small">' + SEASON.boss + ' — STANDINGS</div>' +
-      '<div class="sdm-cd">Daily resets in <b>' + fmtDur(msToDailyReset()) + '</b> · season ends in <b>' + (ended() ? 'ended' : fmtDur(SEASON.end - Date.now())) + '</b> · prizes are collected on the event screen</div>' +
-      liveNote +
+    return liveNote +
       (meDay || meSea ? '' : '<div class="sdm-locknote">Fight at least once to place. Daily ranks your <b>best single run</b> — season ranks your <b>total damage</b>.</div>') +
       '<div class="sdl-cols">' +
         '<div class="sdl-col">' +
@@ -837,21 +903,40 @@
           (mySeaRank ? '<div class="sdl-mychip">Your rank <b>#' + mySeaRank + '</b></div>' : '<div class="sdl-mychip none">Not placed yet</div>') +
           '<div class="sdl-list">' + lbRows(seaList, meSea, mySeaRank, 8) + '</div>' +
         '</div>' +
-      '</div>' +
+      '</div>';
+  }
+  let _lbTimer = 0;
+  function refreshLB() {
+    if (!_modal) return;
+    const b = _modal.querySelector('#sdl-body'); if (!b) return;
+    b.innerHTML = lbSheetBody();
+  }
+  function openLB() {
+    ensureCloud(refreshLB, true);
+    sheet(
+      '<div class="sdm-kicker">LEADERBOARDS</div>' +
+      '<div class="sdm-title small">' + SEASON.boss + ' — STANDINGS</div>' +
+      '<div class="sdm-cd">Daily resets in <b data-sdreset>' + fmtDur(msToDailyReset()) + '</b> · season ends in <b>' + (ended() ? 'ended' : fmtDur(SEASON.end - Date.now())) + '</b> · prizes are collected on the event screen</div>' +
+      '<div id="sdl-body">' + lbSheetBody() + '</div>' +
       '<div class="sdl-tierwrap">' +
-        '<div class="sdl-tcol"><div class="sdl-tcol-h">DAILY REWARDS · ❖ VOIDMAW PARTS</div>' +
-          lbTier('#1', '❖ 12 Voidmaw Parts · $50B · 5 ◇') +
-          lbTier('Top 10', '❖ 7 Voidmaw Parts · $10B · 2 ◇') +
-          lbTier('Top 100', '❖ 4 Voidmaw Parts · $2B · 1 ◇') +
-          lbTier('Ranked', '❖ 3 Voidmaw Parts · $200M') +
+        '<div class="sdl-tcol"><div class="sdl-tcol-h">DAILY REWARDS · ✦ EVENT COINS</div>' +
+          LB_TIERS.map((t) => lbTier(t.name, tierTxt(t))).join('') +
         '</div>' +
-        '<div class="sdl-tcol"><div class="sdl-tcol-h">SEASON FINALS · ★ TITAN SINA · ' + SEASON.endsTxt + '</div>' +
-          SEASON_TIERS.map((t) => lbTier(t.name, t.txt)).join('') +
+        '<div class="sdl-tcol"><div class="sdl-tcol-h">SEASON FINALS · ' + SEASON.endsTxt + '</div>' +
+          SEASON_TIERS.map((t) => lbTier(t.name, tierTxt(t))).join('') +
         '</div>' +
       '</div>' +
       '<button class="sdm-ok" id="sdm-ok">Close</button>', true
     );
     _modal.querySelector('#sdm-ok').addEventListener('click', closeModal);
+    // LIVE AUTO-REFRESH — poll the boards every 5s while the sheet stays open,
+    // swapping the standings in place (new scores appear as people play).
+    clearInterval(_lbTimer);
+    _lbTimer = setInterval(() => {
+      if (!_modal || !_modal.querySelector('#sdl-body')) { clearInterval(_lbTimer); _lbTimer = 0; return; }
+      ensureCloud(refreshLB, true);
+      refreshLB();                                      // keep countdown + offline boards fresh too
+    }, 5000);
   }
   function lbTier(n, r) { return '<div class="sdl-tier"><b>' + n + '</b><span>' + r + '</span></div>'; }
 
@@ -877,6 +962,7 @@
     on('sd-buyatt', buyAttempt);
     on('sd-return', () => { const b = document.querySelector('.nav-btn[data-screen="battle"]'); if (b) b.click(); });
     on('sd-lb', openLB);
+    on('sd-store', openStore);
     on('sd-hist', openHistory);
     on('sd-how', () => openHowTo(false));
     on('sd-coach-t', () => { _coachOpen = !_coachOpen; render(); });
@@ -1162,6 +1248,7 @@
   .sdl-gap{ text-align:center; color:#4e3f68; font-size:11px; padding:1px 0; }
   .sdl-live{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; letter-spacing:.08em; color:#7ce0a0; text-align:center; margin-top:6px; }
   .sdl-live.off{ color:#8d7aab; }
+  .sdl-pulse{ display:inline-block; width:6px; height:6px; border-radius:50%; background:#7ce0a0; margin-left:5px; vertical-align:1px; box-shadow:0 0 6px #7ce0a0; animation:sdLivePulse 1.2s ease-in-out infinite; }
   /* manual-flight lockout — hide the auto toggle while an event run is live */
   .sd-noauto #auto-btn, .sd-noauto #auto-warn{ display:none !important; }
   .sdl-tierwrap{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }

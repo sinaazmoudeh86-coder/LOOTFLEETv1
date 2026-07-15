@@ -381,6 +381,11 @@
     // the same full-spectrum rainbow cannons as the Chroma Fang.
     { key:'chromaregent', name:'Chroma Regent', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'SPECTRUM MOTHERSHIP', purchase:{ lc:75000 },
       desc:'The Chroma line\u2019s crown — a rose-quartz mothership tuned to Titan Carrier performance. Every cannon fires streaks of vibrant rainbow light.' },
+    // FROSTYFROST — LootCoin cryo hull at Titan Carrier performance. Its cannons
+    // CHILL targets (slow) and sometimes flash-freeze them into an ice cube.
+    // Bosses shrug the cryo effect off entirely.
+    { key:'frostyfrost', name:'FrostyFrost', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'CRYO TECH', purchase:{ lc:50000 }, frost:true,
+      desc:'A crystalline glacier of a hull at Titan Carrier performance. Every hit chills its target — slowing them — and sometimes flash-freezes them solid in an ice cube. Bosses are immune to the cryo field.' },
     // OBLIVION SPEAR T1 — a forbidden new class one tier ABOVE the Mothership,
     // with roughly DOUBLE its combat performance. It can't be bought: you must
     // recover its blueprint (a 1% drop from a Lv300+ Void Citadel explosion in
@@ -409,9 +414,9 @@
     { key:'oblivionfinal', name:'Oblivion Final', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:40,
       mods:{ hpPct:800, dmgPct:450, multiShot:120, critChance:100, critDamage:350, moveSpeed:75, atkSpeedPct:150, rangePct:240, lifeSteal:22 },
       tag:'OBLIVION FINAL',
-      desc:'The final hull. 2.5× the Oblivion Spear in every dimension, wreathed in a green reactor aura. Sold for LootCoins to commanders Level 200+.',
+      desc:'The final hull. 2.5× the Oblivion Spear in every dimension, wreathed in a green reactor aura. Sold outright for LootCoins — no level gate, no blueprint.',
       greenAura:true,
-      purchase:{ lc:1000000, reqLevel:200 } },
+      purchase:{ lc:1000000 } },
     // DREAD-CLASS — six recovered Dreadnaught hulls, sold directly for a MIX of
     // every currency at a steeper price than the Oblivion Final, each one a step
     // beyond it in raw performance. Gated by account level, not the blueprint chain.

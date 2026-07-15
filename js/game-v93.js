@@ -564,6 +564,24 @@
     let _dmg = p.damage;
     if (e.isBoss && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
     const killed = e.takeDamage(_dmg);
+    // FROSTYFROST — every player bolt chills the target (slow), and sometimes
+    // flash-freezes it into an ice cube. Bosses are immune to the cryo field.
+    if (state.ship === 'frostyfrost' && !p.drone && !e.isBoss && !e.dying) {
+      e.chillT = Math.max(e.chillT || 0, 2.2);
+      if (Math.random() < 0.12 && !(e.frozenT > 0)) {
+        e.frozenT = 1.8;
+        rt.floats.push(new E.FloatText(e.x, e.y - e.size - 12, 'FROZEN', { color: '#aee6ff', size: 30 }));
+        for (let i = 0; i < 10; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 90 + Math.random() * 120;
+          rt.particles.push(new E.Particle(e.x, e.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.4 + Math.random()*0.3, size: 1.6 + Math.random()*2, color: i % 2 ? '#aee6ff' : '#e8f8ff', glow: true, drag: 0.86 }));
+        }
+      } else {
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 70;
+          rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 20, life: 0.3, size: 1.4, color: '#aee6ff', glow: true, drag: 0.9 }));
+        }
+      }
+    }
     // PRISM AURA — 10% of your hit splashes as AOE to nearby foes
     if (state.shipAura && state.shipAura[state.ship]) prismSplash(e, p.damage);
     // damage floats are thinned under load — crits ALWAYS show
@@ -2928,7 +2946,7 @@
   }
   // LOOTCOIN FAST-TRACK — hero-banner ship offers (Ships tab). Carrier first;
   // once owned, the banner upgrades to the Mothership.
-  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 75000, oblivionfinal: 1000000, chromafang: 500, chromaregent: 75000 };
+  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 75000, oblivionfinal: 1000000, chromafang: 500, chromaregent: 75000, frostyfrost: 50000 };
   function buyShipLC(key) {
     const ship = C.SHIP_BY_KEY[key];
     const price = LC_SHIP_OFFERS[key];

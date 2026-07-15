@@ -264,6 +264,7 @@
     const scale = e.dying ? (1 - e.deathT) : (0.35 + 0.65 * easeOut(e.spawnT));
     const alpha = e.dying ? (1 - e.deathT) : 1;
     const lunge = e.attackLunge > 0 ? Math.sin(e.attackLunge * Math.PI) * 4 : 0;
+    const frosted = !e.dying && (e.frozenT > 0 || e.chillT > 0);
     ctx.save();
     ctx.globalAlpha = alpha;
     if (e.isBoss && !e.dying) {
@@ -291,6 +292,54 @@
       drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
     }
     ctx.restore();
+
+    // FROSTYFROST cryo overlays — chilled: icy tint + drifting flakes; frozen:
+    // a full translucent ICE CUBE encasing the vessel (layered alpha, no blur)
+    if (frosted) {
+      const t = performance.now() / 1000;
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      if (e.frozenT > 0) {
+        const cs = e.size * 1.55;
+        const fade = Math.min(1, e.frozenT / 0.3);          // melt-out fade
+        ctx.globalAlpha = alpha * fade;
+        // cube body
+        ctx.fillStyle = 'rgba(150,214,255,0.34)';
+        rr(ctx, -cs, -cs, cs * 2, cs * 2, cs * 0.22); ctx.fill();
+        // inner glow core
+        ctx.fillStyle = 'rgba(220,245,255,0.18)';
+        rr(ctx, -cs * 0.7, -cs * 0.7, cs * 1.4, cs * 1.4, cs * 0.18); ctx.fill();
+        // bevel edges
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(230,250,255,0.85)';
+        rr(ctx, -cs, -cs, cs * 2, cs * 2, cs * 0.22); ctx.stroke();
+        ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(160,220,255,0.5)';
+        rr(ctx, -cs * 0.82, -cs * 0.82, cs * 1.64, cs * 1.64, cs * 0.16); ctx.stroke();
+        // specular sheen streak
+        ctx.globalAlpha = alpha * fade * (0.5 + 0.3 * Math.sin(t * 2.2 + e.seed));
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-cs * 0.55, -cs * 0.75); ctx.lineTo(-cs * 0.05, -cs * 0.25); ctx.stroke();
+        // frost sparkles
+        ctx.fillStyle = '#eaf9ff';
+        for (let i = 0; i < 3; i++) {
+          const sa = e.seed + i * 2.1 + t * 0.8;
+          ctx.globalAlpha = alpha * fade * (0.4 + 0.4 * Math.sin(t * 3 + i * 1.7));
+          ctx.fillRect(Math.cos(sa) * cs * 0.6 - 1, Math.sin(sa * 1.3) * cs * 0.6 - 1, 2, 2);
+        }
+      } else {
+        // chilled — icy aura ring + slow flakes
+        ctx.globalAlpha = alpha * 0.5;
+        ctx.strokeStyle = 'rgba(150,214,255,0.7)'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 14;
+        ctx.beginPath(); ctx.arc(0, 0, e.size * 1.25, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#cdeeff';
+        for (let i = 0; i < 4; i++) {
+          const sa = e.seed * 3 + i * 1.57 + t * 0.6;
+          ctx.globalAlpha = alpha * (0.35 + 0.3 * Math.sin(t * 2.4 + i));
+          ctx.fillRect(Math.cos(sa) * e.size * 1.1 - 1, Math.sin(sa + t) * e.size * 1.1 - 1, 2, 2);
+        }
+      }
+      ctx.restore();
+    }
 
     if (!e.dying && e.hp < e.maxHp) {
       // impact shockwave — a quick expanding ring right after a hit lands
@@ -894,7 +943,7 @@
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
-    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, voidmaw:5, chromafang:1, chromaregent:5 };
+    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
   const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
     dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4 };
@@ -907,7 +956,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent','frostyfrost'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }

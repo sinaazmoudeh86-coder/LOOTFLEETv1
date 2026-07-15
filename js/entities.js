@@ -126,6 +126,8 @@
       // close to firing distance, hold there, and volley bolts at the player
       // (every boss is a gunner too — set via isBoss after construction).
       this.ranged = (this.seed % 10) < 3.5;
+      this.chillT = 0;        // FROSTYFROST cryo: >0 → slowed (movement + fire rate)
+      this.frozenT = 0;       // FROSTYFROST cryo: >0 → flash-frozen solid (ice cube)
       this.range = 230;                              // ≈ the player's own 250
       this.holdAt = this.range * (0.55 + (this.seed % 1) * 0.25);
       this.fireT = 1.2 + (this.seed % 1.4);          // first shot is staggered
@@ -146,6 +148,15 @@
         if (this.deathT >= 1) this.dead = true;
         return;
       }
+      // FROSTYFROST cryo — frozen solid: an ice cube. No movement, no attacks.
+      if (this.frozenT > 0) {
+        this.frozenT -= dt;
+        this.moving = false;
+        this.contactTimer = Math.max(0, this.contactTimer - dt);
+        return;
+      }
+      const chill = this.chillT > 0 ? 0.42 : 1;      // chilled → crawling + slow guns
+      if (this.chillT > 0) this.chillT -= dt;
       // move toward archer
       const dx = archer.x - this.x, dy = archer.y - this.y;
       const dist = Math.hypot(dx, dy) || 1;
@@ -155,7 +166,7 @@
       const gunner = this.ranged || this.isBoss;
       const holdAt = gunner ? Math.max(reach + 6, this.isBoss ? this.range * 0.8 : this.holdAt) : reach;
       if (dist > holdAt) {
-        const sp = this.speed * Math.min(1, this.spawnT * 1.5);
+        const sp = this.speed * Math.min(1, this.spawnT * 1.5) * chill;
         this.x += (dx / dist) * sp * dt;
         this.y += (dy / dist) * sp * dt;
         this.walk += dt * sp * 0.16;   // walk cycle speed tied to movement
@@ -164,7 +175,7 @@
       } else if (dist > reach) {
         // gunner on station — slow strafing orbit while the guns cycle
         const ta = Math.atan2(dy, dx) + Math.PI / 2;
-        const drift = this.speed * 0.3 * ((this.seed % 2) < 1 ? 1 : -1);
+        const drift = this.speed * 0.3 * ((this.seed % 2) < 1 ? 1 : -1) * chill;
         this.x += Math.cos(ta) * drift * dt;
         this.y += Math.sin(ta) * drift * dt;
         this.walk += dt * Math.abs(drift) * 0.16;
@@ -182,7 +193,7 @@
       }
       // standoff fire — request a bolt; the game loop spawns + draws it
       if (gunner && !archer.dead && this.spawnT >= 1 && dist <= this.range * 1.05) {
-        this.fireT -= dt;
+        this.fireT -= dt * chill;
         if (this.fireT <= 0) {
           this.fireT = this.isBoss ? 2.6 : this.fireCd;
           this.fireReq = true;

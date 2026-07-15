@@ -507,6 +507,27 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 .ho-buy:active{ transform:translateY(1px); }
 .ho-ship{ width:74px; height:74px; object-fit:contain; flex:none;
   filter:drop-shadow(0 0 14px rgba(242,169,60,.45)); }
+/* LootCoin Fleet banners (Market top) — Chroma pair renders pink-spectrum */
+.hero-offer.lcf{ cursor:pointer; }
+.hero-offer.lcf.lcf-flat{ cursor:default; opacity:.82; }
+.hero-offer.lcf[data-lcship="chromafang"], .hero-offer.lcf[data-lcship="chromaregent"]{
+  border-color:rgba(255,123,213,.55);
+  background:linear-gradient(115deg, rgba(255,123,213,.16), rgba(122,92,255,.12) 55%, #10172333);
+  box-shadow:0 0 22px -8px rgba(255,123,213,.5); }
+.hero-offer.lcf[data-lcship="chromafang"] .ho-tag, .hero-offer.lcf[data-lcship="chromaregent"] .ho-tag{
+  color:#2a0820; background:linear-gradient(90deg,#ff9de2,#ff7bd5,#8ab4ff); }
+.hero-offer.lcf[data-lcship="chromafang"] .ho-ship, .hero-offer.lcf[data-lcship="chromaregent"] .ho-ship{
+  filter:drop-shadow(0 0 14px rgba(255,123,213,.6)); }
+/* FrostyFrost cryo banner */
+.hero-offer.lcf[data-lcship="frostyfrost"]{
+  border-color:rgba(140,210,255,.55);
+  background:linear-gradient(115deg, rgba(140,210,255,.16), rgba(90,130,255,.12) 55%, #10172333);
+  box-shadow:0 0 22px -8px rgba(140,210,255,.5); }
+.hero-offer.lcf[data-lcship="frostyfrost"] .ho-tag{
+  color:#082030; background:linear-gradient(90deg,#d9f3ff,#8cd2ff,#5aa8ff); }
+.hero-offer.lcf[data-lcship="frostyfrost"] .ho-ship{
+  filter:drop-shadow(0 0 14px rgba(140,210,255,.65)); }
+.ho-buy.owned{ opacity:.75; cursor:default; }
 
 /* ===== LootFleet PRO hero offering ===== */
 #pro-banner{ margin:0 0 10px; }

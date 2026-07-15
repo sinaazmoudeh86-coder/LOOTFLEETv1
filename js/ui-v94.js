@@ -240,7 +240,7 @@
       const isSuper = wz.bossSpawned && wz.super;
       const cit = wz.citadel;
       const citE = cit && wz.bossSpawned && G.getCitadel ? G.getCitadel() : null;
-      const wv = wz.bossSpawned ? (isSuper ? 'SUPER BOSS' : cit ? '⛴ RAZE THE CITADEL' : 'BOSS') : (cit ? 'ASSAULT ' : 'WAVE ') + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
+      const wv = wz.bossSpawned ? (wz.clone ? '⚔ ENEMY CLONE FLEET' : isSuper ? 'SUPER BOSS' : cit ? '⛴ RAZE THE CITADEL' : 'BOSS') : (cit ? 'ASSAULT ' : 'WAVE ') + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
       el['sg-fill'].style.width = (citE ? Math.max(0, citE.hp / citE.maxHp * 100) : Math.min(100, ((wz.bossSpawned ? wz.total : wz.wave - 1) / wz.total) * 100)) + '%';
       el['sg-label'].textContent = '⚔ ' + wv;
       bb.classList.remove('show', 'active');
@@ -487,6 +487,50 @@
     function end() { active = false; knob.style.transform = ''; G.setJoystick(0,0,false); }
     j.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
     j.addEventListener('touchstart', start, {passive:false}); j.addEventListener('touchmove', move, {passive:false}); j.addEventListener('touchend', end);
+    initWASD();
+  }
+
+  // WASD / arrow-key movement (desktop browsers with a keyboard). Holding any
+  // movement key drives the same joystick vector the thumb-stick uses — auto
+  // stays in charge until a key is pressed, then manual flight takes over.
+  function initWASD() {
+    const held = new Set();
+    const KEYMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
+    function typingTarget(e) {
+      const t = e.target;
+      return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    }
+    function sync() {
+      let x = 0, y = 0;
+      if (held.has('left')) x -= 1;
+      if (held.has('right')) x += 1;
+      if (held.has('up')) y -= 1;
+      if (held.has('down')) y += 1;
+      if (x || y) {
+        const d = Math.hypot(x, y);
+        G.setJoystick(x / d, y / d, true);
+      } else {
+        G.setJoystick(0, 0, false);
+      }
+    }
+    window.addEventListener('keydown', (e) => {
+      const dir = KEYMAP[e.code];
+      if (!dir || typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      // ignore when the battle canvas isn't the active screen (menus, sheets)
+      if (screen !== 'battle') { if (held.size) { held.clear(); sync(); } return; }
+      // grabbing the keys takes over from auto-pilot, same as grabbing the stick would
+      if (G.state.auto) { G.setAuto(false); syncAuto(); toast('⌨ Manual flight — WASD / arrows', '#5b9cff'); }
+      if (!held.has(dir)) { held.add(dir); sync(); }
+      e.preventDefault();                       // stop arrow keys scrolling the page
+    });
+    window.addEventListener('keyup', (e) => {
+      const dir = KEYMAP[e.code];
+      if (!dir) return;
+      if (held.delete(dir)) sync();
+    });
+    // dropping focus (tab switch, modal) releases all keys — no stuck movement
+    window.addEventListener('blur', () => { if (held.size) { held.clear(); sync(); } });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && held.size) { held.clear(); sync(); } });
   }
 
   // ==========================================================================
@@ -1300,6 +1344,8 @@
     const blocked = !t.owned && t.cooldown > 0;
     const action = t.owned ? 'Deploy' : t.rival ? (t.citadel ? 'Siege' : 'Attack') : (t.citadel ? 'Siege' : 'Capture');
     const obj = t.owned ? (t.boss || t.citadel ? 'Farm endless boss waves on your tile' : 'Farm your territory')
+      : (t.defense && t.rivalCitadelScore != null) ? 'Break the escort, defeat <b style="color:#ffce8a">' + t.defense.name + "'s clone fleet</b>, then <b style='color:#ff8a64'>raze their citadel</b> to take the zone"
+      : t.defense ? 'Break the escort, then defeat <b style="color:#ffce8a">' + t.defense.name + "'s clone fleet</b> to take the zone"
       : t.citadel ? 'Fight up through the garrison, raze the Void Citadel, and it becomes YOUR Citadel'
       : t.boss ? 'Clear 10 waves, then defeat the <b style="color:var(--hp)">BOSS</b>' : 'Clear 10 waves to capture';
     const ec = G.entryCostFor ? G.entryCostFor(id) : null;
@@ -1339,8 +1385,23 @@
         '<div style="font-size:11px;color:#9fb0c4;margin-top:5px">' + cmult + '× resource output · +' + (25 * (clv - 1)) + '% defense fleet' + (clv < cmax ? ' · each rank makes it costlier for rivals to raze' : '') + '</div>' +
         upgRow +
       '</div>';
-    } else if (t.rivalCitadelScore != null) {
-      citBlock = '<div class="ip-stat"><span class="ip-sname">⛓ Enemy Citadel</span><span class="v" style="color:#ff8a64">⚡' + G.formatNum(t.rivalCitadelScore) + ' clone fleet defends</span></div>';
+    } else if (t.defense) {
+      // ⛨ DEFENDING FLEET — the owner's clone garrison, shown BEFORE you attack
+      const d = t.defense, sn = d.snap || {};
+      const shipImg = sn.ship ? '<img src="ships/ship-' + sn.ship + '.png" alt="" style="width:56px;height:40px;object-fit:contain;flex:none;filter:drop-shadow(0 0 8px rgba(255,206,138,.6))">' : '';
+      const statBits = [];
+      if (sn.lvl) statBits.push('Lv ' + sn.lvl);
+      statBits.push('⚡ ' + G.formatNum(d.score) + ' fleet score');
+      if (sn.hp) statBits.push('~' + G.formatNum(sn.hp) + ' hull');
+      if (sn.dps) statBits.push('~' + G.formatNum(sn.dps) + ' DPS');
+      if (sn.esc) statBits.push(sn.esc + ' escort' + (sn.esc > 1 ? 's' : ''));
+      citBlock = '<div style="background:rgba(255,140,90,.07);border:1px solid rgba(255,140,90,.35);border-radius:10px;padding:9px 11px;margin-top:8px">' +
+        '<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#ff9a70">⛨ DEFENDING FLEET — ' + d.name.toUpperCase() + (d.real ? '' : ' <span style="opacity:.6;font-weight:600">(sim)</span>') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-top:7px">' + shipImg +
+          '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:#ffce8a">' + (sn.nm || 'Clone Fleet') + '</div>' +
+          '<div style="font-size:11px;color:#c9b39a;line-height:1.45">' + statBits.join(' · ') + '</div></div></div>' +
+        '<div style="font-size:11px;color:#9fb0c4;margin-top:7px">A <b style="color:#ffce8a">clone of their fleet</b> garrisons this zone — beat it' + (d.citadel ? ', <b style="color:#ff8a64">then raze their citadel (Rank-hardened)</b>,' : '') + ' to take the tile.</div>' +
+      '</div>';
     } else if (t.owned && G.citadelBuildCost) {
       const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0;
       const af = bc && GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (bc[k2] || 0));
@@ -1628,7 +1689,9 @@
     const row = [];
     const add = (col, gly, v) => { if (v) row.push('<span class="mega-c"><span style="color:' + col + '">' + gly + '</span> ' + G.formatNum(v) + '</span>'); };
     add('#f2a93c', '$', c.gold); add('#5bc0ff', '⬢', c.fuel); add('#d0a060', '◆', c.iron);
-    add('#c07bff', '✦', c.plasma); add('#ff3a3a', '◈', c.prism); add('#f2a93c', '◉', c.credits); add('#ff5a6a', '◇', c.dreadCores);
+    add('#c07bff', '✦', c.plasma); add('#ff3a3a', '◈', c.prism);
+    if (c.credits) row.push('<span class="mega-c"><span style="color:#f2a93c">◉</span> ' + c.credits.toLocaleString() + '</span>');
+    add('#ff5a6a', '◇', c.dreadCores);
     return '<span class="mega-cost' + (big ? ' big' : '') + '">' + row.join('') + '</span>';
   }
   function megaShipCard(key) {
@@ -1934,7 +1997,7 @@
       // FEATURED hero banner — LootCoin fast-track: Carrier first, then Mothership
       {
         const offer = !G.state.ownedShips.carrier ? { key: 'carrier', lc: 25000 }
-          : (!G.state.ownedShips.mothership ? { key: 'mothership', lc: 75000 } : null);
+          : (!G.state.ownedShips.mothership ? { key: 'mothership', lc: 100000 } : null);
         if (offer && G.buyShipLC) {
           const sh = C.SHIP_BY_KEY[offer.key];
           html += `<div class="hero-offer" data-lcship="${offer.key}" data-lcprice="${offer.lc}">
@@ -1960,7 +2023,8 @@
           { key: 'chromafang',   lc: 500,     tag: '✼ SPECTRUM', desc: 'Cruiser-grade raider — fires vibrant rainbow lasers.' },
           { key: 'frostyfrost',  lc: 50000,   tag: '❄ CRYO',     desc: 'Titan Carrier power — chills targets and flash-freezes them into ice cubes. Bosses are immune.' },
           { key: 'chromaregent', lc: 75000,   tag: '✼ SPECTRUM', desc: 'Titan Carrier power — every cannon streaks the full spectrum.' },
-          { key: 'oblivionfinal', lc: 1000000, tag: '★ APEX',    desc: 'The final hull. 2.5× the Oblivion Spear in every dimension.' },
+          { key: 'oblivionfinal', lc: 300000, tag: '★ APEX',    desc: 'The final hull. 2.5× the Oblivion Spear in every dimension.' },
+          { key: 'titansina', lc: 1000000, tag: '✦ FINAL CLASS', desc: 'The hero ship — 2× the Dread Omega, zone-wide range, full-spectrum rainbow tracers.' },
         ];
         html += `<div class="store-sec">${storeHead(STORE_ICONS.ship, 'LootCoin Fleet', 'Direct purchase · no blueprint')}`;
         html += `<div class="sec-blurb">Bought outright with ${LC_ICON} LootCoins — no blueprint, no kill chain, no level gate. Yours instantly.</div>`;
@@ -2324,6 +2388,10 @@
           <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div></div>
         <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.power)}</div></div>`).join('');
     const _sc = el['board-body'].scrollTop;
+    // FLICKER GUARD — the 4s auto-refresh only touches the DOM when the board
+    // actually changed (rebuilding identical rows made the ship icons flash).
+    if (el['board-body']._lbHtml === html) return;
+    el['board-body']._lbHtml = html;
     el['board-body'].innerHTML = html;
     el['board-body'].scrollTop = _sc;
     wireHangarTabs(el['board-body']);

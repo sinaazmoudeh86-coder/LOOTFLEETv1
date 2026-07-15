@@ -241,16 +241,24 @@
     if (isLocked(t)) { toast('This Dreadnaught is on weekly cooldown'); return; }
     closeAllSheets();
     try { G().startDreadHunt(t); } catch (e) { return; }
+    // ONE HUNT PER TIER PER WEEK — the attempt is CONSUMED ON LAUNCH, win or
+    // lose. Bailing mid-hunt no longer refunds it (that loophole let players
+    // farm the 30-wave gauntlet endlessly). Gold respawns still buy it back.
+    const st = G().state;
+    if (!st.dreadLock) st.dreadLock = {};
+    st.dreadLock[t] = weekIndex();
+    try { G().save(); } catch (e) {}
+    updateHud();
     // jump to the live battle view
     const b = document.querySelector('.nav-btn[data-screen="battle"]'); if (b) b.click();
-    banner('DREADNAUGHT HUNT · TIER ' + t, 'Survive 30 waves — then break the Dreadnaught', ACCENT);
+    banner('DREADNAUGHT HUNT · TIER ' + t, 'Survive 30 waves — then break the Dreadnaught · your weekly attempt is live', ACCENT);
   }
 
   // called by the engine the instant the Dreadnaught is destroyed
   function onHuntCleared(t) {
     const st = G().state;
     if (!st.dreadLock) st.dreadLock = {};
-    st.dreadLock[t] = weekIndex();
+    st.dreadLock[t] = weekIndex();   // (already consumed at launch — kept for safety)
     const firstEver = !st.dreadFirstKill;
     st.dreadFirstKill = true;
     let got = Math.random() < dropChance(t) ? 1 : 0;
@@ -674,7 +682,7 @@
     body.innerHTML =
       '<div class="dh-banner">' +
         '<div class="dh-banner-t">☄ DREADNAUGHT HUNT</div>' +
-        '<div class="dh-banner-s">Weekly raids · 30 waves then a multi-phase raid boss · each tier once per week</div>' +
+        '<div class="dh-banner-s">Weekly raids · 30 waves then a multi-phase raid boss · ONE attempt per tier per week, consumed on launch — win or lose</div>' +
         '<div class="dh-week">Weekly reset in <b data-reset="1">' + fmtDur(reset) + '</b></div>' +
       '</div>' +
       '<div class="dh-list">' + cards + '</div>' +

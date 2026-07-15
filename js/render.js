@@ -301,41 +301,35 @@
       ctx.translate(e.x, e.y);
       if (e.frozenT > 0) {
         const cs = e.size * 1.55;
-        const fade = Math.min(1, e.frozenT / 0.3);          // melt-out fade
+        const fade = Math.min(1, e.frozenT / 0.3) * Math.min(1, (1.8 - e.frozenT) / 0.15 + 0.2);  // ease in AND melt out
         ctx.globalAlpha = alpha * fade;
         // cube body
-        ctx.fillStyle = 'rgba(150,214,255,0.34)';
+        ctx.fillStyle = 'rgba(150,214,255,0.24)';
         rr(ctx, -cs, -cs, cs * 2, cs * 2, cs * 0.22); ctx.fill();
         // inner glow core
-        ctx.fillStyle = 'rgba(220,245,255,0.18)';
+        ctx.fillStyle = 'rgba(220,245,255,0.13)';
         rr(ctx, -cs * 0.7, -cs * 0.7, cs * 1.4, cs * 1.4, cs * 0.18); ctx.fill();
         // bevel edges
-        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(230,250,255,0.85)';
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(230,250,255,0.7)';
         rr(ctx, -cs, -cs, cs * 2, cs * 2, cs * 0.22); ctx.stroke();
-        ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(160,220,255,0.5)';
+        ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(160,220,255,0.4)';
         rr(ctx, -cs * 0.82, -cs * 0.82, cs * 1.64, cs * 1.64, cs * 0.16); ctx.stroke();
-        // specular sheen streak
-        ctx.globalAlpha = alpha * fade * (0.5 + 0.3 * Math.sin(t * 2.2 + e.seed));
+        // specular sheen streak — STEADY (the old per-frame sin pulse read as flicker)
+        ctx.globalAlpha = alpha * fade * 0.55;
         ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(-cs * 0.55, -cs * 0.75); ctx.lineTo(-cs * 0.05, -cs * 0.25); ctx.stroke();
-        // frost sparkles
-        ctx.fillStyle = '#eaf9ff';
-        for (let i = 0; i < 3; i++) {
-          const sa = e.seed + i * 2.1 + t * 0.8;
-          ctx.globalAlpha = alpha * fade * (0.4 + 0.4 * Math.sin(t * 3 + i * 1.7));
-          ctx.fillRect(Math.cos(sa) * cs * 0.6 - 1, Math.sin(sa * 1.3) * cs * 0.6 - 1, 2, 2);
-        }
       } else {
-        // chilled — icy aura ring + slow flakes
-        ctx.globalAlpha = alpha * 0.5;
-        ctx.strokeStyle = 'rgba(150,214,255,0.7)'; ctx.lineWidth = 1.5;
-        ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 14;
+        // chilled — icy aura ring + slow flakes (calm, low-alpha — most of the
+        // screen is chilled under sustained FrostyFrost fire)
+        ctx.globalAlpha = alpha * 0.35;
+        ctx.strokeStyle = 'rgba(150,214,255,0.6)'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 8;
         ctx.beginPath(); ctx.arc(0, 0, e.size * 1.25, 0, 7); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = '#cdeeff';
-        for (let i = 0; i < 4; i++) {
-          const sa = e.seed * 3 + i * 1.57 + t * 0.6;
-          ctx.globalAlpha = alpha * (0.35 + 0.3 * Math.sin(t * 2.4 + i));
-          ctx.fillRect(Math.cos(sa) * e.size * 1.1 - 1, Math.sin(sa + t) * e.size * 1.1 - 1, 2, 2);
+        for (let i = 0; i < 3; i++) {
+          const sa = e.seed * 3 + i * 2.1 + t * 0.5;
+          ctx.globalAlpha = alpha * 0.3;
+          ctx.fillRect(Math.cos(sa) * e.size * 1.1 - 1, Math.sin(sa + t * 0.7) * e.size * 1.1 - 1, 2, 2);
         }
       }
       ctx.restore();

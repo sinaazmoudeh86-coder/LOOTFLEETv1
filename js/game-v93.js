@@ -568,8 +568,9 @@
     // flash-freezes it into an ice cube. Bosses are immune to the cryo field.
     if (state.ship === 'frostyfrost' && !p.drone && !e.isBoss && !e.dying) {
       e.chillT = Math.max(e.chillT || 0, 2.2);
-      if (Math.random() < 0.12 && !(e.frozenT > 0)) {
+      if (Math.random() < 0.12 && !(e.frozenT > 0) && (e.frostCd || 0) <= 0) {
         e.frozenT = 1.8;
+        e.frostCd = 5;                      // refreeze immunity — no cube strobing under rapid fire
         rt.floats.push(new E.FloatText(e.x, e.y - e.size - 12, 'FROZEN', { color: '#aee6ff', size: 30 }));
         for (let i = 0; i < 10; i++) {
           const a = Math.random() * Math.PI * 2, sp = 90 + Math.random() * 120;
@@ -975,8 +976,17 @@
   function step(now) {
     let dt = (now - rt.last) / 1000; rt.last = now;
     if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
-    const steps = Math.max(1, state.gameSpeed | 0);
-    for (let i = 0; i < steps; i++) { rt.time += dt; state.playTime += dt; update(dt); }
+    // ADAPTIVE TIME-SCALE — simulate gameSpeed× time in as FEW sub-steps as
+    // stability allows (each ≤ 50ms of sim time) instead of gameSpeed FULL
+    // update passes per frame. 4×/5×/10× used to run 4/5/10 whole sim passes
+    // every frame — the CPU cost cratered the frame rate and made movement
+    // choppy. Same wall-clock speed, ~half to a quarter of the work:
+    //   1× → 1 step · 4×/5× → 3 steps · 10× → 5 steps (at 60fps) — sub-step
+    //   dt stays ≤35ms so motion, trails and homing keep their smooth feel.
+    const total = dt * Math.max(1, state.gameSpeed | 0);
+    const steps = Math.min(6, Math.max(1, Math.ceil(total / 0.035)));
+    const sdt = total / steps;
+    for (let i = 0; i < steps; i++) { rt.time += sdt; state.playTime += sdt; update(sdt); }
     // RENDER GATE — the simulation above always runs (so idle farming, boss
     // timers and offline progress are never starved), but we only PAINT when the
     // canvas is actually on-screen: skip drawing while the tab is hidden or while
@@ -2360,7 +2370,7 @@
     return Object.assign({}, t, {
       owned: isOwned(k), rival: rivalOf(k), active: state.currentSystem === k,
       cooldown: tileCooldownLeft(k),
-      myCitadel: hasMyCitadel(k) && isOwned(k), rivalCitadelScore: rivalCitadelScore(k),
+      myCitadel: hasMyCitadel(k) && isOwned(k), rivalCitadelScore: rivalCitadelScore(k), defense: rivalDefense(k),
       lootQ: (t.deep ? GX.DEEP_MULT.loot : 1),
       resMult: (t.deep ? GX.DEEP_MULT.resource : 1),
       locked: t.level > state.level + 10 && !isOwned(k),
@@ -2451,7 +2461,7 @@
     const myUid = realMyUid();
     if (ev.deleted) { delete rt.realTiles[ev.tileId]; }
     else {
-      rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil, citadel: !!ev.citadel, fleetScore: ev.fleetScore || 0 };
+      rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil, citadel: !!ev.citadel, fleetScore: ev.fleetScore || 0, defense: ev.defense || null };
       if (myUid && ev.ownerId === myUid) { state.ownedSystems[ev.tileId] = true; }
       else if (state.ownedSystems[ev.tileId]) {
         delete state.ownedSystems[ev.tileId];
@@ -2523,15 +2533,20 @@
     } else if (owned) {
       rt.siege = null; rt.waves = null;
     } else if (rivalCitadelScore(k) != null) {
-      // ATTACK a rival player CITADEL — 8 waves, then a CLONE of the owner's fleet.
+      // ATTACK a rival player CITADEL — waves → their CLONE FLEET → the CITADEL.
       rt.siege = null;
-      rt.waves = { active: true, total: 8, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false, clone: true, cloneScore: rivalCitadelScore(k), claimTile: k };
+      rt.waves = { active: true, total: 8, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.2, super: false, clone: true, cloneScore: rivalCitadelScore(k), cloneDef: rivalDefense(k), thenCitadel: true, playerCit: true, claimTile: k };
     } else if (tile.citadel) {
       // CITADEL SIEGE ZONE → the full citadel-siege encounter; raze it to CLAIM it
       rt.siege = null;
       rt.waves = { active: true, total: 8, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, citadel: true, claimTile: k };
+    } else if (rivalOf(k)) {
+      // RIVAL-HELD tile — their CLONE FLEET garrisons it: clear the escort
+      // waves, then defeat the clone to take the zone.
+      rt.siege = null;
+      rt.waves = { active: true, total: 6, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.1, super: false, clone: true, cloneScore: (rivalDefense(k) || {}).score, cloneDef: rivalDefense(k), plainTake: true, claimTile: k };
     } else {
-      // neutral or rival-held → capture siege (Boss Tiles end on a boss wave)
+      // neutral → capture siege (Boss Tiles end on a boss wave)
       rt.siege = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.0, boss: tile.boss };
       rt.waves = null;
     }
@@ -2578,16 +2593,33 @@
   // THE VOID CITADEL — a massive static fortress at the top of the zone.
   // It cannot move; it suppresses with slow 4-bolt spreads while you grind
   // its enormous hull down. Visual damage states live in render.drawCitadel.
-  function spawnCitadel() {
+  function spawnCitadel(waves) {
     const pool = allowedEnemies();
     const type = pool[pool.length - 1];
     const c = new E.Enemy(type, state.currentDungeon, rt.worldW / 2, rt.worldH * 0.20);
     c.isCitadel = true; c.isBoss = true;      // boss-grade xp/gold on kill
     c.name = 'Void Citadel';
     c.maxHp *= 800; c.hp = c.maxHp;           // a fortress — a true siege grind
+    // endgame clamp: with the DPS-floored base, ×800 would be a 7-minute wall.
+    // Cap the siege at ~45s of the pilot's DPS — but never below the zone curve.
+    {
+      const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
+      const curve800 = C.enemyHp(state.currentDungeon) * type.hpMod * 800;
+      c.maxHp = c.hp = Math.round(Math.max(curve800, Math.min(c.maxHp, dps * 45)));
+    }
     c.damage *= 0.5;
     c.size = 118; c.speed = 0;                // dominates the top of the zone
     c.ranged = true; c.range = 430; c.fireCd = 2.6; c.fireT = 1.4;
+    // PLAYER-BUILT citadel (retake phase 2): named for its owner, scaled to
+    // their published defense so stronger owners hold harder fortresses.
+    if (waves && waves.playerCit) {
+      const def = waves.cloneDef || {};
+      c.name = ((def.name || 'ENEMY').toUpperCase()) + "'S CITADEL";
+      const myS = Math.max(1, Math.round(score()));
+      const ratio = Math.max(0.6, Math.min(5, (waves.cloneScore || myS) / myS));
+      c.maxHp = c.hp = Math.round(c.maxHp * Math.min(2.2, 0.55 + ratio * 0.45));
+      c.tint = '#ff6a5e';
+    }
     rt.enemies.push(c);
     burst(c.x, c.y, '#ff9a50', 50, { speed: 300, life: 1.0, glow: true });
     return c;
@@ -2619,9 +2651,13 @@
     if (rt.waves && rt.waves.claimTile) {
       if (!state.tileCd) state.tileCd = {};
       state.tileCd[rt.waves.claimTile] = Date.now() + 24 * 3600 * 1000;
-      razeCitadelTile(rt.waves.claimTile);     // the razed fortress becomes a plain, buildable tile
-      rt.razingClaim = true;                   // you razed it — keep the tile even if it was protected
-      captureSystem();                         // the razed citadel becomes YOURS
+      if (rt.waves.playerCit) {
+        captureCitadel(rt.waves.claimTile);      // rival's fortress razed → the tile flips to you
+      } else {
+        razeCitadelTile(rt.waves.claimTile);     // the razed fortress becomes a plain, buildable tile
+        rt.razingClaim = true;                   // you razed it — keep the tile even if it was protected
+        captureSystem();                         // the razed citadel becomes YOURS
+      }
     } else {
       if (!state.citadelCd) state.citadelCd = {};
       state.citadelCd[zone] = Date.now() + 15 * 60 * 1000;
@@ -2662,7 +2698,7 @@
     if (s.spawnT > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
-        if (s.pendingBoss) { if (s.clone) spawnCloneBoss(s.cloneScore); else if (s.citadel) spawnCitadel(); else if (s.dread) spawnDreadnaught(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
+        if (s.pendingBoss) { if (s.clone) spawnCloneBoss(s.cloneScore, s.cloneDef); else if (s.citadel) spawnCitadel(s); else if (s.dread) spawnDreadnaught(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
         else spawnWave(s.wave, s.dread ? (1.3 + Math.min(1.3, s.wave * 0.045)) : 1.8); // dread density ramps each wave
       }
       return;
@@ -2678,9 +2714,17 @@
         return;
       }
       if (s.clone) {
-        // ENEMY CITADEL FLEET DOWN — take the tile and its citadel.
+        if (s.thenCitadel) {
+          // CLONE FLEET DOWN — the citadel behind it powers up. Phase 2 begins.
+          s.clone = false; s.thenCitadel = false; s.citadel = true;
+          s.bossSpawned = false; s.pendingBoss = true; s.spawnT = 2.4; s.graceT = null;
+          if (window.UI) { window.UI.siegeEvent('citadel', s); window.UI.unlockToast('⚔ Their fleet is down — now RAZE THE CITADEL'); }
+          return;
+        }
+        // ENEMY CLONE FLEET DOWN — the zone flips to you.
         const ct = s.claimTile; s.active = false; rt.waves = null;
-        captureCitadel(ct);
+        if (s.plainTake) { rt.razingClaim = true; captureSystem(); }
+        else captureCitadel(ct);
         return;
       }
       if (s.citadel) {
@@ -2721,10 +2765,10 @@
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, razing ? { citadel: false, fleetScore: 0, force: true } : undefined).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
-          rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0 };
+          rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0, defense: res.row.defense || null };
         } else if (!razing && res.reason && /protected|cooldown/i.test(res.reason)) {
           // RACE LOST — another operator sealed the claim first (never for a
           // citadel you just razed — that tile is yours by conquest)
@@ -2820,7 +2864,7 @@
     c.lv = lv + 1;
     // harder to take over: republish a rank-boosted defending fleet score
     c.score = Math.round(score() * citadelDefenseMult(c.lv));
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: c.score }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: c.score, defense: defenseSnapshot() }); } catch (e) {} }
     pushFeed('Your Citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' reached Rank ' + c.lv);
     save(); if (window.UI) window.UI.refreshAll();
     return { ok: true, lv: c.lv };
@@ -2833,7 +2877,7 @@
     if (!canAfford(cost)) return { ok: false, reason: 'resources' };
     state.resources.fuel -= cost.fuel; state.resources.iron -= cost.iron; state.resources.plasma -= cost.plasma;
     state.citadels[id] = { score: Math.round(score()), builtAt: Date.now(), lv: 1 };
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: state.citadels[id].score }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: state.citadels[id].score, defense: defenseSnapshot() }); } catch (e) {} }
     pushFeed('You raised a Citadel on ' + ((sysAt(id) || {}).name || 'a system'));
     save(); if (window.UI) window.UI.refreshAll();
     return { ok: true };
@@ -2846,9 +2890,42 @@
     if (!isOwned(id) && state.rivalCitadels && state.rivalCitadels[id] != null) return state.rivalCitadels[id];
     return null;
   }
-  // CLONE FLAGSHIP boss — a defender scaled to its owner's fleet score. The fight
-  // length tracks how strong the defender is relative to YOU, so it's a duel.
-  function spawnCloneBoss(cloneScore) {
+  // Snapshot of MY fleet, published with every claim — rivals render it in the
+  // tile sheet and their client spawns the CLONE defender from it.
+  function defenseSnapshot() {
+    const sh = C.SHIP_BY_KEY[state.ship] || {};
+    const s = rt.stats || computeStats();
+    return { ship: state.ship, nm: sh.name || 'Fleet', lvl: state.level | 0,
+             score: Math.round(score()), hp: Math.round(s.maxHp || 0), dps: Math.round(s.theoryDps || 0),
+             esc: (typeof fleetShips === 'function' ? fleetShips().length : 0) };
+  }
+  // The DEFENDING FLEET of any rival-held tile: real players publish a snapshot
+  // with their claim; simulated rivals get a deterministic pseudo-fleet seeded
+  // by the tile id, so the same tile always shows the same defender.
+  function rivalDefense(id) {
+    const real = rt.realTiles && rt.realTiles[id];
+    const myUid = (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null;
+    if (real && real.ownerId && !(myUid && real.ownerId === myUid)) {
+      const d = real.defense || null;
+      return { name: real.ownerName || 'Rival', real: true, citadel: !!real.citadel,
+               score: (d && d.score) || real.fleetScore || Math.max(800, Math.round(score() * 0.8)), snap: d };
+    }
+    const nm = state.rivalTiles && state.rivalTiles[id];
+    if (!nm || isOwned(id)) return null;
+    let h = 0; for (let i = 0; i < id.length; i++) h = ((h * 31 + id.charCodeAt(i)) >>> 0);
+    const rnd = (h % 1000) / 1000;
+    const t = sysAt(id);
+    const HULLS = ['cruiser', 'battleship', 'dreadnought', 'carrier', 'supercarrier', 'titan', 'mothership'];
+    const band = Math.min(HULLS.length - 1, Math.floor(((t ? t.ring : 5) / (GX.RINGS || 25)) * HULLS.length + rnd * 1.6));
+    const ship = HULLS[band];
+    const cit = !isOwned(id) && state.rivalCitadels && state.rivalCitadels[id] != null;
+    const sc = cit ? state.rivalCitadels[id] : Math.max(400, Math.round(score() * (0.55 + rnd * 0.9)));
+    return { name: nm, real: false, citadel: !!cit, score: sc,
+             snap: { ship, nm: (C.SHIP_BY_KEY[ship] || {}).name || ship, lvl: Math.max(3, (t ? t.level : 10) + ((h >> 4) % 21) - 10), score: sc, hp: 0, dps: 0, esc: (h >> 7) % 5 } };
+  }
+  // CLONE FLAGSHIP boss — a defender built from its owner's published fleet
+  // snapshot: THEIR hull sprite, THEIR name, scaled to THEIR score vs yours.
+  function spawnCloneBoss(cloneScore, def) {
     const pool = allowedEnemies(); const type = pool[pool.length - 1];
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
     const b = new E.Enemy(type, state.currentDungeon, cx, cy);
@@ -2859,7 +2936,13 @@
     b.maxHp = b.hp = Math.max(15000, Math.round(dps * 16 * ratio));
     b.damage = (b.damage || 10) * 2.5;
     b.speed *= 0.5; b.size = 124; b.ranged = true; b.range = 520; b.fireCd = 1.4; b.fireT = 1.1;
-    b.tint = '#ffce8a'; b.name = 'ENEMY CITADEL FLEET · ⚡' + formatNum(cloneScore || 0);
+    const snap = def && def.snap;
+    if (snap && snap.ship) {
+      const im = new Image(); im.src = 'ships/ship-' + snap.ship + '.png';
+      b.spriteImg = im;                                   // render THEIR flagship
+    }
+    b.tint = '#ffce8a';
+    b.name = ((def && def.name) ? def.name.toUpperCase() + "'S FLEET" : 'ENEMY CLONE FLEET') + ' · ⚡' + formatNum(cloneScore || 0);
     rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
     burst(cx, cy, '#ffce8a', 90, { speed: 360, life: 1.2, glow: true });
     if (window.UI) window.UI.bossEvent('super');
@@ -2873,7 +2956,7 @@
     rt.razingClaim = true;                            // you razed it — the tile is yours, no take-back
     captureSystem();                                  // claims the (citadel-less) tile + tows home
     // clear the shared citadel flag so everyone sees the fortress is gone
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: false, fleetScore: 0, force: true }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() }); } catch (e) {} }
     save();
   }
   // Permanently demote a NATURAL citadel siege tile to a plain, buildable tile
@@ -2946,7 +3029,7 @@
   }
   // LOOTCOIN FAST-TRACK — hero-banner ship offers (Ships tab). Carrier first;
   // once owned, the banner upgrades to the Mothership.
-  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 75000, oblivionfinal: 1000000, chromafang: 500, chromaregent: 75000, frostyfrost: 50000 };
+  const LC_SHIP_OFFERS = { carrier: 25000, mothership: 100000, oblivionfinal: 300000, chromafang: 500, chromaregent: 75000, frostyfrost: 50000, titansina: 1000000 };
   function buyShipLC(key) {
     const ship = C.SHIP_BY_KEY[key];
     const price = LC_SHIP_OFFERS[key];
@@ -3379,7 +3462,7 @@
     recommendedZone, zoneAdvice, zoneBonuses, currentWeek,
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor,
-    buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, hasMyCitadel, rivalCitadelScore,
+    buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],

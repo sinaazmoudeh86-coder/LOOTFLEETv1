@@ -383,7 +383,8 @@
     if (lvl() < UNLOCK) { toast('Server Dreadnaught unlocks at Level ' + UNLOCK); return; }
     if (attemptsLeft() <= 0) { toast('No attempts left — resets in ' + fmtDur(msToDailyReset())); return; }
     if (run) return;
-    try { G().setGameSpeed(1); } catch (e) {}   // world boss always engages at 1× speed
+    let prevSpeed = 1;
+    try { prevSpeed = G().state.gameSpeed || 1; G().setGameSpeed(1); } catch (e) {}   // world boss always engages at 1× — restored at run end
     let prevAuto = false;
     try { prevAuto = !!G().getAuto(); G().setAuto(false); } catch (e) {}   // MANUAL FLIGHT ONLY
     let b = null;
@@ -392,7 +393,7 @@
     s.att = (s.att | 0) + 1; s.runs = (s.runs | 0) + 1;
     try { G().save(); } catch (e) {}
     applyBossStage(b, 1);                       // every attempt starts back at STAGE 1
-    run = { left: RUN_SECS, dealt: 0, drops: [], boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 7, zoneWarned: false, prevAuto };
+    run = { left: RUN_SECS, dealt: 0, drops: [], boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 7, zoneWarned: false, prevAuto, prevSpeed };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     ensureWarbar();
@@ -547,11 +548,13 @@
   function endRun(reason, engineHandled) {
     if (!run) return;
     const s = sd(), dealt = Math.floor(run.dealt);
-    const drops = run.drops, b = run.boss, prevAuto = run.prevAuto;
+    const drops = run.drops, b = run.boss, prevAuto = run.prevAuto, prevSpeed = run.prevSpeed;
     run = null;
     const app = $('app'); if (app) app.classList.remove('sd-noauto');
     try { G().setAuto(!!prevAuto); } catch (e) {}   // hand auto-pilot back
+    try { if (prevSpeed && prevSpeed !== 1) G().setGameSpeed(prevSpeed); } catch (e) {}   // restore battle speed (the 1× was event-only)
     try { G().refreshStats(); } catch (e) {}         // drop the 3× event fire range
+    try { if (window.UI) window.UI.refreshAll(); } catch (e) {}   // speed pills reflect the restore
     if (!engineHandled) {
       try {
         const rt = G().rt;
@@ -832,8 +835,11 @@
   function ensureCloud(cb, force) {
     if (!cloudOn()) return;
     const s = sd(); if (!s) return;
-    if (_cl.inflight || (!force && Date.now() - _cl.t < 8000)) { return; }
-    _cl.inflight = true; _cl.t = Date.now();
+    // inflight guard with a 10s TIMEOUT — a hung fetch used to wedge the boards
+    // in "syncing" forever (no retries). Stale inflight now unblocks itself.
+    if (_cl.inflight && Date.now() - (_cl.inflightAt || 0) < 10000) return;
+    if (!force && Date.now() - _cl.t < 8000) return;
+    _cl.inflight = true; _cl.inflightAt = Date.now(); _cl.t = Date.now();
     Promise.all([window.CLOUD.sdDaily(SEASON.num, s.day, 100), window.CLOUD.sdSeason(SEASON.num, 100)]).then(([d, se]) => {
       _cl.inflight = false; _cl.ok = !!(d || se);
       if (d) _cl.day = d;
@@ -853,8 +859,14 @@
   }
   // publish my row after every run (identity = auth.uid(); server keeps maxes)
   function publishScore() {
-    if (!cloudOn()) return;
     const s = sd(); if (!s) return;
+    // GUESTS can read the live board but can never WRITE it (the RPC requires a
+    // signed-in account) — tell them once a day why their run isn't showing up.
+    if (cloudOn() && !myUid()) {
+      if (s.pubWarnDay !== dayIdx()) { s.pubWarnDay = dayIdx(); try { G().save(); } catch (e) {} toast('👤 Guest run — sign in with an account to appear on the LIVE event leaderboard'); }
+      return;
+    }
+    if (!cloudOn()) return;
     try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: s.bestDay, total: Math.floor(s.total), stage: Math.max(1, s.bestStage | 0) }); } catch (e) {}
     setTimeout(() => ensureCloud(null, true), 1500);
   }
@@ -880,17 +892,24 @@
   function lbSheetBody() {
     const s = sd();
     const live = cloudOn();
+    const signedIn = live && !!myUid();
     const meDay = s.bestDay || 0, meSea = Math.floor(s.total) || 0;
     const myDayRank = meDay ? ((live && liveDailyRank()) || rankFor(s.day, meDay)) : null;
     const mySeaRank = meSea ? ((live && liveSeasonRank()) || seasonRankFor(meSea)) : null;
-    const dayList = live ? cloudOthers(_cl.day).map((r) => ({ name: r.name || 'Operator', dmg: r.best_day || 0 })) : botsFor(s.day);
-    const seaList = live ? cloudOthers(_cl.season).map((r) => ({ name: r.name || 'Operator', dmg: r.total || 0 })) : seasonBots();
+    // live rows when we HAVE them; simulated rivals as the visible fallback
+    // while the first fetch is still in flight or failing (never an empty board)
+    const dayList = (live && _cl.day) ? cloudOthers(_cl.day).map((r) => ({ name: r.name || 'Operator', dmg: r.best_day || 0 })) : botsFor(s.day);
+    const seaList = (live && _cl.season) ? cloudOthers(_cl.season).map((r) => ({ name: r.name || 'Operator', dmg: r.total || 0 })) : seasonBots();
+    const aloneNote = (live && _cl.ok && signedIn && _cl.season && cloudOthers(_cl.season).length === 0)
+      ? '<div class="sdm-locknote soft" style="margin-top:6px">You\u2019re the only operator published so far — players appear the moment they fight <b>while signed in</b> (guest runs never reach the board).</div>' : '';
     const liveNote = live
       ? (_cl.ok
-          ? '<div class="sdl-live">🌐 LIVE — real server standings · auto-updates<span class="sdl-pulse"></span></div>'
-          : '<div class="sdl-live">🌐 Syncing live standings…</div>')
+          ? (signedIn
+              ? '<div class="sdl-live">🌐 LIVE — real server standings · auto-updates<span class="sdl-pulse"></span></div>'
+              : '<div class="sdl-live off">🌐 LIVE board (read-only) — <b style="color:#ffcf7a">you\u2019re a guest: your runs don\u2019t publish.</b> Sign in to place.</div>')
+          : '<div class="sdl-live off">🌐 Connecting to live standings… simulated rivals shown</div>')
       : '<div class="sdl-live off">Offline — simulated rivals shown until you sign in</div>';
-    return liveNote +
+    return liveNote + aloneNote +
       (meDay || meSea ? '' : '<div class="sdm-locknote">Fight at least once to place. Daily ranks your <b>best single run</b> — season ranks your <b>total damage</b>.</div>') +
       '<div class="sdl-cols">' +
         '<div class="sdl-col">' +

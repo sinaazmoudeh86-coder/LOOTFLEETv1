@@ -250,7 +250,7 @@
     const claimedN = ms.list.filter((m) => m.claimed).length;
     const sub = $('missions-sub'); if (sub) sub.textContent = 'Tier ' + tier + ' · ' + doneN + '/10 complete · resets ' + fmtLeft();
     let html = '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">DAILY MISSION BOARD <span class="mh-tier">TIER ' + tier + '</span></div>' +
-      '<div class="mh-s">10 fresh orders every day · ⟳ resets in <b>' + fmtLeft() + '</b></div>' +
+      '<div class="mh-s">10 fresh orders every day · ⟳ resets in <b data-msn-cd>' + fmtLeft() + '</b></div>' +
       (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rm) + '</b> this tier · targets up steeply</div>'
                 : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>') +
       '</div><div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
@@ -282,6 +282,10 @@
     // preserve scroll through re-renders
     let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
     const _st = _sc ? _sc.scrollTop : 0;
+    // FLICKER GUARD — identical content (timers aside) skips the DOM swap; the
+    // countdowns are patched in place by the interval below instead.
+    if (body._msnHtml === html) return;
+    body._msnHtml = html;
     body.innerHTML = html;
     if (_sc) _sc.scrollTop = _st;
     body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => {
@@ -323,7 +327,14 @@
     ensureDay();
     watchBoss();
     setInterval(tick, 1000);
-    setInterval(() => { if (document.querySelector('#screen-missions.active')) render(); }, 30000); // countdown refresh
+    // countdown refresh — patch the ticking text IN PLACE (no innerHTML rebuild,
+    // no flicker); render() itself only runs on real mission-state changes.
+    setInterval(() => {
+      if (!document.querySelector('#screen-missions.active')) return;
+      const cd = document.querySelector('#missions-body [data-msn-cd]'); if (cd) cd.textContent = fmtLeft();
+      const sub = $('missions-sub');
+      if (sub && G.state.missions) { const ms = G.state.missions; sub.textContent = 'Tier ' + (ms.tier || 1) + ' · ' + ms.list.filter((m) => m.done >= m.n).length + '/10 complete · resets ' + fmtLeft(); }
+    }, 30000);
     syncBadge();
   }
   // self-boot: wait for the engine, mirroring galaxy-box.js

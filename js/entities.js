@@ -86,9 +86,14 @@
       this.angle = Math.atan2(dy, dx);
       const step = this.speed * dt;
 
-      // record trail point
-      this.trail.push({ x: this.x, y: this.y });
-      if (this.trail.length > 5) this.trail.shift();
+      // record trail — SUB-SAMPLED along the movement so large sim steps (high
+      // game speed runs fewer, bigger sub-steps) still leave a continuous
+      // streak instead of a chain of separated dots ("motion glitch" at 5×).
+      const segs = Math.min(4, Math.max(1, Math.round(step / 16)));
+      for (let i = 0; i < segs; i++) {
+        this.trail.push({ x: this.x + Math.cos(this.angle) * step * (i / segs), y: this.y + Math.sin(this.angle) * step * (i / segs) });
+      }
+      while (this.trail.length > 9) this.trail.shift();
 
       if (this.target && !this.target.dead && dist <= step + this.target.size) {
         this.x = tx; this.y = ty;
@@ -109,6 +114,17 @@
       this.level = C.dungeonEnemyLevel(dungeon); // cosmetic display level
       this.x = x; this.y = y;
       this.maxHp = C.enemyHp(dungeon) * typeDef.hpMod;
+      // ENDGAME HP FLOOR (Jul 2026): past ~Lv100 fleet DPS dwarfs the zone curve
+      // (800B+ fleet scores one-shot whole screens). Trash now floors at ~0.55s
+      // of the pilot's own theoretical DPS (× the type's hpMod), so the grind
+      // stays a grind at ANY power level. Boss/garrison multipliers stack on top.
+      try {
+        const ps = window.GAME && window.GAME.rt && window.GAME.rt.stats;
+        if (ps && ps.theoryDps) {
+          const floor = ps.theoryDps * 0.55 * typeDef.hpMod;
+          if (floor > this.maxHp) this.maxHp = Math.round(floor);
+        }
+      } catch (e) {}
       this.hp = this.maxHp;
       this.damage = C.enemyDamage(dungeon) * typeDef.dmgMod;
       this.speed = typeDef.spd;
@@ -128,6 +144,7 @@
       this.ranged = (this.seed % 10) < 3.5;
       this.chillT = 0;        // FROSTYFROST cryo: >0 → slowed (movement + fire rate)
       this.frozenT = 0;       // FROSTYFROST cryo: >0 → flash-frozen solid (ice cube)
+      this.frostCd = 0;       // refreeze immunity — stops the ice cube strobing under high fire rates
       this.range = 230;                              // ≈ the player's own 250
       this.holdAt = this.range * (0.55 + (this.seed % 1) * 0.25);
       this.fireT = 1.2 + (this.seed % 1.4);          // first shot is staggered
@@ -149,6 +166,7 @@
         return;
       }
       // FROSTYFROST cryo — frozen solid: an ice cube. No movement, no attacks.
+      if (this.frostCd > 0) this.frostCd -= dt;
       if (this.frozenT > 0) {
         this.frozenT -= dt;
         this.moving = false;

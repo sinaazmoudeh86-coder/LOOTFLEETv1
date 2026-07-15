@@ -54,6 +54,63 @@
     const sso = $('lg-sso-status'); if (sso) { sso.style.display = 'block'; sso.textContent = 'Syncing your fleet…'; }
     try { if (window.ACCOUNT) await window.ACCOUNT.pull(); } catch (e) {}
     boot(); reveal(true);
+    setTimeout(maybePromptName, 600);   // NEW accounts: pick a commander name first
+  }
+
+  // ---- FIRST-LOGIN COMMANDER NAME -------------------------------------------
+  // A brand-new account's FIRST action is naming their commander. Shown once:
+  // skipped for saves with real progress (existing accounts get flagged silently)
+  // and never shown again after confirm (state.nameSet persists in the save).
+  function maybePromptName() {
+    try {
+      const g = window.GAME;
+      if (!g || !g.state) { setTimeout(maybePromptName, 400); return; }
+      const st = g.state;
+      if (st.nameSet) return;
+      if ((st.level || 1) > 1 || (st.playTime || 0) > 120) {   // veteran save — don't nag
+        st.nameSet = true; try { g.save(); } catch (e) {} return;
+      }
+      if ($('first-name-gate')) return;
+      const s = getSession() || {};
+      const suggested = (s.name || '').replace(/[^\w .-]/g, '').slice(0, 16);
+      const wrap = document.createElement('div');
+      wrap.id = 'first-name-gate';
+      wrap.innerHTML =
+        '<style>#first-name-gate{position:fixed;inset:0;z-index:400;display:grid;place-items:center;padding:20px;background:rgba(5,8,16,.82);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}' +
+        '#fng-card{width:100%;max-width:330px;background:linear-gradient(180deg,#141b2b,#0d1220);border:1px solid #2c3a58;border-radius:18px;padding:22px 18px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.6);animation:fngUp .35s cubic-bezier(.22,1,.36,1)}' +
+        '@keyframes fngUp{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}' +
+        '#fng-card h2{font-family:Orbitron,sans-serif;font-size:17px;letter-spacing:.06em;color:#eaf0fa;margin:8px 0 4px}' +
+        '#fng-card p{font-size:12px;color:#9fb0c4;line-height:1.5;margin:0 0 14px}' +
+        '#fng-in{width:100%;box-sizing:border-box;padding:13px;border-radius:11px;border:1px solid #33456b;background:#0a0f1b;color:#eaf0fa;font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;text-align:center;letter-spacing:.06em}' +
+        '#fng-in:focus{outline:none;border-color:#5b9cff;box-shadow:0 0 0 3px rgba(91,156,255,.18)}' +
+        '#fng-err{display:none;color:#ff8a96;font-size:11px;margin-top:7px}' +
+        '#fng-ok{width:100%;margin-top:13px;border:none;border-radius:11px;padding:13px;background:linear-gradient(180deg,#4d94ff,#1f61d8);color:#fff;font-family:Rajdhani,sans-serif;font-weight:800;font-size:15px;letter-spacing:.04em;cursor:pointer}' +
+        '#fng-ok:active{transform:scale(.98)}' +
+        '#fng-note{font-size:10.5px;color:#67758c;margin-top:10px}</style>' +
+        '<div id="fng-card">' +
+          '<div style="font-size:34px">☄</div>' +
+          '<h2>NAME YOUR COMMANDER</h2>' +
+          '<p>This is how the galaxy sees you — leaderboards, territory claims and battle reports all carry it.</p>' +
+          '<input id="fng-in" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Commander name" value="' + suggested.replace(/"/g, '&quot;') + '">' +
+          '<div id="fng-err">2–16 characters — letters, numbers, spaces, . _ -</div>' +
+          '<button id="fng-ok">⚔ Enter the galaxy</button>' +
+          '<div id="fng-note">You can change it later in Account &amp; Settings.</div>' +
+        '</div>';
+      document.body.appendChild(wrap);
+      const input = wrap.querySelector('#fng-in'), ok = wrap.querySelector('#fng-ok'), fe = wrap.querySelector('#fng-err');
+      setTimeout(() => { try { input.focus(); input.select(); } catch (e) {} }, 80);
+      const submit = () => {
+        const v = (input.value || '').trim().replace(/[^\w .-]/g, '').slice(0, 16);
+        if (v.length < 2) { fe.style.display = 'block'; input.value = v; try { input.focus(); } catch (e) {} return; }
+        try { if (window.ACCOUNT && window.ACCOUNT.setName) window.ACCOUNT.setName(v); } catch (e) {}
+        st.nameSet = true; try { g.save(); } catch (e) {}
+        try { if (window.ACCOUNT && window.ACCOUNT.push) window.ACCOUNT.push(); } catch (e) {}   // leaderboard row picks the name up
+        wrap.remove();
+        try { if (window.UI && window.UI.unlockToast) window.UI.unlockToast('☄ Welcome, Commander ' + v); } catch (e) {}
+      };
+      ok.addEventListener('click', submit);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    } catch (e) {}
   }
 
   function prettyAuthError(ex) {

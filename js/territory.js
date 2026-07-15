@@ -24,12 +24,13 @@
   // a real account (guests have no stable cross-device id to fight under).
   function enabled() { return !!(client() && myId()); }
 
-  // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil } }
+  // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil, citadel, fleetScore, defense } }
   async function loadAll() {
     const cl = client(); if (!cl) return {};
-    const toMap = (data) => { const map = {}; (data || []).forEach((r) => { map[r.tile_id] = { ownerId: r.owner_id, ownerName: r.owner_name, cooldownUntil: r.cooldown_until, citadel: !!r.citadel, fleetScore: r.fleet_score || 0 }; }); return map; };
+    const toMap = (data) => { const map = {}; (data || []).forEach((r) => { map[r.tile_id] = { ownerId: r.owner_id, ownerName: r.owner_name, cooldownUntil: r.cooldown_until, citadel: !!r.citadel, fleetScore: r.fleet_score || 0, defense: r.defense || null }; }); return map; };
     try {
-      let { data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score');
+      let { data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score,defense');
+      if (error) { ({ data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score')); }
       if (error) { ({ data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until')); }
       if (error || !data) return {};
       return toMap(data);
@@ -45,7 +46,10 @@
     const cl = client(); if (!cl || !myId()) return { ok: false, reason: 'offline' };
     meta = meta || {};
     try {
-      let res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0) });
+      let res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0), p_defense: meta.defense || null });
+      if (res.error && /p_defense|function|argument/i.test(res.error.message || '')) {
+        res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0) });
+      }
       if (res.error && /p_citadel|p_fleet_score|function|argument/i.test(res.error.message || '')) {
         res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15 });
       }
@@ -73,6 +77,7 @@
             cooldownUntil: payload.new ? payload.new.cooldown_until : null,
             citadel: payload.new ? !!payload.new.citadel : false,
             fleetScore: payload.new ? (payload.new.fleet_score || 0) : 0,
+            defense: payload.new ? (payload.new.defense || null) : null,
             deleted: !payload.new,
           });
         })

@@ -518,6 +518,15 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   color:#2a0820; background:linear-gradient(90deg,#ff9de2,#ff7bd5,#8ab4ff); }
 .hero-offer.lcf[data-lcship="chromafang"] .ho-ship, .hero-offer.lcf[data-lcship="chromaregent"] .ho-ship{
   filter:drop-shadow(0 0 14px rgba(255,123,213,.6)); }
+/* Titan Sina FINAL CLASS banner — full-spectrum */
+.hero-offer.lcf[data-lcship="titansina"]{
+  border-color:rgba(255,210,77,.6);
+  background:linear-gradient(115deg, rgba(255,90,104,.14), rgba(255,210,77,.12) 40%, rgba(122,92,255,.14) 80%, #10172333);
+  box-shadow:0 0 26px -8px rgba(255,210,77,.55); }
+.hero-offer.lcf[data-lcship="titansina"] .ho-tag{
+  color:#241205; background:linear-gradient(90deg,#ff8a80,#ffd24d,#8ce08a,#7ab8ff,#c98aff); }
+.hero-offer.lcf[data-lcship="titansina"] .ho-ship{
+  filter:drop-shadow(0 0 16px rgba(255,210,77,.7)); }
 /* FrostyFrost cryo banner */
 .hero-offer.lcf[data-lcship="frostyfrost"]{
   border-color:rgba(140,210,255,.55);

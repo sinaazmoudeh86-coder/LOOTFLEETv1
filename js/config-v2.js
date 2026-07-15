@@ -135,18 +135,19 @@
   // GRINDING units down over several volleys, not one-shotting the screen —
   // an on-level enemy should soak a good handful of hits before breaking.
   function enemyHp(dungeon) {
-    // zones 1–25 are the FAST lane — geared pilots nearly one-shot everything.
-    // HP climbs very gently across this band, then catches up to full HP over
-    // zones 26–31 so there's no brutal cliff. Real grind HP arrives at zone 32.
+    // REBALANCE (Jul 2026): the old fast-lane ramp (0.04→0.16) + flat deep ramp
+    // let player DPS creep one-shot whole zones. Baseline +27%, the 1–25 band
+    // roughly doubled, and 32+ now keeps climbing (up to 2.5×) so a fixed fleet
+    // stops deleting everything a few zones past its gear tier.
     let ramp;
     if (dungeon <= 25) {
-      ramp = 0.04 + (dungeon - 1) * (0.12 / 24);   // 0.04 → 0.16 across 1–25
+      ramp = 0.08 + (dungeon - 1) * (0.27 / 24);   // 0.08 → 0.35 across 1–25
     } else if (dungeon <= 31) {
-      ramp = 0.16 + (dungeon - 25) * ((1 - 0.16) / 6); // 0.16 → 1 across 26–31
+      ramp = 0.35 + (dungeon - 25) * ((1 - 0.35) / 6); // 0.35 → 1 across 26–31
     } else {
-      ramp = 1;
+      ramp = 1 + Math.min(1.5, (dungeon - 31) * 0.025); // 1 → 2.5× by zone ~91
     }
-    return Math.max(8, Math.floor((252 * dungeonScale(dungeon) + 30) * ramp));
+    return Math.max(10, Math.floor((320 * dungeonScale(dungeon) + 38) * ramp));
   }
 
   // Contact damage an enemy deals per hit. Kept low relative to player HP so a
@@ -154,15 +155,16 @@
   // because enemy damage scales geometrically while your HP lags if under-geared.
   // (Also see the per-hit cap in entities.js — no single hit can one-shot you.)
   function enemyDamage(dungeon) {
-    // zones 1–25 hit soft — the easy-grind band stays forgiving, then damage
-    // ramps back to full over zones 26–31 alongside the HP catch-up.
+    // zones 1–25 hit soft — the easy-grind band stays forgiving (slightly less
+    // so after the Jul 2026 rebalance), then damage ramps to full over 26–31
+    // and keeps a mild climb at depth so pushing always carries risk.
     let ramp;
     if (dungeon <= 25) {
-      ramp = 0.35 + (dungeon - 1) * (0.20 / 24);   // 0.35 → 0.55 across 1–25
+      ramp = 0.42 + (dungeon - 1) * (0.20 / 24);   // 0.42 → 0.62 across 1–25
     } else if (dungeon <= 31) {
-      ramp = 0.55 + (dungeon - 25) * ((1 - 0.55) / 6); // 0.55 → 1 across 26–31
+      ramp = 0.62 + (dungeon - 25) * ((1 - 0.62) / 6); // 0.62 → 1 across 26–31
     } else {
-      ramp = 1;
+      ramp = 1 + Math.min(0.5, (dungeon - 31) * 0.01); // 1 → 1.5× by zone ~81
     }
     return Math.max(1, Math.floor((2.1 * dungeonScale(dungeon) + 1) * ramp));
   }
@@ -416,7 +418,7 @@
       tag:'OBLIVION FINAL',
       desc:'The final hull. 2.5× the Oblivion Spear in every dimension, wreathed in a green reactor aura. Sold outright for LootCoins — no level gate, no blueprint.',
       greenAura:true,
-      purchase:{ lc:1000000 } },
+      purchase:{ lc:300000 } },
     // DREAD-CLASS — six recovered Dreadnaught hulls, sold directly for a MIX of
     // every currency at a steeper price than the Oblivion Final, each one a step
     // beyond it in raw performance. Gated by account level, not the blueprint chain.
@@ -424,42 +426,41 @@
       mods:{ hpPct:1040, dmgPct:585, multiShot:156, critChance:130, critDamage:455, moveSpeed:98, atkSpeedPct:195, rangePct:312, lifeSteal:29 },
       tag:'DREAD-CLASS I', dreadAura:true, reqLevel:100,
       desc:'First of the recovered Dreadnaughts — already a tier beyond the Oblivion Final. Bought with a mix of every currency.',
-      megaCost:{ gold:5e9, fuel:60e6, iron:40e6, plasma:25e6, prism:4000, credits:1500000, dreadCores:6 } },
+      megaCost:{ gold:5e9, fuel:60e6, iron:40e6, plasma:25e6, prism:4000, credits:350000, dreadCores:6 } },
     { key:'dread2', name:'Dread Sovereign', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:52,
       mods:{ hpPct:1280, dmgPct:720, multiShot:192, critChance:160, critDamage:560, moveSpeed:120, atkSpeedPct:240, rangePct:384, lifeSteal:35 },
       tag:'DREAD-CLASS II', dreadAura:true, reqLevel:120,
       desc:'A command Dreadnaught bristling with hardpoints. Strictly superior to the Reaver.',
-      megaCost:{ gold:10e9, fuel:120e6, iron:80e6, plasma:50e6, prism:8000, credits:3000000, dreadCores:12 } },
+      megaCost:{ gold:10e9, fuel:120e6, iron:80e6, plasma:50e6, prism:8000, credits:450000, dreadCores:12 } },
     { key:'dread3', name:'Dread Leviathan', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:60,
       mods:{ hpPct:1560, dmgPct:878, multiShot:234, critChance:195, critDamage:683, moveSpeed:146, atkSpeedPct:293, rangePct:468, lifeSteal:43 },
       tag:'DREAD-CLASS III', dreadAura:true, reqLevel:140,
       desc:'A leviathan-scale hull whose reactor output dwarfs the lesser Dreads.',
-      megaCost:{ gold:15e9, fuel:180e6, iron:120e6, plasma:75e6, prism:12000, credits:4500000, dreadCores:18 } },
+      megaCost:{ gold:15e9, fuel:180e6, iron:120e6, plasma:75e6, prism:12000, credits:550000, dreadCores:18 } },
     { key:'dread4', name:'Dread Harbinger', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:72,
       mods:{ hpPct:1880, dmgPct:1058, multiShot:282, critChance:235, critDamage:823, moveSpeed:176, atkSpeedPct:353, rangePct:564, lifeSteal:52 },
       tag:'DREAD-CLASS IV', dreadAura:true, reqLevel:160,
       desc:'A harbinger of the apex Dreads — overwhelming firepower across 72 drone bays.',
-      megaCost:{ gold:20e9, fuel:240e6, iron:160e6, plasma:100e6, prism:16000, credits:6000000, dreadCores:24 } },
+      megaCost:{ gold:20e9, fuel:240e6, iron:160e6, plasma:100e6, prism:16000, credits:650000, dreadCores:24 } },
     { key:'dread5', name:'Dread Tyrant', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:84,
       mods:{ hpPct:2240, dmgPct:1260, multiShot:336, critChance:280, critDamage:980, moveSpeed:210, atkSpeedPct:420, rangePct:672, lifeSteal:62 },
       tag:'DREAD-CLASS V', dreadAura:true, reqLevel:180,
       desc:'A tyrant hull that rewrites the battlefield — second only to the Omega.',
-      megaCost:{ gold:30e9, fuel:360e6, iron:240e6, plasma:150e6, prism:24000, credits:9000000, dreadCores:36 } },
+      megaCost:{ gold:30e9, fuel:360e6, iron:240e6, plasma:150e6, prism:24000, credits:775000, dreadCores:36 } },
     { key:'dread6', name:'Dread Omega', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:96,
       mods:{ hpPct:2640, dmgPct:1485, multiShot:396, critChance:330, critDamage:1155, moveSpeed:248, atkSpeedPct:495, rangePct:792, lifeSteal:73 },
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
-      megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:15000000, dreadCores:60 } },
+      megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:900000, dreadCores:60 } },
     // TITAN SINA — the FINAL-CLASS hero ship. Double the Dread Omega in every
     // stat, with weapon range that effectively covers the entire battle zone.
     // Its fire renders as full-spectrum gatling tracers — lasers of all colors.
-    // Cost: 1T gold + 1B of each galaxy resource + 1,000 Void Credits (Dread
-    // Cores) + 100,000 LootCoins.
+    // Cost: 1,000,000 LootCoins FLAT — no level gate, no other currencies.
     { key:'titansina', name:'Titan Sina', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:128,
       mods:{ hpPct:5280, dmgPct:2970, multiShot:792, critChance:660, critDamage:2310, moveSpeed:496, atkSpeedPct:990, rangePct:4000, lifeSteal:146 },
-      tag:'FINAL CLASS · TITAN SINA', sinaTracers:true, reqLevel:200,
-      desc:'The final-class hero ship — twice the Dread Omega in every dimension. Its guns reach across the entire battle zone, spraying full-spectrum tracer fire.',
-      megaCost:{ gold:1e12, fuel:1e9, iron:1e9, plasma:1e9, credits:100000, dreadCores:1000 } },
+      tag:'FINAL CLASS · TITAN SINA', sinaTracers:true,
+      desc:'The final-class hero ship — twice the Dread Omega in every dimension. Its guns reach across the entire battle zone, spraying full-spectrum tracer fire. Sold outright for 1,000,000 LootCoins.',
+      megaCost:{ credits:1000000 } },
   ];
   // Economy tuning: hulls cost 3× gold and demand 5× the kills to unlock.
   SHIPS.forEach((s) => {

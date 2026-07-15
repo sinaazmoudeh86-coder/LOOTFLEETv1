@@ -518,8 +518,17 @@
     // keep the player's scroll position through re-renders (no jump-to-top "reload" feel)
     let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
     const _st = _sc ? _sc.scrollTop : 0;
+    // FLICKER GUARD — keep the LIVE diorama canvas across re-renders (upgrades
+    // re-render the card list; remounting the scene made the whole screen flash).
+    const _oldCv = $('mn-scene-cv');
     body.innerHTML = html;
-    if (window.MOONSCENE) window.MOONSCENE.mount($('mn-scene-cv'));
+    const _newCv = $('mn-scene-cv');
+    if (_oldCv && _newCv && window.MOONSCENE) {
+      _newCv.replaceWith(_oldCv);                       // same canvas, same GL/2D context — no restart
+      if (window.MOONSCENE.refresh) window.MOONSCENE.refresh();
+    } else if (window.MOONSCENE) {
+      window.MOONSCENE.mount($('mn-scene-cv'));
+    }
     wire(body, root, mm);
     if (_sc) _sc.scrollTop = _st;
   }

@@ -144,6 +144,17 @@
   // ---- SIM (called by engine each frame during a run) -----------------------
   function tick(dt, rt) {
     const g = G(); if (!g) return; const run = g.state.prismRun; if (!run || !run.active) { RUN.active = false; return; }
+    // ORPHAN GUARD — if the zone changed under the run through any path that
+    // skipped resetZone (death respawn race, event deploy, galaxy warp), the
+    // run is dead: end it cleanly instead of mining an invisible field in the
+    // wrong zone with a frozen HUD pill.
+    if (g.state.currentDungeon !== run.d) {
+      g.state.prismRun = null;
+      RUN.active = false;
+      try { g.save(); } catch (e) {}
+      updateHud(); syncChrome();
+      return;
+    }
     if (!RUN.active || RUN.runId !== run.started) initRun(rt, run);
     RUN.cx = rt.worldW / 2; RUN.cy = rt.worldH / 2;
     const fR = fieldR(RUN.tier);

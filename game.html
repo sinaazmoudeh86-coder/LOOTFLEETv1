@@ -30,10 +30,10 @@
 <link rel="stylesheet" href="css/theme.css?v=181">
 <link rel="stylesheet" href="css/web-v89.css?v=192">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=180">
-<link rel="stylesheet" href="css/fx-primordial.css">
+<link rel="stylesheet" href="css/fx-primordial.css?v=4">
 <link rel="stylesheet" href="css/moon-colony.css?v=169">
 <link rel="stylesheet" href="css/fx-aaa.css?v=171">
-<link rel="stylesheet" href="css/readability.css?v=1">
+<link rel="stylesheet" href="css/readability.css?v=2">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -426,6 +426,11 @@
         </div>
 
         <!-- MISSIONS (Command) -->
+        <div class="screen overlay" id="screen-homecit" data-screen-label="Home Citadel">
+          <div class="scr-head"><span class="scr-title">Home Citadel</span><span class="scr-sub" id="homecit-sub"></span></div>
+          <div class="scr-body" id="homecit-body"></div>
+        </div>
+
         <div class="screen overlay" id="screen-missions">
           <div class="scr-head"><span class="scr-title">Missions</span><span class="scr-sub" id="missions-sub"></span></div>
           <div class="scr-body" id="missions-body"></div>
@@ -509,6 +514,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           <span class="nl">Moon Colony</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="homecit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l4-3 5 4 5-4 4 3v11z"/><path d="M9 21v-5h6v5"/></svg>
+          <span class="nl">Home Citadel</span>
+        </button>
         <button class="nav-btn nav-grouped" data-screen="missions">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg>
           <span class="nl">Missions</span>
@@ -581,6 +590,11 @@
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></div>
               <div><div class="mc-n">Moon Colony</div><div class="mc-s">Build, automate &amp; harvest · 24/7 passive income</div></div>
               <span class="mc-lock"></span>
+            </div>
+            <div class="mega-card cmd-homecit" data-go="homecit">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l4-3 5 4 5-4 4 3v11z"/><path d="M9 21v-5h6v5"/></svg></div>
+              <div><div class="mc-n">Home Citadel</div><div class="mc-s">Defend waves · permanent AFK empire</div></div>
+              <span class="mc-lock"></span><span class="badge" id="cmd-homecit-badge" style="display:none">⛏</span>
             </div>
             <div class="mega-card cmd-msn" data-go="missions">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg></div>
@@ -659,31 +673,32 @@
 
 <script src="js/config-v2.js?v=211"></script>
 <script src="js/items.js?v=4"></script>
-<script src="js/entities.js?v=212"></script>
-<script src="js/render.js?v=213"></script>
+<script src="js/entities.js?v=216"></script>
+<script src="js/render.js?v=217"></script>
 <script src="js/galaxy.js?v=2"></script>
-<script src="js/leaderboard.js"></script>
+<script src="js/leaderboard.js?v=175"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
 <script src="js/analytics.js?v=1"></script>
-<script src="js/cloud.js?v=181"></script>
-<script src="js/session-lock.js?v=1"></script>
-<script src="js/account.js?v=181"></script>
-<script src="js/territory.js?v=204"></script>
-<script src="js/payments-v91.js?v=189"></script>
-<script src="js/game-v93.js?v=218"></script>
-<script src="js/ui-v94.js?v=212"></script>
+<script src="js/cloud.js?v=190"></script>
+<script src="js/account.js?v=194"></script>
+<script src="js/session-lock.js?v=2"></script>
+<script src="js/territory.js?v=205"></script>
+<script src="js/payments-v91.js?v=190"></script>
+<script src="js/game-v93.js?v=226"></script>
+<script src="js/ui-v94.js?v=217"></script>
 <script src="js/fx-cinematic.js?v=3"></script>
-<script src="js/fx-primordial.js"></script>
+<script src="js/fx-primordial.js?v=4"></script>
 <script src="js/fx-aaa.js?v=160"></script>
 <script src="js/moon-scene.js?v=166"></script>
-<script src="js/moon-colony.js?v=184"></script>
+<script src="js/moon-colony.js?v=185"></script>
+<script src="js/home-citadel.js?v=20"></script>
 <script src="js/missions.js?v=189"></script>
 <script src="js/coach-v89.js?v=167"></script>
 <script src="js/prism-v5.js?v=5"></script>
 <script src="js/prism-fleet.js"></script>
 <script src="js/dreadnaught.js?v=3"></script>
-<script src="js/server-dreadnaught.js?v=7"></script>
+<script src="js/server-dreadnaught.js?v=8"></script>
 <script src="js/galaxy-box.js"></script>
 <script src="js/shipworks.js?v=6"></script>
 <script src="js/ascension.js?v=12"></script>
@@ -769,7 +784,7 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,dread:30,sdread:50,pilot:30,boxes:30,moon:30,casino:15};
+    const LOCKS={galaxy:25,dread:30,sdread:50,homecit:150,pilot:30,boxes:30,moon:30,casino:15};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -785,7 +800,7 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
+      const on=document.querySelector('#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();

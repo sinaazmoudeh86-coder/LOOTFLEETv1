@@ -12,6 +12,7 @@ changes. SW cache `lootfleet-v205`.
 |---|---|---|
 | `supabase/server-dreadnaught.sql` | Event leaderboards table + RPC | already ran it (event boards show 🌐 LIVE) |
 | `supabase/server-dreadnaught-bignum.sql` | **REQUIRED FIX** — converts scores to `numeric`; endgame damage (>9.2e18) was rejected by bigint, so big players never appeared/updated on the event boards | never — run it |
+| `supabase/territory-v2.sql` | **REQUIRED FIX** — the live territory table was HALF-MIGRATED (missing columns + ambiguous claim_tile overloads), so EVERY turf claim silently failed and players never saw each other's conquests. Adds columns, rebuilds ONE canonical RPC, enables read-for-all RLS + realtime. Clients also re-pull the map every 60s and republish local conquests once. | never — run it |
 | `supabase/territory-defense.sql` | Adds `defense` jsonb + extended `claim_tile` — publishes each owner's fleet snapshot for the My Galaxy clone-defense feature | fine to defer: clients fall back to fleet_score-only defenders |
 
 ## 2. Redeploy the site
@@ -62,7 +63,47 @@ load (SW v201).
   trails sub-sampled (no more dotted tracers), FrostyFrost cryo visuals calmed
   + 5s refreeze immunity (the "ghost ships flickering" at 3×+).
 
+**Home Citadel (NEW — Command · Lv 35)**
+- Tower-defense waves that PERMANENTLY raise passive AFK production — pays
+  only existing currencies (gold → ore/fuel @W5 → plasma @W15 → ◈ prism @W40),
+  ◇ cores + real Shipworks part crates every 10th wave (Rare→Epic→Legendary→
+  Dread-class), ×2 everything past Wave 100. Storage-capped (8→24h via Silo);
+  4 buildings (Mining Array / Deep Silo / Defense Grid / Repair Bay).
+- Wave fights: canvas defense — turrets + fleet auto-fire, tap = fleet strike;
+  enemy strength scales off the pilot's own DPS. Fail = mining offline until
+  repair (timer or gold), wave progress never lost.
+
+**My Galaxy — shared-world fixes**
+- ALL players now see the SAME map: the simulated-rival layer is a pure
+  function of (tile, UTC day) when the shared turf war is live — identical on
+  every client, shifting daily; random local sim mutations disabled. Real
+  claims still override everything.
+- Defending-fleet panel always shows the owner's REAL ships now: claims without
+  a defense snapshot reconstruct the fleet from the owner's public leaderboard
+  row (flagship + escorts), marked "scouted"; the clone battle spawns those
+  exact hulls.
+
+**Ships tab — one card design**
+- Every hull's detail sheet now uses the SAME layout (icon · name+chip · class
+  · layout chips · desc · mod chips · one status strip · action) — Season 1 /
+  mission / LootCoin / Dread-class / construction hulls included; stale "own
+  the previous ship" copy is gone.
+
 **QoL / fixes**
+- **Pro / progress loss FIX (critical)**: cloud sync no longer blind-overwrites
+  — saves merge by newest, entitlements (Pro time, purchases, owned ships,
+  blueprints, cosmetics) union so they can never regress; cloud writes are
+  blocked until the cloud copy is verified-fetched; push debounce 30s→8s with
+  flush on hide/close and instantly after any purchase. Fixes "Pro gone after
+  24h" and "event coins/credits wiped next day".
+- **Blueprints simplified**: no prior-hull requirement anywhere — recover the
+  blueprint + hit the kill count with ANY ship (total kills). Oblivion-class
+  construction gates and citadel blueprint drops follow the same rule.
+- **Moon production ×10** across every mine (Ore 140/h base, Fuel 200/h,
+  Plasma 90/h, Gold 2,600/h, Prism 6/h).
+- **Legibility pass**: global type floor raised (~+1px everywhere, prose
+  ≥12.5px); Voidmaw banner & hangar reward cards rewritten — shorter copy at
+  13px instead of the old 10–11px paragraphs.
 - WASD + arrow-key flight on desktop (takes over from auto-pilot, releases on
   blur, never fires while typing).
 - Adaptive sim stepping: 4×/5×/10× speed no longer runs 4/5/10 full sim passes

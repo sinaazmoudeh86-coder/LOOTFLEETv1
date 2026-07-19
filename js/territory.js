@@ -47,16 +47,26 @@
     meta = meta || {};
     try {
       let res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0), p_defense: meta.defense || null });
-      if (res.error && /p_defense|function|argument/i.test(res.error.message || '')) {
+      if (res.error && /p_defense|function|argument|column|candidate|does not exist/i.test(res.error.message || '')) {
         res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0) });
       }
-      if (res.error && /p_citadel|p_fleet_score|function|argument/i.test(res.error.message || '')) {
+      if (res.error && /p_citadel|p_fleet_score|function|argument|column|candidate|does not exist/i.test(res.error.message || '')) {
         res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15 });
       }
-      if (res.error && /p_protect_minutes|function|argument/i.test(res.error.message || '')) {
+      if (res.error && /p_protect_minutes|function|argument|column|candidate|does not exist/i.test(res.error.message || '')) {
         res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName() });
       }
-      if (res.error) return { ok: false, reason: res.error.message || 'error' };
+      if (res.error) {
+        // surface persistent claim failures ONCE per 5 min — a silently broken
+        // turf war (half-migrated server) is how nobody saw anyone's conquests
+        try {
+          if (!window.__turfWarnT || Date.now() - window.__turfWarnT > 300000) {
+            window.__turfWarnT = Date.now();
+            if (window.UI && window.UI.unlockToast) window.UI.unlockToast('⚠ Turf war sync failed — server migration required (territory-v2.sql)');
+          }
+        } catch (e) {}
+        return { ok: false, reason: res.error.message || 'error' };
+      }
       return { ok: true, row: res.data };
     } catch (e) { return { ok: false, reason: 'error' }; }
   }

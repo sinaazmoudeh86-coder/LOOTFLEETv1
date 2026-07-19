@@ -51,5 +51,6 @@
 }
 .flc.flc-arc .flc-ic, .flc.flc-arc .flc-n { position: relative; z-index: 1; }
 
-/* the JS-injected lightning canvas */
-.prim-bolt-canvas { mix-blend-mode: screen; }
+/* the JS-injected lightning canvas — normal compositing; screen-blend washed
+   out neighboring 9.5px labels whenever a bolt crossed them */
+.prim-bolt-canvas { }

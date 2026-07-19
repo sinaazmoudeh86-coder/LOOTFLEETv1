@@ -1,141 +1,95 @@
 /* =============================================================================
-   session-lock.js — single active session per account
+   session-lock.js — ONE ACTIVE LOGIN PER ACCOUNT
    ---------------------------------------------------------------------------
-   A FRESH login claims the account (upserts this device's id into
-   `active_sessions`). Every other signed-in device sees the claim — via
-   Supabase realtime when available, and a 20s poll as the guaranteed
-   fallback — and is kicked to the login gate with a "signed in elsewhere"
-   screen. A kicked device stops pushing cloud saves immediately so it can
-   never clobber the new device's progress.
-
-   Requires supabase/session-lock.sql. Load AFTER cloud.js, BEFORE auth.js.
-   auth.js calls SESSIONLOCK.start(user, fresh):
-     fresh=true  → new sign-in: claim unconditionally (kicks the old device)
-     fresh=false → restored session: verify we still own the account first
+   The NEWEST login always takes over; every older tab/device is kicked live:
+     · same browser  → BroadcastChannel('lf-session') — instant, no network
+     · other devices → Supabase Realtime broadcast on channel lf-session-<uid>
+   A kicked page sets window.__sessionKicked (ACCOUNT.push/flush already refuse
+   ALL local + cloud writes under that flag) and shows a full-screen takeover
+   notice; "Take back control" reloads, which re-claims the lock. Guests
+   (no cloud id) are never locked. Loads after account.js, before auth.js.
    ============================================================================= */
 (function () {
   'use strict';
-  const DEV_KEY = 'lf-device-id';
-  let deviceId = null, uid = null, pollT = 0, chan = null, kicked = false;
+  const DEV_KEY = 'lf-device';
+  // PER-WINDOW claim identity — localStorage is shared by every tab of the same
+  // browser, so a persisted id could never distinguish (= never kick) sibling
+  // tabs. Each window gets its own id; lf-device stays only as a stable
+  // browser marker for diagnostics.
+  const INST = 'w_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  function deviceId() { return INST; }
+  function browserId() {
+    let d = null;
+    try { d = localStorage.getItem(DEV_KEY); } catch (e) {}
+    if (!d) { d = 'd_' + Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem(DEV_KEY, d); } catch (e) {} }
+    return d;
+  }
+  function uid() { try { const s = JSON.parse(localStorage.getItem('io-auth')); return (s && s.id) || null; } catch (e) { return null; } }
 
-  function devId() {
-    if (deviceId) return deviceId;
-    try { deviceId = localStorage.getItem(DEV_KEY); } catch (e) {}
-    if (!deviceId) {
-      deviceId = (crypto && crypto.randomUUID) ? crypto.randomUUID()
-        : 'd-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-      try { localStorage.setItem(DEV_KEY, deviceId); } catch (e) {}
+  let claimedAt = 0, chan = null, bc = null, claimedUid = null;
+
+  function beats(m) {   // does this foreign claim outrank mine?
+    if (!m || m.dev === deviceId()) return false;
+    return (m.at > claimedAt) || (m.at === claimedAt && String(m.dev) > deviceId());
+  }
+  function kick(byName) {
+    if (window.__sessionKicked) return;
+    window.__sessionKicked = true;   // account.js: blocks every local + cloud write
+    let ov = document.getElementById('lf-kicked');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'lf-kicked';
+      ov.innerHTML = '<div class="lfk-card"><div class="lfk-ic">⚠</div><h3>SIGNED IN ELSEWHERE</h3>' +
+        '<p>Your account just became active on another ' + (byName === 'tab' ? 'tab' : 'device or tab') + '. ' +
+        'To protect your save, <b>this screen has stopped playing and saving</b>.</p>' +
+        '<button id="lfk-take">⚡ TAKE BACK CONTROL</button></div>';
+      const st = document.createElement('style');
+      st.textContent = '#lf-kicked{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;background:rgba(5,8,14,.93);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:20px}' +
+        '.lfk-card{max-width:340px;text-align:center;background:linear-gradient(180deg,#141b28,#0c111c);border:1px solid #2c3a52;border-radius:18px;padding:26px 22px;box-shadow:0 24px 60px rgba(0,0,0,.7)}' +
+        '.lfk-ic{font-size:34px;filter:drop-shadow(0 0 14px #ffcf7a)}' +
+        '.lfk-card h3{font-family:Orbitron,sans-serif;font-weight:800;font-size:16px;letter-spacing:.06em;color:#ffe1a6;margin:10px 0 8px}' +
+        '.lfk-card p{font-family:Rajdhani,sans-serif;font-weight:600;font-size:13.5px;line-height:1.55;color:#b8c4d8;margin:0 0 16px}' +
+        '.lfk-card p b{color:#fff}' +
+        '#lfk-take{width:100%;border:none;border-radius:12px;padding:13px;font-family:Orbitron,sans-serif;font-weight:800;font-size:13px;color:#1c1206;background:linear-gradient(180deg,#ffd24d,#e8960f);cursor:pointer;box-shadow:0 8px 22px -8px rgba(255,210,77,.7)}';
+      document.head.appendChild(st);
+      document.body.appendChild(ov);
+      ov.querySelector('#lfk-take').addEventListener('click', () => location.reload());
     }
-    return deviceId;
-  }
-  function client() { return (window.CLOUD && window.CLOUD.enabled) ? window.CLOUD.client : null; }
-  function deviceLabel() {
-    const ua = navigator.userAgent || '';
-    const os = /iPhone|iPad/.test(ua) ? 'an iPhone / iPad'
-      : /Android/.test(ua) ? 'an Android device'
-      : /Mac/.test(ua) ? 'a Mac' : /Win/.test(ua) ? 'a Windows PC' : 'another device';
-    return os;
+    ov.style.display = 'grid';
   }
 
-  async function claim(userId) {
-    const c = client(); if (!c) return;
+  function claim() {
+    const id = uid(); if (!id) return;                 // guests: never locked
+    // EMBEDDED contexts (editor previews, verifier frames) must never steal the
+    // lock from the player's real session; background tabs shouldn't either —
+    // they claim when they become visible.
+    if (window !== window.top) return;
+    if (document.hidden) { document.addEventListener('visibilitychange', function once() { if (!document.hidden) { document.removeEventListener('visibilitychange', once); claim(); } }); return; }
+    claimedAt = Date.now();
+    claimedUid = id;
+    window.__sessionKicked = false;
+    // same-browser tabs — instant, offline-safe
     try {
-      await c.from('active_sessions').upsert(
-        { user_id: userId, session_id: devId(), device: deviceLabel(), updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      );
+      if (!bc && window.BroadcastChannel) {
+        bc = new BroadcastChannel('lf-session');
+        bc.onmessage = (ev) => { const m = ev.data || {}; if (m.t === 'claim' && m.uid === claimedUid && beats(m)) kick('tab'); };
+      }
+      if (bc) bc.postMessage({ t: 'claim', uid: id, dev: deviceId(), at: claimedAt });
+    } catch (e) {}
+    // cross-device — Supabase Realtime broadcast (no SQL, no polling)
+    try {
+      if (window.CLOUD && window.CLOUD.enabled && window.CLOUD.client) {
+        if (chan) { try { window.CLOUD.client.removeChannel(chan); } catch (e) {} chan = null; }
+        chan = window.CLOUD.client.channel('lf-session-' + id);
+        chan.on('broadcast', { event: 'claim' }, (p) => { const m = (p && p.payload) || {}; if (beats(m)) kick('device'); })
+            .subscribe((st) => { if (st === 'SUBSCRIBED') { try { chan.send({ type: 'broadcast', event: 'claim', payload: { dev: deviceId(), at: claimedAt } }); } catch (e) {} } });
+      }
     } catch (e) {}
   }
 
-  async function check() {
-    const c = client(); if (!c || !uid || kicked) return;
-    try {
-      const { data, error } = await c.from('active_sessions')
-        .select('session_id,device').eq('user_id', uid).maybeSingle();
-      if (error || !data) return;
-      if (data.session_id && data.session_id !== devId()) kick(data.device);
-    } catch (e) {}
-  }
-
-  function watch() {
-    const c = client(); if (!c) return;
-    clearInterval(pollT);
-    pollT = setInterval(check, 20000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
-    // realtime — instant kick when the row changes hands (best-effort)
-    try {
-      chan = c.channel('lf-session-' + uid)
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'active_sessions', filter: 'user_id=eq.' + uid },
-          (p) => { const row = p.new || {}; if (row.session_id && row.session_id !== devId()) kick(row.device); })
-        .subscribe();
-    } catch (e) {}
-  }
-
-  function stop() {
-    clearInterval(pollT); pollT = 0;
-    try { if (chan && client()) client().removeChannel(chan); } catch (e) {}
-    chan = null;
-  }
-
-  async function kick(device) {
-    if (kicked) return;
-    kicked = true;
-    window.__sessionKicked = true;   // account.js: blocks all further cloud pushes
-    stop();
-    // sign THIS device out only — 'local' scope must not revoke the new device
-    try { const c = client(); if (c) await c.auth.signOut({ scope: 'local' }); } catch (e) {}
-    try { localStorage.removeItem('io-auth'); } catch (e) {}
-    showKickScreen(device);
-  }
-
-  function showKickScreen(device) {
-    if (document.getElementById('session-kicked')) return;
-    const d = document.createElement('div');
-    d.id = 'session-kicked';
-    d.innerHTML = '<div class="sk-card">' +
-      '<div class="sk-ic">⚠</div>' +
-      '<h2>Signed in elsewhere</h2>' +
-      '<p>Your account was just signed in on <b>' + (device || 'another device') + '</b>. ' +
-      'Loot Fleet allows one active session at a time, so this one has been disconnected.</p>' +
-      '<p class="sk-sub">Your progress is safe in the cloud.</p>' +
-      '<button type="button" id="sk-back">Sign back in here</button></div>';
-    const st = document.createElement('style');
-    st.textContent =
-      '#session-kicked{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:20px;' +
-      'background:radial-gradient(120% 90% at 50% 0%,#0d1524,#05080f 70%);}' +
-      '#session-kicked .sk-card{max-width:340px;text-align:center;border:1px solid rgba(120,150,200,.25);' +
-      'border-radius:16px;padding:28px 22px;background:rgba(13,19,30,.92);box-shadow:0 12px 40px rgba(0,0,0,.5);}' +
-      '#session-kicked .sk-ic{font-size:34px;margin-bottom:8px;}' +
-      '#session-kicked h2{font-family:var(--font-display,inherit);font-size:17px;letter-spacing:.08em;' +
-      'text-transform:uppercase;color:var(--gold,#e8c05a);margin:0 0 10px;}' +
-      '#session-kicked p{font-size:12.5px;line-height:1.65;color:#c7d2e4;margin:0 0 8px;}' +
-      '#session-kicked .sk-sub{color:#8b96a8;font-size:11px;}' +
-      '#session-kicked b{color:#fff;}' +
-      '#session-kicked button{margin-top:12px;width:100%;padding:12px;border-radius:11px;border:0;cursor:pointer;' +
-      'font-weight:800;font-size:13px;letter-spacing:.04em;color:#0b0f18;' +
-      'background:linear-gradient(180deg,#ffd97a,#e8b23f);}';
-    d.appendChild(st);
-    document.body.appendChild(d);
-    document.getElementById('sk-back').addEventListener('click', () => location.reload());
-  }
-
-  // fresh=true → claim (kick everyone else). fresh=false → verify first.
-  async function start(user, fresh) {
-    const c = client(); if (!c || !user || !user.id || kicked) return;
-    uid = user.id;
-    if (fresh) {
-      await claim(uid);
-    } else {
-      try {
-        const { data, error } = await c.from('active_sessions')
-          .select('session_id,device').eq('user_id', uid).maybeSingle();
-        if (!error && data && data.session_id && data.session_id !== devId()) { kick(data.device); return; }
-      } catch (e) {}
-      await claim(uid);   // adopt (first run) / refresh heartbeat
-    }
-    watch();
-  }
-
-  window.SESSIONLOCK = { start, stop, kicked: () => kicked };
+  window.SESSIONLOCK = { claim, kick, deviceId, browserId, isKicked: () => !!window.__sessionKicked };
+  // this page load IS the newest login — claim once the session is readable
+  const boot = () => { try { if (uid() && !window.__sessionKicked) claim(); } catch (e) {} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 700));
+  else setTimeout(boot, 700);
 })();

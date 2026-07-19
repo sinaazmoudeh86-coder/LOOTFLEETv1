@@ -96,10 +96,14 @@
   function sizeCanvas(a) {
     var r = a.host.getBoundingClientRect();
     if (!r.width || !r.height) return false;
-    // canvas extends well beyond the host so bolts can radiate outward; ensure
-    // enough room even for tiny hosts (ledger dot) where bolts use a min length
-    var reach = Math.max(Math.min(r.width, r.height), 15) * 2.6;
-    var padX = Math.max(r.width * 0.9, reach), padY = Math.max(r.height * 1.1, reach);
+    // COMPACT halo (Jul 2026): the old canvas spilled ~±115px over NEIGHBORING
+    // pills — bolts + the white core glow sat on other items' 9.5px labels and
+    // washed them out (the "can't read some pills" bug). Now the FX hugs the
+    // item's own icon: pills get a tiny 8px halo at the icon, icons cap at 20px.
+    a._pill = a.host.classList.contains('flc');
+    a._r = a._pill ? 8 : Math.max(10, Math.min(Math.min(r.width, r.height), 20));
+    var pad = a._r * 2.2;
+    var padX = pad, padY = pad;
     var W = r.width + padX * 2, H = r.height + padY * 2;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var pw = Math.round(W * dpr), ph = Math.round(H * dpr);
@@ -112,9 +116,9 @@
     a.canvas.style.width = W + 'px';
     a.canvas.style.height = H + 'px';
     a.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    a._W = W; a._H = H; a._cx = W / 2; a._cy = H / 2;
-    // ensure a visible bolt length even on tiny hosts (e.g. the ledger dot)
-    a._r = Math.max(Math.min(r.width, r.height), 15);
+    a._W = W; a._H = H;
+    a._cx = a._pill ? padX + 13 : W / 2;   // pills: halo sits on the icon, not the label
+    a._cy = H / 2;
     return true;
   }
 
@@ -126,8 +130,6 @@
     ctx.lineWidth = width;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 6;
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     var dx = x1 - x0, dy = y1 - y0;
@@ -161,50 +163,51 @@
       var pulse = 0.5 + 0.5 * Math.sin(T * 5 + a.seed);
 
       // --- core energy glow ---
-      var gr = ctx.createRadialGradient(cx, cy, 1, cx, cy, base * (0.7 + 0.4 * pulse));
-      gr.addColorStop(0, 'rgba(255,255,255,' + (0.45 + 0.3 * pulse) + ')');
-      gr.addColorStop(0.4, 'rgba(' + pal.glowMid + ',' + (0.22 + 0.15 * pulse) + ')');
+      var glowR = base * (0.55 + 0.25 * pulse);
+      var gr = ctx.createRadialGradient(cx, cy, 1, cx, cy, glowR);
+      gr.addColorStop(0, 'rgba(255,255,255,' + (0.22 + 0.12 * pulse) + ')');
+      gr.addColorStop(0.4, 'rgba(' + pal.glowMid + ',' + (0.12 + 0.08 * pulse) + ')');
       gr.addColorStop(1, 'rgba(' + pal.glowOuter + ',0)');
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = gr;
-      ctx.beginPath(); ctx.arc(cx, cy, base * (0.7 + 0.4 * pulse), 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, 7); ctx.fill();
       ctx.restore();
 
       // --- radiating bolts ---
-      var N = 9;
+      var N = a._pill ? 3 : 5;
       var rot = T * 0.8 + a.seed;
       for (var b = 0; b < N; b++) {
         // crackle gate: each bolt flickers in/out on its own phase
         var crk = Math.sin(T * 22 + b * 2.4 + a.seed * 3);
         if (crk < 0.1) continue;
         var ang = (b / N) * Math.PI * 2 + rot;
-        var reach = base * (0.85 + 0.7 * Math.abs(Math.sin(T * 7 + b)));
+        var reach = base * (0.7 + 0.45 * Math.abs(Math.sin(T * 7 + b)));
         var ex = cx + Math.cos(ang) * reach;
         var ey = cy + Math.sin(ang) * reach;
         var col = pal.bolts[b % pal.bolts.length];
         var al = 0.5 + 0.5 * crk;
         // glow underlayer (thick, soft) + hot core (thin, bright)
-        drawBolt(ctx, cx, cy, ex, ey, 5, base * 0.5, 3.2, col, al * 0.35);
-        drawBolt(ctx, cx, cy, ex, ey, 6, base * 0.45, 1.3, '#ffffff', al);
-        // bright tip spark
+        drawBolt(ctx, cx, cy, ex, ey, 5, base * 0.45, 2.4, col, al * 0.25);
+        drawBolt(ctx, cx, cy, ex, ey, 6, base * 0.4, 1.1, '#ffffff', al * 0.7);
+        // tip spark (no shadowBlur — hot path)
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = '#fff'; ctx.globalAlpha = al;
-        ctx.shadowColor = col; ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.arc(ex, ey, 1.6, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.globalAlpha = al * 0.7;
+        ctx.beginPath(); ctx.arc(ex, ey, 1.3, 0, 7); ctx.fill();
         ctx.restore();
       }
 
-      // --- expanding discharge ring ---
+      // --- expanding discharge ring (icon hosts only — pills stay clean) ---
+      if (a._pill) continue;
       var k = (T * 0.85 + a.seed) % 1;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = (1 - k) * 0.6;
+      ctx.globalAlpha = (1 - k) * 0.3;
       ctx.strokeStyle = pal.ring;
       ctx.lineWidth = (1 - k) * 2 + 0.5;
       ctx.beginPath();
-      ctx.arc(cx, cy, base * 0.5 + k * base * 1.6, 0, 7);
+      ctx.arc(cx, cy, base * 0.5 + k * base * 1.1, 0, 7);
       ctx.stroke();
       ctx.restore();
     }

@@ -89,7 +89,8 @@
       // record trail — SUB-SAMPLED along the movement so large sim steps (high
       // game speed runs fewer, bigger sub-steps) still leave a continuous
       // streak instead of a chain of separated dots ("motion glitch" at 5×).
-      const segs = Math.min(4, Math.max(1, Math.round(step / 16)));
+      const _pc = (window.GAME && window.GAME.rt) ? window.GAME.rt.projectiles.length : 0;
+      const segs = _pc > 120 ? 0 : _pc > 60 ? 1 : Math.min(4, Math.max(1, Math.round(step / 16)));
       for (let i = 0; i < segs; i++) {
         this.trail.push({ x: this.x + Math.cos(this.angle) * step * (i / segs), y: this.y + Math.sin(this.angle) * step * (i / segs) });
       }
@@ -156,6 +157,9 @@
       this.spawnT = 0;        // 0..1 spawn-in animation
     }
     update(dt, archer) {
+      // HOME CITADEL raiders besiege the FORT, not the pilot — the whole AI
+      // (seek, hold-at-range, contact, fire gating) runs against the proxy.
+      if (this.raidTarget && !this.raidTarget.dead) archer = this.raidTarget;
       this.spawnT = Math.min(1, this.spawnT + dt * 3.5);
       if (this.hitFlash > 0) this.hitFlash -= dt * 5;
       if (this.attackLunge > 0) this.attackLunge -= dt * 4;

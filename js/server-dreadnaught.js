@@ -714,7 +714,7 @@
     return '<div class="sd-vm" id="sd-vmstrip">' +
       '<img src="ships/ship-voidmaw.png" alt="">' +
       '<div class="sd-vm-t"><b>THE VOIDMAW — SEASON 1 GRAND PRIZE</b>' +
-        '<span>Mothership-grade hull. Parts drop from stages 5+, your first fight each day and the ✦ Event Store — <b>≈ a month of consistent play</b>. Event-only, gone after ' + SEASON.endsTxt + '.</span>' +
+        '<span>Mothership-grade hull — collect <b>' + VM_NEED + ' parts</b> to fly it. Stages 5+ · first fight daily · ✦ Event Store. Gone after ' + SEASON.endsTxt + '.</span>' +
         (owned
           ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
           : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / VM_NEED * 100) + '%"></i><span>❖ ' + parts + ' / ' + VM_NEED + ' parts</span></div>') +
@@ -1308,8 +1308,8 @@
   .sd-vm{ display:flex; gap:12px; align-items:center; background:linear-gradient(90deg,#1c1030,#140b22); border:1px solid #4a2f78; border-radius:14px; padding:11px 12px; box-shadow:0 0 20px -8px ${ACCENT}; }
   .sd-vm img{ width:84px; height:60px; object-fit:contain; flex:none; filter:drop-shadow(0 0 12px ${ACCENT}); animation:sdBossFloat 4.5s ease-in-out infinite; }
   .sd-vm-t{ flex:1; min-width:0; }
-  .sd-vm-t b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.08em; color:#f0dcff; }
-  .sd-vm-t span{ display:block; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:10.5px; color:#a695c2; line-height:1.4; margin-top:3px; }
+  .sd-vm-t b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:.08em; color:#f0dcff; }
+  .sd-vm-t span{ display:block; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px; color:#c4b2de; line-height:1.45; margin-top:4px; }
   .vm-partbar{ position:relative; height:17px; border-radius:9px; background:#241733; border:1px solid #3c2560; overflow:hidden; margin-top:7px; }
   .vm-partbar i{ display:block; height:100%; background:linear-gradient(90deg,#b04dff,#ff4adf); box-shadow:0 0 10px ${ACCENT}; }
   .vm-partbar.done i{ background:linear-gradient(90deg,#2f9e4f,#46d27a); box-shadow:0 0 10px #46d27a; }

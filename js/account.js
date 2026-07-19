@@ -35,18 +35,26 @@
   function saveLocal(state) { try { localStorage.setItem(key(), JSON.stringify(state)); } catch (e) {} }
 
   // ---- cloud push (debounced; inert unless a cloud user is signed in) --------
-  // Local saves are instant; CLOUD writes are batched to at most ~1 per 30s so
-  // the backend isn't hammered. A final flush fires when the tab hides/closes.
-  let pending = null, timer = 0, lastSent = '';
+  // Local saves are instant; CLOUD writes are batched to ~1 per 8s. A final
+  // flush fires when the tab hides/closes. Writes are BLOCKED until the cloud
+  // copy has been successfully fetched this session — a device that never
+  // managed to pull must never clobber the server save with stale state.
+  let pending = null, timer = 0, lastSent = '', _pullOk = false, _cloudWeight = 0;
+  // "How much life is in this save?" — playtime + kills + levels. Used to stop
+  // fresh-boot states from ever outranking a real account by timestamp alone.
+  function saveWeight(s) { if (!s) return 0; return (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600; }
   function push(state) {
+    if (window.__sessionKicked) return;   // kicked by a newer login — stop ALL writes (local too: same-browser tabs share this slot)
     saveLocal(state);
-    if (window.__sessionKicked) return;   // kicked by a login elsewhere — never clobber the new device
     if (!cloudOn()) return;
     const s = session();
     if (!s || !s.id) return;            // only signed-in cloud users sync
+    if (!_pullOk) return;               // cloud copy unverified — keep writes local
+    if (_cloudWeight > 0 && saveWeight(state) < _cloudWeight * 0.2) return;   // CLOBBER GUARD: never overwrite a heavy cloud save with a near-fresh state
     pending = state;
-    if (!timer) timer = setTimeout(flush, 30000);
+    if (!timer) timer = setTimeout(flush, 8000);
   }
+  function flushNow() { try { if (pending) flush(); } catch (e) {} }
   async function flush() {
     clearTimeout(timer); timer = 0;
     if (window.__sessionKicked) return;
@@ -74,14 +82,67 @@
   }
   // don't lose the last batch when the player leaves
   window.addEventListener('pagehide', flush);
+  window.addEventListener('beforeunload', flush);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
-  // pull the authoritative cloud save into the local namespaced slot
+  // pull the authoritative cloud save — MERGED, never a blind overwrite.
+  // Base = whichever copy is newer (lastSave stamp); entitlements that must
+  // never regress (Pro time, purchases, owned ships, blueprints, cosmetics)
+  // are UNIONED in from the older copy. Fixes "Pro/credits gone the next day"
+  // — a stale cloud copy can no longer erase a newer local save, and vice versa.
+  function mergeSaves(local, cloud) {
+    if (!cloud) return local || null;
+    if (!local) return cloud;
+    let base = (cloud.lastSave || 0) >= (local.lastSave || 0) ? cloud : local;
+    let other = base === cloud ? local : cloud;
+    // FRESH-BOOT GUARD: a newer timestamp never outranks real progress — if the
+    // "newer" copy holds under 20% of the other's weight, the heavier copy wins.
+    if (saveWeight(base) < saveWeight(other) * 0.2) { const t = base; base = other; other = t; }
+    base.proUntil = Math.max(base.proUntil || 0, other.proUntil || 0);
+    ['purchases', 'ownedShips', 'blueprints'].forEach((k) => {
+      if (!other[k]) return;
+      base[k] = base[k] || {};
+      for (const id in other[k]) if (other[k][id] && !base[k][id]) base[k][id] = other[k][id];
+    });
+    // PERMANENT PROGRESSION — monotonic counters can never regress through a
+    // stale copy: Home Citadel wave + buildings, lifetime missions, season damage.
+    if (other.homecit) {
+      if (!base.homecit) base.homecit = other.homecit;
+      else {
+        base.homecit.wave = Math.max(base.homecit.wave | 0, other.homecit.wave | 0);
+        base.homecit.cit = Math.max(base.homecit.cit | 0, other.homecit.cit | 0);
+        const bb = base.homecit.b || {}, ob = other.homecit.b || {};
+        ['mine', 'silo', 'turret', 'repair'].forEach((k) => { bb[k] = Math.max(bb[k] | 0, ob[k] | 0); });
+        base.homecit.b = bb;
+      }
+    }
+    base.lifetimeMissions = Math.max(base.lifetimeMissions | 0, other.lifetimeMissions | 0);
+    if (other.sdread && base.sdread) {
+      base.sdread.total = Math.max(base.sdread.total || 0, other.sdread.total || 0);
+      base.sdread.bestEver = Math.max(base.sdread.bestEver || 0, other.sdread.bestEver || 0);
+    } else if (other.sdread && !base.sdread) base.sdread = other.sdread;
+    if (other.cosmetics && other.cosmetics.owned) {
+      base.cosmetics = base.cosmetics || { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
+      base.cosmetics.owned = base.cosmetics.owned || {};
+      for (const id in other.cosmetics.owned) if (!base.cosmetics.owned[id]) base.cosmetics.owned[id] = 1;
+    }
+    return base;
+  }
   async function pull() {
     if (!cloudOn()) return null;
     const s = session();
     if (!s || !s.id) return null;
-    const data = await window.CLOUD.pull(s.id);
-    if (data) { saveLocal(data); return data; }
+    let res;
+    try {
+      res = window.CLOUD.pullMeta ? await window.CLOUD.pullMeta(s.id)
+                                  : { ok: true, data: await window.CLOUD.pull(s.id) };
+    } catch (e) { res = { ok: false }; }
+    if (!res || !res.ok) return null;   // fetch FAILED — cloud writes stay blocked this session
+    _pullOk = true;
+    // recovery net + clobber baseline: stash the untouched cloud copy, remember its weight
+    try { if (res.data) { localStorage.setItem('lf-backup::' + uid(), JSON.stringify(res.data)); _cloudWeight = saveWeight(res.data); } } catch (e) {}
+    const merged = mergeSaves(load(), res.data);
+    if (merged) { saveLocal(merged); try { window.SESSIONLOCK && window.SESSIONLOCK.claim(); } catch (e) {} return merged; }
+    try { window.SESSIONLOCK && window.SESSIONLOCK.claim(); } catch (e) {}   // this login takes over — kick every older tab/device
     return null;
   }
 
@@ -122,5 +183,5 @@
     refreshBar();
     return true;
   }
-  window.ACCOUNT = { key, current, session, load, save: saveLocal, push, pull, refreshBar, cloudOn, setName };
+  window.ACCOUNT = { key, current, session, load, save: saveLocal, push, pull, flushNow, refreshBar, cloudOn, setName };
 })();

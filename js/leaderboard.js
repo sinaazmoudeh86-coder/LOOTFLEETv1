@@ -21,6 +21,15 @@
     window.CLOUD.lbTop(100).then((rows) => { _realInflight = false; if (rows) { _real = rows.map(mapReal); if (cb) cb(); } }).catch(() => { _realInflight = false; });
   }
   function realOthers(){ const id = myId(); return (_real || []).filter((p) => !id || p._uid !== id); }
+  // Look up a REAL account's public row by commander name — used by My Galaxy
+  // to reconstruct a tile owner's actual fleet when their claim carries no
+  // defense snapshot. Warms the cache on a miss.
+  function byName(nm){
+    if (!nm) return null;
+    if (!_real || Date.now() - _realT > 60000) { try { ensureReal(); } catch (e) {} }
+    const n = String(nm).toLowerCase();
+    return (_real || []).find((p) => (p.name || '').toLowerCase() === n) || null;
+  }
 
   // The game's "launch" Monday. weeksSince(launch)+1 = current heat number.
   const LAUNCH = Date.UTC(2026, 0, 5);              // Mon Jan 5 2026
@@ -166,5 +175,5 @@
     return { board, real: board.length - 1 };
   }
 
-  window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel, ensureReal };
+  window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel, ensureReal, byName };
 })();

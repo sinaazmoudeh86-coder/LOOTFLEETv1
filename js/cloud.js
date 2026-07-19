@@ -69,6 +69,15 @@
       return data ? data.data : null;
     } catch (e) { return null; }
   }
+  // like pull, but distinguishes "fetch failed" from "no save row yet" — the
+  // sync layer must only unblock cloud writes after a VERIFIED fetch.
+  async function pullMeta(userId) {
+    try {
+      const { data, error } = await client.from('saves').select('data').eq('user_id', userId).maybeSingle();
+      if (error) return { ok: false };
+      return { ok: true, data: data ? data.data : null };
+    } catch (e) { return { ok: false }; }
+  }
   async function push(userId, save) {
     try {
       await client.from('saves').upsert(
@@ -130,5 +139,5 @@
     } catch (e) { return null; }
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, push, lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, pullMeta, push, lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
 })();

@@ -47,11 +47,11 @@
       blurb: 'The crown jewel — ◈ prism crystal to the core · 2.2× prism, +40% gold.' },
   ];
   const B = {
-    oremine:  { name: 'Ore Mine',        ic: '⛏', cat: 'mine',    out: 'iron',   rate: 14, cost: { gold: 1500, fuel: 80 },              desc: 'Extracts ◆ iron from the regolith.' },
-    fuelwell: { name: 'Fuel Well',       ic: '⛽', cat: 'mine',    out: 'fuel',   rate: 20, cost: { gold: 1200, iron: 60 },              desc: 'Taps ⬢ fuel ice pockets.' },
-    plasmarig:{ name: 'Plasma Rig',      ic: '⚡', cat: 'mine',    out: 'plasma', rate: 9,  cost: { gold: 2500, fuel: 150, iron: 100 },  desc: 'Condenses ✦ plasma from solar wind.', minSector: 1 },
-    goldrig:  { name: 'Assay Plant',     ic: '⚖', cat: 'mine',    out: 'gold',   rate: 260,cost: { gold: 4000, iron: 200 },             desc: 'Refines trace metals into $ gold.', minSector: 1 },
-    prismex:  { name: 'Prism Extractor', ic: '◈', cat: 'mine',    out: 'prism',  rate: 0.6,cost: { gold: 400000, fuel: 20000, plasma: 8000 }, desc: 'Late-game: sifts ◈ prism fragments.', minSector: 4 },
+    oremine:  { name: 'Ore Mine',        ic: '⛏', cat: 'mine',    out: 'iron',   rate: 140, cost: { gold: 1500, fuel: 80 },              desc: 'Extracts ◆ iron from the regolith.' },
+    fuelwell: { name: 'Fuel Well',       ic: '⛽', cat: 'mine',    out: 'fuel',   rate: 200, cost: { gold: 1200, iron: 60 },              desc: 'Taps ⬢ fuel ice pockets.' },
+    plasmarig:{ name: 'Plasma Rig',      ic: '⚡', cat: 'mine',    out: 'plasma', rate: 90, cost: { gold: 2500, fuel: 150, iron: 100 },  desc: 'Condenses ✦ plasma from solar wind.', minSector: 1 },
+    goldrig:  { name: 'Assay Plant',     ic: '⚖', cat: 'mine',    out: 'gold',   rate: 2600,cost: { gold: 4000, iron: 200 },             desc: 'Refines trace metals into $ gold.', minSector: 1 },
+    prismex:  { name: 'Prism Extractor', ic: '◈', cat: 'mine',    out: 'prism',  rate: 6,cost: { gold: 400000, fuel: 20000, plasma: 8000 }, desc: 'Late-game: sifts ◈ prism fragments.', minSector: 4 },
     refinery: { name: 'Refinery',        ic: '⚗', cat: 'boost',   pct: 8,  cost: { gold: 6000, iron: 350 },                 desc: '+8%/lv colony-wide production.', minSector: 1 },
     drones:   { name: 'Cargo Drones',    ic: '⬡', cat: 'boost',   pct: 5,  cost: { gold: 3500, fuel: 250 },                 desc: '+5%/lv production · automation swarm.' },
     cargohub: { name: 'Cargo Hub',       ic: '▣', cat: 'storage', hrs: 2,  cost: { gold: 2500, iron: 150 },                 desc: '+2h/lv storage before production idles.' },

@@ -239,7 +239,7 @@
       _result(true, { credits: p.credits });
     } else if (res.ok && sku === PRO.sku) {
       const G = window.GAME;
-      if (G && G.state) { G.state.proUntil = Math.max(G.state.proUntil || 0, Date.now()) + 31 * 864e5; G.save(); if (window.UI) window.UI.refreshAll(); }
+      if (G && G.state) { G.state.proUntil = Math.max(G.state.proUntil || 0, Date.now()) + 31 * 864e5; G.save(); try { window.ACCOUNT && window.ACCOUNT.flushNow && window.ACCOUNT.flushNow(); } catch (e) {} if (window.UI) window.UI.refreshAll(); }
       _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
     } else {
       _result(false, p ? { credits: p.credits } : {});
@@ -340,7 +340,7 @@
           _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
         }
       }
-      if (changed) { G.save(); if (window.UI) window.UI.refreshAll(); }
+      if (changed) { G.save(); try { window.ACCOUNT && window.ACCOUNT.flushNow && window.ACCOUNT.flushNow(); } catch (e) {} if (window.UI) window.UI.refreshAll(); }
       return row;
     } catch (e) { _claimBusy = false; return null; }
   }

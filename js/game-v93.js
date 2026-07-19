@@ -399,7 +399,26 @@
     plasma:  ['#c8ffdd', '#46d27a'],
     support: ['#dcffe9', '#7ce0a0'],
   };
-  function fireAt(target, s, wpn) {
+  function fireAt(target, s, wpn, foldable) {
+    const live = rt.projectiles.length;
+    if (foldable && live > 90) {
+      const fold = live > 180 ? 6 : 3;
+      rt._foldN = (rt._foldN || 0) + 1;
+      const r0 = rollDamage(s);
+      if (rt._foldN % fold !== 0) {   // bank this bolt's damage into the next spawned one
+        rt._bankDmg = (rt._bankDmg || 0) + r0.dmg;
+        rt._bankCrit = rt._bankCrit || r0.crit;
+        return null;
+      }
+      const p0 = new E.Projectile(rt.archer.x, rt.archer.y, target, 0, false);
+      p0.damage = r0.dmg + (rt._bankDmg || 0); p0.crit = r0.crit || !!rt._bankCrit;
+      rt._bankDmg = 0; rt._bankCrit = false;
+      if (!wpn) wpn = nextWeapon() || (state.equipped && state.equipped.bow);
+      p0.wtype = wpn && I.weaponClassOf ? I.weaponClassOf(wpn).key : 'gatling';
+      p0.angle = Math.atan2(target.y - rt.archer.y, target.x - rt.archer.x);
+      rt.projectiles.push(p0);
+      return p0;
+    }
     const p = new E.Projectile(rt.archer.x, rt.archer.y, target, 0, false);
     const r = rollDamage(s); p.damage = r.dmg; p.crit = r.crit;
     p.angle = Math.atan2(target.y - rt.archer.y, target.x - rt.archer.x);
@@ -472,7 +491,7 @@
     // MULTI-SHOT: chance to also fire at nearby enemies — each from its own hardpoint
     if (s.multiShot > 0 && Math.random() * 100 < s.multiShot) {
       const extra = nearbyEnemies(C.MULTISHOT_MAX_TARGETS, primary);
-      extra.forEach((t) => fireAt(t, s));
+      extra.forEach((t) => fireAt(t, s, null, true));   // extras fold under load
     }
   }
   // PRISM AURA splash — 10% of a hit ripples to nearby foes as AOE.
@@ -588,9 +607,15 @@
     }
     // PRISM AURA — 10% of your hit splashes as AOE to nearby foes
     if (state.shipAura && state.shipAura[state.ship]) prismSplash(e, p.damage);
-    // damage floats are thinned under load — crits ALWAYS show
-    if (p.crit || rt.floats.length < 28) {
-      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(_dmg), { color: p.crit ? '#e07c12' : '#f4f8ff', size: p.crit ? 48 : 32, crit: p.crit }));
+    // AGGREGATED DAMAGE BUBBLES (Jul 2026): at endgame fire rates one bubble
+    // per hit melted the frame rate. Damage now SUMS per enemy over a 0.25s
+    // window and pops as ONE number — crit styling sticks if any hit in the
+    // window crit; the final chunk always flushes on the killing blow.
+    e._fbSum = (e._fbSum || 0) + _dmg;
+    if (p.crit) e._fbCrit = true;
+    if ((killed || rt.time - (e._fbT || 0) >= 0.25) && rt.floats.length < 22) {
+      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(e._fbSum), { color: e._fbCrit ? '#e07c12' : '#f4f8ff', size: e._fbCrit ? 44 : 30, crit: !!e._fbCrit }));
+      e._fbT = rt.time; e._fbSum = 0; e._fbCrit = false;
     }
     // IMPACT: class-specific hit effects — each weapon lands differently
     const back = p.angle;
@@ -879,8 +904,11 @@
   // PARTICLES
   // --------------------------------------------------------------------------
   function burst(x, y, color, n, opts = {}) {
+    const pc = rt.particles.length;
+    if (pc > 240) return;                                 // particle budget
     const speed = (opts.speed ?? 140) * 1.25;
     n = Math.ceil(n * 1.7);                               // more debris everywhere
+    if (pc > 160) n = Math.max(1, Math.ceil(n * 0.3));
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, sp = speed * (0.3 + Math.random() * 0.8);
       rt.particles.push(new E.Particle(x, y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: (opts.life ?? 0.6)*(0.7+Math.random()*0.7), size: (opts.size ?? (2+Math.random()*2.5)) * 1.5, color, gravity: opts.gravity ?? 0, glow: true }));
@@ -1132,6 +1160,8 @@
     if (state.dreadRun && state.dreadRun.active && window.DREAD && window.DREAD.tick) { try { window.DREAD.tick(dt, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — seasonal world-boss run (timer, stages, boss scaling).
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineTick) { try { window.SDREAD.engineTick(dt, rt); } catch (e) {} }
+    // HOME CITADEL — wave defense on the real engine (fort objective, raider waves).
+    if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineTick) { try { window.HOMECIT.engineTick(dt, rt); } catch (e) {} }
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
@@ -1143,6 +1173,7 @@
         burst(a.x, a.y, '#b04dff', 44, { speed: 240, life: 1.0 });
         respawnAt(0);
         if (window.SDREAD && window.SDREAD.onDeath) { try { window.SDREAD.onDeath(); } catch (e) {} }
+        if (window.HOMECIT && window.HOMECIT.onDeath) { try { window.HOMECIT.onDeath(); } catch (e) {} }
         return;
       }
       const killer = a.killer;
@@ -1388,6 +1419,8 @@
     if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — void aura + weak-point FX over the arena.
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineRender) { try { window.SDREAD.engineRender(ctx, rt.time, rt); } catch (e) {} }
+    // HOME CITADEL — the fort, its shield and turret fire, drawn in-world.
+    if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineRender) { try { window.HOMECIT.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
     if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
   }
@@ -1718,8 +1751,9 @@
     const ship = C.SHIP_BY_KEY[key]; if (!ship) return false;
     if (ship.tier === 0) return true;
     if (ship.megaCost) return (state.level || 1) >= (ship.reqLevel || 1);   // DREAD-class: level-gated direct buy
-    const prev = C.shipPrevKey(key);
-    return hasBlueprint(key) && !!state.ownedShips[prev] && shipKillsFor(prev) >= ship.reqKills;
+    // Jul 2026: no prior-hull requirement — recover the blueprint and hit the
+    // TOTAL kill count with ANY ship. Kills are kills.
+    return hasBlueprint(key) && (state.totalKills || 0) >= (ship.reqKills || 0);
   }
   // DREAD-class multi-currency cost helpers
   function megaShort(c) {
@@ -1751,10 +1785,10 @@
                hasBlueprint: true, prevOwned: true, killsMet: true, killsHave: 0, killsNeed: 0, price: 0 };
     }
     const prev = C.shipPrevKey(key);
-    const have = prev ? shipKillsFor(prev) : 0;
+    const have = state.totalKills || 0;              // ANY ship — no prior-hull gate
     const need = ship.reqKills || 0;
     const bp = hasBlueprint(key);
-    const prevOwned = ship.tier === 0 || !!state.ownedShips[prev];
+    const prevOwned = true;
     const killsMet = have >= need;
     const unlocked = bp && prevOwned && killsMet;
     const resAfford = ship.resPrice ? canAfford(ship.resPrice) : null;
@@ -1864,19 +1898,22 @@
       dr.y = a.y + Math.sin(ta) * orbit;
       dr.cd -= dt;
       if (a.dead || rt.awaitingRespawn) continue;
-      // nearest enemy within range, measured from the drone itself
+      if (dr.cd > 0) continue;                 // scan only when ready to fire
       let best = null, bd = C.DRONE.range * C.DRONE.range;
       for (const en of rt.enemies) { if (en.dying) continue; const d = (en.x - dr.x) ** 2 + (en.y - dr.y) ** 2; if (d < bd) { bd = d; best = en; } }
-      if (best && dr.cd <= 0) {
+      if (best) {
+        // under heavy load, drones fire HALF as often for DOUBLE damage — same
+        // DPS, half the objects (the sky stays readable too)
+        const crowd2 = rt.projectiles.length > 120;
         const p = new E.Projectile(dr.x, dr.y, best, 0, false);
         const crit = Math.random() * 100 < s.critChance;
         let dmg = s.attackDamage * C.DRONE.dmgFrac * (0.9 + Math.random() * 0.2);
         if (crit) dmg *= 1 + s.critDamage / 100;
         if (state.auto) dmg *= 0.8;
-        p.damage = Math.max(1, Math.round(dmg)); p.crit = crit; p.drone = true;
+        p.damage = Math.max(1, Math.round(dmg * (crowd2 ? 2 : 1))); p.crit = crit; p.drone = true;
         p.angle = Math.atan2(best.y - dr.y, best.x - dr.x);
         rt.projectiles.push(p);
-        dr.cd = 1 / C.DRONE.fireRate;
+        dr.cd = (crowd2 ? 2 : 1) / C.DRONE.fireRate;
         rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.12, size: 1.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
       }
     }
@@ -2234,6 +2271,8 @@
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; rt.siege = null; rt.waves = null;
     resetZone();
+    // strip any siege/wave state resetZone re-armed — boss-only arena
+    rt.siege = null; rt.waves = null;
     // boss-only arena — strip zone spawns; the event owns the encounter
     rt.nodes = []; rt.enemies = []; rt.ground = [];
     rt.bossInit = rt.bossTimer = 1e9;
@@ -2267,13 +2306,52 @@
     if (window.UI) window.UI.bossEvent('super');
     return b;
   }
+  // HOME CITADEL deploy — wave defense on the REAL battle engine in the pilot's
+  // deepest zone (the Home Zone). Clean arena; window.HOMECIT.engineTick owns
+  // spawns, the fort objective, win/lose and rewards.
+  function startHomeDefense() {
+    const zone = Math.max(1, Math.min(state.highestUnlocked || 1, Math.max(1, state.level)));
+    state.currentDungeon = zone;
+    state.currentSystem = null;
+    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null; rt.siege = null; rt.waves = null; rt.sdrun = null;
+    resetZone();
+    // resetZone re-arms siege/wave machinery on citadel-siege zones — the event
+    // owns this arena, so strip it AGAIN after the rebuild (wave-7 citadel bug).
+    rt.siege = null; rt.waves = null;
+    rt.nodes = []; rt.enemies = []; rt.ground = [];
+    rt.bossInit = rt.bossTimer = 1e9;
+    rt.hcrun = { active: true, zone, started: Date.now() };
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 3;
+    rt.archer.x = rt.worldW / 2; rt.archer.y = rt.worldH * 0.55;   // between fort and the approach lanes
+    if (window.UI) window.UI.refreshAll(); save();
+    return { zone, worldW: rt.worldW, worldH: rt.worldH };
+  }
+  // one zone-native raider for the Home Citadel defense (real art, real AI;
+  // the module sets its wave-budget HP and aims it at the fort)
+  function spawnHomeRaider(x, y) {
+    if (!rt.hcrun) return null;
+    const pool = allowedEnemies();
+    // raiders only — never the zone's boss-grade top entry
+    const type = pool[(Math.random() * Math.max(1, pool.length - 1)) | 0];
+    const e = new E.Enemy(type, state.currentDungeon, x, y);
+    e.isBoss = false; e.isCitadel = false;
+    rt.enemies.push(e);
+    return e;
+  }
+  function endHomeDefense() {
+    rt.hcrun = null;
+    respawnAt(Math.max(1, state.currentDungeon || 1));
+  }
   function respawnAt(d) {
     if (d > state.highestUnlocked) d = state.highestUnlocked;
     state.currentDungeon = d;
     state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
     rt.awaitingRespawn = false;
     rt.archer.dead = false; rt.archer.killer = null;
-    rt.waves = null; rt.sdrun = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null;
     resetZone();
     // generous safety on redeploy: 4s invulnerability + a spawn grace window so
@@ -2342,12 +2420,29 @@
   // ==========================================================================
   function sysAt(k) { return GX.tileAt(k); }
   function isOwned(k) { return !!state.ownedSystems[k]; }
+  const turfOn = () => !!(window.TERRITORY && window.TERRITORY.enabled());
+  // GLOBAL NPC layer — when the shared turf war is live, simulated rivals are a
+  // PURE FUNCTION of (tile, UTC day): every player sees the exact same NPC
+  // holdings, which shift a little each day. Real claims always override.
+  function npcOwner(k) {
+    if (isOwned(k)) return null;
+    if (state.tileCd && (state.tileCd[k] || 0) > Date.now()) return null;   // freshly fought — leave neutral until claims stream in
+    const day = Math.floor(Date.now() / 864e5);
+    const s = k + '·' + day;
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    const t = sysAt(k); const ring = t ? t.ring : 8;
+    const p = 0.10 + Math.min(0.16, (ring / (GX.RINGS || 25)) * 0.14);
+    if ((h % 10000) / 10000 >= p) return null;
+    return RIVAL_NAMES[(h >>> 8) % RIVAL_NAMES.length];
+  }
   function rivalOf(k) {
     const real = rt.realTiles && rt.realTiles[k];
     if (real) {
-      const myUid = (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null;
+      const myUid = turfOn() ? window.TERRITORY.myId() : null;
       return (myUid && real.ownerId === myUid) ? null : (real.ownerName || 'Operator');
     }
+    if (turfOn()) return npcOwner(k);   // shared world — deterministic NPC layer, identical for everyone
     return (state.rivalTiles && state.rivalTiles[k]) || null;
   }
   // Seconds left on a tile's contest cooldown. ANY attacked/captured tile is
@@ -2406,6 +2501,9 @@
   // during) sessions. Catch-up runs on load for the time you were away.
   function rndRivalName() { return RIVAL_NAMES[(Math.random() * RIVAL_NAMES.length) | 0]; }
   function galaxyEvent() {
+    // SHARED turf war live → the local random sim must NOT mutate the map:
+    // every player sees the same deterministic NPC layer + real claims instead.
+    if (turfOn()) return null;
     // weighted ring pick — deeper space is more contested
     const ring = 1 + Math.min(GX.RINGS - 1, Math.floor(Math.pow(Math.random(), 0.6) * GX.RINGS));
     const ids = GX.ringCoords(ring).map((c) => GX.tileId(c.q, c.r));
@@ -2500,8 +2598,25 @@
   function initTerritory() {
     if (!(window.TERRITORY && window.TERRITORY.enabled())) return;
     rt._terrSync = Date.now();
-    window.TERRITORY.loadAll().then((map) => { syncRealTiles(map); if (window.UI) window.UI.galaxyChanged(); });
+    window.TERRITORY.loadAll().then((map) => { syncRealTiles(map); if (window.UI) window.UI.galaxyChanged(); republishOwnedTiles(map); });
     window.TERRITORY.subscribe(onRealtimeTile);
+    // CONVERGENCE: realtime alone can miss (publication gaps, device sleep) —
+    // re-pull the whole shared map every 60s so all players see the SAME galaxy
+    if (!rt._terrIv) rt._terrIv = setInterval(() => {
+      try { window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } catch (e) {}
+    }, 60000);
+  }
+  // ONE-TIME REPAIR: conquests that never reached the server (the half-migrated
+  // claim_tile rejected every write for months) get republished, spaced out.
+  function republishOwnedTiles(map) {
+    if (state._turfRepub2) return;
+    state._turfRepub2 = 1; save();
+    const mine = Object.keys(state.ownedSystems || {}).filter((id) => !(map && map[id]));
+    mine.slice(0, 40).forEach((id, i) => {
+      setTimeout(() => {
+        try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: !!hasMyCitadel(id), fleetScore: Math.round(score()), defense: defenseSnapshot() }); } catch (e) {}
+      }, 800 + i * 400);
+    });
   }
   // Tap a tile: own → deploy/farm; neutral → capture siege; rival → contest
   // (starts a 15-min region cooldown). Returns {ok} / {ok:false, reason}.
@@ -2935,12 +3050,26 @@
   function rivalDefense(id) {
     const real = rt.realTiles && rt.realTiles[id];
     const myUid = (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null;
-    if (real && real.ownerId && !(myUid && real.ownerId === myUid)) {
-      const d = real.defense || null;
+    if (real && (real.ownerId || real.ownerName) && !(myUid && real.ownerId === myUid)) {
+      let d = real.defense || null;
+      const sc0 = (d && d.score) || real.fleetScore || 0;
+      if (!d || !d.ship) {
+        // claim carries no snapshot (pre-defense claim / migration pending) —
+        // reconstruct from the owner's PUBLIC leaderboard row so the panel and
+        // the clone battle always show the REAL hulls that took the tile.
+        let row = null;
+        try { row = window.LEADERBOARD && window.LEADERBOARD.byName && window.LEADERBOARD.byName(real.ownerName); } catch (e) {}
+        const fleet = (row && row._fleet && row._fleet.length) ? row._fleet.filter((k) => C.SHIP_BY_KEY[k]) : null;
+        const sc = sc0 || (row && row.power) || Math.max(800, Math.round(score() * 0.8));
+        const TIERS = ['battleship', 'carrier', 'supercarrier', 'titan', 'mothership'];
+        const ship = (fleet && fleet[0]) || TIERS[Math.max(0, Math.min(TIERS.length - 1, Math.floor(Math.log10(Math.max(10, sc)) - 3)))];
+        d = { ship, nm: (C.SHIP_BY_KEY[ship] || {}).name || ship, lvl: (row && row.level) || 0, score: sc, hp: 0, dps: 0,
+              esc: fleet ? Math.min(4, Math.max(0, fleet.length - 1)) : 0, escKeys: fleet ? fleet.slice(1, 5) : [], approx: !fleet };
+      }
       return { name: real.ownerName || 'Rival', real: true, citadel: !!real.citadel,
-               score: (d && d.score) || real.fleetScore || Math.max(800, Math.round(score() * 0.8)), snap: d };
+               score: (d && d.score) || sc0 || Math.max(800, Math.round(score() * 0.8)), snap: d };
     }
-    const nm = state.rivalTiles && state.rivalTiles[id];
+    const nm = rivalOf(id);
     if (!nm || isOwned(id)) return null;
     let h = 0; for (let i = 0; i < id.length; i++) h = ((h * 31 + id.charCodeAt(i)) >>> 0);
     const rnd = (h % 1000) / 1000;
@@ -3435,7 +3564,7 @@
     const owned = !!(state.ownedShips && state.ownedShips[key]);
     const hasBp = !!(state.blueprints && state.blueprints[key]);
     const reqShip = b.reqShip, reqKills = b.reqShipKills || 0;
-    const killsHave = (state.shipKills && state.shipKills[reqShip]) || 0;
+    const killsHave = state.totalKills || 0;         // ANY ship — no specific-hull grind
     const killsMet = killsHave >= reqKills;
     const cost = b.cost || {};
     const have = { fuel: (state.resources && state.resources.fuel) || 0, iron: (state.resources && state.resources.iron) || 0, plasma: (state.resources && state.resources.plasma) || 0, prism: prismIngots() };
@@ -3488,7 +3617,6 @@
       const bd = s.build && s.bpDrop; if (!bd) continue;
       if (state.blueprints && state.blueprints[s.key]) continue;
       if (state.ownedShips && state.ownedShips[s.key]) continue;
-      if (bd.reqOwn && !(state.ownedShips && state.ownedShips[bd.reqOwn])) continue;
       if (lvl < (bd.minCitLevel || 0)) continue;
       if (Math.random() < (bd.chance || 0)) {
         if (!state.blueprints) state.blueprints = {};
@@ -3508,6 +3636,7 @@
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, grantPro, respawnAt,
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
+    startHomeDefense, spawnHomeRaider, endHomeDefense,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
     isCitadelZone, citadelCooldownLeft, isSwarmZone, zoneReqLevel,
     getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,

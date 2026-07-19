@@ -319,17 +319,21 @@
         ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(-cs * 0.55, -cs * 0.75); ctx.lineTo(-cs * 0.05, -cs * 0.25); ctx.stroke();
       } else {
-        // chilled — icy aura ring + slow flakes (calm, low-alpha — most of the
-        // screen is chilled under sustained FrostyFrost fire)
+        // chilled — icy ring. Dash-state + flakes only in SMALL fights: 40 chilled
+        // raiders paying per-frame dash churn was a real lag source in defenses.
+        const crowd = window.GAME && window.GAME.rt && window.GAME.rt.enemies.length > 18;
         ctx.globalAlpha = alpha * 0.35;
         ctx.strokeStyle = 'rgba(150,214,255,0.6)'; ctx.lineWidth = 1.5;
-        ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 8;
-        ctx.beginPath(); ctx.arc(0, 0, e.size * 1.25, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#cdeeff';
-        for (let i = 0; i < 3; i++) {
-          const sa = e.seed * 3 + i * 2.1 + t * 0.5;
-          ctx.globalAlpha = alpha * 0.3;
-          ctx.fillRect(Math.cos(sa) * e.size * 1.1 - 1, Math.sin(sa + t * 0.7) * e.size * 1.1 - 1, 2, 2);
+        if (!crowd) { ctx.setLineDash([5, 6]); ctx.lineDashOffset = -t * 8; }
+        ctx.beginPath(); ctx.arc(0, 0, e.size * 1.25, 0, 7); ctx.stroke();
+        if (!crowd) {
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#cdeeff';
+          for (let i = 0; i < 3; i++) {
+            const sa = e.seed * 3 + i * 2.1 + t * 0.5;
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.fillRect(Math.cos(sa) * e.size * 1.1 - 1, Math.sin(sa + t * 0.7) * e.size * 1.1 - 1, 2, 2);
+          }
         }
       }
       ctx.restore();
@@ -890,7 +894,7 @@
     tg.addColorStop(0, 'rgba(255,60,90,0)'); tg.addColorStop(1, 'rgba(255,90,110,0.8)');
     ctx.strokeStyle = tg; ctx.lineWidth = 3; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(2, 0); ctx.stroke();
-    ctx.shadowColor = b.tint || '#ff5a6e'; ctx.shadowBlur = 8;
+    if (!(window.GAME && window.GAME.rt && window.GAME.rt.ebolts.length > 20)) { ctx.shadowColor = b.tint || '#ff5a6e'; ctx.shadowBlur = 8; }
     ctx.fillStyle = b.tint || '#ff8a5c';
     ctx.beginPath(); ctx.ellipse(0, 0, 5, 2, 0, 0, 7); ctx.fill();
     ctx.fillStyle = '#ffdade';

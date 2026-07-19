@@ -132,6 +132,7 @@
     else if (name === 'casino') { if (window.CASINO) window.CASINO.render(); }
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
     else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
+    else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
     syncJoystickVisible();
   }
 
@@ -224,14 +225,17 @@
     if (aw) aw.classList.toggle('in-hangar', safe);
     const sys = (G.sysAt && s.currentSystem) ? G.sysAt(s.currentSystem) : null;
     const sysName = sys ? sys.name : ('Zone ' + s.currentDungeon);
-    el['zb-name'].textContent = safe ? '⌂ Hangar' : sysName;
-    el['zb-sub'].textContent = safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : ''));
+    // EVENT DEPLOYMENTS — the zone chip + advice + boss meter belong to the zone
+    // grind; Home Citadel / Voidmaw runs own the arena and show their own HUD.
+    const evRun = G.rt && (G.rt.hcrun || G.rt.sdrun);
+    el['zb-name'].textContent = evRun ? (G.rt.hcrun ? '🏰 Home Zone' : '❖ Voidmaw') : (safe ? '⌂ Hangar' : sysName);
+    el['zb-sub'].textContent = evRun ? (G.rt.hcrun ? 'Citadel defense' : 'Season 1 · world boss') : (safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : '')));
     const adv = G.zoneAdvice();
     // advice shows only when it adds info: deploy prompt in safe zone, or a
     // push-up / back-off recommendation. Hidden when the current zone is fine.
     const a2 = el['advice'];
     const msg = safe ? 'Tap above to open the Galaxy Map →' : adv.msg;
-    const show = safe || adv.kind === 'up' || adv.kind === 'down';
+    const show = !evRun && (safe || adv.kind === 'up' || adv.kind === 'down');
     if (a2.textContent !== msg) a2.textContent = msg;
     a2.className = (safe ? 'safe' : adv.kind) + (show ? ' show' : '');
     // siege/wave bar takes priority over the boss meter while a gauntlet is active
@@ -250,12 +254,16 @@
       bb.classList.remove('show', 'active');
     } else {
       sgb.classList.remove('show');
-      if (safe) { bb.classList.remove('show', 'active'); }
+      if (safe || evRun) { bb.classList.remove('show', 'active'); }
       else {
         const bi = G.getBossInfo();
+        // a 1e9 timer means "suppressed" (event arenas) — never show the meter
+        if (!bi.alive && bi.timeLeft > 86400) { bb.classList.remove('show', 'active'); }
+        else {
         bb.classList.add('show');
         if (bi.alive) { bb.classList.add('active'); el['bb-fill'].style.width = Math.max(0, bi.hp / bi.max * 100) + '%'; el['bb-label'].textContent = '☠ ' + (bi.name || 'BOSS'); }
         else { bb.classList.remove('active'); el['bb-fill'].style.width = (bi.progress * 100) + '%'; const m = Math.floor(bi.timeLeft/60), sec = bi.timeLeft%60; el['bb-label'].textContent = bi.progress > 0.985 ? 'BOSS INCOMING' : `Boss in ~${m}:${sec<10?'0':''}${sec}`; }
+        }
       }
     }
   }
@@ -1458,7 +1466,7 @@
       citBlock = '<div style="background:rgba(255,140,90,.07);border:1px solid rgba(255,140,90,.35);border-radius:10px;padding:9px 11px;margin-top:8px">' +
         '<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#ff9a70">⛨ DEFENDING FLEET — ' + d.name.toUpperCase() + (d.real ? '' : ' <span style="opacity:.6;font-weight:600">(sim)</span>') + '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;margin-top:7px">' + shipImg +
-          '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:#ffce8a">' + (sn.nm || 'Clone Fleet') + '</div>' +
+          '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:#ffce8a">' + (sn.nm || 'Clone Fleet') + (sn.approx ? ' <span style="opacity:.55;font-size:10px;font-weight:700">· scouted fleet</span>' : '') + '</div>' +
           '<div style="font-size:11px;color:#c9b39a;line-height:1.45">' + statBits.join(' · ') + '</div></div></div>' +
         '<div style="font-size:11px;color:#9fb0c4;margin-top:7px">A <b style="color:#ffce8a">clone of their fleet</b> garrisons this zone — beat it' + (d.citadel ? ', <b style="color:#ff8a64">then raze their citadel (Rank-hardened)</b>,' : '') + ' to take the tile.</div>' +
       '</div>';
@@ -1688,64 +1696,6 @@
       return `<span class="bc-chip ${ok ? '' : 'short'}" style="--cc:${c}"><span class="bc-g">${g}</span>${G.formatNum(cost[k])}</span>`;
     }).join('');
   }
-  // OBLIVION-class build card — blueprint / kill-gate / resource / 2-week-build flow
-  function buildShipCard(key) {
-    const ship = C.SHIP_BY_KEY[key], inf = G.buildShipInfo(key);
-    const cls = 'sc-' + ship.cls.toLowerCase();
-    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
-    const mods = modSummary(ship.mods);
-    const reqName = (C.SHIP_BY_KEY[inf.reqShip] || {}).name || inf.reqShip;
-    const bd = ship.bpDrop || {};
-    let action = '', body = '';
-    if (inf.status === 'owned') {
-      action = G.state.ship === key ? `<span class="ship-badge active">● ACTIVE</span>` : `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
-    } else if (inf.status === 'building') {
-      const total = (inf.days || 14) * 86400000, left = inf.arrivesAt - Date.now(), pct = Math.max(0, Math.min(100, (1 - left / total) * 100));
-      action = `<span class="ship-badge build">⏳ ${fmtBuildLeft(left)}</span>`;
-      body = `<div class="ship-lock building"><span class="lk-ic">⏳</span><span>Under construction — arrives in <b>${fmtBuildLeft(left)}</b></span><div class="lk-bar"><div class="lk-fill prism" style="width:${pct}%"></div></div></div>`;
-    } else if (inf.status === 'ready') {
-      action = `<span class="ship-badge active">✦ ARRIVED</span>`;
-      body = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Construction complete — boarding…</span></div>`;
-    } else if (inf.status === 'noblueprint') {
-      const pctTxt = (bd.chance * 100).toFixed(bd.chance < 0.01 ? 1 : 0);
-      action = `<span class="ship-badge locked">🔒</span>`;
-      body = `<div class="ship-lock"><span class="lk-ic">◈</span><span>Recover the <b>Blueprint</b> — a <b>${pctTxt}%</b> drop from a <b>Lv${bd.minCitLevel}+ Void Citadel</b> explosion in <b>Zone Grind</b>${bd.reqOwn ? ` · own the <b>${(C.SHIP_BY_KEY[bd.reqOwn] || {}).name}</b> first` : ''}</span></div>`;
-    } else if (inf.status === 'needkills') {
-      const pct = Math.min(100, inf.killsHave / inf.reqKills * 100);
-      action = `<span class="ship-badge bp">✦ BP</span>`;
-      body = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Blueprint secured · <b>${G.formatNum(inf.killsHave)} / ${G.formatNum(inf.reqKills)}</b> kills in the ${reqName}</span><div class="lk-bar"><div class="lk-fill" style="width:${pct}%"></div></div></div>`;
-    } else if (inf.status === 'busy') {
-      action = `<span class="ship-badge locked">⏳</span>`;
-      body = `<div class="ship-lock"><span class="lk-ic">⏳</span><span>Another hull is already under construction — finish it first</span></div>`;
-    } else { // buildable | needres
-      const can = inf.status === 'buildable';
-      action = can ? `<button class="ship-btn buy res" data-build-start="${key}">⚒ Construct</button>` : `<span class="ship-badge locked">⚒</span>`;
-      body = `<div class="ship-lock ${can ? 'ready' : ''}"><span class="lk-ic">⚒</span><span>${can ? 'Ready to build' : 'Need more resources'} · <b>${inf.days}-day</b> build</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
-    }
-    let upg = '';
-    if (inf.owned && G.shipUpInfo) {
-      const u = G.shipUpInfo(key); const tcol = (window.shipLvlColor ? window.shipLvlColor(u.level) : '#9aa7b8');
-      upg = `<div class="ship-upg" style="display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 10px;background:#0f1623;border:1px solid ${tcol}55;border-radius:9px">
-        <div style="width:24px;height:24px;flex:none;border-radius:6px;background:${tcol}22;border:1px solid ${tcol};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${tcol}">${u.level}</div>
-        <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700">+${u.bonus.dmg}% DMG · +${u.bonus.hp}% HP · +${u.bonus.rate}% Rate</div>
-        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ <span style="color:#ffd24d">●</span> ${G.formatNum(u.cost.gold)} <span style="color:#c79bff">✦</span> ${G.formatNum(u.cost.plasma)}</button>`}
-      </div>`;
-    }
-    return `<div class="ship-card ${cls} apex ${G.state.ship === key ? 'is-active' : ''}">
-      <div class="ship-top">
-        <div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>
-        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip">APEX</span></div>
-          <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
-          <div class="ship-layout">${layout}</div></div>
-        <div class="ship-act">${action}</div>
-      </div>
-      <div class="ship-desc">${ship.desc}</div>
-      ${mods ? `<div class="ship-mods">${mods}</div>` : ''}
-      ${upg}
-      ${body}
-    </div>`;
-  }
-  // DREAD-CLASS — multi-currency cost row (glyphs match the wallet chips).
   function megaCostHTML(c, big) {
     const row = [];
     const add = (col, gly, v) => { if (v) row.push('<span class="mega-c"><span style="color:' + col + '">' + gly + '</span> ' + G.formatNum(v) + '</span>'); };
@@ -1755,75 +1705,7 @@
     add('#ff5a6a', '◇', c.dreadCores);
     return '<span class="mega-cost' + (big ? ' big' : '') + '">' + row.join('') + '</span>';
   }
-  function megaShipCard(key) {
-    const ship = C.SHIP_BY_KEY[key]; const st = G.shipBuyState(key);
-    const cls = 'sc-' + ship.cls.toLowerCase();
-    const sina = key === 'titansina';   // FINAL-CLASS showcase card
-    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
-    const mods = modSummary(ship.mods);
-    const lvl = G.state.level || 1;
-    let action = '', body = '';
-    if (st.active) action = `<span class="ship-badge active">● ACTIVE</span>`;
-    else if (st.owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
-    else if (lvl < st.reqLevel) { action = `<span class="ship-badge locked">🔒</span>`; body = `<div class="ship-lock"><span class="lk-ic">🔒</span><span>Reach <b>account Level ${st.reqLevel}</b> to acquire — you're Level <b>${lvl}</b></span></div>`; }
-    else { action = `<button class="ship-btn buy dreadbuy" data-mega-buy="${key}">Acquire</button>`; body = `<div class="ship-lock ready"><span class="lk-ic">◇</span><span>Cost: ${megaCostHTML(ship.megaCost)}</span></div>`; }
-    let upg = '';
-    if (st.owned && G.shipUpInfo) {
-      const u = G.shipUpInfo(key); const tcol = (window.shipLvlColor ? window.shipLvlColor(u.level) : '#9aa7b8');
-      upg = `<div class="ship-upg" style="display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 10px;background:#0f1623;border:1px solid ${tcol}55;border-radius:9px">
-        <div style="width:24px;height:24px;flex:none;border-radius:6px;background:${tcol}22;border:1px solid ${tcol};display:grid;place-items:center;font-family:Orbitron,sans-serif;font-weight:800;font-size:11px;color:${tcol}">${u.level}</div>
-        <div style="flex:1;min-width:0;font-size:10px;color:#46d27a;font-weight:700">+${u.bonus.dmg}% DMG · +${u.bonus.hp}% HP · +${u.bonus.rate}% Rate</div>
-        ${u.maxed ? `<span style="font-family:Orbitron,sans-serif;font-weight:800;font-size:10px;color:${tcol}">MAX</span>` : `<button class="ship-btn" data-ship-upg="${key}" ${u.afford ? '' : 'disabled'} style="white-space:nowrap">⬆ <span style="color:#f2a93c">$</span> ${G.formatNum(u.cost.gold)} <span style="color:#c07bff">✦</span> ${G.formatNum(u.cost.plasma)}</button>`}
-      </div>`;
-    }
-    return `<div class="ship-card ${cls} apex dread ${sina ? 'sina ' : ''}${st.active ? 'is-active' : ''}">
-      ${sina ? `<div class="sina-hero">
-        <i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>
-        <img src="ships/ship-titansina.png" alt="" decoding="async">
-        <span class="sina-callout">2× THE DREAD OMEGA · FULL-ZONE RANGE</span>
-      </div>` : ''}
-      <div class="ship-top">
-        ${sina ? '' : `<div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>`}
-        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip ${sina ? 'sina' : 'dread'}">${sina ? 'FINAL CLASS' : 'DREAD'}</span></div>
-          <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
-          <div class="ship-layout">${layout}</div></div>
-        <div class="ship-act">${action}</div>
-      </div>
-      <div class="ship-desc">${ship.desc}</div>
-      ${mods ? `<div class="ship-mods">${mods}</div>` : ''}
-      ${upg}
-      ${body}
-    </div>`;
-  }
-  // DREAD-class buy confirm — lists every currency with have/cost.
-  function openMegaBuy(key) {
-    const ship = C.SHIP_BY_KEY[key], c = ship.megaCost;
-    const have = { gold: G.state.gold || 0, fuel: (G.state.resources || {}).fuel || 0, iron: (G.state.resources || {}).iron || 0,
-      plasma: (G.state.resources || {}).plasma || 0, prism: (G.getResources && G.state.prism ? G.state.prism.ingots : 0) || 0,
-      credits: G.getCredits ? G.getCredits() : 0, dreadCores: G.getDreadCores ? G.getDreadCores() : 0 };
-    const rows = [
-      ['Gold', '$', '#f2a93c', c.gold, have.gold], ['Fuel', '⬢', '#5bc0ff', c.fuel, have.fuel],
-      ['Iron', '◆', '#d0a060', c.iron, have.iron], ['Plasma', '✦', '#c07bff', c.plasma, have.plasma],
-      ['Prism', '◈', '#ff3a3a', c.prism, have.prism], ['LootCoins', '◉', '#f2a93c', c.credits, have.credits],
-      ['Dread Cores', '◇', '#ff5a6a', c.dreadCores, have.dreadCores],
-    ].filter((r) => r[3]);
-    const afford = rows.every((r) => r[4] >= r[3]);
-    const rowsHTML = rows.map((r) => `<div class="ip-stat"><span class="ip-sname"><span style="color:${r[2]}">${r[1]}</span> ${r[0]}</span><span class="v" style="color:${r[4] >= r[3] ? '#7ce0a0' : 'var(--bad)'}">${G.formatNum(r[4])} / ${G.formatNum(r[3])}</span></div>`).join('');
-    const sheet = showSheet(`<div class="sheet-head">◇ Acquire ${ship.name}</div><div class="sheet-body">
-      <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">${ship.desc}</p>
-      ${rowsHTML}
-      ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough resources — keep grinding & hunting Dreadnaughts.</p>'}
-      <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
-        <button class="btn primary" data-ok ${afford ? '' : 'disabled'}>${afford ? 'Acquire ' + ship.name : 'Insufficient currency'}</button></div></div>`);
-    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
-    const ok = sheet.querySelector('[data-ok]');
-    if (ok && afford) ok.addEventListener('click', () => {
-      const r = G.buyShip(key); closeSheet();
-      if (r.ok) { toast('★ ' + ship.name + ' acquired!', '#ff5a6a'); renderStore(); }
-      else { toast('Cannot acquire — need more ' + (r.reason || 'currency'), '#e23b4e'); }
-    });
-  }
-  // OBLIVION FINAL — purchase-only apex hull (LootCoins, Level-gated).
+  // (unused since the unified shipCard — kept only because its span borders live grid code)
   function purchaseShipCard(key) {const ship = C.SHIP_BY_KEY[key];
     const cls = 'sc-' + ship.cls.toLowerCase();
     const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
@@ -1924,70 +1806,12 @@
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
     sheet.querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('missions'); }));
   }
-  // VERIDIAN — mission-reward hull. No price: 1,000 lifetime missions, accepted
-  // from the Mission Board. This card shows progress and routes there.
-  function missionShipCard(key) {
-    const ship = C.SHIP_BY_KEY[key];
-    const cls = 'sc-' + ship.cls.toLowerCase();
-    const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
-    const active = G.state.ship === key;
-    const need = ship.missionShip || 1000, have = Math.min(need, G.state.lifetimeMissions | 0);
-    let action;
-    if (active) action = `<span class="ship-btn active">◉ FLYING</span>`;
-    else if (owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">EQUIP</button>`;
-    else if (have >= need) action = `<button class="ship-btn buy vmbuy" data-go-missions="1">⌘ Accept ship</button>`;
-    else action = `<button class="ship-btn buy vmbuy" data-go-missions="1">⌘ Missions</button>`;
-    const body = owned
-      ? `<div class="vm-note owned" style="color:#7ce0a0;border-color:rgba(89,217,140,.35);background:rgba(89,217,140,.06)">⌘ Mission Veteran — earned with ${need.toLocaleString()} lifetime missions. Its resonance aura burns everything nearby, scaling with your DPS.</div>`
-      : `<div class="vm-note" style="color:#a9d8bb;border-color:rgba(89,217,140,.3);background:rgba(89,217,140,.05)"><b>MISSION REWARD</b> — cannot be bought. Complete <b>${need.toLocaleString()} lifetime missions</b>, then accept the ship on the Mission Board. Its verdant aura damages everything within a few tiles, scaling with your DPS.</div>` +
-        `<div class="vm-partbar" style="--vmc:#59d98c"><i style="width:${Math.min(100, have / need * 100)}%;background:linear-gradient(90deg,#59d98c,#a5f2c4)"></i><span>⌘ ${have.toLocaleString()} / ${need.toLocaleString()} missions</span></div>`;
-    return `<div class="ship-card vm ${cls}" data-key="${key}" style="border-color:rgba(89,217,140,.4)">
-      <div class="ship-top">
-        <div class="ship-icon"><img src="ships/ship-${key}.png" alt="${ship.name}" decoding="async" style="filter:drop-shadow(0 0 9px rgba(89,217,140,.8))"></div>
-        <div class="ship-t">
-          <div class="ship-n" style="color:#c9f5da">${ship.name} <span class="apex-chip" style="background:linear-gradient(90deg,#a5f2c4,#59d98c);color:#04240f">MISSION VETERAN</span></div>
-          <div class="ship-cls">${ship.cls}-class · DPS resonance aura</div>
-        </div>
-        ${action}
-      </div>
-      ${body}
-    </div>`;
-  }
-  function eventShipCard(key) {
-    const ship = C.SHIP_BY_KEY[key];
-    const cls = 'sc-' + ship.cls.toLowerCase();
-    const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
-    const active = G.state.ship === key;
-    const parts = ((G.state.shipParts && G.state.shipParts[key]) | 0);
-    const need = 100;
-    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones}</span>`;
-    let action, body = '';
-    if (active) action = `<span class="ship-badge active">FLYING</span>`;
-    else if (owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
-    else action = `<button class="ship-btn buy vmbuy" data-go-sdread="1">❖ Earn</button>`;
-    if (!owned) body =
-      `<div class="vm-note"><b>SEASON 1 EXCLUSIVE</b> — cannot be bought. Assemble <b>${need} Voidmaw Parts</b> from the <b>Server Dreadnaught</b> event: stage rewards, daily leaderboard ranks and first-fight bonuses. Gone when the season ends (Aug 31).</div>` +
-      `<div class="vm-partbar"><i style="width:${Math.min(100, parts / need * 100)}%"></i><span>❖ ${parts} / ${need} parts</span></div>`;
-    else body = `<div class="vm-note owned">❖ Season 1: Voidmaw — event-exclusive hull, assembled from ${need} parts. A trophy few will ever fly.</div>`;
-    return `<div class="ship-card vm ${cls}" data-key="${key}">
-      <div class="ship-top">
-        <div class="ship-ic ${cls}"><img class="ship-img" src="ships/ship-${key}.png" alt="" loading="lazy"></div>
-        <div class="ship-meta"><div class="ship-name">${ship.name} <span class="apex-chip vm">SEASON 1</span></div>
-          <div class="ship-tag">${ship.cls} class · ${ship.tag}</div>
-          <div class="ship-layout">${layout}</div></div>
-        <div class="ship-action">${action}</div>
-      </div>
-      <div class="vm-desc">${ship.desc}</div>
-      ${body}
-    </div>`;
-  }
+  // ONE unified detail-sheet card for EVERY hull (Jul 2026): identical frame —
+  // icon · name+chip · class line · layout chips · desc · mod chips · ONE status
+  // strip · action. Only the status strip varies by acquisition (gold / LootCoin
+  // / Dread-class / construction / Season 1 event / mission reward).
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
-    if (ship.event) return eventShipCard(key);
-    if (ship.missionShip) return missionShipCard(key);
-    if (ship.build) return buildShipCard(key);
-    if (ship.purchase) return purchaseShipCard(key);
-    if (ship.megaCost) return megaShipCard(key);
     const st = G.shipBuyState(key);
     const cls = 'sc-' + ship.cls.toLowerCase();
     const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span>` +
@@ -1996,24 +1820,72 @@
     let action = '', lock = '';
     if (st.active) action = `<span class="ship-badge active">● ACTIVE</span>`;
     else if (st.owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
+    else if (ship.event) {
+      // SEASON 1 — assembled from event parts, never sold
+      const need = 100, have = Math.min(need, (G.state.shipParts && G.state.shipParts[key]) | 0);
+      action = `<button class="ship-btn buy" data-go-sdread="1">❖ Earn</button>`;
+      lock = `<div class="ship-lock ready"><span class="lk-ic">❖</span><span>Season 1 exclusive — <b>${have} / ${need}</b> Voidmaw Parts · gone after Aug 31</span>
+        <div class="lk-bar"><div class="lk-fill" style="width:${have / need * 100}%"></div></div></div>`;
+    } else if (ship.missionShip) {
+      const need = ship.missionShip, have = Math.min(need, G.state.lifetimeMissions | 0);
+      action = `<button class="ship-btn buy" data-go-missions="1">⌘ Missions</button>`;
+      lock = `<div class="ship-lock ready"><span class="lk-ic">⌘</span><span>Mission reward — <b>${have.toLocaleString()} / ${need.toLocaleString()}</b> lifetime missions${have >= need ? ' · <b>accept it on the Mission Board</b>' : ''}</span>
+        <div class="lk-bar"><div class="lk-fill" style="width:${Math.min(100, have / need * 100)}%"></div></div></div>`;
+    } else if (ship.purchase && ship.purchase.lc) {
+      action = `<button class="ship-btn buy" data-lc-final="${key}">${window.lootCoinSVG ? lootCoinSVG(13) : '◈'} ${ship.purchase.lc.toLocaleString()}</button>`;
+      lock = `<div class="ship-lock ready"><span class="lk-ic">◈</span><span><b>${ship.purchase.lc.toLocaleString()} LootCoins</b> — instant unlock, no level gate</span></div>`;
+    } else if (ship.megaCost) {
+      action = st.unlocked ? `<button class="ship-btn buy" data-mega-buy="${key}">Acquire</button>` : `<span class="ship-badge locked">🔒</span>`;
+      lock = `<div class="ship-lock ${st.unlocked ? 'ready' : ''}"><span class="lk-ic">◇</span><span>${st.unlocked ? 'Dread-class — paid in a mix of every currency' : `Dread-class · unlocks at <b>Level ${st.reqLevel}</b>`}</span></div>
+        <div class="ship-lock" style="margin-top:6px">${megaCostHTML(ship.megaCost, true)}</div>`;
+    } else if (ship.build) {
+      const inf = G.buildShipInfo(key) || {};
+      if (inf.status === 'building') {
+        const total = (inf.days || 14) * 86400000, left = inf.arrivesAt - Date.now(), pct = Math.max(0, Math.min(100, (1 - left / total) * 100));
+        action = `<span class="ship-badge build">⏳</span>`;
+        lock = `<div class="ship-lock building"><span class="lk-ic">⏳</span><span>Under construction — arrives in <b>${fmtBuildLeft(left)}</b></span><div class="lk-bar"><div class="lk-fill prism" style="width:${pct}%"></div></div></div>`;
+      } else if (inf.status === 'ready') {
+        action = `<span class="ship-badge active">✦ ARRIVED</span>`;
+        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Construction complete — boarding…</span></div>`;
+      } else if (inf.status === 'noblueprint') {
+        const bd = ship.bpDrop || {}; const pctTxt = ((bd.chance || 0) * 100).toFixed((bd.chance || 0) < 0.01 ? 1 : 0);
+        action = `<span class="ship-badge locked">🔒</span>`;
+        lock = `<div class="ship-lock"><span class="lk-ic">◈</span><span>Recover the <b>Blueprint</b> — a <b>${pctTxt}%</b> drop from a <b>Lv${bd.minCitLevel}+ Void Citadel</b> in Zone Grind</span></div>`;
+      } else if (inf.status === 'needkills') {
+        const pct = Math.min(100, inf.killsHave / inf.reqKills * 100);
+        action = `<span class="ship-badge bp">✦ BP</span>`;
+        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Blueprint secured · <b>${G.formatNum(inf.killsHave)} / ${G.formatNum(inf.reqKills)}</b> total kills — any ship</span><div class="lk-bar"><div class="lk-fill" style="width:${pct}%"></div></div></div>`;
+      } else if (inf.status === 'busy') {
+        action = `<span class="ship-badge locked">⏳</span>`;
+        lock = `<div class="ship-lock"><span class="lk-ic">⏳</span><span>Another hull is already under construction — finish it first</span></div>`;
+      } else {
+        const can = inf.status === 'buildable';
+        action = can ? `<button class="ship-btn buy res" data-build-start="${key}">⚒ Construct</button>` : `<span class="ship-badge locked">⚒</span>`;
+        lock = `<div class="ship-lock ${can ? 'ready' : ''}"><span class="lk-ic">⚒</span><span>${can ? 'Ready to build' : 'Need more resources'} · <b>${inf.days}-day</b> build</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
+      }
+    }
     else if (st.unlocked) action = ship.resPrice
       ? `<button class="ship-btn buy res" data-ship-buy="${key}">${resCostChips(ship.resPrice)}</button>`
       : `<button class="ship-btn buy" data-ship-buy="${key}"><span class="coin">$</span> ${G.formatNum(ship.price)}</button>`;
     else action = `<span class="ship-badge locked">🔒</span>`;
-    if (!st.owned && !st.unlocked) {
+    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build) {
       if (!st.hasBlueprint) {
         const z = st.bpZone, reach = z <= G.state.highestUnlocked;
         lock = `<div class="ship-lock"><span class="lk-ic">◷</span><span>Recover the <b>Blueprint</b> — defeat the <b>boss</b> in <b>${zoneName(z)}</b> (Zone ${z})</span>` +
           (reach ? `<button class="lk-go" data-bp-hunt="${z}">Hunt ›</button>` : `<span class="lk-soft">reach Z${z}</span>`) + `</div>`;
-      } else if (!st.prevOwned) {
-        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Blueprint ready · own the <b>${C.SHIP_BY_KEY[st.prevKey].name}</b> first</span></div>`;
       } else if (!st.killsMet) {
         const pct = Math.min(100, st.killsHave / st.killsNeed * 100);
-        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Blueprint ready · <b>${G.formatNum(st.killsHave)}/${G.formatNum(st.killsNeed)}</b> kills in the ${C.SHIP_BY_KEY[st.prevKey].name}</span>
+        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Blueprint ready · <b>${G.formatNum(st.killsHave)}/${G.formatNum(st.killsNeed)}</b> total kills — any ship</span>
           <div class="lk-bar"><div class="lk-fill" style="width:${pct}%"></div></div></div>`;
       }
     }
-    const bpChip = ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
+    const bpChip = st.active ? ''
+      : ship.event ? `<span class="bp-chip have" style="border-color:#b04dff88;color:#d9a0ff">❖ SEASON 1</span>`
+      : ship.missionShip ? `<span class="bp-chip have" style="border-color:#59d98c88;color:#a5f2c4">⌘ MISSIONS</span>`
+      : ship.purchase ? `<span class="bp-chip have" style="border-color:#f2a93c88;color:#ffd9a0">◈ LOOTCOIN</span>`
+      : ship.megaCost ? `<span class="bp-chip have" style="border-color:#ff5a6888;color:#ff9aa6">◇ DREAD</span>`
+      : ship.build ? (st.owned ? '' : ((G.state.blueprints && G.state.blueprints[key]) ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◈ CITADEL</span>`))
+      : ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
     // hull-upgrade row for any owned ship (same options as My Ship)
     let upg = '';
     if (st.owned && G.shipUpInfo) {

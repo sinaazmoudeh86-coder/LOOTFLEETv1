@@ -1,4 +1,40 @@
-# LOOT FLEET V1.0 BETA — Deploy v166 (Season 1: Voidmaw + PvP defense + balance)
+# LOOT FLEET V1.0 BETA — Deploy v167 (Jul 20 update)
+
+## ⚡ JUL 20 UPDATE (SW cache `lootfleet-v269`)
+Push this folder to GitHub → Vercel as usual. **New SQL to run once**:
+`supabase/territory-v2b.sql` (tile ABANDON — release_tile RPC + owner-delete
+policy). Also run `territory-v2.sql` + `server-dreadnaught-bignum.sql` if you
+haven't yet — abandons and the shared turf map depend on them.
+
+**What's in Jul 20:**
+- ⚜ VIP Program — badge in the score pill, 15 levels. Points: purchases
+  (50/$1 on every fulfilment path), Voidmaw medals (daily 100/50/25/10 ·
+  season 500/250/125/50), Event Store exchange (✦1,500 → ⚜25). Perks: +XP,
+  +gold, +AFK, +prism yield (VIP 8+), +5 citadel cap per level. Points are
+  cloud-merge protected (never regress).
+- HUD redesigned — fleet portraits + score + VIP badge + inline XP bar in one
+  panel; HP row with kills chip; DPS chip removed.
+- Change Flagship from the fleet panel (escorts auto-promote to the helm).
+- Abandon owned tiles/citadels in My Galaxy (two-tap confirm, server release).
+- Meaty fire — fire rate above 2.2/s + multishot above 200% folds into damage:
+  identical DPS, ~10× fewer projectiles, ends the endgame lock-ups.
+- Prism mining — hidden 0.02 speed crush fixed (→0.15); rigs now 2B/25B/500B/20T.
+- Voidmaw pity floor — any 2+ stage run banks ≥1 ❖ part (+1 ◇ core past S20).
+- Auto-sell fixed — fleet-aware sweep after every pickup's equip pass.
+- Battle-end loot sweep; filter never scraps escort upgrades.
+- Fixes: Dread-class Acquire (Titan Sina), Dread Hunt Close routing, hull
+  missions removed, iPad galaxy pan (baked map blit), Home Citadel lag
+  (raiders melee-only + 90-bolt budget), device takeover (20s heartbeat +
+  wake check), Home Citadel Lv 150 + tooltips + harder waves, escort V
+  formation, VIP/wave/citadel merge protection.
+
+**Smoke test (60s):** HUD portraits + tappable VIP badge · Titan Sina Acquire
+opens confirm · 2+ stage Voidmaw run pays ≥1 part · tablet map pans smooth ·
+owned tile shows ⏏ Abandon · bag stays lean with auto-sell on.
+
+---
+
+## Original notes (Season 1 launch, formerly v166)
 
 Static front-end redeploy + **up to THREE one-time SQL migrations** (run the
 ones you haven't yet — all are safe to re-run). No Stripe / auth / pricing

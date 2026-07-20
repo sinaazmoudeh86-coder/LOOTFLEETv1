@@ -95,5 +95,19 @@
     } catch (e) {}
   }
 
-  window.TERRITORY = { enabled, myId, myName, loadAll, claim, subscribe };
+  // release a tile I own back to neutral. Prefers the release_tile RPC
+  // (supabase/territory-v2b.sql); falls back to a direct delete (needs the
+  // owner-delete RLS policy from the same migration).
+  async function release(tileId) {
+    const cl = client(); if (!cl || !myId()) return { ok: false };
+    try {
+      const { error } = await cl.rpc('release_tile', { p_tile_id: tileId });
+      if (!error) return { ok: true };
+    } catch (e) {}
+    try {
+      const { error: e2 } = await cl.from('territory').delete().eq('tile_id', tileId).eq('owner_id', myId());
+      return { ok: !e2 };
+    } catch (e) { return { ok: false }; }
+  }
+  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe };
 })();

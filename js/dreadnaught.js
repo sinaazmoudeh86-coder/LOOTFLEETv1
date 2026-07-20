@@ -738,7 +738,7 @@
       '</div>'
     );
     const tb = $('drm-tree'); if (tb) tb.addEventListener('click', () => { closeAllSheets(); const b = document.querySelector('.nav-btn[data-screen="pilot"]'); if (b) b.click(); else { const h = document.querySelector('.nav-btn[data-screen="hero"]'); if (h) h.click(); } });
-    const cb = $('drm-close'); if (cb) cb.addEventListener('click', closeAllSheets);
+    const cb = $('drm-close'); if (cb) cb.addEventListener('click', () => { closeAllSheets(); const b = document.querySelector('.nav-btn[data-screen="dread"]'); if (b) b.click(); });
   }
 
   // =========================================================================

@@ -68,6 +68,7 @@
     claimedAt = Date.now();
     claimedUid = id;
     window.__sessionKicked = false;
+    startHeartbeat();
     // same-browser tabs — instant, offline-safe
     try {
       if (!bc && window.BroadcastChannel) {
@@ -87,7 +88,21 @@
     } catch (e) {}
   }
 
-  window.SESSIONLOCK = { claim, kick, deviceId, browserId, isKicked: () => !!window.__sessionKicked };
+  // HEARTBEAT — re-announce my ORIGINAL claim every 20s. A device that slept
+  // through the live kick hears the newer claim on wake and stands down; an
+  // older claim can never outrank a newer one (beats() compares timestamps).
+  let _hb = 0;
+  function startHeartbeat() {
+    if (_hb) return;
+    _hb = setInterval(() => {
+      try {
+        if (window.__sessionKicked || !claimedAt) return;
+        if (bc) bc.postMessage({ t: 'claim', uid: claimedUid, dev: deviceId(), at: claimedAt });
+        if (chan) chan.send({ type: 'broadcast', event: 'claim', payload: { dev: deviceId(), at: claimedAt } });
+      } catch (e) {}
+    }, 20000);
+  }
+  window.SESSIONLOCK = { claim, kick, deviceId, browserId, lockInfo: () => ({ dev: deviceId(), at: claimedAt }), isKicked: () => !!window.__sessionKicked };
   // this page load IS the newest login — claim once the session is readable
   const boot = () => { try { if (uid() && !window.__sessionKicked) claim(); } catch (e) {} };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 700));

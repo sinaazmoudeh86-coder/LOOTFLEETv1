@@ -34,17 +34,17 @@
   // per extra unit owned. Rigs are TANKY now (deep-zone fields would melt them) —
   // see spawnMinerEntity for level scaling + the per-raider damage cap in tick().
   const MINERS = {
-    scout:     { name: 'Scout Miner',     cost: 100e9,  rate: 1.6, hp: 320,  grow: 1.4, sprite: 'interceptor',  col: '#9aa7b8', blurb: 'Cheap, low yield.' },
-    hauler:    { name: 'Hauler Rig',      cost: 1e12,   rate: 3.6, hp: 900,  grow: 1.4, sprite: 'cruiser',      col: '#5fd1ff', blurb: 'Balanced workhorse.' },
-    heavy:     { name: 'Heavy Excavator', cost: 10e12,  rate: 7.5, hp: 2600, grow: 1.4, sprite: 'heavycruiser', col: '#d0a060', blurb: 'Armoured, strong output.' },
-    harvester: { name: 'Prism Harvester', cost: 100e12, rate: 15,  hp: 7200, grow: 3.0, sprite: 'carrier',      col: '#ffd450', blurb: 'Endgame rig. Huge yield.' },
+    scout:     { name: 'Scout Miner',     cost: 2e9,  rate: 1.6, hp: 320,  grow: 1.4, sprite: 'interceptor',  col: '#9aa7b8', blurb: 'Cheap, low yield.' },
+    hauler:    { name: 'Hauler Rig',      cost: 25e9,   rate: 3.6, hp: 900,  grow: 1.4, sprite: 'cruiser',      col: '#5fd1ff', blurb: 'Balanced workhorse.' },
+    heavy:     { name: 'Heavy Excavator', cost: 500e9,  rate: 7.5, hp: 2600, grow: 1.4, sprite: 'heavycruiser', col: '#d0a060', blurb: 'Armoured, strong output.' },
+    harvester: { name: 'Prism Harvester', cost: 20e12, rate: 15,  hp: 7200, grow: 3.0, sprite: 'carrier',      col: '#ffd450', blurb: 'Endgame rig. Huge yield.' },
   };
   const MINER_ORDER = ['scout', 'hauler', 'heavy', 'harvester'];
   const MAX_MINERS = 10;       // hard cap on how many of EACH miner type you can own
   const REFINERY = { base: 1500, grow: 1.6, max: 25, k: 0.12 };   // +12% prism/sec per lvl (Gold)
   const CORE_BASE = 2500, CORE_GROW = 10, CORE_BONUS = 0.08;      // +8% prism/sec per lvl (Ingots) — 10x base, 10x exponential
   const RAID_FRAC = 0.5;     // share of raiders that dive for your miners
-  const MINE_SPEED = 0.02;   // global dig-speed factor — a FULL fleet cracks a field in ~5 min (was ~5 s)
+  const MINE_SPEED = 0.15;   // global dig-speed (Jul 2026: 0.02→0.15 — the old crush made a 37/s fleet mine ~1/s; T5 runs were 30+ min)
   const RAID_DPS = 0.55;     // multiplier on enemy damage vs miners
   const RAID_HP_CAP = 0.045; // one raider removes at most this frac of a rig's max HP per second (no one-shots)
   const DAILY_FIELDS = 4;    // each tier yields ~this many field-fulls of ore per day, then locks
@@ -86,7 +86,9 @@
   function dailyLeft(tier) { return Math.max(0, dailyCap(tier) - dailyUsed(tier)); }
   function lockedLeft(tier) { const p = P(); ensureDaily(p); const u = p.lock && p.lock[tier]; return u ? Math.max(0, u - Date.now()) : 0; }
   function fmtTime(ms) { let s = Math.ceil(ms / 1000); const h = Math.floor(s / 3600); s -= h * 3600; const m = Math.floor(s / 60); s -= m * 60; const z = (n) => (n < 10 ? '0' + n : '' + n); return h > 0 ? (h + ':' + z(m) + ':' + z(s)) : (z(m) + ':' + z(s)); }
-  function ratePerSec(tier) { let r = 0; P().miners.forEach((m) => r += MINERS[m.type].rate); return r * tierMult(tier) * coreMult() * refMult() * MINE_SPEED; }
+  // VIP perk: +2% prism yield per VIP level past 7 (VIP 8 = +2% … VIP 15 = +16%)
+  function vipPrism() { const lv = window.VIP ? window.VIP.level() : 0; return 1 + Math.max(0, lv - 7) * 0.02; }
+  function ratePerSec(tier) { let r = 0; P().miners.forEach((m) => r += MINERS[m.type].rate); return r * tierMult(tier) * coreMult() * refMult() * MINE_SPEED * vipPrism(); }
 
   // per-kill refine bonus (secondary faucet; mining is primary)
   function killYield(dungeon, isBoss) {
@@ -174,7 +176,7 @@
     }
     // production
     if (RUN.ore > 0 && rate > 0) {
-      const prod = Math.min(RUN.ore, rate * tierMult(RUN.tier) * coreMult() * refMult() * MINE_SPEED * dt);
+      const prod = Math.min(RUN.ore, rate * tierMult(RUN.tier) * coreMult() * refMult() * MINE_SPEED * vipPrism() * dt);
       RUN.ore -= prod; bank(prod);
       const pp = P(); ensureDaily(pp); pp.daily.used[RUN.tier] = (pp.daily.used[RUN.tier] || 0) + prod;
       RUN.floatAcc += prod; RUN.floatT -= dt;
@@ -427,7 +429,7 @@
       const haveLbl = '×' + have + '/' + MAX_MINERS;
       const btn = capped ? '<span class="pm-maxed">MAX</span>' : '<button class="pm-buy ' + (afford ? '' : 'dis') + '" data-buy="' + type + '">$ ' + fmt(c) + '</button>';
       return '<div class="pm-mrow"><div class="pm-mrow-l"><div class="pm-mrow-n" style="color:' + def.col + '">' + def.name + ' <span class="pm-have">' + haveLbl + '</span></div>' +
-        '<div class="pm-mrow-d">' + def.blurb + ' · ◈' + def.rate.toFixed(1) + '/s · ' + fmt(Math.round(def.hp * (1 + lvl() * 0.07))) + ' HP</div></div>' + btn + '</div>';
+        '<div class="pm-mrow-d">' + def.blurb + ' · ⛏ power ' + def.rate.toFixed(1) + ' · ' + fmt(Math.round(def.hp * (1 + lvl() * 0.07))) + ' HP</div></div>' + btn + '</div>';
     }).join('');
     const totalRate = ratePerSec(1);
 

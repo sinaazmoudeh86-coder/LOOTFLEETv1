@@ -883,7 +883,7 @@
         <div class="fp-locked">🔒 Fleet command unlocks at <b>Lv 100</b> — then +1 escort slot every 100 levels. Your other hulls fly <b>with</b> you in battle and add their strength to your Fleet Score.</div>`;
       return;
     }
-    let cells = `<div class="fp-slot flag"><img src="ships/ship-${flag.key}.png" alt=""><div class="fps-n">${flag.name}</div><div class="fps-tag star">★ FLAGSHIP</div></div>`;
+    let cells = `<div class="fp-slot flag" data-fpflag="1" title="Tap to change flagship"><img src="ships/ship-${flag.key}.png" alt=""><div class="fps-n">${flag.name}</div><div class="fps-tag star">★ FLAGSHIP · ⇄</div></div>`;
     C.FLEET.slotLevels.forEach((lv, i) => {
       if (i < slots) {
         const k = fleet[i];
@@ -900,6 +900,7 @@
     const n = G.fleetShips().length;
     panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">${n + 1}/${1 + slots} flying · ${n > 0 ? 'Fleet Score active' : 'deploy escorts to boost your score'}</span></div><div class="fp-slots">${cells}</div>${fleetLoadoutsHTML()}`;
     panel.querySelectorAll('[data-fp]').forEach((d) => d.addEventListener('click', () => openFleetPicker(+d.dataset.fp)));
+    const fb = panel.querySelector('[data-fpflag]'); if (fb) fb.addEventListener('click', openFlagshipPicker);
     // loadout chips open the item card
     panel.querySelectorAll('[data-fli]').forEach((d) => d.addEventListener('click', () => {
       const [k, sk] = d.dataset.fli.split(':');
@@ -938,6 +939,32 @@
         ${(!fit || !fitted) && !isFlag ? '<div class="fl-hint">No gear stowed — switch to this hull once to fit it out.</div>' : ''}</div>`;
     });
     return html;
+  }
+  // FLAGSHIP PICKER — switch the hull YOU fly straight from the fleet panel.
+  // Escorts flying a hull can't take the helm until pulled from their slot.
+  function openFlagshipPicker() {
+    const fleet = G.getFleet();
+    const avail = C.SHIPS.filter((s) => G.state.ownedShips[s.key] && s.key !== G.state.ship);
+    let rows = avail.map((s) => {
+      const inFleet = fleet.includes(s.key);
+      return `<div class="fp-pick" data-fk="${s.key}" ${inFleet ? 'data-esc="1"' : ''}><img src="ships/ship-${s.key}.png" alt=""><div class="fpp-m"><div class="fpp-n">${s.name}</div><div class="fpp-d">${inFleet ? '● currently an escort — tap to promote' : (s.tag || s.cls)}</div></div><span class="fpp-go">${inFleet ? 'PROMOTE' : 'TAKE HELM'}</span></div>`;
+    }).join('');
+    if (!rows) rows = '<p style="color:var(--muted);font-size:11.5px;line-height:1.5">No other hulls owned — buy ships in Hangar → Ships first.</p>';
+    const cur = C.SHIP_BY_KEY[G.state.ship];
+    const sheet = showSheet(`<div class="sheet-head">Change Flagship</div><div class="sheet-body">
+      <p style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Flying: <b style="color:#ffd24d">${cur ? cur.name : G.state.ship}</b> — pick the hull to take the helm. Its equipped loadout stays with your pilot.</p>
+      ${rows}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelectorAll('[data-fk]').forEach((d) => d.addEventListener('click', () => {
+      const k = d.dataset.fk;
+      if (d.dataset.esc) {
+        const idx = G.getFleet().indexOf(k);
+        if (idx >= 0) G.setFleetSlot(idx, null);   // pull from escort duty first
+      }
+      if (G.switchShip(k)) { toast('★ ' + C.SHIP_BY_KEY[k].name + ' is now your flagship', '#ffd24d'); closeSheet(); renderHero(); }
+      else toast('Cannot switch to that hull', '#e23b4e');
+    }));
   }
   function openFleetPicker(i) {
     const fleet = G.getFleet();
@@ -1181,7 +1208,7 @@
   }
   function bindGalaxyMap() {
     const cv = document.getElementById('gx-canvas'); if (!cv) return;
-    _gxCv = cv;
+    _gxCv = cv; _gxBake = null;   // fresh render = fresh bake (data may have changed)
     const wrap = cv.parentElement;
     const fit = () => {
       const r = wrap.getBoundingClientRect();
@@ -1199,9 +1226,11 @@
       const dx = e.clientX - down.x, dy = e.clientY - down.y;
       if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
       gxCam.x = down.cx - dx / gxCam.z; gxCam.y = down.cy - dy / gxCam.z;
-      drawGalaxyMap();
+      _gxPanning = true;
+      if (!_gxRaf) _gxRaf = requestAnimationFrame(() => { _gxRaf = 0; drawGalaxyMap(); });   // one draw per frame, not per event
     });
     cv.addEventListener('pointerup', (e) => {
+      _gxPanning = false;
       if (down && !moved) {
         const r = cv.getBoundingClientRect();
         const wx = (e.clientX - r.left - cv._w / 2) / gxCam.z + gxCam.x;
@@ -1221,8 +1250,36 @@
     }));
   }
   function zoomGalaxy(f) { gxCam.z = Math.max(0.16, Math.min(2.6, gxCam.z * f)); drawGalaxyMap(); }
-  function drawGalaxyMap() {
+  // PERF (Jul 2026): panning repainted ~1,900 hexes + glows on every pointermove
+  // — molasses on iPad. The world now bakes into an offscreen canvas with a
+  // 220px margin; panning is ONE blit. Rebake on zoom/data/margin-exit, and at
+  // ~2Hz while idle so the citadel pulses stay alive.
+  let _gxBake = null, _gxPanning = false, _gxRaf = 0;
+  function drawGalaxyMap(force) {
     const cv = _gxCv; if (!cv || !cv._w || screen !== 'galaxy') return;
+    const M = 220;
+    const now = performance.now();
+    let b = _gxBake;
+    const stale = force || !b || b.z !== gxCam.z || b.vw !== cv._w || b.vh !== cv._h ||
+      Math.abs((b.cx - gxCam.x) * gxCam.z) > M - 12 || Math.abs((b.cy - gxCam.y) * gxCam.z) > M - 12 ||
+      (!_gxPanning && now - b.at > 450);
+    if (stale) {
+      if (!b || b.vw !== cv._w || b.vh !== cv._h) { b = _gxBake = { cv: document.createElement('canvas') }; }
+      const dpr = Math.min(1.5, cv._dpr || 1);
+      b.vw = cv._w; b.vh = cv._h; b.z = gxCam.z; b.cx = gxCam.x; b.cy = gxCam.y; b.at = now;
+      b._w = cv._w + M * 2; b._h = cv._h + M * 2;
+      const pw = Math.round(b._w * dpr), ph = Math.round(b._h * dpr);
+      if (b.cv.width !== pw || b.cv.height !== ph) { b.cv.width = pw; b.cv.height = ph; }
+      b.cv._dpr = dpr; b.cv._w = b._w; b.cv._h = b._h;
+      gxPaintWorld(b.cv);
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(cv._dpr, 0, 0, cv._dpr, 0, 0);
+    ctx.clearRect(0, 0, cv._w, cv._h);
+    const ox = (b.cx - gxCam.x) * gxCam.z - M, oy = (b.cy - gxCam.y) * gxCam.z - M;
+    ctx.drawImage(b.cv, 0, 0, b.cv.width, b.cv.height, ox, oy, b._w, b._h);
+  }
+  function gxPaintWorld(cv) {
     const ctx = cv.getContext('2d');
     ctx.setTransform(cv._dpr, 0, 0, cv._dpr, 0, 0);
     const w = cv._w, h = cv._h, z = gxCam.z;
@@ -1381,6 +1438,26 @@
     const lab = document.getElementById('gx-ringlab');
     if (lab) lab.textContent = cring <= 0 ? 'CORE · Home Citadel' : 'RING ' + Math.min(GM.RINGS, cring) + ' · Lv ' + GM.ringLevel(Math.min(GM.RINGS, Math.max(1, cring)));
   }
+  // DREAD-class confirm sheet — was dropped in the dead-code cleanup while the
+  // unified ship card still emitted data-mega-buy, so Acquire silently threw.
+  function openMegaBuy(key) {
+    const ship = C.SHIP_BY_KEY[key]; if (!ship || !ship.megaCost) return;
+    const st = G.shipBuyState(key);
+    const sheet = showSheet(`<div class="sheet-head">${ship.name}</div><div class="sheet-body">
+      <div style="display:flex;align-items:center;gap:12px"><img src="ships/ship-${key}.png" alt="" style="width:74px;height:52px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(255,90,104,.5))">
+      <div style="flex:1;min-width:0"><div style="font-family:var(--font-display);font-weight:800;font-size:15px;color:#fff">${ship.name}</div>
+      <div style="font-size:11px;color:#9fb0c4;margin-top:2px">${ship.tag || ship.cls}</div></div></div>
+      <div class="ip-stat" style="margin-top:10px"><span class="ip-sname">Price</span><span class="v">${megaCostHTML(ship.megaCost, true)}</span></div>
+      <p style="font-size:12px;color:#b8c4d8;line-height:1.5;margin-top:8px">One-time purchase — the hull is yours permanently and switching to it is free.</p>
+      <div class="sheet-actions"><button class="btn" data-x>Cancel</button><button class="btn gold" data-ok ${st.affordable ? '' : 'disabled'}>${st.affordable ? '✦ Acquire ' + ship.name : 'Not enough funds'}</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const ok = sheet.querySelector('[data-ok]');
+    if (ok) ok.addEventListener('click', () => {
+      const r = G.buyShip(key);
+      if (r.ok) { closeSheet(); toast('✦ ' + ship.name + ' acquired — she\u2019s in your hangar!', '#ffd24d'); renderStore(); renderHero(); }
+      else toast(r.reason === 'locked' ? 'Reach Level ' + (ship.reqLevel || 1) + ' first' : 'Not enough funds for the ' + ship.name, '#e23b4e');
+    });
+  }
   function openTileAction(id) {
     const t = G.tileInfo(id); if (!t) return;
     if (t.home) {
@@ -1471,14 +1548,14 @@
         '<div style="font-size:11px;color:#9fb0c4;margin-top:7px">A <b style="color:#ffce8a">clone of their fleet</b> garrisons this zone — beat it' + (d.citadel ? ', <b style="color:#ff8a64">then raze their citadel (Rank-hardened)</b>,' : '') + ' to take the tile.</div>' +
       '</div>';
     } else if (t.owned && G.citadelBuildCost) {
-      const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0;
+      const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0, cap = G.citadelCap ? G.citadelCap() : 50;
       const af = bc && GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (bc[k2] || 0));
       const can = G.canBuildCitadel && G.canBuildCitadel(id);
       const chips = GM.RES_KEYS.filter((k2) => bc && bc[k2]).map((k2) => '<span style="color:' + ((myRes[k2] || 0) >= bc[k2] ? GM.RES[k2].color : 'var(--bad)') + '">' + GM.RES[k2].glyph + ' ' + G.formatNum(bc[k2]) + '</span>').join(' &nbsp; ');
       citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
         '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;gap:8px">⛓ Build Citadel <span style="color:#9fb0c4;font-weight:600">10× output · ' + cn + '/50 owned</span></div>' +
         '<div style="font-size:12.5px;font-variant-numeric:tabular-nums;margin:7px 0;font-weight:700">' + chips + '</div>' +
-        (cn >= 50 ? '<div style="font-size:10.5px;color:#ffcf7a;margin-bottom:6px">Citadel limit reached (50) — raze one to build elsewhere.</div>' : '') +
+        (cn >= cap ? '<div style="font-size:10.5px;color:#ffcf7a;margin-bottom:6px">Citadel limit reached (' + cap + ') — abandon one, or raise your VIP level (+5 cap each).</div>' : '') +
         '<button class="btn gold" data-build-cit="' + id + '" ' + (can && af ? '' : 'disabled') + ' style="width:100%">Build Citadel</button>' +
       '</div>';
     }
@@ -1498,12 +1575,20 @@
       ${t.citadel && !t.owned ? '<p style="font-size:12px;margin-top:6px;color:#ffb088">⛴ Citadels pay <b>' + GM.CITADEL_RATE_MULT + '×</b> a normal tile — but warping in costs <b>' + GM.CITADEL_COST_MULT + '×</b> and sieges are limited to <b>once per day</b>.</p>' : ''}
       ${t.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
       ${!ecAfford ? '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough Galaxy Resources to warp this deep — farm or capture closer rings first.</p>' : ''}
+      ${t.owned ? '<div style="background:rgba(255,73,95,.05);border:1px solid rgba(255,73,95,.28);border-radius:10px;padding:8px 11px;margin-top:8px"><div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#ff8a96">⏏ ABANDON THIS ZONE</div><div style="font-size:11px;color:#b08f96;line-height:1.45;margin-top:3px">Releases the tile back to neutral — you lose its hourly production' + (t.myCitadel ? ', <b style="color:#ff8a96">and your CITADEL here is scrapped</b> (no refund)' : '') + '. Anyone may claim it again.</div><button class="btn" data-abandon style="width:100%;margin-top:7px;border-color:rgba(255,73,95,.45);color:#ff8a96">⏏ Abandon tile' + (t.myCitadel ? ' + citadel' : '') + '</button></div>' : ''}
       <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${blocked ? '◷ ' + cdTxt : actionLabel}</button></div></div>`);
+    const ab = sheet.querySelector('[data-abandon]');
+    if (ab) ab.addEventListener('click', () => {
+      if (!ab.dataset.arm) { ab.dataset.arm = '1'; ab.textContent = '⚠ TAP AGAIN TO CONFIRM — this cannot be undone'; ab.style.background = 'rgba(255,73,95,.15)'; return; }
+      const r = G.abandonTile(id);
+      if (r.ok) { closeSheet(); toast('⏏ ' + t.name + ' abandoned — the zone is neutral again', '#e8a34a'); renderGalaxy(); }
+      else toast('This zone cannot be abandoned', '#e23b4e');
+    });
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     sheet.querySelectorAll('[data-build-cit]').forEach((b) => b.addEventListener('click', () => {
       const r = G.buildCitadel(b.dataset.buildCit);
       if (r.ok) { closeSheet(); toast('⛓ Citadel raised — this tile now pays 10×!', '#ffd24d'); renderGalaxy(); }
-      else toast(r.reason === 'max' ? 'Citadel limit reached (50)' : r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot build here', '#e23b4e');
+      else toast(r.reason === 'max' ? 'Citadel limit reached (' + (G.citadelCap ? G.citadelCap() : 50) + ') — VIP levels raise it' : r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot build here', '#e23b4e');
     }));
     sheet.querySelectorAll('[data-upg-cit]').forEach((b) => b.addEventListener('click', () => {
       const r = G.upgradeCitadel(b.dataset.upgCit);

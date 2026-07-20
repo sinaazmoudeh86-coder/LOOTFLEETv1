@@ -265,12 +265,16 @@
         if (c.cores) g.state.dreadCores = (g.state.dreadCores || 0) + c.cores;
         let ptxt = '';
         if (c.parts && !vmOwned()) { addPart(VM_KEY, c.parts); ptxt = '❖ ' + c.parts + ' Voidmaw Parts · '; }
-        txt = '🏆 Daily rank #' + c.rank + ' (' + c.name + ') — ' + ptxt + '$' + fmt(c.gold || 0) + (c.cores ? ' · ◇' + c.cores : '');
+        const vpd = c.rank === 1 ? 100 : c.rank === 2 ? 50 : c.rank === 3 ? 25 : 10;
+        try { if (window.VIP) window.VIP.grant(vpd, 'Daily rank #' + c.rank); } catch (e) {}
+        txt = '🏆 Daily rank #' + c.rank + ' (' + c.name + ') — ⚜' + vpd + ' · ' + ptxt + '$' + fmt(c.gold || 0) + (c.cores ? ' · ◇' + c.cores : '');
       } else {
         const t = SEASON_TIERS[c.idx] || SEASON_TIERS[3];
         s.coins = (s.coins | 0) + t.coins;
         g.state.credits = (g.state.credits || 0) + t.lc;
-        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — rank #' + c.rank + ' (' + t.name + '): ' + tierTxt(t);
+        const vps = c.rank === 1 ? 500 : c.rank === 2 ? 250 : c.rank === 3 ? 125 : 50;
+        try { if (window.VIP) window.VIP.grant(vps, 'Season rank #' + c.rank); } catch (e) {}
+        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — rank #' + c.rank + ' (' + t.name + '): ⚜' + vps + ' · ' + tierTxt(t);
       }
       s.hist.unshift({ d: Date.now(), s: 0, txt }); lines.push(txt);
     });
@@ -301,6 +305,7 @@
       { id: 'obalpha',ic: '⬡', name: 'Oblivion Alpha Shard', sub: 'Oblivion Spear Alpha',                          cost: 1400, key: 'oblivionspearalpha' },
       { id: 'obspear',ic: '⬡', name: 'Oblivion Spear Shard', sub: 'the first Oblivion hull',                       cost: 1200, key: 'oblivionspear' },
       { id: 'mother', ic: '⬢', name: 'Mothership Shard',     sub: 'endgame faction carrier',                       cost: 800,  key: 'mothership' },
+      { id: 'vip25',  ic: '⚜', name: '25 VIP Points',        sub: 'account prestige — permanent',                  cost: 1500, vip: 25 },
       { id: 'titan',  ic: '⬢', name: 'Titan Carrier Shard',  sub: 'flagship drone carrier',                        cost: 600,  key: 'titan' },
     ];
   }
@@ -309,9 +314,15 @@
     const it = storeItems().find((x) => x.id === id); if (!it) return;
     if ((s.coins | 0) < it.cost) { toast('Need ' + COIN + ' ' + (it.cost - (s.coins | 0)).toLocaleString() + ' more Event Coins'); return; }
     s.coins = (s.coins | 0) - it.cost;
-    const key = typeof it.key === 'function' ? it.key() : it.key;
-    addPart(key, 1);
-    const got = '1× ' + shipName(key) + ' shard';
+    let got;
+    if (it.vip) {
+      try { if (window.VIP) window.VIP.grant(it.vip, 'Event Store exchange'); } catch (e) {}
+      got = '⚜ ' + it.vip + ' VIP points';
+    } else {
+      const key = typeof it.key === 'function' ? it.key() : it.key;
+      addPart(key, 1);
+      got = '1× ' + shipName(key) + ' shard';
+    }
     s.hist.unshift({ d: Date.now(), s: -1, txt: '✦ Event Store — ' + it.name + ': ' + got + ' (' + COIN + ' ' + it.cost.toLocaleString() + ')' });
     if (s.hist.length > 40) s.hist.length = 40;
     try { G().save(); } catch (e) {}
@@ -571,6 +582,22 @@
       addPart(VM_KEY, 1);
       drops.push({ stage: 0, drops: [{ t: '❖ 1× VOIDMAW PART — first fight of the day (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff' }] });
       s.hist.unshift({ d: Date.now(), s: -1, txt: '❖ Daily first-fight bonus — 1× Voidmaw Part (' + vmParts() + '/' + VM_NEED + ')' });
+    }
+    // PITY FLOOR (Jul 2026): there is NO cap on parts/cores per day — but RNG
+    // could zero a whole run. Any attempt clearing 2+ stages now banks at least
+    // 1 ❖ part (and 1 ◇ core past stage 20) if the rolls paid nothing.
+    {
+      const clearedN = drops.filter((d) => d.stage > 0).length;
+      const maxStage = drops.reduce((a, d) => Math.max(a, d.stage | 0), 0);
+      const has = (needle) => drops.some((d) => (d.drops || []).some((x) => ((x.t || '') + '').indexOf(needle) >= 0));
+      if (!vmOwned() && clearedN >= 2 && !has('VOIDMAW PART')) {
+        addPart(VM_KEY, 1);
+        drops.push({ stage: 0, drops: [{ t: '❖ 1× VOIDMAW PART — persistence bonus (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff' }] });
+      }
+      if (clearedN >= 2 && maxStage >= 20 && !has('Dread Core')) {
+        const st2 = G().state; st2.dreadCores = (st2.dreadCores || 0) + 1;
+        drops.push({ stage: 0, drops: [{ t: '◇ 1 Dread Core — persistence bonus', c: '#ff3a4a' }] });
+      }
     }
     const wasBestDay = dealt > (s.bestDay || 0), wasBestEver = dealt > (s.bestEver || 0);
     if (wasBestDay) s.bestDay = dealt;

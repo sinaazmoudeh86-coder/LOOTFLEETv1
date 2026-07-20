@@ -28,6 +28,8 @@
    ============================================================================= */
 (function () {
   'use strict';
+  // ⚜ VIP: 50 points per $1 — LC packs are 1,000 LC/$, so credits/20 = pts.
+  const vgrant = (n, why) => { try { if (window.VIP && window.VIP.grant) window.VIP.grant(n, why); } catch (e) {} };
   // PACK LADDER — $25 per 25,000 LootCoins at the base tier, then +5% BONUS
   // coins per additional tier. Four clean options, capped at $100.
   // PACK LADDER — matches the App Store IAP products exactly:
@@ -236,10 +238,12 @@
     if (res.ok && p) {
       const G = window.GAME;
       if (G && G.state) { G.state.credits = (G.state.credits || 0) + p.credits; G.save(); if (window.UI) window.UI.refreshAll(); }
+      vgrant(Math.round(p.credits / 20), 'LootCoin pack');
       _result(true, { credits: p.credits });
     } else if (res.ok && sku === PRO.sku) {
       const G = window.GAME;
       if (G && G.state) { G.state.proUntil = Math.max(G.state.proUntil || 0, Date.now()) + 31 * 864e5; G.save(); try { window.ACCOUNT && window.ACCOUNT.flushNow && window.ACCOUNT.flushNow(); } catch (e) {} if (window.UI) window.UI.refreshAll(); }
+      vgrant(1000, 'LootFleet Pro');
       _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
     } else {
       _result(false, p ? { credits: p.credits } : {});
@@ -328,6 +332,7 @@
       let changed = false;
       if (row.credits > 0) {
         G.state.credits = (G.state.credits || 0) + row.credits;
+        vgrant(Math.round(row.credits / 20), 'LootCoin pack');
         changed = true;
         const p = _getPending(); _clearPending();
         _result(true, { credits: row.credits, label: (p && p.label) || null });
@@ -336,6 +341,7 @@
         const t = new Date(row.pro_until).getTime();
         if (t > (G.state.proUntil || 0)) {
           G.state.proUntil = t; changed = true;
+          vgrant(1000, 'LootFleet Pro');
           const p = _getPending(); if (p && p.sku === 'pro_monthly') _clearPending();
           _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
         }

@@ -45,6 +45,9 @@
   function saveWeight(s) { if (!s) return 0; return (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600; }
   function push(state) {
     if (window.__sessionKicked) return;   // kicked by a newer login — stop ALL writes (local too: same-browser tabs share this slot)
+    // stamp the save with MY session lock — the cloud row always names the
+    // device that last owned the account (offline-takeover detection reads it)
+    try { const li = window.SESSIONLOCK && window.SESSIONLOCK.lockInfo && window.SESSIONLOCK.lockInfo(); if (li && li.at) state._lock = { dev: li.dev, at: li.at }; } catch (e) {}
     saveLocal(state);
     if (!cloudOn()) return;
     const s = session();
@@ -84,6 +87,22 @@
   window.addEventListener('pagehide', flush);
   window.addEventListener('beforeunload', flush);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+  // WAKE CHECK — a device that slept through the live kick (Realtime doesn't
+  // queue for sleepers) asks the cloud row who owns the account now. Someone
+  // newer → kick overlay ("Take back control" reloads into a fresh merge).
+  // Still me → re-claim so both channels hear the active session again.
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden || window.__sessionKicked) return;
+    if (!cloudOn()) return;
+    const s = session(); if (!s || !s.id || !window.SESSIONLOCK) return;
+    try {
+      const res = window.CLOUD.pullMeta ? await window.CLOUD.pullMeta(s.id) : null;
+      const rl = res && res.ok && res.data && res.data._lock;
+      const li = window.SESSIONLOCK.lockInfo();
+      if (rl && li.at && rl.dev !== li.dev && rl.at > li.at) { window.SESSIONLOCK.kick('device'); return; }
+      window.SESSIONLOCK.claim();
+    } catch (e) {}
+  });
   // pull the authoritative cloud save — MERGED, never a blind overwrite.
   // Base = whichever copy is newer (lastSave stamp); entitlements that must
   // never regress (Pro time, purchases, owned ships, blueprints, cosmetics)
@@ -116,6 +135,7 @@
       }
     }
     base.lifetimeMissions = Math.max(base.lifetimeMissions | 0, other.lifetimeMissions | 0);
+    base.vipPts = Math.max(base.vipPts | 0, other.vipPts | 0);   // ⚜ VIP points never regress
     if (other.sdread && base.sdread) {
       base.sdread.total = Math.max(base.sdread.total || 0, other.sdread.total || 0);
       base.sdread.bestEver = Math.max(base.sdread.bestEver || 0, other.sdread.bestEver || 0);

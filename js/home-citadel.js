@@ -117,7 +117,7 @@
   function rates(s) {
     const w = s.wave | 0;
     if (w < 1) return { gold: 0, iron: 0, fuel: 0, plasma: 0, prism: 0 };
-    const mult = Math.pow(w, 1.45) * zScale() * (1 + (s.b.mine | 0) * 0.10) * (w >= 100 ? 2 : 1);
+    const mult = Math.pow(w, 1.45) * zScale() * (1 + (s.b.mine | 0) * 0.10) * (w >= 100 ? 2 : 1) * (window.VIP ? window.VIP.mult('afk') : 1);
     return {
       gold: 1500 * mult,
       iron: w >= 5 ? 55 * mult : 0,
@@ -517,7 +517,7 @@
   function grantWaveRewards(s, next) {
     s.wave = next;
     const st = G().state, r = rates(s), lines = [];
-    const gold = Math.max(5000, Math.round(r.gold * 2.2));
+    const gold = Math.max(5000, Math.round(r.gold * 2.2 * (window.VIP ? window.VIP.mult('gold') : 1)));
     st.gold += gold; lines.push({ t: '$' + fmt(gold) + ' Gold', c: '#e6b566' });
     if (r.iron > 0) { const a = Math.round(r.iron * 1.5); st.resources.iron += a; lines.push({ t: '+' + fmt(a) + ' Ore', c: '#d0a060' }); }
     if (r.fuel > 0) { const a = Math.round(r.fuel * 1.5); st.resources.fuel += a; lines.push({ t: '+' + fmt(a) + ' Fuel', c: '#5bc0ff' }); }

@@ -190,6 +190,11 @@
     s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0)) / 100);
     s.shipLevel = _hl + 1;
     s.critChance = Math.min(100, s.critChance);
+    // MEATY FIRE (Jul 2026): past 2.2 shots/s and 200% multishot, extra rate
+    // FOLDS INTO DAMAGE — identical DPS, a fraction of the projectiles. At
+    // Lv100+ the screen stops being a hose of rounds; every shell lands huge.
+    if (s.attacksPerSec > 2.2) { s.attackDamage *= s.attacksPerSec / 2.2; s.attacksPerSec = 2.2; }
+    if (s.multiShot > 200) { s.attackDamage *= (1 + s.multiShot / 100) / 3; s.multiShot = 200; }
     s.lifeSteal = Math.min(95, s.lifeSteal);
     s.multiShot = Math.min(100, s.multiShot);
     s.maxHp = s.health;
@@ -278,6 +283,7 @@
   }
   function gainXp(amount) {
     if (isPro()) amount *= 2;   // LootFleet Pro — 2× XP on every source, account-wide
+    if (window.VIP) amount *= window.VIP.mult('xp');   // VIP program XP perk
     if (window.DREAD && window.DREAD.mult) amount *= window.DREAD.mult('xpGain');   // PILOT: XP Gain nodes
     if (window.ASCEND && window.ASCEND.xpMult) amount *= window.ASCEND.xpMult();    // ASCENSION: Combat Computer
     state.xp += amount;
@@ -439,7 +445,7 @@
       const spread = e.isCitadel ? (i - 1.5) * 0.18 : e.isBoss ? (i - 1) * 0.22 : (Math.random() - 0.5) * 0.07;
       const ang = Math.atan2(a.y - e.y, a.x - e.x) + spread;
       const sp = e.isCitadel ? 150 : e.isBoss ? 165 : 200;
-      rt.ebolts.push({ x: e.x + Math.cos(ang) * e.size * 0.8, y: e.y + Math.sin(ang) * e.size * 0.8,
+      if (!e.raidTarget) rt.ebolts.push({ x: e.x + Math.cos(ang) * e.size * 0.8, y: e.y + Math.sin(ang) * e.size * 0.8,
         vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, ang,
         dmg: e.damage * (e.isCitadel ? 0.45 : e.isBoss ? 0.55 : 0.7), tint: e.tint, src: e, life: 2.6 });
     }
@@ -465,6 +471,7 @@
       }
     }
     rt.ebolts = rt.ebolts.filter((b) => !b.dead);
+    if (rt.ebolts.length > 90) rt.ebolts.splice(0, rt.ebolts.length - 90);
   }
 
   function fire(primary) {
@@ -922,7 +929,16 @@
     if (!targets.length) return false;
     let weakest = Infinity, empty = false;
     targets.forEach((t) => { const e = state.equipped[t]; if (!e) empty = true; else weakest = Math.min(weakest, I.itemPower(e)); });
-    return empty || I.itemPower(item) > weakest;
+    if (empty || I.itemPower(item) > weakest) return true;
+    // FLEET-AWARE (Jul 2026): a drop that upgrades ANY escort's fitting is kept
+    // too — auto-sell must never scrap gear the rest of the fleet needs.
+    for (const sh of fleetShips()) {
+      if (!canMountWeapon(item, sh.cls)) continue;
+      const fit = (state.fittings || {})[sh.key] || {};
+      const eT = C.shipSlots(sh.key).filter((sk) => C.slotBase(sk) === item.slot);
+      for (const t of eT) { const e = fit[t]; if (!e || I.itemPower(item) > I.itemPower(e)) return true; }
+    }
+    return false;
   }
 
   function lootBurst(x, y, rarity) {
@@ -1245,6 +1261,29 @@
     rt.dps = rt.dmgWindow.reduce((s, d) => s + d.dmg, 0) / 2;
   }
 
+  // BATTLE-END SWEEP — every arena teardown (tile secured tow, event end,
+  // redeploy, respawn) COLLECTS all remaining drops instead of deleting them;
+  // the magnet never has to race the tow. Lost-marker items stay lost.
+  function sweepLoot() {
+    for (const gi of rt.ground) { if (!gi.lost && !gi.picked && !gi.dead && gi.item) collect(gi); }
+  }
+  // AUTO-SELL SWEEP (Jul 2026): the fleet-aware keep filter routes most drops
+  // into the bag so escorts can take upgrades — but the gear autoEquip BENCHES
+  // must still auto-sell, or the bag floods and auto-sell "stops working".
+  // After every pickup's equip pass, benched items at/below the auto-sell tier
+  // that no longer upgrade ANY fleet slot convert to gold + salvage.
+  function autoSellSweep(g) {
+    const tier = autoSellTier(); if (tier < 0) return;
+    let gold = 0, n = 0;
+    state.inventory = state.inventory.filter((it) => {
+      if (it.rarity > tier || isPickupUpgrade(it)) return true;
+      gold += C.sellValue(it); addSalvage(it); n++; return false;
+    });
+    if (n) {
+      state.gold += gold;
+      if (g) rt.floats.push(new E.FloatText(g.x, g.y - 24, '+$' + formatNum(gold) + (n > 1 ? ' (' + n + ' sold)' : ''), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
+    }
+  }
   function collect(g) {
     g.picked = true; g.dead = true;
     const item = g.item;
@@ -1266,7 +1305,7 @@
       rt.floats.push(new E.FloatText(g.x, g.y - 10, '+$' + formatNum(gold), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
       return;
     }
-    else { addToInventory(item); if (state.autoEquipAlways) autoEquip(true); }
+    else { addToInventory(item); if (state.autoEquipAlways) autoEquip(true); autoSellSweep(g); }
     burst(g.x, g.y, C.RARITY[item.rarity].color, 10, { speed: 130, life: 0.6, glow: item.rarity >= 2 });
     rt.floats.push(new E.FloatText(g.x, g.y - 12, '+1', { color: C.RARITY[item.rarity].color, size: 16, vy: -50, life: 0.8 }));
     if (window.UI) window.UI.onCollect(item);
@@ -1952,7 +1991,9 @@
     if (window.UI) window.UI.refreshAll();
     return { ok: true };
   }
-  const ESCORT_OFF = [[-36, 30], [36, 30], [-66, 6], [66, 6]];
+  // wide V formation — clear of even the biggest flagship sprites (Jul 2026:
+  // old ±36/±66 offsets left escorts hidden UNDER a Titan-class flagship)
+  const ESCORT_OFF = [[-95, 58], [95, 58], [-160, 14], [160, 14]];
   const ESCORT_WTYPE = { Frigate: 'laser', Cruiser: 'gatling', Battleship: 'missile', Carrier: 'rail', Aegis: 'support' };
   function rebuildEscorts() {
     const ax = rt.archer ? rt.archer.x : 0, ay = rt.archer ? rt.archer.y : 0;
@@ -2274,6 +2315,7 @@
     // strip any siege/wave state resetZone re-armed — boss-only arena
     rt.siege = null; rt.waves = null;
     // boss-only arena — strip zone spawns; the event owns the encounter
+    sweepLoot();
     rt.nodes = []; rt.enemies = []; rt.ground = [];
     rt.bossInit = rt.bossTimer = 1e9;
     rt.sdrun = { active: true, started: Date.now() };
@@ -2320,6 +2362,7 @@
     // resetZone re-arms siege/wave machinery on citadel-siege zones — the event
     // owns this arena, so strip it AGAIN after the rebuild (wave-7 citadel bug).
     rt.siege = null; rt.waves = null;
+    sweepLoot();
     rt.nodes = []; rt.enemies = []; rt.ground = [];
     rt.bossInit = rt.bossTimer = 1e9;
     rt.hcrun = { active: true, zone, started: Date.now() };
@@ -2364,6 +2407,7 @@
   function resetZone() {
     state.prismRun = null;   // any (re)deploy ends a Prism Field run
     state.prismFleetRun = null;   // ...and a Prism Fleet gauntlet run
+    sweepLoot();
     rt.enemies = []; rt.projectiles = []; rt.ground = []; rt.ebolts = []; rt.towT = 0;
     // CINEMATIC: hyperspace warp-in streaks on every combat deploy
     if (state.currentDungeon >= 1) rt.warpT = 0.85;
@@ -2963,6 +3007,22 @@
   // CLONE scaled to the owner's fleet score and take the citadel on victory.
   // ===========================================================================
   const CITADEL_MAX = 50, CITADEL_MULT = 10, CITADEL_LV_MAX = 5;
+  // VIP perk: +5 citadel cap per VIP level (VIP 15 = 125 citadels)
+  function citadelCap() { return CITADEL_MAX + (window.VIP ? window.VIP.level() * 5 : 0); }
+  // ABANDON — walk away from a tile you own: ownership, its citadel and its
+  // production all release; the tile goes neutral (server claim released too).
+  function abandonTile(id) {
+    if (!isOwned(id)) return { ok: false, reason: 'owned' };
+    const t = sysAt(id); if (!t || t.home) return { ok: false, reason: 'home' };
+    delete state.ownedSystems[id];
+    if (state.citadels) delete state.citadels[id];
+    if (state.tileCd) delete state.tileCd[id];
+    if (state.currentSystem === id) state.currentSystem = null;
+    try { if (window.TERRITORY && window.TERRITORY.enabled() && window.TERRITORY.release) window.TERRITORY.release(id); } catch (e) {}
+    if (rt.realTiles && rt.realTiles[id]) delete rt.realTiles[id];
+    save(); if (window.UI) window.UI.galaxyChanged();
+    return { ok: true };
+  }
   function citadelCount() { return Object.keys(state.citadels || {}).length; }
   function hasMyCitadel(id) { return !!(state.citadels && state.citadels[id]); }
   // Citadel RANK (1..5). Each rank multiplies output (10× per rank), raises the
@@ -2984,7 +3044,7 @@
   }
   function canBuildCitadel(id) {
     const t = sysAt(id);
-    return !!(t && !t.home && isOwned(id) && !hasMyCitadel(id) && citadelCount() < CITADEL_MAX);
+    return !!(t && !t.home && isOwned(id) && !hasMyCitadel(id) && citadelCount() < citadelCap());
   }
   // RANK-UP cost: upgrading rank L → L+1 costs the tile's build cost × L,
   // so each rank is a real investment (1×, 2×, 3×, 4× the build price).
@@ -3016,7 +3076,7 @@
   function buildCitadel(id) {
     if (!isOwned(id)) return { ok: false, reason: 'owned' };
     if (hasMyCitadel(id)) return { ok: false, reason: 'exists' };
-    if (citadelCount() >= CITADEL_MAX) return { ok: false, reason: 'max' };
+    if (citadelCount() >= citadelCap()) return { ok: false, reason: 'max' };
     const cost = citadelBuildCost(id);
     if (!canAfford(cost)) return { ok: false, reason: 'resources' };
     state.resources.fuel -= cost.fuel; state.resources.iron -= cost.iron; state.resources.plasma -= cost.plasma;
@@ -3648,7 +3708,7 @@
     recommendedZone, zoneAdvice, zoneBonuses, currentWeek,
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor,
-    buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, hasMyCitadel, rivalCitadelScore, rivalDefense,
+    buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],

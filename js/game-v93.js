@@ -593,9 +593,10 @@
     let _dmg = p.damage;
     if (e.isBoss && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
     const killed = e.takeDamage(_dmg);
-    // FROSTYFROST — every player bolt chills the target (slow), and sometimes
-    // flash-freezes it into an ice cube. Bosses are immune to the cryo field.
-    if (state.ship === 'frostyfrost' && !p.drone && !e.isBoss && !e.dying) {
+    // FROSTYFROST — cryo tech is FLEET tech: if a FrostyFrost is anywhere in
+    // your fleet (flagship OR escort), every player bolt chills the target and
+    // sometimes flash-freezes it into an ice cube. Bosses are immune.
+    if (frostAboard() && !p.drone && !e.isBoss && !e.dying) {
       e.chillT = Math.max(e.chillT || 0, 2.2);
       if (Math.random() < 0.12 && !(e.frozenT > 0) && (e.frostCd || 0) <= 0) {
         e.frozenT = 1.8;
@@ -988,7 +989,7 @@
     // 1) collect any ground loot first (the "pick everything up" promise)
     // distant drops only — anything inside magnet range flies to the ship on
     // its own, so the operator keeps fighting instead of fetching every pickup.
-    const loot = rt.ground.filter((g) => !g.lost && !g.dead && Math.hypot(g.x - a.x, g.y - a.y) > MAGNET_RADIUS * 0.9);
+    const loot = rt.ground.filter((g) => !g.lost && !g.dead && Math.hypot(g.x - a.x, g.y - a.y) > MAGNET_RADIUS * (window.DREAD ? window.DREAD.mult('pickupRadius') : 1) * 0.9);
     if (loot.length) {
       loot.sort((g, h) => ((g.x-a.x)**2+(g.y-a.y)**2)-((h.x-a.x)**2+(h.y-a.y)**2));
       moveToward(loot[0].x, loot[0].y, dt, sp);
@@ -1237,7 +1238,7 @@
         if (d <= _pickR) collect(g);
         else if (d <= _magR) {
           const k = 1 - d / _magR;            // 0 at edge → 1 near player
-          const pull = MAGNET_SPEED * (0.5 + k * 2.5);
+          const pull = MAGNET_SPEED * _prMul * (0.5 + k * 2.5);   // PILOT: radius buff also speeds the vacuum — felt, not just wider
           g.x += (dx / d) * pull * dt;
           g.y += (dy / d) * pull * dt;
           g.magnet = true;
@@ -1256,6 +1257,15 @@
     for (const f of rt.floats) f.update(dt); rt.floats = rt.floats.filter((f) => !f.dead);
     if (rt.floats.length > 60) rt.floats.splice(0, rt.floats.length - 60);
 
+    // BATCHED EQUIP + SELL FLUSH (Jul 2026): running full-fleet autoEquip and
+    // the sell sweep on EVERY pickup caused visible hitches when the magnet
+    // vacuumed a siege's worth of drops — now one pass, ≥2.5/s max, covering
+    // every pickup since the last flush.
+    if (rt._aeDirty && rt.time - rt._aeDirty >= 0.4) {
+      rt._aeDirty = 0;
+      if (state.autoEquipAlways) autoEquip(true);
+      autoSellSweep(null);
+    }
     // dps
     rt.dmgWindow = rt.dmgWindow.filter((d) => rt.time - d.t < 2);
     rt.dps = rt.dmgWindow.reduce((s, d) => s + d.dmg, 0) / 2;
@@ -1281,7 +1291,8 @@
     });
     if (n) {
       state.gold += gold;
-      if (g) rt.floats.push(new E.FloatText(g.x, g.y - 24, '+$' + formatNum(gold) + (n > 1 ? ' (' + n + ' sold)' : ''), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
+      const fx = g || rt.archer;
+      if (fx) rt.floats.push(new E.FloatText(fx.x, fx.y - 24, '+$' + formatNum(gold) + (n > 1 ? ' (' + n + ' sold)' : ''), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
     }
   }
   function collect(g) {
@@ -1305,7 +1316,7 @@
       rt.floats.push(new E.FloatText(g.x, g.y - 10, '+$' + formatNum(gold), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
       return;
     }
-    else { addToInventory(item); if (state.autoEquipAlways) autoEquip(true); autoSellSweep(g); }
+    else { addToInventory(item); rt._aeDirty = (rt.time || 0.001); }   // batched — see the equip/sell flush in update()
     burst(g.x, g.y, C.RARITY[item.rarity].color, 10, { speed: 130, life: 0.6, glow: item.rarity >= 2 });
     rt.floats.push(new E.FloatText(g.x, g.y - 12, '+1', { color: C.RARITY[item.rarity].color, size: 16, vy: -50, life: 0.8 }));
     if (window.UI) window.UI.onCollect(item);
@@ -2528,10 +2539,19 @@
     }
   }
   // Full info card for one tile — everything the detail panel needs.
+  // ALLIED TILE — owned by a real player in MY alliance (never attackable)
+  function isAllyTile(k) {
+    const real = rt.realTiles && rt.realTiles[k];
+    if (!real || !real.ownerId) return false;
+    const my = realMyUid();
+    if (my && real.ownerId === my) return false;
+    return !!(window.ALLIANCE && window.ALLIANCE.isAlly && window.ALLIANCE.isAlly(real.ownerId));
+  }
   function tileInfo(k) {
     const t = sysAt(k); if (!t) return null;
     return Object.assign({}, t, {
       owned: isOwned(k), rival: rivalOf(k), active: state.currentSystem === k,
+      ally: isAllyTile(k),
       cooldown: tileCooldownLeft(k),
       myCitadel: hasMyCitadel(k) && isOwned(k), rivalCitadelScore: rivalCitadelScore(k), defense: rivalDefense(k),
       lootQ: (t.deep ? GX.DEEP_MULT.loot : 1),
@@ -2581,6 +2601,7 @@
       if (hadCit) delete state.citadels[id];
       if (!state.tileCd) state.tileCd = {};
       state.tileCd[id] = Date.now() + 24 * 3600 * 1000;
+      try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, { ownerName: name, fleetScore: rivalCitadelScore(id) || 0, defense: null }, { razed: hadCit }); } catch (e) {}
       return { kind: 'lost', name, tile: id, razed: hadCit };
     }
     return null;
@@ -2618,7 +2639,12 @@
     Object.keys(rt.realTiles).forEach((id) => {
       const r = rt.realTiles[id];
       if (myUid && r.ownerId === myUid) state.ownedSystems[id] = true;
-      else if (state.ownedSystems[id]) delete state.ownedSystems[id];
+      else if (state.ownedSystems[id]) {
+        delete state.ownedSystems[id];
+        // lost while away — file a war report with the conqueror's fleet intel
+        try { if (window.MAIL) window.MAIL.tileLost((GX.tileAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]) }); } catch (e) {}
+        if (state.citadels && state.citadels[id]) delete state.citadels[id];
+      }
       if (state.rivalTiles) delete state.rivalTiles[id]; // a real owner overrides any simulated one
     });
   }
@@ -2633,6 +2659,8 @@
         delete state.ownedSystems[ev.tileId];
         const tn = (GX.tileAt(ev.tileId) || {}).name || ev.tileId;
         pushFeed(ev.ownerName + ' captured your ' + tn, true);
+        try { if (window.MAIL) window.MAIL.tileLost(tn, rt.realTiles[ev.tileId], { razed: !!(state.citadels && state.citadels[ev.tileId]) }); } catch (e) {}
+        if (state.citadels && state.citadels[ev.tileId]) delete state.citadels[ev.tileId];
         if (window.UI) window.UI.galaxyContestToast(ev.ownerName, tn);
       }
       if (state.rivalTiles) delete state.rivalTiles[ev.tileId];
@@ -2675,6 +2703,7 @@
   }
   function warp(k) {
     const tile = sysAt(k); if (!tile) return { ok: false, reason: 'invalid' };
+    if (isAllyTile(k)) return { ok: false, reason: 'ally' };   // same alliance — never attackable
     if (tile.home) return { ok: false, reason: 'home' };       // the Home Citadel is neutral
     const owned = isOwned(k);
     if (!owned && tile.level > state.level + 10) return { ok: false, reason: 'locked' };
@@ -2949,6 +2978,7 @@
     state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + 24 * 3600 * 1000);
     if (state.rivalTiles) delete state.rivalTiles[k];
     pushFeed(fromRival ? ('You took ' + tile.name + ' from ' + fromRival) : ('You captured ' + tile.name));
+    try { if (window.MAIL) window.MAIL.tileWon(tile.name, fromRival, razing); } catch (e) {}
     // REAL turf war: stake the claim on the shared server (server-authoritative,
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
@@ -2962,6 +2992,7 @@
           // citadel you just razed — that tile is yours by conquest)
           delete state.ownedSystems[k];
           pushFeed('Beaten to ' + tile.name + ' — another operator sealed the claim first', true);
+          try { if (window.MAIL) window.MAIL.raceLost(tile.name, (rt.realTiles[k] || {}).ownerName); } catch (e) {}
           if (window.UI) window.UI.unlockToast('⚔ Race lost — ' + tile.name + ' was claimed seconds before you');
           save();
         }
@@ -3312,6 +3343,15 @@
       if (ttk < 1.1 && survivable) ceiling = d;   // must shred enemies (was 2.2)
     }
     return Math.max(1, ceiling - 2);
+  }
+  // FrostyFrost anywhere in the fleet (flagship or escort) — memoized 500ms
+  function frostAboard() {
+    const n = performance.now();
+    if (rt._frostChk == null || n - (rt._frostT || 0) > 500) {
+      rt._frostT = n;
+      rt._frostChk = state.ship === 'frostyfrost' || (typeof fleetShips === 'function' && fleetShips().some((f) => f.key === 'frostyfrost'));
+    }
+    return rt._frostChk;
   }
   function zoneAdvice() {
     const rec = recommendedZone(), cur = state.currentDungeon, s = rt.stats;
@@ -3707,7 +3747,7 @@
     secondUnlocked: (b) => secondUnlocked(b), equipLayout,
     recommendedZone, zoneAdvice, zoneBonuses, currentWeek,
     // galaxy map
-    warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor,
+    warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,

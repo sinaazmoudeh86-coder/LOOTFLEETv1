@@ -34,8 +34,8 @@
   // per extra unit owned. Rigs are TANKY now (deep-zone fields would melt them) —
   // see spawnMinerEntity for level scaling + the per-raider damage cap in tick().
   const MINERS = {
-    scout:     { name: 'Scout Miner',     cost: 2e9,  rate: 1.6, hp: 320,  grow: 1.4, sprite: 'interceptor',  col: '#9aa7b8', blurb: 'Cheap, low yield.' },
-    hauler:    { name: 'Hauler Rig',      cost: 25e9,   rate: 3.6, hp: 900,  grow: 1.4, sprite: 'cruiser',      col: '#5fd1ff', blurb: 'Balanced workhorse.' },
+    scout:     { name: 'Scout Miner',     cost: 8e8,  rate: 1.6, hp: 320,  grow: 1.4, sprite: 'interceptor',  col: '#9aa7b8', blurb: 'Cheap, low yield.' },
+    hauler:    { name: 'Hauler Rig',      cost: 10e9,   rate: 3.6, hp: 900,  grow: 1.4, sprite: 'cruiser',      col: '#5fd1ff', blurb: 'Balanced workhorse.' },
     heavy:     { name: 'Heavy Excavator', cost: 500e9,  rate: 7.5, hp: 2600, grow: 1.4, sprite: 'heavycruiser', col: '#d0a060', blurb: 'Armoured, strong output.' },
     harvester: { name: 'Prism Harvester', cost: 20e12, rate: 15,  hp: 7200, grow: 3.0, sprite: 'carrier',      col: '#ffd450', blurb: 'Endgame rig. Huge yield.' },
   };

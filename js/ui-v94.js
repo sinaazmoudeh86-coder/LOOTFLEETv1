@@ -91,6 +91,16 @@
       if (pbf) { pbf.style.cursor = 'pointer'; pbf.addEventListener('click', tapMyFleet); }
       const lcb = document.getElementById('hud-lcbuy');
       if (lcb) lcb.addEventListener('click', openCredits);
+      const prb = document.getElementById('hud-probuy');
+      if (prb) prb.addEventListener('click', () => { if (G.isPro && G.isPro()) openAccountSheet(); else openProSheet(); });
+      syncProCta();
+      const fnb = document.getElementById('fly-now');
+      if (fnb) fnb.addEventListener('click', () => {
+        const rec = +fnb.dataset.rec || 1;
+        G.selectDungeon(rec);
+        toast('⚔ Deployed to Zone ' + rec + ' — ' + zoneName(rec), '#ffd24d');
+        fnb.classList.remove('show');
+      });
       const lcc = document.getElementById('hud-lc-chip');
       if (lcc) lcc.addEventListener('click', openCredits);
     }
@@ -114,7 +124,7 @@
     screen = name;
     document.querySelectorAll('.screen.overlay').forEach((s) => s.classList.remove('active'));
     if (sc) sc.classList.add('active');
-    const navName = (name === 'hero') ? 'store' : name;
+    const navName = (name === 'hero' || name === 'social' || name === 'mail') ? 'store' : name;
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navName));
     if (name === 'hero') renderHero();
     else if (name === 'bag') renderBag();
@@ -124,6 +134,8 @@
     else if (name === 'board') renderBoard();
     else if (name === 'skills') renderSkills();
     else if (name === 'pilot') { if (window.DREAD) window.DREAD.renderPilot(); }
+    else if (name === 'social') { if (window.SOCIAL) window.SOCIAL.open(); }
+    else if (name === 'mail') { if (window.MAIL) window.MAIL.render(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
     else if (name === 'sdread') { if (window.SDREAD) window.SDREAD.render(); }
     else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
@@ -238,6 +250,18 @@
     const show = !evRun && (safe || adv.kind === 'up' || adv.kind === 'down');
     if (a2.textContent !== msg) a2.textContent = msg;
     a2.className = (safe ? 'safe' : adv.kind) + (show ? ' show' : '');
+    // FLY NOW — big deploy CTA while docked in the hangar, straight to the
+    // recommended zone (clearly named)
+    const fn = el['fly-now'] || (el['fly-now'] = document.getElementById('fly-now'));
+    if (fn) {
+      const rec = Math.max(1, adv.rec || 1);
+      fn.classList.toggle('show', !!(safe && !evRun));
+      if (safe && !evRun) {
+        const fz = document.getElementById('fly-now-zone');
+        if (fz) fz.textContent = 'ZONE ' + rec + ' — ' + zoneName(rec).toUpperCase();
+        fn.dataset.rec = rec;
+      }
+    }
     // siege/wave bar takes priority over the boss meter while a gauntlet is active
     const siege = G.getSiege ? G.getSiege() : null;
     const waves = G.getWaves ? G.getWaves() : null;
@@ -268,8 +292,18 @@
     }
   }
 
+  // top-bar Pro CTA ↔ member badge (swaps once the subscription is active)
+  function syncProCta() {
+    const b = document.getElementById('hud-probuy'); if (!b) return;
+    const pro = !!(G.isPro && G.isPro());
+    b.classList.toggle('is-pro', pro);
+    const sub = document.getElementById('hud-pro-sub');
+    if (sub) sub.textContent = pro ? 'ACTIVE · MEMBER' : '5× SPEED · 2× XP';
+    b.title = pro ? 'LootFleet Pro — active · manage' : 'LootFleet Pro — 5× speed · 2× XP';
+  }
   function refreshAll() {
     if (!_inited) return;
+    syncProCta();
     if (screen === 'hero') renderHero();
     else if (screen === 'bag') renderBag();
     else if (screen === 'zones') renderZones();
@@ -755,13 +789,14 @@
     heroBody.insertAdjacentHTML('afterbegin', hangarTabsHTML('ship'));
     wireHangarTabs(heroBody);
     el['hero-sub'].textContent = (window.AUTH ? window.AUTH.name() : 'Operator') + ' · Lv ' + G.state.level;
-    // LOOTFLEET PRO hero offering — sits just above the ship portrait
+    // LOOTFLEET PRO hero offering — purchase pill for non-members ONLY; members
+    // wear the ACTIVE badge in the top bar instead (no pill in the Hangar)
     {
       const pb = $('pro-banner');
       if (pb) {
         const pro = G.isPro && G.isPro();
         pb.innerHTML = pro
-          ? `<div class="pro-offer active"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro · ACTIVE</div><div class="po-desc">⚡ 5× speed + ✨ 2× XP · renews ${new Date(G.state.proUntil).toLocaleDateString()}</div></div></div>`
+          ? ''
           : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">⚡ Exclusive 5× battle speed · ✨ 2× XP on every kill</div><button class="po-buy">$19.99 / month — Go Pro</button></div></div>`;
         const cta = pb.querySelector('#pro-offer-cta');
         if (cta) cta.addEventListener('click', openProSheet);
@@ -1307,6 +1342,7 @@
         const id = GM.tileId(c.q, c.r);
         const t = GM.tileAt(id); if (!t) continue;
         const owned = G.isOwned(id), rival = !owned && G.rivalOf(id);
+        const ally = !owned && G.isAllyTile && G.isAllyTile(id);
         const locked = !owned && !t.home && t.level > lvl + 10;
         const active = G.state.currentSystem === id;
         const cd = t.home ? 0 : G.tileCooldownLeft(id);
@@ -1314,6 +1350,7 @@
         let fill, edge;
         if (t.home) { fill = '#2a2438'; edge = '#f2b24b'; }
         else if (owned) { fill = 'rgba(45,120,235,0.82)'; edge = '#9fccff'; }   // YOURS — solid blue, clearly held
+        else if (ally) { fill = 'rgba(46,180,102,0.55)'; edge = '#46d27a'; }     // ALLIED — green, protected
         else if (rival) { fill = 'rgba(210,59,78,0.42)'; edge = '#ff5468'; }     // rival — red
         else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
         else { fill = 'rgba(120,134,158,0.14)'; edge = '#566884'; }              // unclaimed — neutral slate
@@ -1487,8 +1524,9 @@
     const ratePerH = t.rate ? t.rate * (t.deep ? GM.DEEP_MULT.resource : 1) : 0;
     const cdTxt = t.cooldown > 0 ? (t.cooldown >= 3600 ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
     const blocked = !t.owned && t.cooldown > 0;
-    const action = t.owned ? 'Deploy' : t.rival ? (t.citadel ? 'Siege' : 'Attack') : (t.citadel ? 'Siege' : 'Capture');
-    const obj = t.owned ? (t.boss || t.citadel ? 'Farm endless boss waves on your tile' : 'Farm your territory')
+    const action = t.ally ? '⬡ Allied' : t.owned ? 'Deploy' : t.rival ? (t.citadel ? 'Siege' : 'Attack') : (t.citadel ? 'Siege' : 'Capture');
+    const obj = t.ally ? '<b style="color:#7ce0a0">⬡ ALLIED TERRITORY</b> — ' + (t.rival || 'a pilot') + ' is in your alliance. Allied systems can never be attacked.'
+      : t.owned ? (t.boss || t.citadel ? 'Farm endless boss waves on your tile' : 'Farm your territory')
       : (t.defense && t.rivalCitadelScore != null) ? 'Break the escort, defeat <b style="color:#ffce8a">' + t.defense.name + "'s clone fleet</b>, then <b style='color:#ff8a64'>raze their citadel</b> to take the zone"
       : t.defense ? 'Break the escort, then defeat <b style="color:#ffce8a">' + t.defense.name + "'s clone fleet</b> to take the zone"
       : t.citadel ? 'Fight up through the garrison, raze the Void Citadel, and it becomes YOUR Citadel'
@@ -1599,7 +1637,7 @@
     if (ok) ok.addEventListener('click', () => {
       const r = G.warp(id);
       if (r.ok) { closeSheet(); toast((t.rival ? 'Attacking ' : t.owned ? 'Deploying to ' : 'Claiming ') + t.name, '#5b9cff'); showScreen('battle'); }
-      else toast(r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
+      else toast(r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
     });
   }
 
@@ -1736,12 +1774,21 @@
   function storeHead(ico, title, right) { return `<div class="sec-head"><span class="sec-ic">${ico}</span><h3>${title}</h3>${right?`<span class="sec-right">${right}</span>`:''}</div>`; }
   // Unified Hangar segment header — shared by the "My Ship" (hero) view and the
   // store categories, so Ship + Store live under one tab.
-  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['pilot','Pilot'],['board','Leaderboard']];
+  const HANGAR_TABS = [['ship','My Ship'],['ships','Ships'],['market','Market'],['pilot','Pilot'],['social','Social'],['mail','Mail'],['board','Ranks']];
+  const HT_ICON = {
+    ship: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c3 2.5 4.5 6 4.5 10l2.5 3.5-3.5-.5c-1 1.6-2.2 2.8-3.5 4-1.3-1.2-2.5-2.4-3.5-4l-3.5.5L7.5 12C7.5 8 9 4.5 12 2z"/><circle cx="12" cy="10" r="1.6"/></svg>',
+    ships: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l8 4 8-4"/><path d="M4 12l8 4 8-4"/><path d="M12 3l8 4-8 4-8-4z"/></svg>',
+    market: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6L5 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/></svg>',
+    pilot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5"/></svg>',
+    social: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><path d="M2.8 19.5c1.2-3 3.5-4.5 6.2-4.5s5 1.5 6.2 4.5"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16.4 15.2c2.3.3 4 1.7 4.9 4"/></svg>',
+    board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M6 6H3v2a3 3 0 0 0 3 3M18 6h3v2a3 3 0 0 1-3 3"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+  };
   function hangarTabsHTML(active) {
     const fleetMode = G && G.fleetShips && G.fleetShips().length > 0;
     return `<div class="store-cats">${HANGAR_TABS.map(([k,l]) => {
       const label = (k === 'ship' && fleetMode) ? 'My Fleet' : l;
-      return `<button class="store-cat ${active===k?'active':''}" data-hangtab="${k}">${label}</button>`;
+      return `<button class="store-cat ${active===k?'active':''}" data-hangtab="${k}" aria-label="${label}"><span class="ht-ic">${HT_ICON[k]||''}</span><span class="ht-lbl">${label}</span></button>`;
     }).join('')}</div>`;
   }
   function wireHangarTabs(root) {
@@ -1751,6 +1798,8 @@
       else if (k === 'board') { tapBoard(); showScreen('board'); }
       else if (k === 'market') { tapMarket(); storeCat = k; showScreen('store'); }
       else if (k === 'pilot') showScreen('pilot');
+      else if (k === 'social') showScreen('social');
+      else if (k === 'mail') showScreen('mail');
       else { if (k === 'ships') tapMyShip(); storeCat = k; showScreen('store'); }
     }));
   }
@@ -2840,5 +2889,5 @@
     }
   }
 
-  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult };
+  window.UI = { init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
 })();

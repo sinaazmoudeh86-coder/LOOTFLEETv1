@@ -132,6 +132,10 @@
         const bb = base.homecit.b || {}, ob = other.homecit.b || {};
         ['mine', 'silo', 'turret', 'repair'].forEach((k) => { bb[k] = Math.max(bb[k] | 0, ob[k] | 0); });
         base.homecit.b = bb;
+        // defense towers — per-pad: keep the stronger build (never lose a tower)
+        const bt = base.homecit.tw || [], ot = other.homecit.tw || [];
+        for (let i = 0; i < 8; i++) { const a = bt[i], o = ot[i]; if (!a) bt[i] = o || null; else if (o && (o.lv | 0) > (a.lv | 0)) bt[i] = o; }
+        base.homecit.tw = bt;
       }
     }
     base.lifetimeMissions = Math.max(base.lifetimeMissions | 0, other.lifetimeMissions | 0);

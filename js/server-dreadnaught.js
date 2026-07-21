@@ -238,6 +238,12 @@
     if (!s.claims) s.claims = [];
     s.claims.push({ t: 's', rank, idx: idx < 0 ? 3 : idx, made: Date.now() });
     s.pendingToast = '🏆 Season ' + SEASON.num + ' final standings — you placed #' + rank + '. Collect your rewards in the event.';
+    try {
+      const st2 = SEASON_TIERS[idx < 0 ? 3 : idx];
+      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: 'Season ' + SEASON.num + ' final standings — #' + rank,
+        body: 'The <b>' + SEASON.label + '</b> season has ended. Your total damage placed you <b>#' + rank + '</b> (' + st2.name + ') — your prize is waiting: <b>' + tierTxt(st2) + '</b>.',
+        meta: { kind: 'prize', cta: { label: '🏆 Collect season prize', screen: 'sdread' } } });
+    } catch (e) {}
     try { G().save(); } catch (e) {}
   }
   // called on day rollover, BEFORE resetting bestDay — stages yesterday's placement as a CLAIM
@@ -247,6 +253,11 @@
     const rank = (s.lbRank && s.lbRank.day === s.day) ? s.lbRank.rank : rankFor(s.day, s.bestDay), t = tierFor(rank);
     if (!s.claims) s.claims = [];
     s.claims.push({ t: 'd', rank, name: t.name, coins: t.coins, lc: t.lc, made: Date.now() });
+    try {
+      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: 'Daily event results — you ranked #' + rank,
+        body: 'Yesterday\u2019s <b>' + SEASON.label + '</b> daily board is settled: your best run ranked <b>#' + rank + '</b> (' + t.name + '). Prize staged: <b>' + tierTxt(t) + '</b>.',
+        meta: { kind: 'prize', cta: { label: '✦ Collect daily prize', screen: 'sdread' } } });
+    } catch (e) {}
     s.pendingToast = '🏆 Server Dreadnaught — yesterday you placed #' + rank + '. Collect your rewards in the event.';
   }
   // collect EVERYTHING staged — the one button that pays out daily + season prizes

@@ -370,6 +370,7 @@
   let _filter = null;                       // category highlight filter
   let _selected = null;                     // selected node key on the tree
   let pan = { x: 0, y: 0 };                  // tree pan offset (px)
+  let zoom = 1;                              // tree zoom (0.35–1.8)
   const HEX = 26;                            // hex radius (px) in tree space (zoomed out a touch)
   let _treeCanvas, _treeCtx, _hitNodes = [], _panActive = false, _panMoved = false, _panStart = null;
 
@@ -408,17 +409,22 @@
           '<div class="pl-filters">' + ['offense', 'defense', 'utility', 'rare'].map((c) =>
             '<button class="pl-fchip ' + c + (_filter === c ? ' on' : '') + '" data-filter="' + c + '"><i style="background:' + CAT_COL[c] + '"></i>' + c[0].toUpperCase() + c.slice(1) + '</button>').join('') +
           '</div>' +
+          '<button class="pl-recenter" id="pl-zout" title="Zoom out">−</button>' +
+          '<button class="pl-recenter" id="pl-zin" title="Zoom in">+</button>' +
           '<button class="pl-recenter" id="pl-recenter" title="Recenter">⊙</button>' +
         '</div>' +
         '<canvas id="pl-tree" class="pl-tree"></canvas>' +
-        '<div class="pl-hint">Drag to explore · tap a node to inspect · unlock outward from the core</div>' +
+        '<div class="pl-hint">Drag to explore · pinch or scroll to zoom · tap a node to inspect</div>' +
       '</div>' +
       '<div class="pl-detail" id="pl-detail"></div>' +
       coachBlock();
 
     // wire
     $('pl-hunt-btn').addEventListener('click', openHuntScreen);
-    $('pl-recenter').addEventListener('click', () => { pan = { x: 0, y: 0 }; fitTree(); drawTree(); });
+    $('pl-recenter').addEventListener('click', () => { pan = { x: 0, y: 0 }; zoom = 1; fitTree(); drawTree(); });
+    const zBtn = (f) => { const nz = Math.max(0.35, Math.min(1.8, zoom * f)); pan.x *= nz / zoom; pan.y *= nz / zoom; zoom = nz; drawTree(); };
+    $('pl-zout').addEventListener('click', () => zBtn(1 / 1.3));
+    $('pl-zin').addEventListener('click', () => zBtn(1.3));
     body.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { _filter = _filter === b.dataset.filter ? null : b.dataset.filter; renderPilot(); }));
     body.querySelectorAll('[data-coach]').forEach((b) => b.addEventListener('click', () => { _coachOpen = !_coachOpen; renderPilot(); }));
     setupTree();
@@ -456,6 +462,20 @@
     _treeCanvas.addEventListener('touchstart', (e) => { const t = e.touches[0], r = _treeCanvas.getBoundingClientRect(); dn(t.clientX - r.left, t.clientY - r.top); }, { passive: true });
     _treeCanvas.addEventListener('touchmove', (e) => { const t = e.touches[0], r = _treeCanvas.getBoundingClientRect(); mv(t.clientX - r.left, t.clientY - r.top); e.preventDefault(); }, { passive: false });
     _treeCanvas.addEventListener('touchend', (e) => { const t = (e.changedTouches && e.changedTouches[0]) || {}, r = _treeCanvas.getBoundingClientRect(); up((t.clientX || 0) - r.left, (t.clientY || 0) - r.top); });
+    // ZOOM — wheel (desktop) + pinch (touch), anchored on the cursor / pinch midpoint
+    const applyZoom = (nz, cx, cy) => {
+      nz = Math.max(0.35, Math.min(1.8, nz));
+      const W = _treeCanvas._w, H = _treeCanvas._h;
+      const wx = (cx - W / 2 - pan.x) / zoom, wy = (cy - H / 2 - pan.y) / zoom;
+      zoom = nz; pan.x = cx - W / 2 - wx * zoom; pan.y = cy - H / 2 - wy * zoom;
+      drawTree();
+    };
+    _treeCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const r = _treeCanvas.getBoundingClientRect(); applyZoom(zoom * (e.deltaY < 0 ? 1.12 : 0.89), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+    let _pinch = null;
+    const pinchInfo = (e, r) => { const a = e.touches[0], b = e.touches[1]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), x: (a.clientX + b.clientX) / 2 - r.left, y: (a.clientY + b.clientY) / 2 - r.top }; };
+    _treeCanvas.addEventListener('touchstart', (e) => { if (e.touches.length === 2) { _panActive = false; const r = _treeCanvas.getBoundingClientRect(); _pinch = pinchInfo(e, r); _pinch.z0 = zoom; } }, { passive: true });
+    _treeCanvas.addEventListener('touchmove', (e) => { if (_pinch && e.touches.length === 2) { const r = _treeCanvas.getBoundingClientRect(); const p = pinchInfo(e, r); applyZoom(_pinch.z0 * (p.d / _pinch.d), p.x, p.y); e.preventDefault(); } }, { passive: false });
+    _treeCanvas.addEventListener('touchend', (e) => { if (e.touches.length < 2) _pinch = null; });
     // re-fit once flex layout settles, and on viewport resize, so the canvas
     // always fills the space left by the pinned hero/detail rows (no scroll).
     requestAnimationFrame(() => { fitTree(); drawTree(); });
@@ -482,19 +502,19 @@
     const ctx = _treeCtx, W = _treeCanvas._w, H = _treeCanvas._h;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0b0f18'; ctx.fillRect(0, 0, W, H);
-    const ox = W / 2 + pan.x, oy = H / 2 + pan.y;
+    const ox = W / 2 + pan.x, oy = H / 2 + pan.y, z = zoom;
     const vis = visibleSet();
     _hitNodes = [];
     // first pass: connection lines between unlocked & their visible neighbors
     ctx.lineWidth = 2;
     Object.keys(vis).forEach((k) => {
       const [q, r] = parseKey(k); const c = hexCenter(q, r);
-      const sx = ox + c.x, sy = oy + c.y;
+      const sx = ox + c.x * z, sy = oy + c.y * z;
       if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) return;
       neighbors(q, r).forEach(([nq, nr]) => {
         const nk = key(nq, nr); if (!vis[nk]) return;
         if (k > nk) return; // draw each edge once
-        const nc = hexCenter(nq, nr); const ex = ox + nc.x, ey = oy + nc.y;
+        const nc = hexCenter(nq, nr); const ex = ox + nc.x * z, ey = oy + nc.y * z;
         const bothU = isUnlocked(k) && isUnlocked(nk);
         ctx.strokeStyle = bothU ? 'rgba(255,160,90,0.5)' : 'rgba(120,140,170,0.14)';
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
@@ -503,7 +523,7 @@
     // second pass: nodes
     Object.keys(vis).forEach((k) => {
       const [q, r] = parseKey(k); const c = hexCenter(q, r);
-      const x = ox + c.x, y = oy + c.y;
+      const x = ox + c.x * z, y = oy + c.y * z;
       if (x < -36 || x > W + 36 || y < -36 || y > H + 36) return;
       const d = nodeDef(q, r);
       const unlocked = isUnlocked(k);
@@ -513,7 +533,7 @@
       _hitNodes.push({ k, x, y });
 
       ctx.save();
-      const rad = HEX * 0.82;
+      const rad = HEX * 0.82 * z;
       // AURA — unlocked (filled) nodes glow in their category colour so they read
       // instantly as "owned", just like a lit galaxy tile. Empty nodes stay dark.
       if (unlocked && !dim) {
@@ -527,7 +547,7 @@
         ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(x, y, rad * 2.0, 0, 7); ctx.fill();
         ctx.restore();
       }
-      if (_selected === k) { hexPath(ctx, x, y, HEX * 0.98); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0; }
+      if (_selected === k) { hexPath(ctx, x, y, HEX * 0.98 * z); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0; }
       hexPath(ctx, x, y, rad);
       if (unlocked) {
         const g = ctx.createLinearGradient(x - rad, y - rad, x + rad, y + rad);
@@ -551,7 +571,7 @@
       // glyph
       const glyph = d.core ? '★' : avail || unlocked ? catGlyph(d) : '?';
       ctx.fillStyle = unlocked ? '#0b0f18' : avail ? col : 'rgba(180,195,215,0.5)';
-      ctx.font = (d.core ? '800 18px' : '800 14px') + ' Orbitron, Rajdhani, sans-serif';
+      ctx.font = '800 ' + Math.max(7, Math.round((d.core ? 18 : 14) * z)) + 'px Orbitron, Rajdhani, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(glyph, x, y + 0.5);
       ctx.restore();
@@ -581,7 +601,7 @@
     return M[k] || '◆';
   }
   function tapTree(x, y) {
-    let best = null, bd = HEX * HEX;
+    let best = null, bd = HEX * zoom * HEX * zoom;
     _hitNodes.forEach((n) => { const dx = n.x - x, dy = n.y - y, d2 = dx * dx + dy * dy; if (d2 < bd) { bd = d2; best = n; } });
     if (best) {
       _selected = best.k; renderDetail();

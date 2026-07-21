@@ -1,6 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+// PREVIEW-SANDBOX SW RESCUE — must run FIRST. A previously-registered game SW
+// poisons the auth-gated preview origin (every fetch 401s). Unregister any
+// game-scoped SW and reload ONCE so this load escapes its control.
+(function(){
+  if(!/claudeusercontent\.com$/.test(location.hostname) || !('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then(function(rs){
+    var mine = rs.filter(function(r){
+      var src = (r.active||r.waiting||r.installing||{}).scriptURL || '';
+      return /\/serve\/.*sw\.js$/.test(src) || /\/serve\/(deploy-[^/]*\/)?$/.test(r.scope||'');
+    });
+    var wipe = ('caches' in window) ? caches.keys().then(function(ks){ return Promise.all(ks.filter(function(k){ return /^lootfleet-/.test(k); }).map(function(k){ return caches.delete(k); })); }) : Promise.resolve();
+    if(!mine.length) return;
+    Promise.all(mine.map(function(r){ return r.unregister(); }).concat([wipe])).then(function(){
+      if(!sessionStorage.getItem('lf-sw-rescued')){
+        sessionStorage.setItem('lf-sw-rescued','1');
+        location.reload();
+      }
+    });
+  }).catch(function(){});
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0b1018">
@@ -39,6 +61,12 @@
 #login{ z-index:60; }
 .lg-ver{ display:inline-block; font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:800; letter-spacing:.16em; color:#0b1220;
   background:linear-gradient(90deg,#ffd24d,#e8960f); border-radius:6px; padding:2px 7px; vertical-align:6px; margin-left:6px; }
+.lg-build{ display:inline-block; font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:800; letter-spacing:.14em; color:#8fa3bd;
+  border:1px solid #2a3850; border-radius:6px; padding:1px 6px; vertical-align:6px; margin-left:4px; }
+.lg-update{ margin:12px 0 4px; padding:12px 14px; border:1px solid #ffcf4d55; border-radius:12px; background:linear-gradient(180deg,#221a08,#170f06); text-align:left; }
+.lg-update .lg-upd-t{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.1em; color:#ffd24d; }
+.lg-update .lg-upd-s{ font-size:12px; color:#c9b78a; line-height:1.5; margin:6px 0 10px; }
+#login.stale .lg-form,#login.stale .auth-seg,#login.stale .lg-guest,#login.stale .auth-or{ opacity:.35; pointer-events:none; filter:grayscale(.5); }
 .lg-wrap{ padding:20px; min-height:100%; display:flex; align-items:center; justify-content:center; }
 .auth-card{
   width:100%; max-width:374px; margin:auto;
@@ -128,6 +156,31 @@
   mix-blend-mode:screen; animation:arenaPulse 5s ease-in-out infinite; }
 @keyframes arenaPulse{ 0%,100%{ opacity:.45; } 50%{ opacity:1; } }
 @media (prefers-reduced-motion:reduce){ #arena-wrap::before{ animation:none; } }
+#hud .lvl-badge{ align-self:center; margin:0 0 0 auto; height:46px; width:44px; min-height:0; flex:none; background:radial-gradient(120% 120% at 50% 0%,#222d40,#141b28); }
+#hud .cta-stack{ display:flex; flex-direction:column; gap:5px; align-self:stretch; flex:none; }
+#hud .cta-stack .lc-cta{ flex:1 1 0; height:auto; min-height:0; margin:0; padding:0 14px; border-radius:11px; gap:8px; align-self:stretch; }
+#hud .cta-stack .lch-gem{ width:18px; height:18px; }
+#hud .cta-stack .pro-star{ font-size:16px; }
+#hud .cta-stack .lch-t .l1{ font-size:9.5px; }
+#hud .cta-stack .lch-t .l2{ font-size:12px; }
+/* LootFleet Pro pill — violet, matching the hero-banner family */
+.pro-cta{ background:linear-gradient(115deg,#251239 0%,#170d28 65%,#120a1e 100%)!important; border:1px solid rgba(184,123,255,.5)!important; box-shadow:0 0 14px -6px rgba(184,123,255,.6) inset, 0 3px 10px -6px #000!important; }
+.pro-cta .pro-star{ font-size:14px; color:#c07bff; text-shadow:0 0 10px rgba(192,123,255,.85); }
+.pro-cta .lch-t .l1{ color:#d9c2f5; }
+.pro-cta .lch-t .l2{ color:#c07bff; }
+.pro-cta.is-pro{ border-color:#2a6a44!important; box-shadow:0 0 12px -4px rgba(70,210,122,.5)!important; }
+.pro-cta.is-pro .pro-star{ color:#46d27a; text-shadow:0 0 10px rgba(70,210,122,.8); }
+.pro-cta.is-pro .lch-t .l2{ color:#7ce0a0; }
+/* hangar FLY NOW deploy CTA */
+#fly-now{ position:absolute; left:50%; top:152px; bottom:auto; transform:translateX(-50%); z-index:12; display:none; flex-direction:column; align-items:center; gap:3px;
+  background:linear-gradient(180deg,#ffd24d,#e8960f); border:none; border-radius:16px; padding:13px 30px; cursor:pointer;
+  box-shadow:0 8px 30px -8px rgba(242,178,75,.85), inset 0 1px 0 rgba(255,255,255,.45); animation:flyPulse 2.2s ease-in-out infinite; }
+#fly-now.show{ display:flex; }
+#fly-now:active{ transform:translateX(-50%) scale(.96); }
+#fly-now .fn-t{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:16px; letter-spacing:.1em; color:#0b1220; }
+#fly-now .fn-z{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:11px; letter-spacing:.08em; color:#4a2f08; }
+@keyframes flyPulse{ 0%,100%{ box-shadow:0 8px 30px -8px rgba(242,178,75,.85), inset 0 1px 0 rgba(255,255,255,.45); } 50%{ box-shadow:0 8px 42px -6px rgba(242,178,75,1), inset 0 1px 0 rgba(255,255,255,.45); } }
+@media (prefers-reduced-motion:reduce){ #fly-now{ animation:none; } }
 </style>
 <style id="lock-gate-css">
 .lock-veil{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;
@@ -274,7 +327,6 @@
 #hud .bar-wrap.xpw{ grid-column:1/4; position:relative; height:13px; border-radius:7px; background:#0e1a30; border:1px solid #2c3a52; overflow:hidden; margin:0; }
 #hud .bar-wrap.xpw .bar-fill.xp{ position:absolute; inset:0 auto 0 0; border-radius:7px 0 0 7px; background:linear-gradient(90deg,#2f6dd8,#7fb1ff); box-shadow:0 0 10px rgba(91,156,255,.55); }
 #hud .bar-wrap.xpw .bar-label{ position:absolute; inset:0; display:flex; align-items:center; justify-content:flex-end; padding:0 8px; font-size:9px; font-weight:800; letter-spacing:.03em; color:#dbe8ff; text-shadow:0 1px 3px #000, 0 0 6px rgba(0,0,0,.8); font-variant-numeric:tabular-nums; }
-#hud .lvl-badge{ align-self:center; }
 #hud .lc-cta{ align-self:center; }
 /* battle row — HP owns the width, kills chip rides the end */
 #hud .hud-bars{ display:flex; flex-direction:row; align-items:center; gap:8px; margin-top:7px; }
@@ -321,12 +373,18 @@
               <div class="pb-val" id="hud-power">0</div>
               <div class="bar-wrap xpw"><div class="bar-fill xp" id="xp-fill" style="width:0%"></div><div class="bar-label" id="xp-label">0 / 100 XP</div></div>
             </div>
+            <div class="lvl-badge"><span class="lab">LVL</span><span class="num" id="hud-level">1</span></div>
           </div>
-          <div class="lvl-badge"><span class="lab">LVL</span><span class="num" id="hud-level">1</span></div>
+          <div class="cta-stack">
           <button id="hud-lcbuy" class="lc-cta" aria-label="Loot Coins on sale now" title="Loot Coins — On Sale Now">
             <svg class="lch-gem" width="18" height="18" viewBox="0 0 24 24"><defs><linearGradient id="lchg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lchg)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lchg)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg>
             <span class="lch-t"><span class="l1">◈ LOOT COINS</span><span class="l2">ON SALE NOW</span></span>
           </button>
+          <button id="hud-probuy" class="lc-cta pro-cta" aria-label="LootFleet Pro" title="LootFleet Pro">
+            <span class="pro-star">★</span>
+            <span class="lch-t"><span class="l1">LOOTFLEET PRO</span><span class="l2" id="hud-pro-sub">5× SPEED · 2× XP</span></span>
+          </button>
+          </div>
         </div>
         <div class="hud-bars">
           <div class="bar-wrap hpw"><div class="bar-fill hp" id="hp-fill" style="width:100%"></div><div class="bar-label" id="hp-label">HP</div></div>
@@ -349,6 +407,7 @@
               <div id="advice" class="ok"></div>
             </div>
             <div id="loot-feed"></div>
+            <button id="fly-now"><span class="fn-t">⚔ FLY NOW</span><span class="fn-z" id="fly-now-zone"></span></button>
             <div id="cargo-full">⚠ HOLD FULL · loot auto-scrapped<span class="cf-go">tap to manage ›</span></div>
             <div id="toast-layer"></div>
             <div id="joystick"><div class="knob"></div></div>
@@ -435,6 +494,18 @@
           <div class="scr-head"><span class="scr-title">Prism Fleet</span><span class="scr-sub" id="pf-sub"></span></div>
           <div class="scr-body" id="pf-body"></div>
           <div class="pf-sheet-root" id="pf-sheet-root"></div>
+        </div>
+
+        <!-- MAIL (Hangar ▸ Mail) -->
+        <div class="screen overlay" id="screen-mail" data-screen-label="Mail">
+          <div class="scr-head"><span class="scr-title">Comms</span><span class="scr-sub" id="mail-sub"></span></div>
+          <div class="scr-body" id="mail-body"></div>
+        </div>
+
+        <!-- SOCIAL (Hangar ▸ Social) -->
+        <div class="screen overlay" id="screen-social" data-screen-label="Social">
+          <div class="scr-head"><span class="scr-title">Social</span><span class="scr-sub" id="social-sub"></span></div>
+          <div class="scr-body" id="social-body"></div>
         </div>
 
         <!-- PILOT (Hangar ▸ Pilot) -->
@@ -667,7 +738,12 @@
         <div class="lg-wrap">
           <div class="auth-card">
             <div class="lg-logo"><img class="lg-mark" src="logo.png" alt="Loot Fleet"></div>
-            <h1 class="lg-title">Loot Fleet <span class="lg-ver">V1.0 BETA</span></h1>
+            <h1 class="lg-title">Loot Fleet <span class="lg-ver">V1.0 BETA</span> <span class="lg-build" id="lg-build"></span></h1>
+            <div class="lg-update" id="lg-update" hidden>
+              <div class="lg-upd-t">⚠ UPDATE REQUIRED</div>
+              <div class="lg-upd-s">You're on an outdated build — logging in on old versions can desync your save. Update to continue.</div>
+              <button type="button" class="lg-primary" id="lg-update-btn">⟳ Update now</button>
+            </div>
 
             <!-- one clear choice: new vs returning -->
             <div class="auth-seg" role="tablist" aria-label="Account">
@@ -723,26 +799,62 @@
 <script src="js/vip.js?v=6"></script>
 <script src="js/territory.js?v=206"></script>
 <script src="js/payments-v91.js?v=191"></script>
-<script src="js/game-v93.js?v=233"></script>
-<script src="js/ui-v94.js?v=221"></script>
+<script src="js/game-v93.js?v=238"></script>
+<script src="js/ui-v94.js?v=226"></script>
 <script src="js/fx-cinematic.js?v=3"></script>
 <script src="js/fx-primordial.js?v=4"></script>
 <script src="js/fx-aaa.js?v=160"></script>
 <script src="js/moon-scene.js?v=166"></script>
-<script src="js/moon-colony.js?v=185"></script>
-<script src="js/home-citadel.js?v=21"></script>
+<script src="js/moon-colony.js?v=186"></script>
+<script src="js/home-citadel.js?v=25"></script>
 <script src="js/missions.js?v=190"></script>
 <script src="js/coach-v89.js?v=167"></script>
-<script src="js/prism-v5.js?v=191"></script>
+<script src="js/prism-v5.js?v=192"></script>
 <script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js?v=190"></script>
-<script src="js/server-dreadnaught.js?v=10"></script>
+<script src="js/dreadnaught.js?v=191"></script>
+<script src="js/server-dreadnaught.js?v=11"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/shipworks.js?v=6"></script>
+<script src="js/shipworks.js?v=7"></script>
+<script src="js/social.js?v=6"></script>
+<script src="js/mail.js?v=3"></script>
+<script src="js/alliance.js?v=5"></script>
 <script src="js/ascension.js?v=12"></script>
 <script src="js/casino.js?v=6"></script>
 <script src="js/casino2.js?v=5"></script>
 <script src="js/auth.js?v=182"></script>
+<script id="version-gate">
+  // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
+  // truth. A client behind the live build may NOT log in: stale code on one
+  // device is what forks saves between iPad and PC.
+  window.LF_BUILD = 281;
+  (function(){
+    var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
+    function gate(latest){
+      if(!latest || (latest.build|0) <= window.LF_BUILD) return;
+      var lg=document.getElementById('login'), up=document.getElementById('lg-update');
+      if(lg) lg.classList.add('stale');
+      if(up){ up.hidden=false;
+        var s=up.querySelector('.lg-upd-s');
+        if(s) s.textContent='Build '+latest.build+' is live — you\u2019re on '+window.LF_BUILD+'. Logging in on old versions can desync your save. Update to continue.';
+        document.getElementById('lg-update-btn').addEventListener('click', function(){
+          var done=function(){ location.reload(); };
+          try{
+            Promise.resolve()
+              .then(function(){ return ('caches' in window) ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }) : null; })
+              .then(function(){ return (navigator.serviceWorker && navigator.serviceWorker.getRegistration) ? navigator.serviceWorker.getRegistration().then(function(r){ return r && r.update(); }) : null; })
+              .then(done, done);
+          }catch(e){ done(); }
+        });
+      }
+    }
+    try{
+      fetch('version.json?t='+Date.now(), { cache:'no-store' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(gate)
+        .catch(function(){}); // offline → can't check; don't lock people out
+    }catch(e){}
+  })();
+</script>
 <script id="auth-gate-glue">
   /* Presentational glue only — drives the new segmented control through the
      existing #lg-toggle that auth.js already wires. No auth logic added. */
@@ -779,8 +891,12 @@
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>requestAnimationFrame(tryBoot));
     window.addEventListener('load',()=>setTimeout(tryBoot,80));
     setTimeout(tryBoot,1500);
-    // offline / installable PWA (only on a real https host)
-    if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
+    // offline / installable PWA (only on a real https host — NEVER the preview
+    // sandbox: its assets are auth-gated and a SW would 401 every fetch)
+    var sandbox=/claudeusercontent\.com$/.test(location.hostname);
+    if(sandbox && 'serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>{ if(r.scope && r.scope.indexOf('/deploy-')>-1) r.unregister(); })).catch(()=>{});
+    } else if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
       window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
     }
   })();

@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v281';
+const CACHE = 'lootfleet-v296';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -19,8 +19,9 @@ const CORE = [
   'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v93.js', 'js/ui-v94.js', 'js/fx-cinematic.js', 'js/fx-primordial.js', 'js/coach-v89.js', 'js/auth.js', 'js/prism-v5.js', 'js/prism-fleet.js', 'js/dreadnaught.js', 'js/galaxy-box.js',
   'js/showcase.js', 'js/ships-inline.js',
   'js/missions.js', 'js/moon-colony.js', 'js/moon-scene.js', 'js/fx-aaa.js',
-  'js/shipworks.js', 'js/ascension.js', 'js/casino.js', 'js/casino2.js', 'js/social.js', 'js/alliance.js', 'js/mail.js',
+  'js/shipworks.js', 'js/ascension.js', 'js/casino.js', 'js/casino2.js', 'js/social.js', 'js/alliance.js', 'js/alliance-boss.js', 'js/mail.js',
   'js/dreadnaught.js', 'js/server-dreadnaught.js',
+  'ships/ship-monolith1.png', 'ships/ship-monolith2.png', 'ships/ship-monolith3.png', 'ships/ship-monolith4.png',
   'ships/ship-voidmaw.png', 'ships/ship-chromafang.png', 'ships/ship-chromaregent.png', 'ships/ship-frostyfrost.png', 'ships/ship-veridian.png', 'js/home-citadel.js', 'js/session-lock.js', 'js/vip.js', 'ships/hc-citadel.png', 'ships/hc-mine.png', 'ships/hc-silo.png', 'ships/hc-turret.png', 'ships/hc-repair.png',
   'css/fx-aaa.css', 'css/readability.css',
   'ships/ship-frigate.png', 'ships/ship-interceptor.png', 'ships/ship-cruiser.png',

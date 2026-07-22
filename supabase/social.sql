@@ -185,7 +185,7 @@ create table if not exists public.alliances (
 create table if not exists public.alliance_members (
   user_id uuid primary key references auth.users(id) on delete cascade,
   alliance_id uuid not null references public.alliances(id) on delete cascade,
-  role text not null default 'member',          -- leader | officer | member
+  role text not null default 'member',          -- leader | coleader | elder | member ('officer' = legacy elder)
   contrib bigint not null default 0,            -- this week's contribution
   week_key text not null default '',
   day_key date,
@@ -241,13 +241,45 @@ begin
     select min(id) from (select id from public.alliance_feed where alliance_id = aid order by id desc limit 80) keep);
 end; $$;
 
--- fresh boss HP: scales with the ALLIANCE's real strength and boss number
+-- fresh boss HP: anchored to the ALLIANCE's real strength, EXPONENTIAL in the
+-- mark — every level is ×1.55 the last
 create or replace function public._al_boss_hp(aid uuid, n int)
 returns numeric language sql security definer set search_path = public as $$
   select greatest(5e13, coalesce((select sum(l.power)::numeric from public.alliance_members m
     join public.leaderboard l on l.user_id = m.user_id where m.alliance_id = aid), 0) * 25)
-    * power(1.35::numeric, greatest(0, n - 1));
+    * power(1.55::numeric, greatest(0, n - 1));
 $$;
+
+-- ARMADA WEEK — integer week index breaking SUNDAY 00:00 America/Chicago
+-- (epoch day 0 = Thursday; +4 shifts the boundary to Sunday; Chicago tz
+-- handles CST/CDT automatically)
+create or replace function public._al_bweek()
+returns int language sql stable as $$
+  select floor((extract(epoch from (now() at time zone 'America/Chicago')) / 86400 + 4) / 7)::int;
+$$;
+grant execute on function public._al_bweek() to authenticated;
+alter table public.alliances add column if not exists boss_week int;
+
+-- 24h REJOIN COOLDOWN — set when a member LEAVES voluntarily; blocks joining,
+-- requesting, or founding another alliance until it expires. Kicks don't count.
+create table if not exists public.alliance_cooldowns (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  left_at timestamptz not null default now()
+);
+alter table public.alliance_cooldowns enable row level security;
+create or replace function public._al_cooldown_check(u uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare la timestamptz; hrs int;
+begin
+  select left_at into la from public.alliance_cooldowns where user_id = u;
+  if la is null then return; end if;
+  if la + interval '24 hours' <= now() then
+    delete from public.alliance_cooldowns where user_id = u;   -- expired — clean up
+    return;
+  end if;
+  hrs := ceil(extract(epoch from (la + interval '24 hours' - now())) / 3600)::int;
+  raise exception 'rejoin cooldown — ~%h until you can join another alliance', hrs;
+end; $$;
 
 drop function if exists public.alliance_create(text, text, text);
 create or replace function public.alliance_create(p_name text, p_tag text, p_blurb text, p_open boolean)
@@ -256,6 +288,7 @@ declare me uuid := auth.uid(); aid uuid; nm text; tg text;
 begin
   if me is null then raise exception 'not authenticated'; end if;
   if exists (select 1 from public.alliance_members where user_id = me) then raise exception 'already in an alliance'; end if;
+  perform public._al_cooldown_check(me);
   nm := trim(coalesce(p_name,'')); tg := upper(trim(coalesce(p_tag,'')));
   if length(nm) < 3 or length(nm) > 24 then raise exception 'name must be 3-24 chars'; end if;
   if length(tg) < 2 or length(tg) > 4 then raise exception 'tag must be 2-4 chars'; end if;
@@ -277,6 +310,7 @@ declare me uuid := auth.uid(); n int; cap int; ax bigint; lv int := 1; need bigi
 begin
   if me is null then raise exception 'not authenticated'; end if;
   if exists (select 1 from public.alliance_members where user_id = me) then raise exception 'already in an alliance'; end if;
+  perform public._al_cooldown_check(me);
   select xp, join_mode into ax, jm from public.alliances where id = p_id;
   if ax is null then raise exception 'no such alliance'; end if;
   if jm = 'request' then raise exception 'approval required — send a join request'; end if;
@@ -302,6 +336,7 @@ declare me uuid := auth.uid(); jm text; nm text;
 begin
   if me is null then raise exception 'not authenticated'; end if;
   if exists (select 1 from public.alliance_members where user_id = me) then raise exception 'already in an alliance'; end if;
+  perform public._al_cooldown_check(me);
   select join_mode into jm from public.alliances where id = p_id;
   if jm is null then raise exception 'no such alliance'; end if;
   if jm = 'open' then raise exception 'this alliance is open — just join'; end if;
@@ -327,13 +362,23 @@ returns uuid language sql security definer set search_path = public as $$
 $$;
 grant execute on function public.alliance_my_request() to authenticated;
 
--- leader/officer verdict on a request. accept → membership (cap-checked).
+-- RANK LADDER -----------------------------------------------------------
+-- leader(3) > coleader(2) > elder(1) > member(0). 'officer' = legacy elder.
+create or replace function public._al_rank(r text) returns int
+immutable language sql as $$
+  select case r when 'leader' then 3 when 'coleader' then 2
+                when 'elder' then 1 when 'officer' then 1 else 0 end $$;
+grant execute on function public._al_rank(text) to authenticated;
+-- MIGRATION: legacy 'officer' rows become 'elder'
+update public.alliance_members set role = 'elder' where role = 'officer';
+
+-- elder+ verdict on a request. accept → membership (cap-checked).
 create or replace function public.alliance_request_respond(p_uid uuid, p_accept boolean)
 returns void language plpgsql security definer set search_path = public as $$
 declare me uuid := auth.uid(); aid uuid; myrole text; raid uuid; n int; cap int; ax bigint; lv int := 1; need bigint := 0; tot bigint := 0; nm text;
 begin
   select alliance_id, role into aid, myrole from public.alliance_members where user_id = me;
-  if aid is null or myrole not in ('leader','officer') then raise exception 'no permission'; end if;
+  if aid is null or public._al_rank(myrole) < 1 then raise exception 'no permission'; end if;
   select alliance_id into raid from public.alliance_requests where user_id = p_uid;
   if raid is null or raid <> aid then raise exception 'request not found'; end if;
   if not p_accept then
@@ -367,6 +412,9 @@ begin
   select alliance_id, role into aid, r from public.alliance_members where user_id = me;
   if aid is null then return; end if;
   delete from public.alliance_members where user_id = me;
+  -- voluntary exit → 24h rejoin cooldown
+  insert into public.alliance_cooldowns(user_id, left_at) values (me, now())
+    on conflict (user_id) do update set left_at = now();
   select name into nm from public.leaderboard where user_id = me;
   if not exists (select 1 from public.alliance_members where alliance_id = aid) then
     delete from public.alliances where id = aid;                       -- last one out: disband
@@ -374,7 +422,7 @@ begin
   end if;
   if r = 'leader' then                                                 -- pass the crown
     select user_id into heir from public.alliance_members where alliance_id = aid
-      order by (role = 'officer') desc, joined_at asc limit 1;
+      order by public._al_rank(role) desc, joined_at asc limit 1;
     update public.alliance_members set role = 'leader' where user_id = heir;
     update public.alliances set leader = heir where id = aid;
   end if;
@@ -389,7 +437,9 @@ begin
   select alliance_id, role into aid, myrole from public.alliance_members where user_id = me;
   select role into theirrole from public.alliance_members where user_id = p_uid and alliance_id = aid;
   if aid is null or theirrole is null then raise exception 'not found'; end if;
-  if not (myrole = 'leader' or (myrole = 'officer' and theirrole = 'member')) then raise exception 'no permission'; end if;
+  -- rank ladder: you can only kick strictly below you (elder→member,
+  -- co-leader→elder/member, leader→anyone)
+  if public._al_rank(myrole) < 1 or public._al_rank(myrole) <= public._al_rank(theirrole) then raise exception 'no permission'; end if;
   if p_uid = me then raise exception 'use leave'; end if;
   delete from public.alliance_members where user_id = p_uid;
   select name into nm from public.leaderboard where user_id = p_uid;
@@ -397,14 +447,29 @@ begin
 end; $$;
 grant execute on function public.alliance_kick(uuid) to authenticated;
 
+-- change a member's rank. Leader: set anyone (below leader) to
+-- coleader/elder/member. Co-Leader: only member↔elder.
 create or replace function public.alliance_role(p_uid uuid, p_role text)
 returns void language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid(); aid uuid; myrole text;
+declare me uuid := auth.uid(); aid uuid; myrole text; theirrole text; nm text;
 begin
-  if p_role not in ('officer','member') then raise exception 'bad role'; end if;
+  if p_role not in ('coleader','elder','member') then raise exception 'bad role'; end if;
   select alliance_id, role into aid, myrole from public.alliance_members where user_id = me;
-  if myrole <> 'leader' then raise exception 'no permission'; end if;
-  update public.alliance_members set role = p_role where user_id = p_uid and alliance_id = aid and role <> 'leader';
+  select role into theirrole from public.alliance_members where user_id = p_uid and alliance_id = aid;
+  if aid is null or theirrole is null then raise exception 'not found'; end if;
+  if theirrole = 'leader' or p_uid = me then raise exception 'no permission'; end if;
+  if not (myrole = 'leader'
+          or (public._al_rank(myrole) = 2 and p_role in ('elder','member')
+              and public._al_rank(theirrole) <= 1)) then
+    raise exception 'no permission';
+  end if;
+  if theirrole = p_role then return; end if;
+  update public.alliance_members set role = p_role where user_id = p_uid and alliance_id = aid;
+  select name into nm from public.leaderboard where user_id = p_uid;
+  perform public._al_feed(aid, 'sys',
+    case when public._al_rank(p_role) > public._al_rank(theirrole) then '▴ ' else '▾ ' end
+    || coalesce(nm,'A pilot') || ' is now '
+    || case p_role when 'coleader' then 'Co-Leader' when 'elder' then 'Elder' else 'a Member' end);
 end; $$;
 grant execute on function public.alliance_role(uuid, text) to authenticated;
 
@@ -434,12 +499,15 @@ begin
 end; $$;
 grant execute on function public.alliance_donate(int) to authenticated;
 
--- boss attack: 2/day (+1 VIP). damage clamped to 15× your leaderboard power.
--- on kill: +300 AC to EVERY member, next boss spawns stronger.
+-- boss attack: 2/day (+1 VIP). Damage comes from the LIVE 2:30 Hollow Armada
+-- raid, clamped to 25× leaderboard power. Damage CARRIES ACROSS LEVELS: every
+-- time a level's HP hits 0 the Armada resets FULL at the next mark (×1.55 HP)
+-- and EVERY member is paid — more ⬡ per level (250 + 50·mark). The whole
+-- ladder resets to Mk-1 every Sunday 12AM America/Chicago.
 create or replace function public.alliance_attack(p_dmg numeric, p_vip boolean)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid(); aid uuid; maxa int; att int; pw numeric; dmg numeric;
-        hp numeric; n int; killed boolean := false; nm text;
+declare me uuid := auth.uid(); aid uuid; maxa int; att int; pw numeric; dmg numeric; tot numeric;
+        hp numeric; n int; wk int; bw int; kills int := 0; coins bigint := 0; nm text;
 begin
   select alliance_id into aid from public.alliance_members where user_id = me;
   if aid is null then raise exception 'no alliance'; end if;
@@ -449,26 +517,36 @@ begin
   select attacks into att from public.alliance_members where user_id = me;
   if att >= maxa then raise exception 'no attacks left today'; end if;
   select coalesce(power,0)::numeric into pw from public.leaderboard where user_id = me;
-  dmg := least(greatest(coalesce(p_dmg,0), 0), greatest(pw, 1) * 15);
+  dmg := least(greatest(coalesce(p_dmg,0), 0), greatest(pw, 1) * 25);
+  tot := dmg;
   update public.alliance_members set attacks = attacks + 1, contrib = contrib + 5 where user_id = me;
-  select boss_hp, boss_n into hp, n from public.alliances where id = aid for update;
+  wk := public._al_bweek();
+  select boss_hp, boss_n, boss_week into hp, n, bw from public.alliances where id = aid for update;
+  if bw is distinct from wk then                          -- WEEKLY RESET (Sun 00:00 Chicago)
+    n := 1; hp := public._al_boss_hp(aid, 1);
+    perform public._al_feed(aid, 'sys', '⟳ WEEKLY RESET — the Hollow Armada returns at Mk-1');
+  end if;
+  while dmg >= hp loop                                    -- burn whole levels, overflow carries
+    dmg := dmg - hp;
+    coins := coins + 250 + 50 * n;                        -- more ⬡ per level
+    kills := kills + 1; n := n + 1;
+    hp := public._al_boss_hp(aid, n);
+    exit when kills >= 200;                               -- sanity valve
+  end loop;
   hp := hp - dmg;
-  if hp <= 0 then
-    killed := true;
-    n := n + 1;
-    update public.alliances set boss_n = n, xp = xp + 200,
-      boss_hp = public._al_boss_hp(aid, n), boss_max = public._al_boss_hp(aid, n) where id = aid;
-    update public.social_wallets w set ac = ac + 300, updated_at = now()
+  update public.alliances set boss_n = n, boss_hp = hp, boss_max = public._al_boss_hp(aid, n),
+    boss_week = wk, xp = xp + 200 * kills where id = aid;
+  if kills > 0 then
+    update public.social_wallets w set ac = ac + coins, updated_at = now()
       where w.user_id in (select user_id from public.alliance_members where alliance_id = aid);
     insert into public.social_wallets(user_id, ac)
-      select user_id, 300 from public.alliance_members m where m.alliance_id = aid
+      select m.user_id, coins from public.alliance_members m where m.alliance_id = aid
         and not exists (select 1 from public.social_wallets w2 where w2.user_id = m.user_id);
     select name into nm from public.leaderboard where user_id = me;
-    perform public._al_feed(aid, 'sys', '☠ BOSS ' || (n-1) || ' DOWN — final blow by ' || coalesce(nm,'a pilot') || ' · +300 ⬡ to every member');
-  else
-    update public.alliances set boss_hp = hp where id = aid;
+    perform public._al_feed(aid, 'sys', '☠ ' || kills || ' ARMADA LEVEL' || case when kills > 1 then 'S' else '' end
+      || ' DOWN — final blows by ' || coalesce(nm,'a pilot') || ' · +' || coins || ' ⬡ to every member · now Mk-' || n);
   end if;
-  return jsonb_build_object('dmg', dmg, 'killed', killed);
+  return jsonb_build_object('dmg', tot, 'kills', kills, 'boss_n', n, 'killed', kills > 0);
 end; $$;
 grant execute on function public.alliance_attack(numeric, boolean) to authenticated;
 
@@ -511,17 +589,21 @@ begin
   select to_jsonb(x) into w from (select fp, ac from public.social_wallets where user_id = me) x;
   select alliance_id, role into aid, myrole from public.alliance_members where user_id = me;
   if aid is null then return jsonb_build_object('alliance', null, 'wallet', w); end if;
+  -- lazy WEEKLY RESET so the UI shows Mk-1 after Sunday even before any attack
+  update public.alliances set boss_n = 1, boss_hp = public._al_boss_hp(id, 1),
+    boss_max = public._al_boss_hp(id, 1), boss_week = public._al_bweek()
+    where id = aid and boss_week is distinct from public._al_bweek();
   select to_jsonb(x) into a from (select id, name, tag, blurb, join_mode, leader, xp, boss_n, boss_hp, boss_max, week_key, week_score from public.alliances where id = aid) x;
   select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into mem from (
     select m.user_id, m.role, m.contrib, m.week_key, m.day_key, m.donated, m.attacks,
            l.name, l.power, l.level, l.fleet, l.updated_at as last_seen
     from public.alliance_members m left join public.leaderboard l on l.user_id = m.user_id
-    where m.alliance_id = aid order by case m.role when 'leader' then 0 when 'officer' then 1 else 2 end, l.power desc nulls last) x;
+    where m.alliance_id = aid order by public._al_rank(m.role) desc, l.power desc nulls last) x;
   select coalesce(jsonb_agg(to_jsonb(x) order by x.id), '[]'::jsonb) into feed from (
     select id, user_id, name, kind, txt, created_at from public.alliance_feed
     where alliance_id = aid order by id desc limit 40) x;
   reqs := '[]'::jsonb;
-  if myrole in ('leader','officer') then
+  if public._al_rank(myrole) >= 1 then
     select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into reqs from (
       select r.user_id, r.note, r.created_at, l.name, l.power, l.level
       from public.alliance_requests r left join public.leaderboard l on l.user_id = r.user_id

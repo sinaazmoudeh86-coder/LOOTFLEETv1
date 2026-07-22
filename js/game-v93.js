@@ -1177,19 +1177,23 @@
     if (state.dreadRun && state.dreadRun.active && window.DREAD && window.DREAD.tick) { try { window.DREAD.tick(dt, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — seasonal world-boss run (timer, stages, boss scaling).
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineTick) { try { window.SDREAD.engineTick(dt, rt); } catch (e) {} }
+    // HOLLOW ARMADA — alliance live raid on the real engine (timer, zones, transmit).
+    if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineTick) { try { window.ALBOSS.engineTick(dt, rt); } catch (e) {} }
     // HOME CITADEL — wave defense on the real engine (fort objective, raider waves).
     if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineTick) { try { window.HOMECIT.engineTick(dt, rt); } catch (e) {} }
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
       a.justDied = false;
-      // SERVER DREADNAUGHT — the world boss is DESIGNED to kill you eventually:
-      // an event death ends the run with NO penalty (no item loss, no hull reset).
-      if (rt.sdrun && rt.sdrun.active) {
-        rt.sdrun = null;
+      // EVENT DEATHS (Voidmaw / Hollow Armada) — these bosses are DESIGNED to
+      // kill you eventually: an event death ends the run with NO penalty
+      // (no item loss, no hull reset) and tows you to the safe hangar.
+      if ((rt.sdrun && rt.sdrun.active) || (rt.alrun && rt.alrun.active)) {
+        rt.sdrun = null; rt.alrun = null;
         burst(a.x, a.y, '#b04dff', 44, { speed: 240, life: 1.0 });
         respawnAt(0);
         if (window.SDREAD && window.SDREAD.onDeath) { try { window.SDREAD.onDeath(); } catch (e) {} }
+        if (window.ALBOSS && window.ALBOSS.onDeath) { try { window.ALBOSS.onDeath(); } catch (e) {} }
         if (window.HOMECIT && window.HOMECIT.onDeath) { try { window.HOMECIT.onDeath(); } catch (e) {} }
         return;
       }
@@ -1221,6 +1225,9 @@
       // no respawn menu — redeploy straight to the home hangar
       respawnAt(0);
       if (window.UI) window.UI.onDeathReturn(lost, killerName, diedZone, hullReset, lostList);
+      // fort defense death: settle the wave as a breach BEFORE the hangar tow
+      if (rt.hcrun && window.HOMECIT && window.HOMECIT.onDeath) { try { window.HOMECIT.onDeath(); } catch (e) {} }
+      goSafeHangar();   // every shipwreck tows to the SAFE hangar — never respawn into a hot zone
     }
 
     // projectiles
@@ -1469,6 +1476,8 @@
     if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — void aura + weak-point FX over the arena.
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineRender) { try { window.SDREAD.engineRender(ctx, rt.time, rt); } catch (e) {} }
+    // HOLLOW ARMADA — collapse zones + siege aura over the arena.
+    if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineRender) { try { window.ALBOSS.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOME CITADEL — the fort, its shield and turret fire, drawn in-world.
     if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineRender) { try { window.HOMECIT.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
@@ -1617,6 +1626,15 @@
 
   function drawPortrait() {
     if (!rt.portraitCtx) return;
+    // RESYNC — the hero panel resizes with layout; a stale canvas size makes
+    // CSS stretch the bitmap and cut ships off at the frame edges
+    const pr = rt.portraitCanvas;
+    if (pr && pr.offsetWidth && (pr.offsetWidth !== rt.portW || pr.offsetHeight !== rt.portH)) {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      rt.portW = pr.offsetWidth; rt.portH = pr.offsetHeight;
+      pr.width = rt.portW * dpr; pr.height = rt.portH * dpr;
+      rt.portraitCtx = pr.getContext('2d'); rt.portraitCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     const ctx = rt.portraitCtx, cw = rt.portW, ch = rt.portH;
     ctx.clearRect(0, 0, cw, ch);
     const esc = fleetShips();
@@ -1635,14 +1653,21 @@
     esc.forEach((sh, i) => {
       if (!fx[i] || !R.drawEscort) return;
       ctx.save();
-      ctx.translate(cw / 2 + fx[i][0] * cw, cy + fx[i][1] * ch);
-      const es = 1.55 / sscale(sh.key);
+      // keep escorts fully inside the frame whatever its size
+      const pad = 42;
+      ctx.translate(Math.max(pad, Math.min(cw - pad, cw / 2 + fx[i][0] * cw)),
+                    Math.max(pad, Math.min(ch - pad, cy + fx[i][1] * ch)));
+      const es = (1.55 * Math.min(1, ch / 190)) / sscale(sh.key);
       ctx.scale(es, es);
       R.drawEscort(ctx, sh.key, 0, 0, rt.time, 0);
       ctx.restore();
     });
     // flagship scales down when escorts fly so everything fits the frame
-    const flagScale = esc.length >= 3 ? 2.1 : esc.length ? 2.4 : 2.9;
+    let flagScale = esc.length >= 3 ? 2.1 : esc.length ? 2.4 : 2.9;
+    // clamp the hull inside the frame — big sprites at high tiers overflow
+    const ptier = (R.hullTier ? R.hullTier(state.level) : 5);
+    const estH = (42 + ptier * 3) * flagScale;
+    if (estH > ch * 0.66) flagScale *= (ch * 0.66) / estH;
     R.drawArcher(ctx, cw / 2, cy, flagScale / sscale(state.ship), { facing: -0.35, bob: rt.time * 2.4, hurtFlash: 0, muzzle: 0, recoil: 0 }, state.equipped, rt.time);
   }
 
@@ -1707,13 +1732,14 @@
   }
   // Add an item's salvage roll into the player's galaxy resources, and (if an
   // accumulator is passed) tally what was gained so the UI can report it.
-  // Galaxy Resource rewards from SELLING items are boosted ×5 (spec).
-  const SELL_RES_MULT = 5;
+  // Galaxy Resource rewards from SELLING items — was ×5, cut to ×1.5
+  // (Jul 2026 economy pass: selling flooded fuel/iron/plasma).
+  const SELL_RES_MULT = 1.5;
   function addSalvage(item, acc) {
     const s = C.salvage(item); if (!s) return;
     if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
     for (const k in s) {
-      const amt = s[k] * SELL_RES_MULT;
+      const amt = Math.max(1, Math.round(s[k] * SELL_RES_MULT));
       state.resources[k] = (state.resources[k] || 0) + amt;
       if (acc) acc[k] = (acc[k] || 0) + amt;
     }
@@ -2329,6 +2355,7 @@
     sweepLoot();
     rt.nodes = []; rt.enemies = []; rt.ground = [];
     rt.bossInit = rt.bossTimer = 1e9;
+    rt.alrun = null; rt.hcrun = null;   // one event at a time — module watchdogs settle any live run
     rt.sdrun = { active: true, started: Date.now() };
     const b = spawnServerDreadBoss();
     rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
@@ -2357,6 +2384,62 @@
     rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
     burst(cx, cy, '#b04dff', 110, { speed: 380, life: 1.3, glow: true });
     if (window.UI) window.UI.bossEvent('super');
+    return b;
+  }
+  // SAFE HANGAR — tow the pilot somewhere nothing can shoot them: clear every
+  // hostile, full heal + 6s invulnerability, and open the Hangar screen.
+  // Used after every event exit (retreat / timer / death) and every shipwreck.
+  function goSafeHangar() {
+    try {
+      rt.siege = null; rt.waves = null;
+      rt.enemies = []; rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false;
+      rt.awaitingRespawn = false;
+      rt.archer.dead = false; rt.archer.killer = null;
+      rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 6;
+    } catch (e) {}
+    const nav = document.querySelector('.nav-btn[data-screen="hero"]');
+    if (nav) nav.click();
+    else if (window.UI && window.UI.showScreen) { try { window.UI.showScreen('hero'); } catch (e) {} }
+    if (window.UI) window.UI.refreshAll();
+  }
+  // HOLLOW ARMADA deploy — the alliance raid boss on the REAL battle engine,
+  // exactly the Voidmaw treatment: clean arena, one huge boss, the module
+  // (window.ALBOSS) owns timer/zones/damage-transmit.
+  let _armImg = null;
+  function armadaImg() { if (!_armImg) { _armImg = new Image(); _armImg.src = 'ships/ship-monolith4.png'; } return _armImg; }
+  function startAllianceRaid(markN) {
+    const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, state.level));
+    state.currentDungeon = zone;
+    state.currentSystem = null;
+    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null; rt.siege = null; rt.waves = null;
+    resetZone();
+    rt.siege = null; rt.waves = null;
+    sweepLoot();
+    rt.nodes = []; rt.enemies = []; rt.ground = [];
+    rt.bossInit = rt.bossTimer = 1e9;
+    rt.sdrun = null; rt.hcrun = null;   // one event at a time — module watchdogs settle any live run
+    rt.alrun = { active: true, started: Date.now() };
+    const pool = allowedEnemies();
+    const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
+    const b = new E.Enemy(pool[pool.length - 1], state.currentDungeon, cx, cy);
+    b.isBoss = true; b.isSuper = true; b.isAlArmada = true;
+    // effectively unlimited HP — the alliance pool lives on the server; ALBOSS
+    // records the delta and tops the bar back up (same trick as the Voidmaw).
+    const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
+    b.maxHp = b.hp = Math.max(1e9, Math.round(dps * 3600));
+    b.speed *= 0.4; b.size = 132;
+    b.ranged = true; b.range = 600; b.fireCd = Math.max(0.8, 1.5 - 0.03 * (markN | 0)); b.fireT = 1.6;
+    b.tint = '#2ee6c9';
+    b.spriteImg = armadaImg();
+    b.name = 'HOLLOW ARMADA · Mk-' + Math.max(1, markN | 0);
+    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    burst(cx, cy, '#2ee6c9', 110, { speed: 380, life: 1.3, glow: true });
+    if (window.UI) window.UI.bossEvent('super');
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 3;
+    if (window.UI) window.UI.refreshAll(); save();
     return b;
   }
   // HOME CITADEL deploy — wave defense on the REAL battle engine in the pilot's
@@ -3125,6 +3208,16 @@
     if (!isOwned(id) && state.rivalCitadels && state.rivalCitadels[id] != null) return state.rivalCitadels[id];
     return null;
   }
+  // MONOLITH line — alliance siege hulls hit boss-class targets harder. Called
+  // from entities.takeDamage so EVERY damage source (bolts, storm, aura, splash)
+  // benefits. Citadels, zone bosses and event bosses all qualify.
+  window.MONO_MULT = function (e) {
+    try {
+      const sh = C.SHIP_BY_KEY[state.ship], b = sh && sh.siegeBonus;
+      if (!b) return 1;
+      return (e.isBoss || e.citadel || e.isCitadel || e.superBoss || e.megaBoss) ? 1 + b : 1;
+    } catch (err) { return 1; }
+  };
   // Snapshot of MY fleet, published with every claim — rivals render it in the
   // tile sheet and their client spawns the CLONE defender from it.
   function defenseSnapshot() {
@@ -3626,8 +3719,8 @@
     const goldGrow = 1.95 + idx * 0.06;
     const plasmaGrow = 1.8 + idx * 0.05;
     const resMul = L >= 3 ? 10 : 1;   // 10× the resources to push a hull past Lv 3
-    return { gold: Math.round(1500 * tierMul * Math.pow(goldGrow, L - 1)),
-             plasma: Math.round(6 * tierMul * Math.pow(plasmaGrow, L - 1) * resMul),
+    return { gold: Math.round(3000 * tierMul * Math.pow(goldGrow, L - 1)),
+             plasma: Math.round(12 * tierMul * Math.pow(plasmaGrow, L - 1) * resMul),
              prism: 0 };   // hull upgrades cost gold + plasma only (Prism is reserved for Prism systems)
   }
   function prismIngots() { return (state.prism && state.prism.ingots) || 0; }
@@ -3734,7 +3827,7 @@
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, grantPro, respawnAt,
-    buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint,
+    buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     startHomeDefense, spawnHomeRaider, endHomeDefense,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
@@ -3758,7 +3851,7 @@
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
     buyCosmetic, setCosmetic, addCredits,
     getCredits: () => state.credits || 0, getCosmetics: () => state.cosmetics,
-    startDreadHunt, dreadLevelFor, startServerDread,
+    startDreadHunt, dreadLevelFor, startServerDread, startAllianceRaid, goSafeHangar,
     setLevel,
     getDreadCores: () => state.dreadCores || 0,
     addDreadCores: (n) => { state.dreadCores = (state.dreadCores || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); },

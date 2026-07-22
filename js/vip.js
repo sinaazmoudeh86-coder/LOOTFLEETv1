@@ -73,6 +73,7 @@
     const after = level();
     if (after > before) setTimeout(() => { try { window.UI.unlockToast('⚜ VIP LEVEL ' + after + ' REACHED — new perks active'); } catch (e) {} }, 900);
     ensureBadge();
+    try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}   // live-update cap readouts (citadel cap etc.)
     return after - before;
   }
   function track() {}   // (legacy hook — points are granted explicitly now)
@@ -131,7 +132,7 @@
       '<div class="vipm-score">⚜ ' + fmt(s) + ' VIP points</div>' +
       (next ? '<div class="vipm-bar"><i style="width:' + pct + '%"></i><span>' + fmt(next.need - s) + ' to VIP ' + (lv + 1) + '</span></div>'
             : '<div class="vipm-bar"><i style="width:100%"></i><span>MAX LEVEL</span></div>') +
-      '<div class="vipm-now">Active now: <b>+' + (GOLD[Math.min(lv, 15)] || 0) + '% gold · +' + (XP[Math.min(lv, 15)] || 0) + '% XP · +' + (AFK[Math.min(lv, 15)] || 0) + '% AFK' + (lv > 7 ? ' · +' + (lv - 7) * 2 + '% ◈ Prism' : '') + (lv > 0 ? ' · +' + lv * 5 + ' citadel cap' : '') + '</b></div>' +
+      '<div class="vipm-now">Active now: <b>+' + (GOLD[Math.min(lv, 15)] || 0) + '% gold · +' + (XP[Math.min(lv, 15)] || 0) + '% XP · +' + (AFK[Math.min(lv, 15)] || 0) + '% AFK' + (lv > 7 ? ' · +' + (lv - 7) * 2 + '% ◈ Prism' : '') + ' · ⛓ citadel cap ' + (window.GAME && window.GAME.citadelCap ? window.GAME.citadelCap() : 50 + lv * 5) + (lv > 0 ? ' (+' + lv * 5 + ')' : '') + '</b></div>' +
       '<div class="vipm-list">' + rows + '</div>' +
       '<button class="vipm-ok" id="vipm-ok">Keep earning</button></div>';
     ($('app') || document.body).appendChild(_m);

@@ -1,7 +1,9 @@
 /* =============================================================================
    alliance.js — ALLIANCES (Hangar ▸ Social ▸ Alliance) · unlocks at Level 40
    ---------------------------------------------------------------------------
-   • FOUND (1B gold) or JOIN an open alliance. Roles: leader / officer / member.
+   • FOUND (1B gold) or JOIN an open alliance. Ranks: leader / co-leader /
+     elder / member. Elder: kick members + accept requests. Co-Leader: also
+     kick elders, promote/demote member↔elder, event signup. Leader: all.
    • DAILY LOOP: one donation (gold or LootCoins → Alliance XP + ⬡ Coins) and
      2 boss attacks (3 with VIP) against the shared, forever-scaling
      VOIDSPAWN LEVIATHAN — kills pay ⬡ 300 to EVERY member.
@@ -36,6 +38,13 @@
     { id: 'prism', ic: '◈', name: '5 Prism Ingots', cost: 900, wk: 1, col: '#ff5a5a', minLv: 5, need: (s) => !!s.prism, grant: (s) => { s.prism.ingots = (s.prism.ingots || 0) + 5; return '+5 ◈ Prism Ingots'; } },
   ];
 
+  // MONOLITH SHIPYARD — alliance-exclusive hull line (sequential unlock)
+  const MONO_SHIPS = [
+    { key: 'monolith1', cost: 500 },
+    { key: 'monolith2', cost: 4500 },
+    { key: 'monolith3', cost: 9000 },
+    { key: 'monolith4', cost: 15000 },
+  ];
   // ---- weekly ops: 3 seeded missions from live save counters ------------------
   const OPS = [
     { id: 'k1', r: 'common', ic: '☠', txt: 'Destroy {N} enemies',            n: 1200,  m: 'kills',  pts: 10, lc: 20 },
@@ -47,6 +56,11 @@
     { id: 'z1', r: 'epic',   ic: '▲', txt: 'Unlock {N} new zones',           n: 2,     m: 'zones',  pts: 60, lc: 120 },
   ];
   const wkKey = () => { const d = new Date(); const t = new Date(d.getFullYear(), 0, 1); return d.getFullYear() + '-' + Math.ceil(((d - t) / 864e5 + t.getDay() + 1) / 7); };
+  // RANK LADDER — 'officer' is the legacy name for elder (pre-migration rows)
+  const normRole = (r) => (r === 'officer' ? 'elder' : (r || 'member'));
+  const RANK = { leader: 3, coleader: 2, elder: 1, member: 0 };
+  const ROLE_NM = { leader: 'LEADER', coleader: 'CO-LEADER', elder: 'ELDER', member: 'MEMBER' };
+  const ROLE_T = { coleader: 'Co-Leader', elder: 'Elder', member: 'Member' };
   function counters() {
     const s = G().state; let colony = 0;
     try { (s.moon.moons || []).forEach((m) => { for (const k in (m.b || {})) colony += (m.b[k].lv | 0); }); } catch (e) {}
@@ -221,8 +235,8 @@
     const feed = (_st.feed || []).map((f) => f.kind === 'sys'
       ? '<div class="al-msg sys">' + esc(f.txt) + '</div>'
       : '<div class="al-msg"><b>' + esc(f.name) + '</b> ' + esc(f.txt) + '</div>').join('');
-    const isLead = mine.role === 'leader', isOff = mine.role === 'officer';
-    const reqs = (isLead || isOff) ? (_st.requests || []) : [];
+    const myR = RANK[normRole(mine.role)] || 0, isLead = myR === 3, isCo = myR === 2;
+    const reqs = myR >= 1 ? (_st.requests || []) : []; // elder+ handle requests
     const reqBlock = reqs.length ?
       '<div class="sc-sec">✋ JOIN REQUESTS · ' + reqs.length + '</div>' + reqs.map((r) =>
         '<div class="sc-row req"><div class="sc-r-m"><b>' + esc(r.name || 'Operator') + '</b><span>Lv ' + (r.level || '?') + ' · ⚡ ' + fmt(r.power || 0) + (r.note ? ' · “' + esc(r.note) + '”' : '') + '</span></div>' +
@@ -234,12 +248,16 @@
         '<span>Alliance Lv ' + p.lv + ' · ' + mem.length + '/' + cap + ' pilots · Weekly ' + fmt(a.week_key === curWeekSql() ? a.week_score : 0) + ' pts</span>' +
         '<div class="al-xp"><i style="width:' + Math.round(p.cur / p.need * 100) + '%"></i></div></div>' +
         '<button class="sc-btn sm ghost" id="al-leave">Leave</button></div>' +
+      // WALLET — the alliance-coin balance, front and center
+      '<div class="al-wallet"><span class="al-w-ic">⬡</span>' +
+        '<div class="al-w-m"><b>' + fmt(wallet.ac) + '</b><span>ALLIANCE COINS</span></div>' +
+        '<span class="al-w-hint">Earn from donations, weekly ops & Armada kills — spend in the store below</span></div>' +
       reqBlock +
-      // BOSS
-      '<div class="al-boss"><div class="al-b-top"><span class="al-b-t">☠ VOIDSPAWN LEVIATHAN · BOSS ' + a.boss_n + '</span><span class="al-b-hp">' + fmt(a.boss_hp) + ' HP</span></div>' +
+      // BOSS — live raid
+      '<div class="al-boss"><div class="al-b-top"><span class="al-b-t">☠ THE HOLLOW ARMADA · Mk-' + a.boss_n + '</span><span class="al-b-hp">' + fmt(a.boss_hp) + ' HP</span></div>' +
         '<div class="al-b-bar"><i style="width:' + bossPct + '%"></i></div>' +
-        '<div class="al-b-row"><span class="al-b-s">Kill pays <b>⬡ 300</b> to every member · respawns stronger</span>' +
-        '<button class="sc-btn heart" id="al-attack" ' + (atk.left ? '' : 'disabled') + '>⚔ Attack · ' + atk.left + '/' + atk.max + '</button></div></div>' +
+        '<div class="al-b-row"><span class="al-b-s"><b>LIVE RAID</b> — fly your REAL flagship in the arena — dodge the collapse zones; every weapon hit transmits to the shared hull. Each level burned to 0 resets FULL at the next mark — exponentially harder. Every kill pays EVERY member <b>⬡ 300</b>, +50 more per mark. Resets Sundays.</span>' +
+        '<button class="sc-btn heart" id="al-attack" ' + (atk.left ? '' : 'disabled') + '>⚔ Raid · ' + atk.left + '/' + atk.max + '</button></div></div>' +
       // DONATE
       '<div class="sc-sec">DAILY DONATION ' + (donatedToday(mine) ? '<b style="color:#7ce0a0">✓ done today</b>' : '') + '</div>' +
       '<div class="al-don">' + DON.map((d) => {
@@ -248,14 +266,31 @@
           '<b>' + d.name + '</b><span>' + (c.gold ? '$ ' + fmt(c.gold) : '◈ ' + c.lc) + '</span><em>+' + d.axp + ' XP · +' + d.ac + ' ⬡</em></button>';
       }).join('') + '</div>' +
       // WEEKLY OPS
-      '<div class="sc-sec">WEEKLY OPS · resets Monday <b class="sc-fp">⬡ ' + fmt(wallet.ac) + '</b></div>' + opRows +
+      '<div class="sc-sec">WEEKLY OPS · resets Monday</div>' + opRows +
       '<button class="al-board-link" id="al-board">🏆 Weekly alliance leaderboard →</button>' +
       // FEED
       '<div class="sc-sec">ALLIANCE FEED</div>' +
       '<div class="al-feed" id="al-feed">' + (feed || '<div class="al-msg sys">Quiet in here — say hello.</div>') + '</div>' +
       '<div class="al-chat"><input id="al-txt" placeholder="Message your alliance…" maxlength="120"><button class="sc-btn" id="al-send">Send</button></div>' +
+      // MONOLITH SHIPYARD — alliance-exclusive hulls
+      '<div class="sc-sec">⬡ MONOLITH SHIPYARD · exclusive siege hulls</div>' +
+      '<div class="al-mono-blurb">Hulls carved from Hollow Armada wreckage — bonus damage to <b>Zone Bosses, Citadels, Event Bosses</b> and the <b>Armada</b> itself. Alliance Coins only, in order.</div>' +
+      MONO_SHIPS.map((m, i) => {
+        const sh2 = window.CONFIG.SHIP_BY_KEY[m.key]; if (!sh2) return '';
+        const owned = !!(G().state.ownedShips && G().state.ownedShips[m.key]);
+        const prevOk = i === 0 || !!(G().state.ownedShips && G().state.ownedShips[MONO_SHIPS[i - 1].key]);
+        const canBuy = !owned && prevOk && wallet.ac >= m.cost;
+        const sub = owned ? '✓ In your hangar — switch to it in Hangar ▸ Ships'
+          : !prevOk ? '🔒 Requires the ' + window.CONFIG.SHIP_BY_KEY[MONO_SHIPS[i - 1].key].name
+          : '⚔ ' + sh2.weapons + ' weapons · ⛨ hull ' + sh2.hull + ' · ' + sh2.tag;
+        return '<div class="al-mrow' + (owned ? ' owned' : '') + (!prevOk && !owned ? ' locked' : '') + '">' +
+          '<img src="ships/ship-' + m.key + '.png" alt="" onerror="this.remove()">' +
+          '<div class="al-m-m"><b>' + sh2.name + ' <em>+' + Math.round(sh2.siegeBonus * 100) + '% SIEGE</em></b><span>' + sub + '</span></div>' +
+          (owned ? '<span class="al-m-owned">✓</span>'
+            : '<button class="sc-btn sm ' + (canBuy ? 'gold' : 'ghost') + '" data-mono="' + m.key + '" ' + (canBuy ? '' : 'disabled') + '>⬡ ' + m.cost.toLocaleString() + '</button>') + '</div>';
+      }).join('') +
       // STORE
-      '<div class="sc-sec">ALLIANCE STORE</div><div class="sc-store">' +
+      '<div class="sc-sec">ALLIANCE STORE · consumables</div><div class="sc-store">' +
       AC_ITEMS.filter((it) => !it.need || it.need(G().state)).map((it) => {
         const so = S().ensure(), used = so.acShop.n[it.id] | 0, capd = used >= it.wk;
         const lock = it.minLv && p.lv < it.minLv;
@@ -267,11 +302,17 @@
       '<div class="sc-sec">ROSTER · weekly contribution</div>' +
       mem.map((m) => {
         const on = S().online(m.last_seen);
-        const canKick = (isLead && m.role !== 'leader' && m.user_id !== me()) || (isOff && m.role === 'member');
+        const r = normRole(m.role), tr = RANK[r] || 0, self = m.user_id === me();
+        const up = r === 'member' ? 'elder' : r === 'elder' ? 'coleader' : null;   // next rank up
+        const dn = r === 'coleader' ? 'elder' : r === 'elder' ? 'member' : null;   // next rank down
+        const canUp = up && !self && (isLead || (isCo && up === 'elder'));
+        const canDn = dn && !self && (isLead || (isCo && r === 'elder'));
+        const canKick = !self && myR >= 1 && myR > tr;
         return '<div class="sc-row"><i class="sc-dot ' + (on ? 'on' : '') + '"></i>' +
-          '<div class="sc-r-m"><b>' + esc(m.name || 'Operator') + ' <em class="al-role ' + m.role + '">' + m.role.toUpperCase() + '</em></b>' +
+          '<div class="sc-r-m"><b>' + esc(m.name || 'Operator') + ' <em class="al-role ' + r + '">' + ROLE_NM[r] + '</em></b>' +
           '<span>Lv ' + (m.level || '?') + ' · ⚡ ' + fmt(m.power || 0) + ' · ' + fmt(m.week_key === curWeekSql() ? m.contrib : 0) + ' contrib</span></div>' +
-          (isLead && m.role !== 'leader' && m.user_id !== me() ? '<button class="sc-btn sm ghost" data-role="' + m.user_id + '" data-to="' + (m.role === 'officer' ? 'member' : 'officer') + '">' + (m.role === 'officer' ? '▾' : '▴') + '</button>' : '') +
+          (canUp ? '<button class="sc-btn sm ghost" title="Promote to ' + ROLE_T[up] + '" data-role="' + m.user_id + '" data-to="' + up + '">▴</button>' : '') +
+          (canDn ? '<button class="sc-btn sm ghost" title="Demote to ' + ROLE_T[dn] + '" data-role="' + m.user_id + '" data-to="' + dn + '">▾</button>' : '') +
           (canKick ? '<button class="sc-btn sm ghost" data-kick="' + m.user_id + '">✕</button>' : '') + '</div>';
       }).join('');
     wireMain(host);
@@ -283,21 +324,31 @@
     const a = _st.alliance;
     $('al-leave').addEventListener('click', () => {
       S().confirmSheet('Leave ' + a.name + '?',
-      (myRow() || {}).role === 'leader' ? 'Leadership passes to your senior member. If you\u2019re the last pilot, the alliance disbands.' : 'You can rejoin later if there\u2019s room.',
+      (myRow() || {}).role === 'leader' ? 'Leadership passes to your senior member. If you\u2019re the last pilot, the alliance disbands. 24-hour cooldown before you can join or found another alliance.' : 'Leaving starts a 24-hour cooldown before you can join or found another alliance.',
       async () => { try { await S().rpc('alliance_leave'); _st = null; _browse = null; } catch (e) {} renderInto($('sc-pane')); });
     });
-    $('al-attack').addEventListener('click', async () => {
+    $('al-attack').addEventListener('click', () => {
       const b = $('al-attack'); b.disabled = true; b.textContent = '⚔ …';
-      const power = (G() && G().score) ? G().score() : 1e6;
-      const dmg = Math.round(power * 10 * (0.85 + Math.random() * 0.3));
-      try {
-        const r = await S().rpc('alliance_attack', { p_dmg: dmg, p_vip: !!(window.VIP && VIP.level && VIP.level() >= 1) });
-        // per-attack pocket reward
-        G().state.gold = (G().state.gold || 0) + Math.round(2e6 * Math.pow(window.CONFIG.dungeonScale(Math.max(1, G().state.highestUnlocked || 1)), 0.7)); G().save();
-        S().toast(r && r.killed ? '☠ BOSS DOWN! +⬡ 300 to every member' : '⚔ Hit for ' + fmt((r && r.dmg) || dmg), r && r.killed ? '#ffd24d' : '#7ce0a0');
-        await Promise.all([load(), S().refreshWallet()]);
-      } catch (e) { S().toast(e.message || 'Attack failed', '#e23b4e'); await load(); }
-      renderMain(host);
+      if (!window.ALBOSS) { S().toast('Combat systems offline', '#e23b4e'); renderMain(host); return; }
+      const a2 = _st.alliance;
+      try { window.ALBOSS.start({
+        bossN: a2.boss_n | 0, bossHp: Number(a2.boss_hp), bossMax: Number(a2.boss_max),
+        onDone: async (res) => {
+          // REAL damage from the arena run (Monolith bonus already applied; server clamps 25× power)
+          const dmg = Math.max(1, Math.round(res.dmg || 1));
+          try {
+            const r = await S().rpc('alliance_attack', { p_dmg: dmg, p_vip: !!(window.VIP && VIP.level && VIP.level() >= 1) });
+            // pocket reward scales with raid performance
+            G().state.gold = (G().state.gold || 0) + Math.round(res.frac * 2e6 * Math.pow(window.CONFIG.dungeonScale(Math.max(1, G().state.highestUnlocked || 1)), 0.7)); G().save();
+            S().toast(r && (r.kills | 0) > 0 ? '☠ ' + r.kills + ' ARMADA LEVEL' + (r.kills > 1 ? 'S' : '') + ' DOWN — ⬡ paid to every member · now Mk-' + (r.boss_n || '?')
+              : res.died ? '✝ Fleet lost — partial damage logged: ' + fmt((r && r.dmg) || dmg)
+              : '⚔ Damage transmitted: ' + fmt((r && r.dmg) || dmg),
+              r && (r.kills | 0) > 0 ? '#ffd24d' : res.died ? '#ff8a96' : '#7ce0a0');
+            await Promise.all([load(), S().refreshWallet()]);
+          } catch (e) { S().toast(e.message || 'Attack failed', '#e23b4e'); await load(); }
+          renderMain(host);
+        },
+      }); } catch (e) { S().toast(e.message || 'Raid failed to launch', '#e23b4e'); renderMain(host); }
     });
     host.querySelectorAll('[data-don]').forEach((b) => b.addEventListener('click', async () => {
       const d = DON.find((x) => x.t === +b.dataset.don), c = d.cost(), s = G().state;
@@ -339,6 +390,20 @@
       const it = AC_ITEMS.find((x) => x.id === b.dataset.acbuy);
       if (it && await S().buyAC(it)) renderMain(host);
     }));
+    // Monolith Shipyard — one-time hull purchases
+    host.querySelectorAll('[data-mono]').forEach((b) => b.addEventListener('click', async () => {
+      const m = MONO_SHIPS.find((x) => x.key === b.dataset.mono); if (!m) return;
+      const sh2 = window.CONFIG.SHIP_BY_KEY[m.key];
+      b.disabled = true; b.textContent = '⬡ …';
+      try {
+        await S().rpc('social_spend', { p_kind: 'ac', p_amount: m.cost });
+        await S().refreshWallet();
+        G().grantShip(m.key); G().save();
+        S().toast('⬡ ' + sh2.name + ' joins your fleet — switch to it in Hangar ▸ Ships', '#7ff2e0');
+        try { if (window.MAIL) MAIL.push({ ic: '⬡', title: sh2.name + ' delivered', body: 'The Monolith Shipyard has completed your <b>' + sh2.name + '</b>. It deals <b>+' + Math.round(sh2.siegeBonus * 100) + '%</b> damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada. Switch to it in <b>Hangar ▸ Ships</b>.' }); } catch (e) {}
+      } catch (e) { S().toast(e.message || 'Purchase failed', '#e23b4e'); }
+      renderMain(host);
+    }));
     host.querySelectorAll('[data-appr]').forEach((b) => b.addEventListener('click', async () => {
       b.disabled = true;
       try { await S().rpc('alliance_request_respond', { p_uid: b.dataset.appr, p_accept: true }); S().toast('✓ Request approved', '#7ce0a0'); await load(); }
@@ -357,7 +422,12 @@
     });
     }));
     host.querySelectorAll('[data-role]').forEach((b) => b.addEventListener('click', async () => {
-      try { await S().rpc('alliance_role', { p_uid: b.dataset.role, p_role: b.dataset.to }); await load(); } catch (e) {}
+      b.disabled = true;
+      try {
+        await S().rpc('alliance_role', { p_uid: b.dataset.role, p_role: b.dataset.to });
+        S().toast((b.textContent === '▾' ? '▾ Demoted to ' : '▴ Promoted to ') + ROLE_T[b.dataset.to], '#7ce0a0');
+        await load();
+      } catch (e) { S().toast(e.message || 'Rank change failed', '#e23b4e'); }
       renderMain(host);
     }));
     $('al-board').addEventListener('click', async () => {
@@ -390,6 +460,22 @@
 
   const CSS = `
   .al-lock{ display:inline-block; font-size:12px; color:#ffcf7a; border:1px solid #5a4420; border-radius:10px; padding:7px 14px; }
+  .al-wallet{ display:flex; align-items:center; gap:11px; background:linear-gradient(130deg,#0d2a24,#0a1a18); border:1px solid #1e5a50; border-radius:14px; padding:11px 14px; margin-bottom:10px; box-shadow:inset 0 0 30px rgba(46,230,201,.05); }
+  .al-w-ic{ font-size:24px; color:#2ee6c9; text-shadow:0 0 14px rgba(46,230,201,.6); flex:none; }
+  .al-w-m{ flex:none; }
+  .al-w-m b{ display:block; font-family:'Orbitron',sans-serif; font-size:19px; font-weight:900; color:#8ff2e0; line-height:1.05; font-variant-numeric:tabular-nums; }
+  .al-w-m span{ font-size:8.5px; font-weight:800; letter-spacing:.18em; color:#3f9e8e; }
+  .al-w-hint{ font-size:10.5px; color:#6f9a91; line-height:1.45; text-align:right; flex:1; }
+  .al-mono-blurb{ font-size:11.5px; color:#8fa3bd; line-height:1.5; background:#0e1622; border:1px solid #1c2a3e; border-radius:11px; padding:9px 12px; margin-bottom:7px; }
+  .al-mrow{ display:flex; align-items:center; gap:10px; background:linear-gradient(130deg,#0f1d24,#0c141f); border:1px solid #1e3a44; border-radius:13px; padding:9px 11px; margin-bottom:6px; }
+  .al-mrow.owned{ border-color:#1e5a50; }
+  .al-mrow.locked{ opacity:.62; }
+  .al-mrow img{ width:62px; height:42px; object-fit:contain; flex:none; filter:drop-shadow(0 0 8px rgba(46,230,201,.35)); }
+  .al-m-m{ flex:1; min-width:0; }
+  .al-m-m b{ display:block; color:#e7f0fb; font-size:13px; font-weight:700; }
+  .al-m-m b em{ font-style:normal; font-family:'Orbitron',sans-serif; font-size:8.5px; letter-spacing:.08em; color:#7ff2e0; border:1px solid #1e5a50; border-radius:5px; padding:1px 5px; vertical-align:1px; margin-left:5px; }
+  .al-m-m span{ font-size:10.5px; color:#7e91a9; }
+  .al-m-owned{ font-size:16px; color:#2ee6c9; flex:none; padding:0 8px; }
   .al-pending{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:#ffcf7a; background:linear-gradient(130deg,#241c08,#171106); border:1px solid #5a4420; border-radius:12px; padding:10px 12px; margin-bottom:10px; }
   .al-pending .sc-btn{ margin-left:auto; }
   .al-mode{ font-style:normal; font-size:8.5px; letter-spacing:.06em; border-radius:5px; padding:1px 5px; vertical-align:1px; margin-left:5px; background:#3a2a10; color:#ffcf7a; }
@@ -446,7 +532,8 @@
   .al-chat input{ flex:1; min-width:0; background:#0e141f; border:1px solid #26324a; border-radius:10px; color:#e7f0fb; font-family:'Rajdhani',sans-serif; font-size:13.5px; padding:9px 12px; outline:none; }
   .al-role{ font-style:normal; font-size:8.5px; letter-spacing:.08em; border-radius:5px; padding:1px 5px; vertical-align:1px; margin-left:4px; background:#26324a; color:#9fb0c4; }
   .al-role.leader{ background:#4a3410; color:#ffd24d; }
-  .al-role.officer{ background:#123553; color:#5db9ff; }
+  .al-role.coleader{ background:#3a1d4d; color:#c99aff; }
+  .al-role.elder{ background:#123553; color:#5db9ff; }
   .al-lockchip{ font-style:normal; font-size:9px; color:#ffcf7a; border:1px solid #5a4420; border-radius:5px; padding:1px 5px; margin-left:5px; }
   .al-lb{ display:flex; flex-direction:column; gap:5px; max-height:300px; overflow-y:auto; }
   .al-lb-row{ display:flex; align-items:center; gap:9px; background:#101826; border:1px solid #1e2a3c; border-radius:10px; padding:8px 10px; font-size:12.5px; }

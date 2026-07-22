@@ -1,18 +1,15 @@
 /* =============================================================================
-   missions.js — DAILY MISSIONS (Command ▸ Missions)
+   missions.js — MISSION BOARDS (Command ▸ Missions) · DAILY / WEEKLY / MONTHLY
    ---------------------------------------------------------------------------
-   10 missions issued per day (local midnight reset), drawn from a wide pool.
-   NON-INVASIVE: progress is measured by polling monotonic accumulators built
-   from positive deltas of existing game state — no game mechanics touched.
-
-   Rewards are deliberately mid-power: gold + galaxy resources + small LootCoin
-   sums, scaled to the commander's level/zone. Clearing all 10 pays a bonus
-   crate: 100 LootCoins + a resource bundle.
-
-   TIERS — claiming the Commander's Crate unlocks the NEXT tier the same day:
-   10 fresh missions with steeply higher targets (Tier 4 = very long, Tier 5+ =
-   nearly a full day of play). Every mission reward AND the crate DOUBLE per
-   tier — LootCoins ×2 each level, endlessly. Resets to Tier 1 at midnight.
+   Three boards on internal tabs, all fed by ONE delta engine (1s poll of
+   positive state deltas — no game mechanics touched):
+     • DAILY   — 10 orders, local-midnight reset, TIER ladder: clearing the
+       board unlocks the next tier same day (targets up steeply, rewards ×2/tier).
+     • WEEKLY  — 5 campaign orders, ~8× daily scale, resets Monday 00:00 local.
+       Big LootCoin rewards + WAR CHEST crate for the full clear.
+     • MONTHLY — 3 grand operations, ~30× daily scale, resets the 1st.
+       Huge LC + ◇ Dread Core rewards + CAMPAIGN TROPHY crate.
+   Every claim (any board) counts toward the ⌘ VERIDIAN 1,000-mission hull.
 ============================================================================= */
 (function () {
   'use strict';
@@ -20,8 +17,7 @@
   const $ = (id) => document.getElementById(id);
 
   // ---------------------------------------------------------------------------
-  // MISSION POOL — id, name, blurb, metric, target(level,zone), reward(level,zone)
-  // Metrics are keys of the delta-accumulator (see tick()).
+  // POOLS — id, name, blurb, metric, target(level,zone), reward(level,zone)
   // ---------------------------------------------------------------------------
   const dayScale = (z) => Math.max(1, Math.pow(z, 1.15));
   const POOL = [
@@ -43,17 +39,38 @@
     { id: 'zone2',   ic: '✈', name: 'Long Haul',          blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 6,                                  rw: (l, z) => ({ plasma: Math.round(110 * dayScale(z)), lc: 10 }) },
     { id: 'time2',   ic: '☉', name: 'Double Shift',       blurb: 'Fly {N} minutes of combat',          m: 'mins',   n: () => 45,                                 rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), fuel: Math.round(200 * dayScale(z)) }) },
     { id: 'loot2',   ic: '❖', name: 'Cargo Bay Bulge',    blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 30 + Math.min(30, Math.round(l / 3)), rw: (l, z) => ({ gold: Math.round(1800 * dayScale(z)), lc: 10 }) },
-    // ---- FEATURE-GATED MISSIONS — only issued once the feature is unlocked (req = min level) ----
     { id: 'gal1',    ic: '⬢', name: 'Land Grab',          blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 2,                                  rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 10 }), req: 25 },
     { id: 'gal2',    ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 20 }), req: 25 },
     { id: 'moon1',   ic: '🌙', name: 'Colony Shipment',   blurb: 'Collect {N} resources from your Moon Colony', m: 'moon', n: (l, z) => Math.round(1500 * dayScale(z)), rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), lc: 10 }), req: 30 },
     { id: 'moon2',   ic: '⛏', name: 'Colony Foreman',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 3,                              rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 15 }), req: 30 },
   ];
-  const ALL_BONUS = { lc: 100 }; // + resource bundle computed at claim time
+  // WEEKLY — campaign-length orders, ~8× daily scale, chunky LootCoins
+  const WPOOL = [
+    { id: 'wkills', ic: '⌖', name: 'Sector Purge',       blurb: 'Destroy {N} enemy ships',        m: 'kills',  n: (l, z) => 4000 + Math.round(l * 80),          rw: (l, z) => ({ gold: Math.round(12000 * dayScale(z)), lc: 60 }) },
+    { id: 'wboss',  ic: '♛', name: 'Warlord Season',     blurb: 'Destroy {N} bosses',             m: 'bosses', n: () => 30,                                     rw: (l, z) => ({ plasma: Math.round(700 * dayScale(z)), lc: 80 }) },
+    { id: 'wgold',  ic: '⛁', name: 'Weekly Ledger',      blurb: 'Earn {N} gold from combat',      m: 'gold',   n: (l, z) => Math.round(80000 * dayScale(z)),    rw: (l, z) => ({ fuel: Math.round(1800 * dayScale(z)), lc: 60 }) },
+    { id: 'wfuel',  ic: '⬢', name: 'Fuel Convoy',        blurb: 'Scavenge {N} fuel',              m: 'fuel',   n: (l, z) => Math.round(450 * dayScale(z)),      rw: (l, z) => ({ iron: Math.round(700 * dayScale(z)), lc: 60 }) },
+    { id: 'wzone',  ic: '✈', name: 'Grand Tour',         blurb: 'Deploy into {N} different zones', m: 'zones', n: () => 8,                                      rw: (l, z) => ({ gold: Math.round(9000 * dayScale(z)), lc: 60 }) },
+    { id: 'wtime',  ic: '☉', name: 'Week on the Wing',   blurb: 'Fly {N} minutes of combat',      m: 'mins',   n: () => 180,                                    rw: (l, z) => ({ gold: Math.round(15000 * dayScale(z)), fuel: Math.round(1500 * dayScale(z)), lc: 80 }) },
+    { id: 'wloot',  ic: '❖', name: 'Salvage Fleet',      blurb: 'Pick up {N} pieces of loot',     m: 'loot',   n: (l) => 150 + Math.min(150, l),                rw: (l, z) => ({ plasma: Math.round(500 * dayScale(z)), lc: 60 }) },
+    { id: 'wlvl',   ic: '▲', name: 'Rising Commander',   blurb: 'Gain {N} account levels',        m: 'levels', n: (l) => l < 40 ? 8 : l < 150 ? 5 : 3,          rw: (l, z) => ({ fuel: Math.round(1200 * dayScale(z)), iron: Math.round(500 * dayScale(z)), lc: 60 }) },
+    { id: 'wtile',  ic: '⚑', name: 'Territory Push',     blurb: 'Capture {N} galaxy tiles',       m: 'tiles',  n: () => 12,                                     rw: (l, z) => ({ plasma: Math.round(800 * dayScale(z)), lc: 100 }), req: 25 },
+    { id: 'wcol',   ic: '⛏', name: 'Colonial Charter',   blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 10,                             rw: (l, z) => ({ gold: Math.round(18000 * dayScale(z)), lc: 100 }), req: 30 },
+  ];
+  // MONTHLY — grand operations, ~30× daily scale, LC + ◇ Dread Cores
+  const MPOOL = [
+    { id: 'mkills', ic: '☄', name: 'Extermination Order', blurb: 'Destroy {N} enemy ships',        m: 'kills',  n: (l, z) => 20000 + Math.round(l * 300),        rw: (l, z) => ({ gold: Math.round(60000 * dayScale(z)), lc: 300 }) },
+    { id: 'mboss',  ic: '◈', name: 'Century of Skulls',   blurb: 'Destroy {N} bosses',             m: 'bosses', n: () => 120,                                    rw: () => ({ lc: 400, cores: 2 }) },
+    { id: 'mgold',  ic: '$', name: 'Imperial Treasury',   blurb: 'Earn {N} gold from combat',      m: 'gold',   n: (l, z) => Math.round(400000 * dayScale(z)),   rw: (l, z) => ({ fuel: Math.round(8000 * dayScale(z)), lc: 300 }) },
+    { id: 'mtime',  ic: '◷', name: 'Iron Endurance',      blurb: 'Fly {N} minutes of combat',      m: 'mins',   n: () => 600,                                    rw: (l, z) => ({ gold: Math.round(50000 * dayScale(z)), lc: 400 }) },
+    { id: 'mzone',  ic: '⌬', name: 'Master of the Map',   blurb: 'Deploy into {N} different zones', m: 'zones', n: () => 12,                                     rw: (l, z) => ({ plasma: Math.round(3000 * dayScale(z)), lc: 300 }) },
+    { id: 'mlvl',   ic: '▲', name: 'Meteoric Rise',       blurb: 'Gain {N} account levels',        m: 'levels', n: (l) => l < 40 ? 25 : l < 150 ? 15 : 8,        rw: (l, z) => ({ iron: Math.round(5000 * dayScale(z)), lc: 300 }) },
+    { id: 'mloot',  ic: '⬡', name: 'Salvage Empire',      blurb: 'Pick up {N} pieces of loot',     m: 'loot',   n: (l) => 500 + Math.min(500, l * 3),            rw: (l, z) => ({ fuel: Math.round(6000 * dayScale(z)), lc: 300 }) },
+    { id: 'mtile',  ic: '⚑', name: 'Empire Builder',      blurb: 'Capture {N} galaxy tiles',       m: 'tiles',  n: () => 40,                                     rw: () => ({ lc: 500, cores: 2 }), req: 25 },
+    { id: 'mcol',   ic: '🌙', name: 'Lunar Dominion',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 30,                             rw: (l, z) => ({ gold: Math.round(70000 * dayScale(z)), lc: 400 }), req: 30 },
+  ];
 
-  // ---- TIER SCALING ---------------------------------------------------------
-  // Targets: T1 ×1 · T2 ×2.4 · T3 ×6 · T4 ×15 (very long) · T5 ×38 (~a full
-  // day) · T6+ keeps growing ×2.5. Rewards double every tier (LC ×2 per level).
+  // ---- DAILY TIER SCALING ----------------------------------------------------
   const TIER_TARGET = [1, 2.4, 6, 15, 38];
   const targetMult = (t) => (t <= 5 ? TIER_TARGET[t - 1] : 38 * Math.pow(2.5, t - 5));
   const rwMult = (t) => Math.pow(2, t - 1);
@@ -64,9 +81,36 @@
   }
 
   // ---------------------------------------------------------------------------
-  // STATE — s.missions = { day, list:[{id,n,done,claimed}], acc:{}, base:{}, allClaimed }
+  // PERIOD KEYS + COUNTDOWNS (all local time)
   // ---------------------------------------------------------------------------
   const dayKey = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  const weekKey = () => { const d = new Date(); const dow = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow); return 'W' + mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); };
+  const monthKey = () => { const d = new Date(); return 'M' + d.getFullYear() + '-' + (d.getMonth() + 1); };
+  const msDay = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) - d; };
+  const msWeek = () => { const d = new Date(); const dow = (d.getDay() + 6) % 7; return new Date(d.getFullYear(), d.getMonth(), d.getDate() + (7 - dow)) - d; };
+  const msMonth = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 1) - d; };
+  function fmtDur(ms) {
+    const t = ms / 1000;
+    if (t >= 86400) return Math.floor(t / 86400) + 'd ' + Math.floor((t % 86400) / 3600) + 'h';
+    return Math.floor(t / 3600) + 'h ' + Math.floor((t % 3600) / 60) + 'm';
+  }
+
+  // ---------------------------------------------------------------------------
+  // BOARDS — d(aily) has the tier ladder; w(eekly)/m(onthly) are single boards
+  // ---------------------------------------------------------------------------
+  const BOARDS = {
+    d: { key: 'missions',  count: 10, pool: POOL,  label: 'DAILY',   title: 'DAILY MISSION BOARD',  pk: dayKey,   left: msDay,   resetTxt: 'resets at midnight', tiered: true },
+    w: { key: 'missionsW', count: 5,  pool: WPOOL, label: 'WEEKLY',  title: 'WEEKLY CAMPAIGN',      pk: weekKey,  left: msWeek,  resetTxt: 'resets Monday 00:00' },
+    m: { key: 'missionsM', count: 3,  pool: MPOOL, label: 'MONTHLY', title: 'MONTHLY OPERATIONS',   pk: monthKey, left: msMonth, resetTxt: 'resets on the 1st' },
+  };
+  function crateRw(b, tier) {
+    const z = Math.max(1, G.state.highestUnlocked || 1), ds = dayScale(z);
+    if (b === 'd') return scaleRw({ lc: 100, fuel: Math.round(300 * ds), iron: Math.round(200 * ds), plasma: Math.round(150 * ds) }, tier || 1);
+    if (b === 'w') return { lc: 500, fuel: Math.round(2500 * ds), iron: Math.round(1800 * ds), plasma: Math.round(1200 * ds) };
+    return { lc: 2000, cores: 3, gold: Math.round(150000 * ds), fuel: Math.round(10000 * ds), iron: Math.round(8000 * ds), plasma: Math.round(6000 * ds) };
+  }
+  const CRATE_NAME = { d: 'COMMANDER\'S CRATE', w: 'WAR CHEST', m: 'CAMPAIGN TROPHY' };
+
   function seededShuffle(arr, seed) {
     const a = arr.slice();
     let s = 0; for (let i = 0; i < seed.length; i++) s = (s * 31 + seed.charCodeAt(i)) >>> 0;
@@ -74,48 +118,37 @@
     return a;
   }
   const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0 });
-  // 10 fresh missions for a tier — same seeded draw, targets scaled by the tier
-  function buildList(tier) {
-    const s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
-    // feature-gated missions only enter the draw once unlocked
-    const eligible = POOL.filter((p) => !p.req || lvl >= p.req);
-    const picks = seededShuffle(eligible, dayKey() + ':t' + tier + ':' + (s.playerName || 'cmdr')).slice(0, 10);
-    const mult = targetMult(tier);
+  function buildList(b, tier) {
+    const bd = BOARDS[b], s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
+    const eligible = bd.pool.filter((p) => !p.req || lvl >= p.req);
+    const picks = seededShuffle(eligible, bd.pk() + ':t' + (tier || 1) + ':' + (s.playerName || 'cmdr')).slice(0, bd.count);
+    const mult = bd.tiered ? targetMult(tier || 1) : 1;
     return picks.map((p) => {
       let n = Math.max(1, Math.round(p.n(lvl, z) * mult));
-      // unique-zone targets can never exceed what the commander can actually reach
       if (p.m === 'zones') n = Math.min(n, Math.max(4, s.highestUnlocked || 4));
       return { id: p.id, n, done: 0, claimed: false };
     });
   }
-  function ensureDay() {
-    const s = G.state;
-    if (!s.missions || s.missions.day !== dayKey()) {
-      s.missions = {
-        day: dayKey(),
-        tier: 1,                 // every day starts back at Tier 1
-        list: null,              // filled just below
-        acc: freshAcc(),
-        seen: {}, // zones deployed this tier (for the 'zones' metric)
-        base: null,
-        allClaimed: false,
-      };
-      s.missions.list = buildList(1);
+  function ensureBoard(b) {
+    const bd = BOARDS[b], s = G.state;
+    let ms = s[bd.key];
+    if (!ms || ms.day !== bd.pk()) {
+      ms = s[bd.key] = { day: bd.pk(), tier: 1, list: buildList(b, 1), acc: freshAcc(), seen: {}, allClaimed: false };
       G.save();
     }
-    if (!s.missions.tier) s.missions.tier = 1; // pre-tier saves
-    // self-heal: crate claimed but tier never advanced (older bug) → advance now
-    if (s.missions.allClaimed) advanceTier();
-    return s.missions;
+    if (bd.tiered) {
+      if (!ms.tier) ms.tier = 1;
+      if (ms.allClaimed) advanceTier();  // self-heal: crate claimed, tier never advanced
+    }
+    return ms;
   }
-  // TIER-UP — fresh board at the next tier: harder targets, all rewards ×2
+  // DAILY TIER-UP — fresh board at the next tier: harder targets, all rewards ×2
   function advanceTier() {
     const ms = G.state.missions;
     ms.tier++;
-    ms.list = buildList(ms.tier);
+    ms.list = buildList('d', ms.tier);
     ms.acc = freshAcc(); ms.seen = {};
     ms.allClaimed = false;
-    ms.base = null; // re-baseline so old deltas can't leak into the new board
     G.save();
     const tl = $('toast-layer');
     if (tl) {
@@ -126,7 +159,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // PROGRESS — 1s poll converts positive state deltas into accumulators
+  // PROGRESS — one 1s poll; positive deltas feed EVERY board's accumulator
   // ---------------------------------------------------------------------------
   function snapshot() {
     const s = G.state, r = s.resources || {};
@@ -134,20 +167,16 @@
              level: s.level || 1, play: s.playTime || 0, items: (s.inventory || []).length + (s.lifetimeLooted || 0), boss: bossCount(),
              hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum() };
   }
-  // sum of all per-ship hull levels (positive deltas = upgrades bought;
-  // death resets go DOWN and are ignored by the delta accumulator)
   function hullLevelSum() {
     const sl = G.state.shipLevels || {}; let t = 0;
     for (const k in sl) t += sl[k] || 0;
     return t;
   }
-  // lifetime resources shipped home from all moon colonies
   function moonLifetimeSum() {
     const lt = (G.state.moon && G.state.moon.lifetime) || {}; let t = 0;
     for (const k in lt) t += lt[k] || 0;
     return t;
   }
-  // total structure levels across all moons (build = +1, upgrade = +1)
   function colonyLevelSum() {
     const root = G.state.moon; if (!root || !root.moons) return 0;
     let t = 0;
@@ -155,61 +184,58 @@
     return t;
   }
   function bossCount() {
-    // bossKillsByZone exists per-save in some versions; fall back to a UI counter
     const s = G.state;
     if (s.stats && typeof s.stats.bossKills === 'number') return s.stats.bossKills;
     return M._bossLocal;
   }
-  const M = { _bossLocal: 0, _timer: null };
-  // count boss deaths by watching the boss bar disappear (no engine hooks)
+  const M = { _bossLocal: 0 };
   function watchBoss() {
     const bar = $('boss-bar'); let was = false;
     setInterval(() => {
-      const on = bar && bar.classList.contains('active'); // 'active' = boss alive (bar uses show/active, not 'on')
+      const on = bar && bar.classList.contains('active');
       if (was && !on) M._bossLocal++;
       was = on;
     }, 500);
   }
   function tick() {
     if (!G || !G.state) return;
-    const ms = ensureDay();
+    const s = G.state;
+    const boards = { d: ensureBoard('d'), w: ensureBoard('w'), m: ensureBoard('m') };
     const now = snapshot();
-    if (!ms.base) { ms.base = now; return; }
-    const b = ms.base, a = ms.acc;
-    if (now.kills > b.kills) a.kills += now.kills - b.kills;
-    if (now.gold > b.gold) a.gold += now.gold - b.gold;
-    if (now.fuel > b.fuel) a.fuel += now.fuel - b.fuel;
-    if (now.iron > b.iron) a.iron += now.iron - b.iron;
-    if (now.plasma > b.plasma) a.plasma += now.plasma - b.plasma;
-    if (now.level > b.level) a.levels += now.level - b.level;
-    if (now.boss > b.boss) a.bosses += now.boss - b.boss;
-    if (now.items > b.items) a.loot += now.items - b.items;
-    // feature metrics (guard with ||0 so saves from before these existed keep working)
-    if (now.hulls > (b.hulls || 0)) a.hulls = (a.hulls || 0) + (now.hulls - (b.hulls || 0));
-    if (now.tiles > (b.tiles || 0)) a.tiles = (a.tiles || 0) + (now.tiles - (b.tiles || 0));
-    if (now.moon > (b.moon || 0)) a.moon = (a.moon || 0) + (now.moon - (b.moon || 0));
-    if (now.colony > (b.colony || 0)) a.colony = (a.colony || 0) + (now.colony - (b.colony || 0));
-    if (G.state.currentDungeon >= 1) {
-      a.mins += 1 / 60;
-      const zk = 'z' + G.state.currentDungeon;
-      if (!ms.seen[zk]) { ms.seen[zk] = 1; a.zones++; }
-    }
-    ms.base = now;
-    // progress + completion toasts
+    if (!s.missionsBase) { s.missionsBase = now; return; }
+    const b = s.missionsBase;
+    const dl = {
+      kills: Math.max(0, now.kills - b.kills), gold: Math.max(0, now.gold - b.gold),
+      fuel: Math.max(0, now.fuel - b.fuel), iron: Math.max(0, now.iron - b.iron), plasma: Math.max(0, now.plasma - b.plasma),
+      levels: Math.max(0, now.level - b.level), bosses: Math.max(0, now.boss - b.boss), loot: Math.max(0, now.items - b.items),
+      hulls: Math.max(0, now.hulls - (b.hulls || 0)), tiles: Math.max(0, now.tiles - (b.tiles || 0)),
+      moon: Math.max(0, now.moon - (b.moon || 0)), colony: Math.max(0, now.colony - (b.colony || 0)),
+    };
+    s.missionsBase = now;
+    const inZone = s.currentDungeon >= 1, zk = 'z' + s.currentDungeon;
     let changed = false;
-    ms.list.forEach((mi) => {
-      const def = POOL.find((p) => p.id === mi.id); if (!def) return;
-      const v = Math.min(mi.n, Math.floor(a[def.m] || 0));
-      if (v > mi.done) { mi.done = v; changed = true;
-        if (mi.done >= mi.n && !mi._toasted) { mi._toasted = true; missionToast(def); } }
-    });
+    for (const k in boards) {
+      const ms = boards[k], a = ms.acc, pool = BOARDS[k].pool;
+      for (const mk in dl) if (dl[mk]) a[mk] = (a[mk] || 0) + dl[mk];
+      if (inZone) {
+        a.mins += 1 / 60;
+        if (!ms.seen) ms.seen = {};
+        if (!ms.seen[zk]) { ms.seen[zk] = 1; a.zones = (a.zones || 0) + 1; }
+      }
+      ms.list.forEach((mi) => {
+        const def = pool.find((p) => p.id === mi.id); if (!def) return;
+        const v = Math.min(mi.n, Math.floor(a[def.m] || 0));
+        if (v > mi.done) { mi.done = v; changed = true;
+          if (mi.done >= mi.n && !mi._toasted) { mi._toasted = true; missionToast(def, BOARDS[k].label); } }
+      });
+    }
     if (changed) { syncBadge(); if (document.querySelector('#screen-missions.active')) render(); }
   }
-  function missionToast(def) {
+  function missionToast(def, label) {
     const tl = $('toast-layer'); if (!tl) return;
     const t = document.createElement('div');
     t.className = 'msn-toast';
-    t.innerHTML = '<span class="mt-ic">' + def.ic + '</span><span><b>MISSION COMPLETE</b><br>' + def.name + ' — claim your reward</span>';
+    t.innerHTML = '<span class="mt-ic">' + def.ic + '</span><span><b>' + (label || '') + ' MISSION COMPLETE</b><br>' + def.name + ' — claim your reward</span>';
     tl.appendChild(t); setTimeout(() => t.remove(), 3400);
   }
 
@@ -223,6 +249,7 @@
     if (rw.fuel) s.resources.fuel += rw.fuel;
     if (rw.iron) s.resources.iron += rw.iron;
     if (rw.plasma) s.resources.plasma += rw.plasma;
+    if (rw.cores) s.dreadCores = (s.dreadCores || 0) + rw.cores;
     if (rw.lc && G.addCredits) G.addCredits(rw.lc); else if (rw.lc) s.credits = (s.credits || 0) + rw.lc;
     G.save(); if (window.UI) window.UI.refreshAll();
   }
@@ -231,35 +258,51 @@
     rw.fuel ? '<span class="mr-chip" style="--c:#5bc0ff">⬢ ' + G.formatNum(rw.fuel) + '</span>' : '',
     rw.iron ? '<span class="mr-chip" style="--c:#d0a060">◆ ' + G.formatNum(rw.iron) + '</span>' : '',
     rw.plasma ? '<span class="mr-chip" style="--c:#c07bff">✦ ' + G.formatNum(rw.plasma) + '</span>' : '',
+    rw.cores ? '<span class="mr-chip" style="--c:#ff6b78">◇ ' + rw.cores + ' Core' + (rw.cores > 1 ? 's' : '') + '</span>' : '',
     rw.lc ? '<span class="mr-chip mr-lc" style="--c:#ffd24d">◉ ' + rw.lc + ' LC</span>' : '',
   ].join('');
 
   // ---------------------------------------------------------------------------
-  // RENDER — Command ▸ Missions screen
+  // RENDER — Command ▸ Missions screen with DAILY / WEEKLY / MONTHLY tabs
   // ---------------------------------------------------------------------------
-  function msLeft() { const d = new Date(); const nx = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); return nx - d; }
-  function fmtLeft() { const t = msLeft() / 1000; return Math.floor(t / 3600) + 'h ' + Math.floor((t % 3600) / 60) + 'm'; }
+  let _tab = 'd';
+  function missionRw(b, def, tier) {
+    const lvl = G.state.level || 1, z = Math.max(1, G.state.highestUnlocked || 1);
+    const rw = def.rw(lvl, z);
+    return b === 'd' ? scaleRw(rw, tier) : rw;
+  }
   function render() {
     const body = $('missions-body'); if (!body) return;
-    const ms = ensureDay();
-    const lvl = G.state.level || 1, z = Math.max(1, G.state.highestUnlocked || 1);
-    const tier = ms.tier || 1, rm = rwMult(tier);
+    const bd = BOARDS[_tab], ms = ensureBoard(_tab);
+    const tier = ms.tier || 1, N = bd.count;
     const doneN = ms.list.filter((m) => m.done >= m.n).length;
     const claimedN = ms.list.filter((m) => m.claimed).length;
-    const sub = $('missions-sub'); if (sub) sub.textContent = 'Tier ' + tier + ' · ' + doneN + '/10 complete · resets ' + fmtLeft();
-    let html = '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">DAILY MISSION BOARD <span class="mh-tier">TIER ' + tier + '</span></div>' +
-      '<div class="mh-s">10 fresh orders every day · ⟳ resets in <b data-msn-cd>' + fmtLeft() + '</b></div>' +
-      (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rm) + '</b> this tier · targets up steeply</div>'
-                : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>') +
-      '</div><div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
-    // ⌘ VERIDIAN — 1,000-lifetime-missions reward hull: hero banner + countdown + accept
-    html += veridianBanner();
+    const dD = ensureBoard('d'), dW = ensureBoard('w'), dM = ensureBoard('m');
+    const sub = $('missions-sub');
+    if (sub) sub.textContent = 'D ' + dD.list.filter((m) => m.done >= m.n).length + '/10 · W ' + dW.list.filter((m) => m.done >= m.n).length + '/5 · M ' + dM.list.filter((m) => m.done >= m.n).length + '/3 · ' + bd.resetTxt.replace('resets ', '⟳ ');
+    const badgeOf = (k) => {
+      const b2 = ensureBoard(k);
+      const c = b2.list.filter((m) => m.done >= m.n && !m.claimed).length + ((b2.list.every((m) => m.done >= m.n) && !b2.allClaimed) ? 1 : 0);
+      return c ? '<i>' + c + '</i>' : '';
+    };
+    let html = '<div class="msn-tabs">' +
+      ['d', 'w', 'm'].map((k) => '<button class="msn-tab ' + (k === _tab ? 'on' : '') + '" data-msntab="' + k + '">' + BOARDS[k].label + badgeOf(k) + '</button>').join('') + '</div>';
+    // head card
+    html += '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">' + bd.title + (bd.tiered ? ' <span class="mh-tier">TIER ' + tier + '</span>' : '') + '</div>' +
+      '<div class="mh-s">' + N + ' orders · ⟳ ' + bd.resetTxt + ' · <b data-msn-cd>' + fmtDur(bd.left()) + '</b> left</div>' +
+      (bd.tiered
+        ? (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rwMult(tier)) + '</b> this tier · targets up steeply</div>'
+                    : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>')
+        : (_tab === 'w' ? '<div class="mh-s">Campaign-length orders — <b>~8× daily scale</b>, big ◉ LootCoin pay</div>'
+                        : '<div class="mh-s">Grand operations — <b>~30× daily scale</b> · ◉ LootCoins + <b style="color:#ff6b78">◇ Dread Cores</b></div>')) +
+      '</div><div class="mh-ring" style="--p:' + (doneN / N * 360) + 'deg"><span>' + doneN + '<i>/' + N + '</i></span></div></div>';
+    if (_tab === 'd') html += veridianBanner();
     ms.list.forEach((mi, i) => {
-      const def = POOL.find((p) => p.id === mi.id); if (!def) return;
-      const rw = scaleRw(def.rw(lvl, z), tier);
+      const def = bd.pool.find((p) => p.id === mi.id); if (!def) return;
+      const rw = missionRw(_tab, def, tier);
       const pct = Math.min(100, mi.done / mi.n * 100);
       const done = mi.done >= mi.n;
-      html += '<div class="msn-card ' + (mi.claimed ? 'claimed' : done ? 'ready' : '') + '">' +
+      html += '<div class="msn-card ' + (mi.claimed ? 'claimed' : done ? 'ready' : '') + (_tab === 'm' ? ' epic' : '') + '">' +
         '<div class="msn-ic">' + def.ic + '</div>' +
         '<div class="msn-mid"><div class="msn-n">' + def.name + '</div>' +
         '<div class="msn-b">' + def.blurb.replace('{N}', '<b>' + G.formatNum(mi.n) + '</b>') + '</div>' +
@@ -270,57 +313,57 @@
           : done ? '<button class="msn-claim" data-claim="' + i + '">CLAIM</button>'
           : '') + '</div>';
     });
-    // ALL-CLEAR bonus crate
-    const allDone = doneN >= 10;
-    const bonusRw = scaleRw({ lc: ALL_BONUS.lc, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) }, tier);
+    // crate
+    const allDone = doneN >= N;
+    const bonusRw = crateRw(_tab, tier);
     html += '<div class="msn-bonus ' + (ms.allClaimed ? 'claimed' : allDone ? 'ready' : '') + '">' +
       '<div class="mb-glow"></div><div class="mb-ic">▣</div>' +
-      '<div class="msn-mid"><div class="msn-n">COMMANDER\'S CRATE · TIER ' + tier + '</div>' +
-      '<div class="msn-b">Clear all 10 · <b>' + claimedN + '/10 claimed</b> · claiming unlocks <b>TIER ' + (tier + 1) + '</b> (rewards ×2)</div>' +
+      '<div class="msn-mid"><div class="msn-n">' + CRATE_NAME[_tab] + (bd.tiered ? ' · TIER ' + tier : '') + '</div>' +
+      '<div class="msn-b">Clear all ' + N + ' · <b>' + claimedN + '/' + N + ' claimed</b>' +
+      (bd.tiered ? ' · claiming unlocks <b>TIER ' + (tier + 1) + '</b> (rewards ×2)' : '') + '</div>' +
       '<div class="msn-rw">' + rwChips(bonusRw) + '</div></div>' +
-      (ms.allClaimed ? '<div class="msn-done">✓</div>' : allDone ? '<button class="msn-claim gold" data-bonus="1">CLAIM</button>' : '<div class="msn-lockp">' + doneN + '/10</div>') + '</div>';
+      (ms.allClaimed ? '<div class="msn-done">✓</div>' : allDone ? '<button class="msn-claim gold" data-bonus="1">CLAIM</button>' : '<div class="msn-lockp">' + doneN + '/' + N + '</div>') + '</div>';
     // preserve scroll through re-renders
     let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
     const _st = _sc ? _sc.scrollTop : 0;
-    // FLICKER GUARD — identical content (timers aside) skips the DOM swap; the
-    // countdowns are patched in place by the interval below instead.
     if (body._msnHtml === html) return;
     body._msnHtml = html;
     body.innerHTML = html;
     if (_sc) _sc.scrollTop = _st;
+    body.querySelectorAll('[data-msntab]').forEach((b) => b.addEventListener('click', () => { _tab = b.dataset.msntab; body._msnHtml = null; render(); }));
     body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => {
       const mi = ms.list[+b.dataset.claim]; if (!mi || mi.claimed || mi.done < mi.n) return;
-      const def = POOL.find((p) => p.id === mi.id);
+      const def = bd.pool.find((p) => p.id === mi.id);
       mi.claimed = true; G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
-      payout(scaleRw(def.rw(lvl, z), tier)); render(); syncBadge();
+      payout(missionRw(_tab, def, tier)); render(); syncBadge();
     }));
     const bb = body.querySelector('[data-bonus]');
-    // ⌘ VERIDIAN accept
     const vb = body.querySelector('[data-veridian-accept]');
     if (vb) vb.addEventListener('click', acceptVeridian);
     if (bb) bb.addEventListener('click', () => {
-      if (ms.allClaimed || doneN < 10) return;
-      // auto-claim anything finished but unclaimed so the tier-up never eats rewards
+      if (ms.allClaimed || ms.list.filter((m) => m.done >= m.n).length < N) return;
+      // auto-claim anything finished but unclaimed so the crate never eats rewards
       ms.list.forEach((mi) => {
         if (!mi.claimed && mi.done >= mi.n) {
-          const d = POOL.find((p) => p.id === mi.id);
+          const d = bd.pool.find((p) => p.id === mi.id);
           mi.claimed = true; G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
-          if (d) payout(scaleRw(d.rw(lvl, z), tier));
+          if (d) payout(missionRw(_tab, d, tier));
         }
       });
       ms.allClaimed = true; payout(bonusRw);
       const tl = $('toast-layer');
       if (tl) {
         const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d';
-        t.innerHTML = '▣ COMMANDER\'S CRATE · TIER ' + tier + '<br><span style="font-size:13px">All 10 cleared · +' + G.formatNum(bonusRw.lc) + ' ◉ LootCoins</span>';
+        t.innerHTML = '▣ ' + CRATE_NAME[_tab] + (bd.tiered ? ' · TIER ' + tier : '') + '<br><span style="font-size:13px">All ' + N + ' cleared · +' + G.formatNum(bonusRw.lc) + ' ◉ LootCoins</span>';
         tl.appendChild(t); setTimeout(() => t.remove(), 3600);
       }
-      advanceTier();
+      if (bd.tiered) advanceTier();
+      G.save();
       render(); syncBadge();
     });
   }
   // ===========================================================================
-  // ⌘ VERIDIAN — the 1,000-lifetime-missions reward hull
+  // ⌘ VERIDIAN — the 1,000-lifetime-missions reward hull (ALL boards count)
   // ===========================================================================
   const VERIDIAN_NEED = 1000;
   function veridianBanner() {
@@ -336,7 +379,7 @@
       '<div class="vrd-art"><img src="ships/ship-veridian.png" alt="Veridian" decoding="async"></div>' +
       '<div class="vrd-mid">' +
         '<div class="vrd-t">THE VERIDIAN <em>MISSION REWARD</em></div>' +
-        '<div class="vrd-s">Complete <b>1,000 lifetime missions</b> to earn this Battleship-grade hull. Its verdant <b>resonance aura</b> constantly damages everything within a few tiles — scaling with your fleet\u2019s DPS.</div>' +
+        '<div class="vrd-s">Complete <b>1,000 lifetime missions</b> (daily, weekly & monthly all count) to earn this Battleship-grade hull. Its verdant <b>resonance aura</b> constantly damages everything within a few tiles — scaling with your fleet\u2019s DPS.</div>' +
         '<div class="vrd-bar"><i style="width:' + (have / VERIDIAN_NEED * 100) + '%"></i><span>⌘ ' + have.toLocaleString() + ' / ' + VERIDIAN_NEED.toLocaleString() + ' lifetime missions</span></div>' +
       '</div>' + right + '</div>';
   }
@@ -356,8 +399,13 @@
   }
 
   function syncBadge() {
-    const ms = G.state.missions; if (!ms) return;
-    const claimable = ms.list.filter((m) => m.done >= m.n && !m.claimed).length + ((ms.list.every((m) => m.done >= m.n) && !ms.allClaimed) ? 1 : 0);
+    if (!G || !G.state) return;
+    let claimable = 0;
+    for (const k of ['d', 'w', 'm']) {
+      const ms = G.state[BOARDS[k].key]; if (!ms || !ms.list) continue;
+      claimable += ms.list.filter((m) => m.done >= m.n && !m.claimed).length;
+      if (ms.list.every((m) => m.done >= m.n) && !ms.allClaimed) claimable++;
+    }
     const b = $('cmd-msn-badge');
     if (b) { b.style.display = claimable ? '' : 'none'; b.textContent = claimable; }
   }
@@ -365,26 +413,31 @@
   // ---------------------------------------------------------------------------
   function init(game) {
     G = game;
-    ensureDay();
+    // migrate pre-tabs saves: the old per-board base is replaced by ONE global baseline
+    if (G.state.missions && G.state.missions.base) { G.state.missionsBase = G.state.missionsBase || G.state.missions.base; delete G.state.missions.base; }
+    ensureBoard('d'); ensureBoard('w'); ensureBoard('m');
     watchBoss();
     setInterval(tick, 1000);
-    // countdown refresh — patch the ticking text IN PLACE (no innerHTML rebuild,
-    // no flicker); render() itself only runs on real mission-state changes.
     setInterval(() => {
       if (!document.querySelector('#screen-missions.active')) return;
-      const cd = document.querySelector('#missions-body [data-msn-cd]'); if (cd) cd.textContent = fmtLeft();
-      const sub = $('missions-sub');
-      if (sub && G.state.missions) { const ms = G.state.missions; sub.textContent = 'Tier ' + (ms.tier || 1) + ' · ' + ms.list.filter((m) => m.done >= m.n).length + '/10 complete · resets ' + fmtLeft(); }
+      const cd = document.querySelector('#missions-body [data-msn-cd]'); if (cd) cd.textContent = fmtDur(BOARDS[_tab].left());
     }, 30000);
     syncBadge();
   }
-  // self-boot: wait for the engine, mirroring galaxy-box.js
   function boot() { if (window.GAME && window.GAME.state) init(window.GAME); else setTimeout(boot, 500); }
   setTimeout(boot, 1000);
   window.MISSIONS = { init, render, syncBadge };
 
-  // ---- CSS (self-injected, mirrors galaxy-box.js pattern) -------------------
+  // ---- CSS (self-injected) ---------------------------------------------------
   const CSS = `
+  .msn-tabs{ display:flex; gap:6px; margin-bottom:11px; }
+  .msn-tab{ flex:1; position:relative; font-family:'Orbitron',sans-serif; font-weight:800; font-size:10px; letter-spacing:.1em;
+    color:#7e93b0; background:linear-gradient(180deg,#121a29,#0d1420); border:1px solid #263650; border-radius:11px; padding:10px 6px; cursor:pointer; }
+  .msn-tab.on{ color:#eaf3ff; border-color:#3f8cff; box-shadow:0 0 14px -5px rgba(63,140,255,.8); background:linear-gradient(180deg,#1a2540,#101a2c); }
+  .msn-tab i{ font-style:normal; position:absolute; top:-6px; right:-4px; min-width:16px; height:16px; border-radius:8px; padding:0 4px;
+    display:grid; place-items:center; font-size:9px; color:#1c0d04; background:linear-gradient(180deg,#ffd24d,#e09a2d); box-shadow:0 0 8px -1px rgba(255,210,77,.9); }
+  .msn-card.epic{ border-color:rgba(255,107,120,.35); }
+  .msn-card.epic .msn-ic{ color:#ff9aa4; border-color:rgba(255,107,120,.4); }
   .msn-head-card{ position:relative; display:flex; align-items:center; justify-content:space-between; gap:12px;
     background:radial-gradient(140% 180% at 10% -20%, rgba(95,160,255,.16), transparent 55%), linear-gradient(180deg,#131c2c,#0c1220);
     border:1px solid #2c3b56; border-radius:14px; padding:13px 15px; margin-bottom:12px; }
@@ -443,7 +496,6 @@
   .msn-toast .mt-ic{ font-size:18px; color:#7ce0a0; }
   @keyframes msnToastIn{ from{ transform:translateY(14px) scale(.92); opacity:0; } }
   @media (prefers-reduced-motion: reduce){ .msn-claim,.mb-glow{ animation:none; } }
-  /* ⌘ VERIDIAN hero banner */
   .vrd-hero{ display:flex; align-items:center; gap:12px; background:linear-gradient(115deg,#0d1f14,#0b1611 60%,#101d24); border:1.5px solid rgba(89,217,140,.4);
     border-radius:14px; padding:12px; margin:0 0 12px; position:relative; overflow:hidden; }
   .vrd-hero.ready{ border-color:rgba(165,242,196,.9); box-shadow:0 0 22px -5px rgba(89,217,140,.65); }

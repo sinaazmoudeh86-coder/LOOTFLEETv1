@@ -128,8 +128,8 @@
   function shipF(key) { const s = C().SHIP_BY_KEY[key]; return 1 + (((s && s.tier) || 1) - 1) * 0.55; }
   function cost(shipKey, m) {
     const lateStars = Math.max(0, m.s - 3);
-    const gold = Math.round(100000 * shipF(shipKey) * Math.pow(2.6, m.t) * Math.pow(1.045, m.s * 5 + m.l - 1) * Math.pow(5, lateStars));
-    return { gold, res: Math.max(1000, Math.round(gold / 100)) };
+    const gold = Math.round(1000000 * shipF(shipKey) * Math.pow(2.6, m.t) * Math.pow(1.045, m.s * 5 + m.l - 1) * Math.pow(5, lateStars));
+    return { gold, res: Math.max(10000, Math.round(gold / 100)) };
   }
   function bank(res) {
     const st = G().state;
@@ -228,18 +228,24 @@
         ? '<div class="asc-maxed">✦ PRISMATIC · FULLY ASCENDED</div>'
         : '<div class="asc-roll">' +
             '<div class="asc-chance ' + chCls + '"><span>SUCCESS</span><b>' + ch + '%</b><div class="asc-chbar"><i style="width:' + ch + '%"></i></div></div>' +
-            '<div class="asc-cost">' +
-              '<span style="color:' + RES.gold.c + (bank('gold') < c.gold ? ';opacity:.45' : '') + '">● ' + fmt(c.gold) + '</span>' +
-              '<span style="color:' + RES[md.res].c + (bank(md.res) < c.res ? ';opacity:.45' : '') + '">' + RES[md.res].glyph + ' ' + fmt(c.res) + '</span>' +
+            '<div class="asc-btns col">' +
+              ascBtn(key, md, c, 1, 'ASCEND') + ascBtn(key, md, c, 10, '×10') + ascBtn(key, md, c, 100, '×100') +
             '</div>' +
-            '<div class="asc-btns">' +
-              '<button class="asc-btn" data-asc="' + key + ':' + md.id + ':1"' + (afford ? '' : ' disabled') + '>ASCEND</button>' +
-              '<button class="asc-btn x10" data-asc="' + key + ':' + md.id + ':10"' + (afford ? '' : ' disabled') + '>×10</button>' +
-              '<button class="asc-btn x10 x100" data-asc="' + key + ':' + md.id + ':100"' + (afford ? '' : ' disabled') + '>×100</button>' +
-            '</div>' +
-            '<div class="asc-fail-note">Fail → resets to +1 of this star · ×10/×100 roll until broke, star-up or tier-up</div>' +
+            '<div class="asc-fail-note">×10/×100 show the FULL batch cost (≈ — each roll priced live) · rolls stop at star-up, tier-up or when broke · Fail → resets to +1 of this star</div>' +
           '</div>') +
     '</div>';
+  }
+
+  // one ascend button row — the FULL price of the batch sits right on the button
+  function ascBtn(key, md, c, n, lbl) {
+    const g = c.gold * n, r = c.res * n;
+    const okG = bank('gold') >= g, okR = bank(md.res) >= r;
+    const afford1 = bank('gold') >= c.gold && bank(md.res) >= c.res;
+    return '<button class="asc-btn row' + (n > 1 ? ' alt' : '') + '" data-asc="' + key + ':' + md.id + ':' + n + '"' + (afford1 ? '' : ' disabled') + '>' +
+      '<span class="ab-n">' + lbl + '</span>' +
+      '<span class="ab-cost">' + (n > 1 ? '<i>≈</i>' : '') +
+        '<em' + (okG ? '' : ' class="short"') + '>● ' + fmt(g) + '</em>' +
+        '<em' + (okR ? '' : ' class="short"') + '>' + RES[md.res].glyph + ' ' + fmt(r) + '</em></span></button>';
   }
 
   function wire(body) {
@@ -438,12 +444,18 @@
   .asc-chbar i{ display:block; height:100%; border-radius:3px; }
   .asc-chance.hi .asc-chbar i{ background:#7ce0a0; } .asc-chance.mid .asc-chbar i{ background:#ffd24d; } .asc-chance.lo .asc-chbar i{ background:#ff6b78; }
   .asc-cost{ display:flex; gap:10px; margin-top:8px; font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; }
-  .asc-btns{ display:flex; gap:8px; margin-top:9px; }
-  .asc-btn{ flex:1; border:none; border-radius:10px; padding:11px; cursor:pointer;
-    font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.14em; color:#08131c;
+  .asc-btns.col{ display:flex; flex-direction:column; gap:6px; margin-top:9px; }
+  .asc-btn.row{ display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; border:none; border-radius:10px; padding:10px 12px; cursor:pointer;
+    font-family:'Orbitron',sans-serif; font-weight:800; letter-spacing:.1em; color:#08131c;
     background:linear-gradient(180deg, color-mix(in srgb,var(--tc) 85%,#fff), var(--tc)); box-shadow:0 6px 18px -8px var(--tc); transition:transform .08s; }
-  .asc-btn.x10{ flex:0 0 22%; color:var(--tc); background:color-mix(in srgb,var(--tc) 12%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 60%,transparent); box-shadow:none; }
-  .asc-btn.x100{ flex:0 0 26%; }
+  .asc-btn.row .ab-n{ font-size:11px; white-space:nowrap; }
+  .asc-btn.row .ab-cost{ display:flex; align-items:center; gap:9px; font-family:'Rajdhani',sans-serif; font-size:11.5px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .asc-btn.row .ab-cost em{ font-style:normal; white-space:nowrap; }
+  .asc-btn.row .ab-cost i{ font-style:normal; opacity:.7; }
+  .asc-btn.row.alt{ color:#dfe9f5; background:color-mix(in srgb,var(--tc) 12%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 60%,transparent); box-shadow:none; }
+  .asc-btn.row.alt .ab-n{ color:var(--tc); }
+  .asc-btn.row.alt .ab-cost{ color:#a9bccf; }
+  .asc-btn.row .ab-cost em.short{ opacity:.45; text-decoration:line-through; }
   .asc-btn:active{ transform:scale(.97); }
   .asc-btn:disabled{ opacity:.38; cursor:default; }
   .asc-fail-note{ margin-top:6px; text-align:center; font-size:8.5px; color:#66798d; letter-spacing:.04em; }

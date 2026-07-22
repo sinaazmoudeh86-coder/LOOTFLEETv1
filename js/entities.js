@@ -224,6 +224,7 @@
       }
     }
     takeDamage(amount) {
+      if (window.MONO_MULT) amount *= window.MONO_MULT(this);   // Monolith siege bonus vs boss-class targets
       this.hp -= amount;
       this.hitFlash = 1;
       if (this.hp <= 0 && !this.dying) {

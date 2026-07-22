@@ -1939,6 +1939,7 @@
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
     sheet.querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('missions'); }));
+    sheet.querySelectorAll('[data-go-alliance]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('social'); toast('⬡ Open the Alliance tab — Monolith Shipyard is in the store', '#7ff2e0'); }));
   }
   // ONE unified detail-sheet card for EVERY hull (Jul 2026): identical frame —
   // icon · name+chip · class line · layout chips · desc · mod chips · ONE status
@@ -1998,11 +1999,16 @@
         lock = `<div class="ship-lock ${can ? 'ready' : ''}"><span class="lk-ic">⚒</span><span>${can ? 'Ready to build' : 'Need more resources'} · <b>${inf.days}-day</b> build</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
       }
     }
+    else if (ship.alliance) {
+      const prev = ship.monoReq && C.SHIP_BY_KEY[ship.monoReq];
+      action = `<button class="ship-btn buy" data-go-alliance="1">⬡ ${ship.acPrice.toLocaleString()}</button>`;
+      lock = `<div class="ship-lock ready"><span class="lk-ic">⬡</span><span>Alliance exclusive — <b>⬡ ${ship.acPrice.toLocaleString()} Alliance Coins</b> in the <b>Alliance Store</b> (Hangar ▸ Social ▸ Alliance)${prev ? ` · requires the <b>${prev.name}</b>` : ''} · deals <b>+${Math.round(ship.siegeBonus * 100)}%</b> damage to Zone Bosses, Citadels, Event Bosses <b>and the Hollow Armada</b></span></div>`;
+    }
     else if (st.unlocked) action = ship.resPrice
       ? `<button class="ship-btn buy res" data-ship-buy="${key}">${resCostChips(ship.resPrice)}</button>`
       : `<button class="ship-btn buy" data-ship-buy="${key}"><span class="coin">$</span> ${G.formatNum(ship.price)}</button>`;
     else action = `<span class="ship-badge locked">🔒</span>`;
-    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build) {
+    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build && !ship.alliance) {
       if (!st.hasBlueprint) {
         const z = st.bpZone, reach = z <= G.state.highestUnlocked;
         lock = `<div class="ship-lock"><span class="lk-ic">◷</span><span>Recover the <b>Blueprint</b> — defeat the <b>boss</b> in <b>${zoneName(z)}</b> (Zone ${z})</span>` +
@@ -2018,6 +2024,7 @@
       : ship.missionShip ? `<span class="bp-chip have" style="border-color:#59d98c88;color:#a5f2c4">⌘ MISSIONS</span>`
       : ship.purchase ? `<span class="bp-chip have" style="border-color:#f2a93c88;color:#ffd9a0">◈ LOOTCOIN</span>`
       : ship.megaCost ? `<span class="bp-chip have" style="border-color:#ff5a6888;color:#ff9aa6">◇ DREAD</span>`
+      : ship.alliance ? `<span class="bp-chip have" style="border-color:#2ee6c988;color:#8ff2e0">⬡ ALLIANCE</span>`
       : ship.build ? (st.owned ? '' : ((G.state.blueprints && G.state.blueprints[key]) ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◈ CITADEL</span>`))
       : ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
     // hull-upgrade row for any owned ship (same options as My Ship)

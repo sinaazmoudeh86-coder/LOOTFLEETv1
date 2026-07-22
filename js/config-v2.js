@@ -395,6 +395,18 @@
     // Bosses shrug the cryo effect off entirely.
     { key:'frostyfrost', name:'FrostyFrost', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'CRYO TECH', purchase:{ lc:50000 }, frost:true,
       desc:'A crystalline glacier of a hull at Titan Carrier performance. Every hit chills its target — slowing them — and sometimes flash-freezes them solid in an ice cube. Bosses are immune to the cryo field.' },
+    // MONOLITH LINE — ALLIANCE-EXCLUSIVE siege hulls carved from Hollow Armada
+    // wreckage. Sold ONLY for ⬡ Alliance Coins in the Alliance Store. siegeBonus
+    // = bonus damage vs boss-class targets (Zone Bosses, Citadels, Event Bosses)
+    // AND vs the Hollow Armada alliance boss — +75% at the Apex.
+    { key:'monolith1', name:'Monolith Shard', cls:'Cruiser', price:0, reqKills:0, weapons:2, ammo:1, hull:1, drones:0, mods:{dmgPct:25,hpPct:20}, tag:'ALLIANCE ⬡ I', alliance:true, acPrice:500, siegeBonus:0.20,
+      desc:'A splinter of Hollow Armada hullstone wrapped around a teal reactor core — the first hull the Monolith Shipyard will cut for a new ally. Deals +20% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada.' },
+    { key:'monolith2', name:'Monolith Bastion', cls:'Battleship', price:0, reqKills:0, weapons:4, ammo:2, hull:2, drones:0, mods:{dmgPct:90,hpPct:120,multiShot:15}, tag:'ALLIANCE ⬡ II', alliance:true, acPrice:4500, siegeBonus:0.35, monoReq:'monolith1',
+      desc:'Layered wreck-plate over triple hardpoints — a battleship that shrugs off return fire while it cracks fortifications. +35% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada.' },
+    { key:'monolith3', name:'Monolith Siegebreaker', cls:'Carrier', price:0, reqKills:0, weapons:5, ammo:2, hull:3, drones:10, mods:{dmgPct:260,hpPct:380,multiShot:55,critChance:35,critDamage:110,atkSpeedPct:55,rangePct:75}, tag:'ALLIANCE ⬡ III', alliance:true, acPrice:9000, siegeBonus:0.50, monoReq:'monolith2',
+      desc:'A carrier-grade wall-breaker — five cannons and a drone screen tuned to one job: bringing down fortifications. +50% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada.' },
+    { key:'monolith4', name:'Monolith Apex', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:44, mods:{hpPct:1000,dmgPct:560,multiShot:150,critChance:125,critDamage:440,moveSpeed:95,atkSpeedPct:190,rangePct:300,lifeSteal:28}, tag:'ALLIANCE ⬡ APEX', alliance:true, acPrice:15000, siegeBonus:0.75, monoReq:'monolith3',
+      desc:'The shipyard\u2019s final cut — Dread Reaver-grade performance whose entire mass is a siege weapon. +75% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada itself.' },
     // OBLIVION SPEAR T1 — a forbidden new class one tier ABOVE the Mothership,
     // with roughly DOUBLE its combat performance. It can't be bought: you must
     // recover its blueprint (a 1% drop from a Lv300+ Void Citadel explosion in

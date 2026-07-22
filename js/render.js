@@ -954,11 +954,12 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent','frostyfrost','veridian'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }
-  function shipImg(key) { const im = SHIP_IMG[key]; return (im && im.complete && im.naturalWidth) ? im : null; }
+  // lazy fallback — any hull key not in the preload list loads on first use
+  function shipImg(key) { let im = SHIP_IMG[key]; if (!im && key) { im = new Image(); im.src = 'ships/ship-' + key + '.png'; SHIP_IMG[key] = im; } return (im && im.complete && im.naturalWidth) ? im : null; }
 
   // =========================================================================
   // COSMETICS — premium hull skins + auras (Market → Cosmetics)

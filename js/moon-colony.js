@@ -27,36 +27,36 @@
   const LV_MAX = Infinity;
   const SECTORS = [
     { name: 'Landing Basin',   slots: 3, cost: null },
-    { name: 'Mare Ironshade',  slots: 3, cost: { gold: 8000,   fuel: 400,   iron: 250 } },
-    { name: 'Crater Fields',   slots: 4, cost: { gold: 30000,  fuel: 1500,  iron: 900,  plasma: 500 } },
-    { name: 'The Deep Rille',  slots: 4, cost: { gold: 120000, fuel: 6000,  iron: 3500, plasma: 2200 } },
-    { name: 'Farside Reach',   slots: 4, cost: { gold: 500000, fuel: 25000, iron: 15000, plasma: 9000 } },
-    { name: 'Umbra Prime',     slots: 4, cost: { gold: 2000000, fuel: 100000, iron: 60000, plasma: 40000 } },
+    { name: 'Mare Ironshade',  slots: 3, cost: { gold: 16000,  fuel: 800,   iron: 500 } },
+    { name: 'Crater Fields',   slots: 4, cost: { gold: 60000,  fuel: 3000,  iron: 1800, plasma: 1000 } },
+    { name: 'The Deep Rille',  slots: 4, cost: { gold: 240000, fuel: 12000, iron: 7000, plasma: 4400 } },
+    { name: 'Farside Reach',   slots: 4, cost: { gold: 1000000, fuel: 50000, iron: 30000, plasma: 18000 } },
+    { name: 'Umbra Prime',     slots: 4, cost: { gold: 4000000, fuel: 200000, iron: 120000, plasma: 80000 } },
   ];
   // THE MOON CHAIN — terraform all sectors of a moon to unlock the next.
   const MOONCAT = [
     { key: 'luna',   name: 'Luna Prime', hue: 215, bias: {},                          cost: null,
       blurb: 'Your first foothold. Balanced deposits.' },
-    { key: 'ferra',  name: 'Ferra',      hue: 28,  bias: { iron: 1.7 },               cost: { gold: 900000,  fuel: 40000,  iron: 25000, plasma: 15000 },
+    { key: 'ferra',  name: 'Ferra',      hue: 28,  bias: { iron: 1.7 },               cost: { gold: 1800000, fuel: 80000,  iron: 50000, plasma: 30000 },
       blurb: 'A rust-red husk laced with ◆ iron veins · +70% iron.' },
-    { key: 'cryos',  name: 'Cryos',      hue: 190, bias: { fuel: 1.9 },               cost: { gold: 4000000, fuel: 150000, iron: 90000, plasma: 60000 },
+    { key: 'cryos',  name: 'Cryos',      hue: 190, bias: { fuel: 1.9 },               cost: { gold: 8000000, fuel: 300000, iron: 180000, plasma: 120000 },
       blurb: 'A frozen shard of ⬢ fuel ice · +90% fuel.' },
-    { key: 'ion',    name: 'Ion',        hue: 275, bias: { plasma: 1.9 },             cost: { gold: 15000000, fuel: 600000, iron: 350000, plasma: 220000 },
+    { key: 'ion',    name: 'Ion',        hue: 275, bias: { plasma: 1.9 },             cost: { gold: 30000000, fuel: 1200000, iron: 700000, plasma: 440000 },
       blurb: 'A storm-wracked moon crackling with ✦ plasma · +90% plasma.' },
-    { key: 'prisma', name: 'Prisma',     hue: 350, bias: { prism: 2.2, gold: 1.4 },   cost: { gold: 80000000, fuel: 2500000, iron: 1500000, plasma: 1000000 },
+    { key: 'prisma', name: 'Prisma',     hue: 350, bias: { prism: 2.2, gold: 1.4 },   cost: { gold: 160000000, fuel: 5000000, iron: 3000000, plasma: 2000000 },
       blurb: 'The crown jewel — ◈ prism crystal to the core · 2.2× prism, +40% gold.' },
   ];
   const B = {
-    oremine:  { name: 'Ore Mine',        ic: '⛏', cat: 'mine',    out: 'iron',   rate: 28, cost: { gold: 1500, fuel: 80 },              desc: 'Extracts ◆ iron from the regolith.' },
-    fuelwell: { name: 'Fuel Well',       ic: '⛽', cat: 'mine',    out: 'fuel',   rate: 40, cost: { gold: 1200, iron: 60 },              desc: 'Taps ⬢ fuel ice pockets.' },
-    plasmarig:{ name: 'Plasma Rig',      ic: '⚡', cat: 'mine',    out: 'plasma', rate: 18, cost: { gold: 2500, fuel: 150, iron: 100 },  desc: 'Condenses ✦ plasma from solar wind.', minSector: 1 },
-    goldrig:  { name: 'Assay Plant',     ic: '⚖', cat: 'mine',    out: 'gold',   rate: 520,cost: { gold: 4000, iron: 200 },             desc: 'Refines trace metals into $ gold.', minSector: 1 },
-    prismex:  { name: 'Prism Extractor', ic: '◈', cat: 'mine',    out: 'prism',  rate: 1.2,cost: { gold: 400000, fuel: 20000, plasma: 8000 }, desc: 'Late-game: sifts ◈ prism fragments.', minSector: 4 },
-    refinery: { name: 'Refinery',        ic: '⚗', cat: 'boost',   pct: 8,  cost: { gold: 6000, iron: 350 },                 desc: '+8%/lv colony-wide production.', minSector: 1 },
-    drones:   { name: 'Cargo Drones',    ic: '⬡', cat: 'boost',   pct: 5,  cost: { gold: 3500, fuel: 250 },                 desc: '+5%/lv production · automation swarm.' },
-    cargohub: { name: 'Cargo Hub',       ic: '▣', cat: 'storage', hrs: 2,  cost: { gold: 2500, iron: 150 },                 desc: '+2h/lv storage before production idles.' },
-    laser:    { name: 'Laser Tower',     ic: '☄', cat: 'defense', def: 12, cost: { gold: 2000, iron: 120 },                 desc: 'Auto-defense · +12 rating/lv.' },
-    shield:   { name: 'Shield Generator',ic: '◍', cat: 'defense', def: 20, cost: { gold: 9000, iron: 500, plasma: 250 },    desc: 'Heavy defense · +20 rating/lv.', minSector: 2 },
+    oremine:  { name: 'Ore Mine',        ic: '⛏', cat: 'mine',    out: 'iron',   rate: 28, cost: { gold: 3000, fuel: 160 },              desc: 'Extracts ◆ iron from the regolith.' },
+    fuelwell: { name: 'Fuel Well',       ic: '⛽', cat: 'mine',    out: 'fuel',   rate: 40, cost: { gold: 2400, iron: 120 },              desc: 'Taps ⬢ fuel ice pockets.' },
+    plasmarig:{ name: 'Plasma Rig',      ic: '⚡', cat: 'mine',    out: 'plasma', rate: 18, cost: { gold: 5000, fuel: 300, iron: 200 },  desc: 'Condenses ✦ plasma from solar wind.', minSector: 1 },
+    goldrig:  { name: 'Assay Plant',     ic: '⚖', cat: 'mine',    out: 'gold',   rate: 520,cost: { gold: 8000, iron: 400 },             desc: 'Refines trace metals into $ gold.', minSector: 1 },
+    prismex:  { name: 'Prism Extractor', ic: '◈', cat: 'mine',    out: 'prism',  rate: 1.2,cost: { gold: 800000, fuel: 40000, plasma: 16000 }, desc: 'Late-game: sifts ◈ prism fragments.', minSector: 4 },
+    refinery: { name: 'Refinery',        ic: '⚗', cat: 'boost',   pct: 8,  cost: { gold: 12000, iron: 700 },                 desc: '+8%/lv colony-wide production.', minSector: 1 },
+    drones:   { name: 'Cargo Drones',    ic: '⬡', cat: 'boost',   pct: 5,  cost: { gold: 7000, fuel: 500 },                 desc: '+5%/lv production · automation swarm.' },
+    cargohub: { name: 'Cargo Hub',       ic: '▣', cat: 'storage', hrs: 2,  cost: { gold: 5000, iron: 300 },                 desc: '+2h/lv storage before production idles.' },
+    laser:    { name: 'Laser Tower',     ic: '☄', cat: 'defense', def: 12, cost: { gold: 4000, iron: 240 },                 desc: 'Auto-defense · +12 rating/lv.' },
+    shield:   { name: 'Shield Generator',ic: '◍', cat: 'defense', def: 20, cost: { gold: 18000, iron: 1000, plasma: 500 },    desc: 'Heavy defense · +20 rating/lv.', minSector: 2 },
   };
   const CATS = [['mine','MINING'],['boost','PROCESSING & LOGISTICS'],['storage','STORAGE'],['defense','DEFENSE']];
   window.MOONDEFS = B;          // shared with moon-scene.js

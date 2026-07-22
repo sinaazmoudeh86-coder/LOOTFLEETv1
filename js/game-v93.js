@@ -347,6 +347,7 @@
     const x = Math.max(20, Math.min(rt.worldW - 20, node.x + Math.cos(a) * r));
     const y = Math.max(20, Math.min(rt.worldH - 20, node.y + Math.sin(a) * r));
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
+    voidSkin(e);
     e.node = node; node.enemy = e;
     rt.enemies.push(e);
   }
@@ -476,8 +477,12 @@
 
   function fire(primary) {
     const s = rt.stats;
-    rt.archer.facing = Math.atan2(primary.y - rt.archer.y, primary.x - rt.archer.x);
-    rt.archer.muzzle = 1; rt.archer.recoil = 1;
+    // SMOOTH AIM v2 (Jul 2026): shots only RECORD the desired bearing — the
+    // hull glides toward it continuously in update(dt). Zero per-shot rotation
+    // steps, no matter how high the fire rate.
+    rt.archer.aim = Math.atan2(primary.y - rt.archer.y, primary.x - rt.archer.x);
+    rt.archer.muzzle = 1;
+    rt.archer.recoil = Math.min(0.7, (rt.archer.recoil || 0) * 0.55 + 0.25);   // gentle, saturating kick
     const shot = fireAt(primary, s);
     // muzzle: flash sparks tinted by the class that fired + smoke + casing
     const mc = MUZZLE_COL[shot.wtype] || MUZZLE_COL.gatling;
@@ -542,7 +547,7 @@
     let dmg = Math.max(1, (rt.stats.theoryDps || 1) * sc.mult);
     let fx = first.x, fy = first.y - Math.max(340, rt.h * 0.6), cur = first, jumps = 0;
     const hit = new Set();
-    rt.shake = Math.min(9, (rt.shake || 0) + 7);
+    rt.shake = Math.min(6, (rt.shake || 0) + 5);
     rt.stormFlash = 0.35;   // lingering full-screen flash
     while (cur && jumps <= sc.chains) {
       hit.add(cur);
@@ -637,7 +642,7 @@
       }
       rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: -16, life: 0.5, size: 7, color: 'rgba(150,150,155,0.45)', drag: 0.92 }));
       rt.particles.push(new E.Particle(p.x, p.y, { vx: 0, vy: 0, life: 0.16, size: p.crit ? 13 : 10, color: '#fff0d0', glow: true, drag: 1 }));
-      rt.shake = Math.min(3.5, (rt.shake || 0) + (p.crit ? 2.0 : 0.7));
+      if (p.crit) rt.shake = Math.min(2.2, (rt.shake || 0) + 1.1);   // non-crit fire no longer rattles the camera
     } else if (wt === 'rail') {
       // PIERCE — slug punches THROUGH: sparks continue forward + entry flash
       for (let i = 0; i < (p.crit ? 12 : 8); i++) {
@@ -674,7 +679,7 @@
       rt.particles.push(new E.Particle(p.x, p.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.3, size: 1.5 + Math.random()*2, color: e.tint, gravity: 140, drag: 0.9 }));
     }
     // crit: a little screen punch
-    if (p.crit) rt.shake = Math.min(4, (rt.shake || 0) + 2.2);
+    if (p.crit) rt.shake = Math.min(2.5, (rt.shake || 0) + 1.2);
     rt.dmgWindow.push({ t: rt.time, dmg: p.damage });
     // LIFE STEAL
     if (rt.stats.lifeSteal > 0 && !rt.archer.dead) {
@@ -1064,6 +1069,13 @@
     // so sustained fire no longer pins shake at the cap and vibrates the whole
     // scene (that was the "stutter while shooting"). ~0.85/frame equivalent.
     if (rt.shake) { rt.shake *= Math.exp(-9.75 * dt); if (rt.shake < 0.3) rt.shake = 0; }
+    // SMOOTH AIM v2 — frame-rate-independent glide toward the firing bearing
+    if (rt.archer && rt.archer.aim != null) {
+      let dA = rt.archer.aim - (rt.archer.facing || 0);
+      while (dA > Math.PI) dA -= Math.PI * 2;
+      while (dA < -Math.PI) dA += Math.PI * 2;
+      rt.archer.facing = (rt.archer.facing || 0) + dA * (1 - Math.exp(-9 * dt));
+    }
     // OBLIVION construction clock — grant the hull the moment its 2-week build lands
     if (state.construction) { update._cc = (update._cc || 0) + dt; if (update._cc > 1) { update._cc = 0; checkConstruction(); } }
     // when downed, freeze everything until the player picks a respawn zone
@@ -1080,10 +1092,21 @@
     // hp regen
     if (!a.dead && a.hp < rt.stats.maxHp) a.hp = Math.min(rt.stats.maxHp, a.hp + rt.stats.maxHp * C.ARENA.regenPerSec * dt);
 
-    // camera follows player (account for zoom — lower zoom shows more world)
+    // camera follows player (account for zoom — lower zoom shows more world).
+    // SMOOTH FOLLOW (Jul 2026 polish): exponential glide toward the target —
+    // the old per-frame hard snap transmitted every micro-move of the hull
+    // (bob, joystick corrections) straight into the whole scene = "jitter".
+    // Teleports (warp / respawn) still snap instantly.
     const z = rt.zoom || 1, visW = rt.w / z, visH = rt.h / z;
-    rt.cam.x = rt.worldW <= visW ? (rt.worldW - visW) / 2 : Math.max(0, Math.min(rt.worldW - visW, a.x - visW / 2));
-    rt.cam.y = rt.worldH <= visH ? (rt.worldH - visH) / 2 : Math.max(0, Math.min(rt.worldH - visH, a.y - visH / 2));
+    const _ctx2 = rt.worldW <= visW ? (rt.worldW - visW) / 2 : Math.max(0, Math.min(rt.worldW - visW, a.x - visW / 2));
+    const _cty2 = rt.worldH <= visH ? (rt.worldH - visH) / 2 : Math.max(0, Math.min(rt.worldH - visH, a.y - visH / 2));
+    if (rt.cam.x == null || Math.abs(_ctx2 - rt.cam.x) > visW * 0.6 || Math.abs(_cty2 - rt.cam.y) > visH * 0.6) {
+      rt.cam.x = _ctx2; rt.cam.y = _cty2;
+    } else {
+      const ck = 1 - Math.exp(-9 * dt);
+      rt.cam.x += (_ctx2 - rt.cam.x) * ck;
+      rt.cam.y += (_cty2 - rt.cam.y) * ck;
+    }
 
     // spawn nodes / siege waves
     if (state.prismFleetRun && state.prismFleetRun.active) {
@@ -1110,7 +1133,7 @@
       rt.towT -= dt;
       if (rt.towT <= 0) {
         rt.towT = 0;
-        if (state.currentDungeon >= 1) { respawnAt(0); if (window.UI) window.UI.siegeEvent('towhome', {}); }
+        if (state.currentDungeon >= 1) { respawnAt(0); if (window.UI) window.UI.siegeEvent('towhome', { voidzone: !!rt._towVoid }); rt._towVoid = false; }
       }
     }
     if (rt.superBossAlive && rt.boss && !rt.boss.dying && Math.random() < 0.6) {
@@ -1373,6 +1396,8 @@
     ctx.scale(z, z);
     ctx.translate(-rt.cam.x + shx, -rt.cam.y + shy);
     R.drawArena(ctx, rt.worldW, rt.worldH, rt.time, state.currentDungeon);
+    // VOID ZONE — black-hole arena dressing under everything else
+    if (state.currentSystem) { try { drawVoidArena(ctx); } catch (e) {} }
     // PRISM MINING — ore field + miners, drawn in world space just above the
     // arena floor (enemies & player render on top).
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.render) { try { window.PRISM.render(ctx, rt.time, rt); } catch (e) {} }
@@ -1626,6 +1651,8 @@
 
   function drawPortrait() {
     if (!rt.portraitCtx) return;
+    // hero canvas is retired (display:none) — skip the draw entirely
+    if (rt.portraitCanvas && !rt.portraitCanvas.offsetWidth) return;
     // RESYNC — the hero panel resizes with layout; a stale canvas size makes
     // CSS stretch the bitmap and cut ships off at the frame edges
     const pr = rt.portraitCanvas;
@@ -1638,37 +1665,28 @@
     const ctx = rt.portraitCtx, cw = rt.portW, ch = rt.portH;
     ctx.clearRect(0, 0, cw, ch);
     const esc = fleetShips();
-    const cy = ch * 0.55;
-    // escorts flank SYMMETRICALLY for the actual count (odd counts center the
-    // extra ship high behind the flagship) — all positions stay within ±0.36·cw
-    // so nothing clips the frame edges
-    const FORMS = {
-      1: [[0.34, 0.10]],
-      2: [[-0.34, 0.10], [0.34, 0.10]],
-      3: [[-0.36, 0.10], [0.36, 0.10], [0, -0.18]],
-      4: [[-0.36, 0.10], [0.36, 0.10], [-0.20, -0.17], [0.20, -0.17]],
-    };
-    const fx = FORMS[Math.min(4, esc.length)] || [];
-    const sscale = (k) => (R.shipScaleOf ? R.shipScaleOf(k) : 1);   // cancel the colossal battle scale in this fit-to-frame preview
+    // HERO FORMATION (Jul 2026): one clean ROW — flagship first, escorts after,
+    // evenly spaced in the SAME ORDER as the fleet cards below. Never stacks.
+    const n = 1 + esc.length;
+    const cy = ch * 0.52;
+    const margin = cw * (n > 3 ? 0.05 : 0.1);
+    const slotW = (cw - margin * 2) / n;
+    const xAt = (i) => margin + slotW * (i + 0.5);
+    const sscale = (k) => (R.shipScaleOf ? R.shipScaleOf(k) : 1);
+    const ptier = (R.hullTier ? R.hullTier(state.level) : 5);
+    const targetF = Math.min(slotW * 0.92, ch * 0.62);
+    const targetE = Math.min(slotW * 0.78, ch * 0.42);
     esc.forEach((sh, i) => {
-      if (!fx[i] || !R.drawEscort) return;
+      if (!R.drawEscort) return;
       ctx.save();
-      // keep escorts fully inside the frame whatever its size
-      const pad = 42;
-      ctx.translate(Math.max(pad, Math.min(cw - pad, cw / 2 + fx[i][0] * cw)),
-                    Math.max(pad, Math.min(ch - pad, cy + fx[i][1] * ch)));
-      const es = (1.55 * Math.min(1, ch / 190)) / sscale(sh.key);
+      ctx.translate(xAt(i + 1), cy + Math.sin(rt.time * 2 + i) * 3);
+      const es = targetE / (38 * sscale(sh.key));
       ctx.scale(es, es);
       R.drawEscort(ctx, sh.key, 0, 0, rt.time, 0);
       ctx.restore();
     });
-    // flagship scales down when escorts fly so everything fits the frame
-    let flagScale = esc.length >= 3 ? 2.1 : esc.length ? 2.4 : 2.9;
-    // clamp the hull inside the frame — big sprites at high tiers overflow
-    const ptier = (R.hullTier ? R.hullTier(state.level) : 5);
-    const estH = (42 + ptier * 3) * flagScale;
-    if (estH > ch * 0.66) flagScale *= (ch * 0.66) / estH;
-    R.drawArcher(ctx, cw / 2, cy, flagScale / sscale(state.ship), { facing: -0.35, bob: rt.time * 2.4, hurtFlash: 0, muzzle: 0, recoil: 0 }, state.equipped, rt.time);
+    const flagScale = targetF / (42 + ptier * 3);
+    R.drawArcher(ctx, xAt(0), cy, flagScale / sscale(state.ship), { facing: -0.35, bob: rt.time * 2.4, hurtFlash: 0, muzzle: 0, recoil: 0 }, state.equipped, rt.time);
   }
 
   // --------------------------------------------------------------------------
@@ -2556,7 +2574,77 @@
   // GALAXY MAP — warp between systems, capture via 10-wave sieges, own systems
   // for per-hour resources. Difficulty scales with ring distance from home.
   // ==========================================================================
-  function sysAt(k) { return GX.tileAt(k); }
+  // ==========================================================================
+  // VOID ZONE — 10 apex turf-war tiles beyond the rim (Command ▸ Void Zone).
+  // Same conquest pipeline as My Galaxy (sysAt/warp/claims/clone sieges):
+  // STRICT level gates (25/50/100/200/300/400/500) · 1000× entry toll · 100× yield
+  // (rate rides the global ×25 galaxy multiplier) · capturing GRANTS the fixed
+  // citadel (no builds/upgrades) · 24h attack shield as everywhere.
+  // ==========================================================================
+  const VOID_TILES = (() => {
+    const req = [25, 50, 100, 200, 300, 400, 500];
+    const nm = ['Umbral Gate', 'Null Bastion', 'Hollow Throne', 'Wraith Spire', 'Abyss Crown', 'Night Forge', 'The Singularity'];
+    const res = ['fuel', 'iron', 'plasma'];
+    const out = {};
+    req.forEach((rq, i) => {
+      out['VZ' + (i + 1)] = { id: 'VZ' + (i + 1), void: true, vtier: rq, ring: 24, level: rq, diff: Math.round(rq * 1.5),   // 1.5× difficulty: void garrisons fight above the gate level
+        name: nm[i], resource: res[i % 3], rate: 40000 * rq, home: false, boss: false, citadel: false, deep: false };   // ×25 global yield → Lv100 ≈ 100M/hr per resource
+    });
+    return out;
+  })();
+  const VOID_ENTRY = (t) => { const m = 1000 * (t.vtier / 200); return { fuel: Math.ceil(40 * m), iron: Math.ceil(25 * m), plasma: Math.ceil(15 * m) }; };
+  // VOID ZONE battle dressing — attacking mobs wear REAL hull sprites, and the
+  // tile's citadel looms at world center (pure set dressing, not an entity).
+  const VOID_MOB_KEYS = ['interceptor', 'cruiser', 'heavycruiser', 'destroyer', 'battleship', 'dreadnought', 'carrier'];
+  const _vzMobImgs = {};
+  function voidSkin(e) {
+    if (!state.currentSystem) return;
+    const t = sysAt(state.currentSystem); if (!t || !t.void) return;
+    const k = VOID_MOB_KEYS[(Math.random() * VOID_MOB_KEYS.length) | 0];
+    if (!_vzMobImgs[k]) { _vzMobImgs[k] = new Image(); _vzMobImgs[k].src = 'ships/ship-' + k + '.png'; }
+    e.spriteImg = _vzMobImgs[k]; e.tint = '#b04dff';
+  }
+  const VOID_ART = { 25: 'void-cit-1', 50: 'void-cit-1', 100: 'void-cit-2', 200: 'void-cit-2', 300: 'void-cit-3', 400: 'void-cit-3', 500: 'void-cit-4' };
+  let _vzArenaImg = null;
+  function drawVoidArena(ctx) {
+    const t = state.currentSystem ? sysAt(state.currentSystem) : null; if (!t || !t.void) return;
+    const art = VOID_ART[t.vtier] || 'void-cit-4';
+    if (!_vzArenaImg || _vzArenaImg._art !== art) { _vzArenaImg = new Image(); _vzArenaImg.src = 'ships/' + art + '.png'; _vzArenaImg._art = art; }
+    const cx = rt.worldW / 2, cy = rt.worldH * 0.36;
+    // deep-space veil + drifting stars
+    ctx.fillStyle = 'rgba(5,3,14,0.45)';
+    ctx.fillRect(-60, -60, rt.worldW + 120, rt.worldH + 120);
+    ctx.fillStyle = 'rgba(210,220,255,0.55)';
+    for (let i = 0; i < 42; i++) {
+      const sx = (i * 977 + rt.time * 6 * ((i % 3) + 1)) % rt.worldW, sy = (i * 613) % rt.worldH;
+      ctx.globalAlpha = 0.15 + 0.45 * Math.abs(Math.sin(i * 3.1 + rt.time * 0.5));
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    // event horizon + accretion glow
+    const g1 = ctx.createRadialGradient(cx, cy, 36, cx, cy, 430);
+    g1.addColorStop(0, 'rgba(0,0,0,0.88)');
+    g1.addColorStop(0.34, 'rgba(80,30,140,0.30)');
+    g1.addColorStop(0.7, 'rgba(176,77,255,0.12)');
+    g1.addColorStop(1, 'rgba(176,77,255,0)');
+    ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(cx, cy, 430, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      const a0 = rt.time * 0.35 + i * 2.1;
+      ctx.strokeStyle = 'rgba(176,77,255,' + (0.16 + i * 0.05).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(cx, cy, 150 + i * 62, a0, a0 + 2.1); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    // the tile's citadel looms at the heart of the fight — art only
+    if (_vzArenaImg.complete && _vzArenaImg.naturalWidth) {
+      const h = 300, w = h * (_vzArenaImg.naturalWidth / _vzArenaImg.naturalHeight);
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(_vzArenaImg, cx - w / 2, cy - h / 2 + Math.sin(rt.time * 0.8) * 6, w, h);
+      ctx.globalAlpha = 1;
+    }
+  }
+  function sysAt(k) { return VOID_TILES[k] || GX.tileAt(k); }
   function isOwned(k) { return !!state.ownedSystems[k]; }
   const turfOn = () => !!(window.TERRITORY && window.TERRITORY.enabled());
   // GLOBAL NPC layer — when the shared turf war is live, simulated rivals are a
@@ -2725,7 +2813,7 @@
       else if (state.ownedSystems[id]) {
         delete state.ownedSystems[id];
         // lost while away — file a war report with the conqueror's fleet intel
-        try { if (window.MAIL) window.MAIL.tileLost((GX.tileAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]) }); } catch (e) {}
+        try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]) }); } catch (e) {}   // sysAt: void tiles mail with real names too
         if (state.citadels && state.citadels[id]) delete state.citadels[id];
       }
       if (state.rivalTiles) delete state.rivalTiles[id]; // a real owner overrides any simulated one
@@ -2740,7 +2828,7 @@
       if (myUid && ev.ownerId === myUid) { state.ownedSystems[ev.tileId] = true; }
       else if (state.ownedSystems[ev.tileId]) {
         delete state.ownedSystems[ev.tileId];
-        const tn = (GX.tileAt(ev.tileId) || {}).name || ev.tileId;
+        const tn = (sysAt(ev.tileId) || {}).name || ev.tileId;   // sysAt: void tiles included
         pushFeed(ev.ownerName + ' captured your ' + tn, true);
         try { if (window.MAIL) window.MAIL.tileLost(tn, rt.realTiles[ev.tileId], { razed: !!(state.citadels && state.citadels[ev.tileId]) }); } catch (e) {}
         if (state.citadels && state.citadels[ev.tileId]) delete state.citadels[ev.tileId];
@@ -2778,6 +2866,11 @@
   // Effective entry cost for a tile (your own territory warps at half price).
   function entryCostFor(k) {
     const t = sysAt(k); if (!t || t.home) return null;
+    if (t.void) {   // VOID ZONE — 1000× toll (your own tile warps half price, as everywhere)
+      const base = VOID_ENTRY(t), vdisc = isOwned(k) ? 0.5 : 1, veff = {};
+      for (const ck in base) veff[ck] = Math.ceil(base[ck] * vdisc);
+      return veff;
+    }
     const c = GX.entryCost(t.ring, t); if (!c) return null;
     const disc = isOwned(k) ? 0.5 : 1;
     const eff = {};
@@ -2789,6 +2882,7 @@
     if (isAllyTile(k)) return { ok: false, reason: 'ally' };   // same alliance — never attackable
     if (tile.home) return { ok: false, reason: 'home' };       // the Home Citadel is neutral
     const owned = isOwned(k);
+    if (tile.void && !owned && state.level < tile.vtier) return { ok: false, reason: 'locked' };   // VOID: strict gates, no +10 grace
     if (!owned && tile.level > state.level + 10) return { ok: false, reason: 'locked' };
     // contest cooldown blocks EVERY non-owned warp-in (rival, neutral, citadel)
     if (!owned && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
@@ -2845,10 +2939,29 @@
       // waves, then defeat the clone to take the zone.
       rt.siege = null;
       rt.waves = { active: true, total: 6, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.1, super: false, clone: true, cloneScore: (rivalDefense(k) || {}).score, cloneDef: rivalDefense(k), plainTake: true, claimTile: k };
+    } else if (tile.void) {
+      // NEUTRAL VOID SPIRE — the VOID WARDEN garrisons it: escort waves, then a
+      // synthetic warden fleet as the FINAL WAVE, tuned to the tile's (5×)
+      // difficulty. Player-held void tiles use the owner's REAL clone fleet
+      // via the rival paths above — same as My Galaxy.
+      rt.siege = null;
+      const vpool = ['battleship', 'dreadnought', 'carrier', 'supercarrier', 'titan', 'mothership'];
+      const wardenShip = vpool[Math.min(vpool.length - 1, Math.floor(tile.vtier / 100))];
+      const wardenScore = Math.round(Math.max(1, score()) * (1.2 + tile.vtier / 250));
+      const wsnap = { ship: wardenShip, nm: 'Void Warden', lvl: tile.vtier, score: wardenScore, hp: 0, dps: 0, esc: 2, escKeys: ['destroyer', 'carrier'] };
+      rt.waves = { active: true, total: 6, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.1, super: false,
+                   clone: true, cloneScore: wardenScore, cloneDef: { name: 'THE VOID WARDEN', real: false, score: wardenScore, snap: wsnap }, plainTake: true, claimTile: k };
     } else {
       // neutral → capture siege (Boss Tiles end on a boss wave)
       rt.siege = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.0, boss: tile.boss };
       rt.waves = null;
+    }
+    // VOID ZONE — marathon sieges: wave count = HALF the tile's level req
+    // (Lv 500 → 250 waves, Lv 25 → 13). Every capture path; not your own sparring.
+    if (tile.void && !owned) {
+      const vw = Math.max(6, Math.ceil(tile.vtier / 2));
+      if (rt.waves && rt.waves.active) rt.waves.total = vw;
+      if (rt.siege && rt.siege.active) rt.siege.total = vw;
     }
     rt.awaitingRespawn = false;
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; rt.archer.hp = (rt.stats ? rt.stats.maxHp : 100); rt.archer.invuln = 3; }
@@ -2872,6 +2985,7 @@
       y = Math.max(30, Math.min(rt.worldH - 30, rt.archer.y + Math.sin(a) * rad));
     }
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
+    voidSkin(e);
     if (cit) {
       // garrison hulks: walls, not bombs — brutal HP, feeble guns
       e.maxHp *= 4.5; e.hp = e.maxHp;
@@ -2929,7 +3043,7 @@
     burst(e.x, e.y, '#fff3d0', 90, { speed: 430, life: 1.2, glow: true });
     burst(e.x, e.y, '#ffd24d', 60, { speed: 260, life: 1.0, glow: true });
     burst(e.x, e.y, '#ff9a50', 40, { speed: 150, life: 0.9, glow: true });
-    rt.shake = 14; rt.novaT = 0.6;
+    rt.shake = 9; rt.novaT = 0.6;
     // loot shower — better than the zone average, nothing absurd: +2 rarity
     // tiers over a 4×-quality roll, dropped in a ring around the PLAYER so the
     // magnet vacuums every piece before the tow home.
@@ -2954,9 +3068,10 @@
       if (rt.waves.playerCit) {
         captureCitadel(rt.waves.claimTile);      // rival's fortress razed → the tile flips to you
       } else {
-        razeCitadelTile(rt.waves.claimTile);     // the razed fortress becomes a plain, buildable tile
-        rt.razingClaim = true;                   // you razed it — keep the tile even if it was protected
-        captureSystem();                         // the razed citadel becomes YOURS
+        // NPC CITADEL — TAKEN INTACT (Jul 2026): no razing. The fortress, its
+        // output and the tile all flip to you; these tiles can't be built on.
+        rt.razingClaim = true;                   // conquest earned — keep the tile even if it was protected
+        captureSystem();                         // the Void Citadel becomes YOURS, intact
       }
     } else {
       if (!state.citadelCd) state.citadelCd = {};
@@ -3056,6 +3171,8 @@
     const razing = !!rt.razingClaim; rt.razingClaim = false;
     const fromRival = rivalOf(k);
     state.ownedSystems[k] = true;
+    // VOID ZONE — the tile's fixed citadel comes WITH the conquest (no builds, no upgrades)
+    if (tile.void) { if (!state.citadels) state.citadels = {}; if (!state.citadels[k]) state.citadels[k] = { score: Math.round(score() * citadelDefenseMult(3)), builtAt: Date.now(), lv: 1, void: true }; }
     // your fresh capture is attack-shielded for 24 h
     if (!state.tileCd) state.tileCd = {};
     state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + 24 * 3600 * 1000);
@@ -3066,7 +3183,7 @@
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, (tile.void || tile.citadel) ? { citadel: true, fleetScore: Math.round(score()), force: razing, defense: defenseSnapshot() } : razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
           rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0, defense: res.row.defense || null };
@@ -3074,6 +3191,7 @@
           // RACE LOST — another operator sealed the claim first (never for a
           // citadel you just razed — that tile is yours by conquest)
           delete state.ownedSystems[k];
+          if (state.citadels && state.citadels[k]) delete state.citadels[k];   // drop any just-granted citadel too — no ghost fortress on a lost race
           pushFeed('Beaten to ' + tile.name + ' — another operator sealed the claim first', true);
           try { if (window.MAIL) window.MAIL.raceLost(tile.name, (rt.realTiles[k] || {}).ownerName); } catch (e) {}
           if (window.UI) window.UI.unlockToast('⚔ Race lost — ' + tile.name + ' was claimed seconds before you');
@@ -3091,6 +3209,7 @@
     rt.waves = null;
     rt.nodes = [];
     rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9;
+    rt._towVoid = !!tile.void;   // route the post-capture tow back to the right screen
     rt.towT = 3.0;
     burst(rt.archer.x, rt.archer.y, '#5bc06b', 40, { speed: 240, life: 1.0, glow: true });
     if (window.UI) { window.UI.siegeEvent('captured', { sys: tile, fromRival: fromRival, full: false }); window.UI.refreshAll(); }
@@ -3146,8 +3265,8 @@
   function citadelDefenseMult(lv) { return 1 + 0.25 * (Math.max(1, lv) - 1); }
   function citadelBuildCost(id) {
     const t = sysAt(id); if (!t) return null;
-    // ~10 days of THIS tile's production — proportional, never astronomical.
-    const HRS = 10 * 24;
+    // ~100 days of THIS tile's production (Jul 2026: ×10 economy pass) — proportional, never astronomical.
+    const HRS = 100 * 24;
     const rate = Math.max(20, (t.rate || 20) * (t.deep ? GX.DEEP_MULT.resource : 1));
     const base = Math.round(rate * HRS);
     const main = t.resource || 'fuel';
@@ -3158,11 +3277,12 @@
   }
   function canBuildCitadel(id) {
     const t = sysAt(id);
-    return !!(t && !t.home && isOwned(id) && !hasMyCitadel(id) && citadelCount() < citadelCap());
+    return !!(t && !t.home && !t.void && !t.citadel && isOwned(id) && !hasMyCitadel(id) && citadelCount() < citadelCap());
   }
   // RANK-UP cost: upgrading rank L → L+1 costs the tile's build cost × L,
   // so each rank is a real investment (1×, 2×, 3×, 4× the build price).
   function citadelUpgradeCost(id) {
+    const tv = sysAt(id); if (tv && tv.void) return null;   // void citadels are FIXED — no upgrades
     const lv = citadelLevel(id);
     if (!lv || lv >= CITADEL_LV_MAX) return null;
     const bc = citadelBuildCost(id); if (!bc) return null;
@@ -3317,15 +3437,22 @@
     if (window.UI) window.UI.bossEvent('super');
     return b;
   }
-  // Won a citadel siege — the enemy citadel is DESTROYED (not taken over). You
-  // win the now-plain tile and can build your OWN citadel on it afterward.
+  // Won a citadel siege vs a PLAYER-built citadel — you TAKE their fortress
+  // (Jul 2026): it is not destroyed. The captured citadel drops ONE rank
+  // (never below Rank 1) and now stands under your flag.
   function captureCitadel(id) {
+    const prevLv = Math.max(1, ((state.rivalCitadels && state.rivalCitadels[id] && state.rivalCitadels[id].lv) ||
+      (rt.realTiles && rt.realTiles[id] && rt.realTiles[id].citadelLv) || 2) - 1);   // unknown rank → captured at Rank 1
     if (state.rivalCitadels) delete state.rivalCitadels[id];
-    razeCitadelTile(id);                              // strip any natural-citadel siege status → plain tile
-    rt.razingClaim = true;                            // you razed it — the tile is yours, no take-back
-    captureSystem();                                  // claims the (citadel-less) tile + tows home
-    // clear the shared citadel flag so everyone sees the fortress is gone
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() }); } catch (e) {} }
+    razeCitadelTile(id);                              // strip any natural-citadel siege status (no-op on normal tiles)
+    rt.razingClaim = true;                            // conquest earned — the tile is yours, no take-back
+    captureSystem();                                  // claims the tile + tows home
+    // the fortress changes hands, downgraded one rank
+    if (!state.citadels) state.citadels = {};
+    state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(prevLv)), builtAt: Date.now(), lv: prevLv, captured: true };
+    pushFeed('You seized the citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' — now Rank ' + prevLv + ' under your flag');
+    // publish: the fortress still stands — under YOUR flag now
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: Math.round(score() * citadelDefenseMult(prevLv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
     save();
   }
   // Permanently demote a NATURAL citadel siege tile to a plain, buildable tile
@@ -3350,9 +3477,14 @@
     const r = { fuel: 0, iron: 0, plasma: 0 };
     Object.keys(state.ownedSystems).forEach((k) => {
       const t = sysAt(k); if (!t || !t.rate) return;
+      if (t.void) {   // VOID ZONE — every tile pays ALL FOUR currencies hourly
+        const vr = t.rate * 25;
+        r.fuel += vr; r.iron += vr; r.plasma += vr; r.gold = (r.gold || 0) + vr * 1000;
+        return;
+      }
       // citadel tiles already carry their 100× in t.rate; deep space adds ×25
       let rate = t.rate * (t.deep ? GX.DEEP_MULT.resource : 1);
-      if (state.citadels && state.citadels[k]) rate *= CITADEL_MULT * (state.citadels[k].lv || 1);   // PLAYER CITADEL — 10× per rank
+      if (!t.void && state.citadels && state.citadels[k]) rate *= CITADEL_MULT * (state.citadels[k].lv || 1);   // PLAYER CITADEL — 10× per rank (VOID premium is baked into t.rate)
       rate *= 25;   // GALAXY YIELD ×25 — holding territory is the resource engine
       r[t.resource || 'fuel'] += rate;
     });
@@ -3365,8 +3497,9 @@
     state.lastResTick = now;
     if (hrs <= 0) return null;
     const rates = resourceRates();
-    const gained = { fuel: rates.fuel * hrs, iron: rates.iron * hrs, plasma: rates.plasma * hrs };
+    const gained = { fuel: rates.fuel * hrs, iron: rates.iron * hrs, plasma: rates.plasma * hrs, gold: (rates.gold || 0) * hrs };
     state.resources.fuel += gained.fuel; state.resources.iron += gained.iron; state.resources.plasma += gained.plasma;
+    if (gained.gold) state.gold = (state.gold || 0) + gained.gold;   // VOID tiles pay gold too
     return gained;
   }
   function setAuto(v) { state.auto = !!v; rt.joy.x = rt.joy.y = 0; save(); }
@@ -3699,9 +3832,17 @@
   // are allowed to grow without a display ceiling.
   function formatNumRaw(n) {
     if (n < 1000) return Math.floor(n).toString();
-    const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc']; let i = 0, v = n;
+    // extended ladder (…Dc → UDc → … → Vg) so huge values never print raw digits
+    const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc', 'Vg'];
+    let i = 0, v = n;
     while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
-    return (v >= 100 ? v.toFixed(0) : v.toFixed(2)) + u[i];
+    if (v >= 10 || i === u.length - 1) {
+      // MINIMAL: two+ digit values show no decimals ("74No", "999M")
+      let r = Math.round(v);
+      if (r >= 1000 && i < u.length - 1) { r = 1; i++; }   // 999.6M → 1B, never "1000M"
+      return r + u[i];
+    }
+    return (Math.round(v * 100) / 100) + u[i];
   }
   function formatTime(sec) {
     sec = Math.floor(sec); const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;

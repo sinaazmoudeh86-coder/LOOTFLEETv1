@@ -84,8 +84,15 @@
       (escorts.length ? '<div class="ml-f-esc">' + escorts.map((k) => '<img src="ships/ship-' + k + '.png" alt="" onerror="this.remove()">').join('') + '</div>' : '') +
       '</div>';
   }
+  // 🏆 claimable prize mails — the winnings are collected RIGHT HERE
+  function prizeBtn(m) {
+    const meta = m.meta;
+    if (!meta || meta.kind !== 'prize' || !meta.prize) return '';
+    if (meta.claimed) return '<div class="ml-claimed">✓ Winnings collected</div>';
+    return '<button class="ml-claim" data-claim-mail="' + m.id + '">🏆 CLAIM WINNINGS</button>';
+  }
   function ctaBtn(meta) {
-    if (!meta || !meta.cta) return '';
+    if (!meta || !meta.cta || meta.prize) return '';
     return '<button class="ml-cta" data-cta-screen="' + esc(meta.cta.screen) + '">' + esc(meta.cta.label) + '</button>';
   }
   const ago = (t) => { const s = (Date.now() - t) / 1000; if (s < 90) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
@@ -95,8 +102,8 @@
     const sub = $('mail-sub'); if (sub) sub.textContent = b.list.length ? (n ? n + ' unread' : 'All read') : '';
     let html = '';
     html += '<div class="ml-bar"><span class="ml-count">' + b.list.length + ' message' + (b.list.length === 1 ? '' : 's') + '</span>' +
-      '<button class="sc-btn sm ghost" id="ml-readall" ' + (n ? '' : 'disabled') + '>Mark all read</button>' +
-      '<button class="sc-btn sm ghost" id="ml-clear" ' + (b.list.length ? '' : 'disabled') + '>Clear read</button></div>';
+      '<button class="sc-btn sm ghost ml-act" id="ml-readall" ' + (n ? '' : 'disabled') + '>✓ Mark all read</button>' +
+      '<button class="sc-btn sm ghost ml-act" id="ml-clear" ' + (b.list.length ? '' : 'disabled') + '>✕ Clear read</button></div>';
     if (!b.list.length) {
       html += '<div class="sc-empty">No transmissions yet. War reports from My Galaxy land here — captures, losses, and who hit you (with their fleet intel).</div>';
     } else {
@@ -106,7 +113,7 @@
           '<div class="ml-r-head"><span class="ml-ic">' + m.ic + '</span>' +
           '<div class="ml-r-m"><b>' + m.title + '</b><span>' + ago(m.t) + '</span></div>' +
           (m.read ? '' : '<i class="ml-dot"></i>') + '<span class="ml-chev">' + (open ? '▾' : '▸') + '</span></div>' +
-          (open ? '<div class="ml-r-body"><p>' + m.body + '</p>' + fleetCard(m.meta) + ctaBtn(m.meta) + '</div>' : '') +
+          (open ? '<div class="ml-r-body"><p>' + m.body + '</p>' + fleetCard(m.meta) + prizeBtn(m) + ctaBtn(m.meta) + '</div>' : '') +
           '</div>';
       }).join('');
     }
@@ -116,6 +123,18 @@
       _openId = _openId === id ? null : id;
       if (m && !m.read) { m.read = true; G().save(); badge(); }
       render();
+    }));
+    body.querySelectorAll('[data-claim-mail]').forEach((btn) => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const mm = box().list.find((x) => x.id === +btn.dataset.claimMail);
+      if (!mm || !mm.meta || !mm.meta.prize || mm.meta.claimed) return;
+      let txt = null;
+      try { txt = (window.SDREAD && window.SDREAD.payPrize) ? window.SDREAD.payPrize(mm.meta.prize) : null; } catch (e2) {}
+      if (txt == null) { if (window.SOCIAL) SOCIAL.toast('Claim failed — refresh the game', '#e23b4e'); return; }
+      mm.meta.claimed = true; mm.read = true; G().save();
+      if (window.SOCIAL) SOCIAL.toast('🏆 Claimed: ' + txt, '#ffd24d');
+      if (window.UI) { try { window.UI.refreshAll(); } catch (e3) {} }
+      render(); badge();
     }));
     body.querySelectorAll('[data-cta-screen]').forEach((b) => b.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -169,6 +188,21 @@
   .ml-cta{ display:block; width:100%; margin-top:10px; font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.06em; color:#0b1220; background:linear-gradient(180deg,#ffd24d,#e8960f); border:none; border-radius:10px; padding:11px; cursor:pointer; box-shadow:0 4px 14px -6px rgba(242,178,75,.7); }
   .ml-cta:active{ transform:scale(.97); }
   .store-cat.has-n::after{ content:attr(data-n); position:absolute; top:2px; right:calc(50% - 22px); min-width:14px; height:14px; padding:0 3px; border-radius:8px; background:#ff5a7a; color:#fff; font-size:9px; font-weight:800; line-height:14px; box-shadow:0 0 6px rgba(255,90,122,.6); }
-  `;
+    /* mail action buttons — blue glow, unmistakably tappable */
+  .ml-act{ color:#8fc4ff !important; border:1px solid rgba(95,168,255,.65) !important; background:linear-gradient(180deg,rgba(47,109,216,.30),rgba(21,48,94,.34)) !important;
+    box-shadow:0 0 12px -2px rgba(95,168,255,.65), inset 0 1px 0 rgba(140,190,255,.25) !important;
+    font-weight:800 !important; letter-spacing:.05em; text-shadow:0 0 8px rgba(95,168,255,.55);
+    animation:mlActGlow 2.4s ease-in-out infinite; }
+  .ml-act:active{ transform:scale(.95); }
+  .ml-act:disabled{ animation:none; opacity:.4; box-shadow:none !important; text-shadow:none; }
+  @keyframes mlActGlow{ 0%,100%{ box-shadow:0 0 10px -3px rgba(95,168,255,.55), inset 0 1px 0 rgba(140,190,255,.25); } 50%{ box-shadow:0 0 16px -1px rgba(95,168,255,.9), inset 0 1px 0 rgba(140,190,255,.35); } }
+  @media (prefers-reduced-motion:reduce){ .ml-act{ animation:none; } }
+  .ml-claim{ display:block; width:100%; margin-top:9px; border:none; border-radius:10px; padding:12px; cursor:pointer;
+    font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.1em; color:#231302;
+    background:linear-gradient(180deg,#ffd24d,#e09a2d); box-shadow:0 0 14px -2px rgba(255,210,77,.8); animation:msnClaimPulse 1.8s ease-in-out infinite; }
+  .ml-claim:active{ transform:scale(.97); }
+  .ml-claimed{ margin-top:9px; text-align:center; font-family:'Orbitron',sans-serif; font-weight:800; font-size:10px; letter-spacing:.08em;
+    color:#7ce0a0; border:1px solid rgba(89,217,140,.5); border-radius:10px; padding:9px; }
+`;
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
 })();

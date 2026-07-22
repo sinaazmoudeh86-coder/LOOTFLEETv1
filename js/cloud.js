@@ -50,6 +50,7 @@
   // Function (service-role) to erase the auth user itself. Each step is
   // best-effort so a missing table/function never blocks the wipe.
   async function deleteAccountData(userId) {
+    try { await client.from('territory').delete().eq('owner_id', userId); } catch (e) {}   // release EVERY held tile — My Galaxy AND Void Zone
     try { await client.from('saves').delete().eq('user_id', userId); } catch (e) {}
     try { await client.from('leaderboard').delete().eq('user_id', userId); } catch (e) {}
     try { await client.from('wallets').delete().eq('user_id', userId); } catch (e) {}

@@ -251,14 +251,20 @@
     if (!s.bestDay || s.day >= dayIdx()) { return; }
     if (Date.UTC(1970, 0, 1) + s.day * 864e5 >= SEASON.end) return;          // season was over
     const rank = (s.lbRank && s.lbRank.day === s.day) ? s.lbRank.rank : rankFor(s.day, s.bestDay), t = tierFor(rank);
-    if (!s.claims) s.claims = [];
-    s.claims.push({ t: 'd', rank, name: t.name, coins: t.coins, lc: t.lc, made: Date.now() });
+    // WINNINGS GO TO MAIL (Jul 2026): the settlement letter carries the prize —
+    // you claim it right in the inbox. Falls back to the in-event claim stage
+    // only if the mail system is unavailable.
+    let mailed = false;
     try {
-      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: 'Daily event results — you ranked #' + rank,
-        body: 'Yesterday\u2019s <b>' + SEASON.label + '</b> daily board is settled: your best run ranked <b>#' + rank + '</b> (' + t.name + '). Prize staged: <b>' + tierTxt(t) + '</b>.',
-        meta: { kind: 'prize', cta: { label: '✦ Collect daily prize', screen: 'sdread' } } });
+      if (window.MAIL) {
+        window.MAIL.push({ ic: '🏆', title: 'Daily event results — you ranked #' + rank,
+          body: 'Yesterday\u2019s <b>' + SEASON.label + '</b> daily board is settled: your best run ranked <b>#' + rank + '</b> (' + t.name + ').<br>Your winnings — claim them right here: <b>' + tierTxt(t) + '</b>',
+          meta: { kind: 'prize', prize: { t: 'd', rank, coins: t.coins, lc: t.lc } } });
+        mailed = true;
+      }
     } catch (e) {}
-    s.pendingToast = '🏆 Server Dreadnaught — yesterday you placed #' + rank + '. Collect your rewards in the event.';
+    if (!mailed) { if (!s.claims) s.claims = []; s.claims.push({ t: 'd', rank, name: t.name, coins: t.coins, lc: t.lc, made: Date.now() }); }
+    s.pendingToast = '🏆 Server Dreadnaught — yesterday you placed #' + rank + '. Your winnings are waiting in your MAIL.';
   }
   // collect EVERYTHING staged — the one button that pays out daily + season prizes
   function claimAll() {
@@ -1079,7 +1085,23 @@
     const s = document.createElement('style'); s.id = 'sdread-css'; s.textContent = CSS; document.head.appendChild(s);
   }
 
-  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
+  // pay a mailed prize (coins/lc/gold/cores) — returns the receipt text
+  function payPrize(p) {
+    const s = sd(), g = G(); if (!p || !g || !g.state) return null;
+    if (p.coins && s) s.coins = (s.coins | 0) + p.coins;
+    if (p.lc) { if (g.addCredits) g.addCredits(p.lc); else g.state.credits = (g.state.credits || 0) + p.lc; }
+    if (p.gold) g.state.gold = (g.state.gold || 0) + p.gold;
+    if (p.cores) g.state.dreadCores = (g.state.dreadCores || 0) + p.cores;
+    try { g.save(); } catch (e) {}
+    try { updateHud(); } catch (e) {}
+    const bits = [];
+    if (p.coins) bits.push('✦ ' + p.coins.toLocaleString() + ' Event Coins');
+    if (p.lc) bits.push('◈ ' + p.lc + ' LootCoins');
+    if (p.gold) bits.push('$ ' + p.gold.toLocaleString());
+    if (p.cores) bits.push('◇ ' + p.cores + ' Cores');
+    return bits.join(' · ') || 'collected';
+  }
+  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
 
   // =========================================================================
   // CSS

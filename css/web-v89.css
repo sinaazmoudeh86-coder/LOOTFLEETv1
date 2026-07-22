@@ -1,6 +1,8 @@
-/* ===== SHIPS tab — compact thumbnail grid (owned = blue, locked = grey) ===== */
-.ship-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:4px;}
-.ship-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;
+/* ===== SHIPS tab — compact thumbnail grid (owned = blue, locked = grey) =====
+   minmax(0,1fr) + min-width:0: long nowrap names must ellipsize, never widen
+   the tracks past the screen (the "cut-off third column" bug). */
+.ship-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:4px;}
+.ship-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;
   padding:9px 7px 8px;border-radius:13px;cursor:pointer;text-align:center;
   border:1px solid #2a3650;background:linear-gradient(180deg,#141c2a,#0f1622);
   transition:transform .12s cubic-bezier(.22,1.2,.36,1),box-shadow .18s,border-color .18s,background .18s;
@@ -328,16 +330,19 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
   background:linear-gradient(180deg,#141d2c,#10172333);
 }
 .fp-locked b{ color:var(--gold); }
-.fp-slots{ display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+/* Hangar hero canvas RETIRED (Jul 2026) — the fleet cards below are the one
+   fleet display. DOM stays (scripts anchor to it), it just never renders. */
+#char-portrait{ display:none !important; }
+.fp-slots{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
 .fp-slot{
-  position:relative; display:flex; flex-direction:column; align-items:center; gap:2px;
-  padding:8px 3px 7px; border-radius:10px; border:1px solid var(--line-2); min-width:0;
+  position:relative; display:flex; flex-direction:column; align-items:center; gap:5px;
+  padding:14px 4px 11px; border-radius:13px; border:1px solid var(--line-2); min-width:0; min-height:118px; justify-content:center;
   background:linear-gradient(180deg,#161f2d,#10172333);
 }
-.fp-slot img{ width:34px; height:34px; object-fit:contain; filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
-.fp-slot .fps-add{ width:34px; height:34px; display:grid; place-items:center; font-size:17px; color:var(--muted-2); }
-.fps-n{ font-size:8.5px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-.fps-tag{ font-size:7.5px; font-weight:800; letter-spacing:.05em; color:var(--muted-2); }
+.fp-slot img{ width:74%; max-width:68px; aspect-ratio:1; height:auto; object-fit:contain; filter:drop-shadow(0 4px 9px rgba(0,0,0,.55)); }
+.fp-slot .fps-add{ width:56px; height:56px; display:grid; place-items:center; font-size:24px; color:var(--muted-2); }
+.fps-n{ font-size:11px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.fps-tag{ font-size:9px; font-weight:800; letter-spacing:.05em; color:var(--muted-2); }
 .fp-slot.flag{ border-color:rgba(242,178,75,.5); background:linear-gradient(180deg,rgba(242,178,75,.1),#10172333); }
 .fp-slot.flag .fps-tag.star{ color:var(--gold); }
 .fp-slot.filled{ border-color:rgba(124,224,160,.45); cursor:pointer; }
@@ -957,6 +962,13 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 
 
 
+
+/* ACTIVE flag: always fully inside the tile, above every glow layer */
+.ship-tile{ overflow:hidden; }
+.ship-tile .st-flag{ top:6px; z-index:5; }
+.ship-tile.st-sina .st-flag{ left:12px; right:auto; transform:none; top:10px; }
+.ship-tile.st-sina::before,.ship-tile.st-sina::after{ z-index:0; }
+.ship-tile.st-sina .sts-art,.ship-tile.st-sina .st-name,.ship-tile.st-sina .st-cls,.ship-tile.st-sina .st-stats,.ship-tile.st-sina .st-badge{ position:relative; z-index:1; }
 
 /* bolt-down: predictable touch behavior across the app */
 #app, #app button, #app .nav-btn, #app .res-chip, #app .lc-cta{ touch-action:manipulation; }

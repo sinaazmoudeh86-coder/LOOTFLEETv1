@@ -143,3 +143,44 @@
 .ho-tag{ font-size:10px !important; }
 .sts-callout{ font-size:11px !important; }
 .st-cd{ font-size:11px !important; }
+
+/* ===== WALLET MINIMAL (Jul 2026) — top bar out of pills: glyph + value only,
+   tabular numbers, no boxes. Beats fx-aaa's !important pill skin. ===== */
+.wallet{ gap:13px !important; }
+.wallet .res-chip,.wallet .gold-chip{
+  background:none !important; border:none !important; box-shadow:none !important;
+  padding:0 !important; height:auto !important; border-radius:0 !important; gap:4px !important;
+  font-size:13.5px; font-weight:800; font-variant-numeric:tabular-nums; color:#e8eefb; letter-spacing:.01em;
+}
+.wallet .gold-chip .coin{ width:15px; height:15px; font-size:10px; }
+.wallet .res-chip .rg{ font-size:12px; }
+.wallet .res-chip .rr{ display:none !important; }   /* mining rates live on the Galaxy screen */
+.wallet .res-chip.chip-glow{ animation:none !important; box-shadow:none !important; }
+.wallet .lc-chip svg.lc{ width:15px; height:15px; filter:drop-shadow(0 0 5px rgba(242,169,60,.85)); }
+/* fit-guard stages inherit the same minimal look, just smaller */
+.wallet.tight,.wallet.tighter,.wallet.tightest{ gap:10px !important; }
+.wallet.tighter .res-chip,.wallet.tighter .gold-chip,
+.wallet.tightest .res-chip,.wallet.tightest .gold-chip{ font-size:12px; }
+.wallet.wrap{ row-gap:3px !important; }
+.wallet.wrap .res-chip,.wallet.wrap .gold-chip{ font-size:11.5px; height:auto !important; }
+
+/* ===== MOBILE BANNER GUARDS (Jul 2026) — every [art | text | action] flex
+   banner WRAPS on phones instead of squeezing its copy into a 1-word tower:
+   row 1 = art + action, row 2 = full-width text. ===== */
+@media (max-width:560px){
+  .vrd-hero{ flex-wrap:wrap; }
+  .vrd-art{ width:64px; height:48px; }
+  .vrd-count,.vrd-owned,.vrd-hero .vrd-accept{ margin-left:auto; }
+  .vrd-mid{ flex:1 1 100%; order:3; min-width:0; }
+  .sd-vm{ flex-wrap:wrap; }
+  .sd-vm img{ width:56px; }
+  .sd-vm-t{ flex:1 1 100%; order:3; min-width:0; }
+  .al-wallet{ flex-wrap:wrap; }
+  .al-w-hint{ flex:1 1 100%; text-align:left; margin-top:2px; }
+  .al-b-row{ flex-wrap:wrap; }
+  .al-b-row .sc-btn{ flex:1 1 100%; }
+  .hero-offer{ flex-wrap:wrap; }
+  .hero-offer .ho-ship{ order:-1; margin-left:auto; }
+  .hero-offer .ho-main{ flex:1 1 100%; min-width:0; }
+  .hero-offer.lcf.ho-sina .ho-ship{ order:0; margin:0 auto; }
+}

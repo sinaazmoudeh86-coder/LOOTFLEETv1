@@ -81,6 +81,7 @@
   }
 
   // ---- render -----------------------------------------------------------------
+  function setTab(t) { _tab = (t === 'alliance') ? 'alliance' : 'friends'; }
   function render() {
     const body = $('social-body'); if (!body) return;
     const sub = $('social-sub');
@@ -92,11 +93,9 @@
       const b = $('sc-signin'); if (b) b.addEventListener('click', () => { if (window.UI && UI.openAccountSheet) UI.openAccountSheet(); else location.reload(); });
       return;
     }
-    body.innerHTML =
-      '<div class="sc-tabs"><button class="sc-tab ' + (_tab === 'friends' ? 'on' : '') + '" data-sctab="friends">♥ Friends</button>' +
-      '<button class="sc-tab ' + (_tab === 'alliance' ? 'on' : '') + '" data-sctab="alliance">⬡ Alliance</button></div>' +
-      '<div id="sc-pane"></div>';
-    body.querySelectorAll('[data-sctab]').forEach((b) => b.addEventListener('click', () => { _tab = b.dataset.sctab; render(); }));
+    const tt = document.querySelector('#screen-social .scr-title');
+    if (tt) tt.textContent = _tab === 'alliance' ? '⬡ Alliance' : '♥ Friends';
+    body.innerHTML = '<div id="sc-pane"></div>';
     if (_tab === 'alliance') { if (window.ALLIANCE) window.ALLIANCE.renderInto($('sc-pane')); return; }
     renderFriends($('sc-pane'));
   }
@@ -239,20 +238,23 @@
   }
   setInterval(updateDot, 2500);
 
-  window.SOCIAL = { render, open, wallet, buyAC, refreshWallet, sheet, confirmSheet, toast, esc, rpc, signedIn, ensure, online };
+  window.SOCIAL = { render, open, setTab, wallet, buyAC, refreshWallet, sheet, confirmSheet, toast, esc, rpc, signedIn, ensure, online };
 
   const CSS = `
   /* ---- hangar tab bar: icon segments, full-width, comfortable targets ---- */
-  .store-cats{ display:flex; flex-wrap:nowrap!important; gap:4px; padding:5px!important; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; border-radius:14px!important; }
-  .store-cats::-webkit-scrollbar{ display:none; }
-  .store-cat{ flex:1 1 0!important; min-width:58px; white-space:nowrap; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-height:50px; padding:6px 4px!important; border-radius:10px; }
+  /* ---- hangar tab bar: equal grid — all 7 tabs always on screen, no scroll.
+     Wide: one row of 7 · phones: balanced 4+3 grid (two rows). ---- */
+  .store-cats{ display:grid; grid-template-columns:repeat(8,1fr); gap:4px; padding:5px!important; overflow:visible; border-radius:14px!important; }
+  .store-cat{ min-width:0!important; white-space:nowrap; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-height:50px; padding:6px 2px!important; border-radius:10px; }
+  .store-cat .ht-lbl{ max-width:100%; overflow:hidden; text-overflow:ellipsis; }
   .store-cat .ht-ic{ display:block; width:18px; height:18px; opacity:.75; }
   .store-cat .ht-ic svg{ display:block; width:100%; height:100%; }
   .store-cat .ht-lbl{ font-size:10px; font-weight:700; letter-spacing:.05em; line-height:1; }
   .store-cat.active .ht-ic{ opacity:1; filter:drop-shadow(0 0 6px rgba(242,178,75,.55)); }
   .store-cat.active::before{ content:''; position:absolute; left:18%; right:18%; bottom:3px; height:2px; border-radius:2px; background:linear-gradient(90deg,transparent,#f2b24b,transparent); }
   .store-cat.has-dot::after{ content:''; position:absolute; top:5px; right:calc(50% - 16px); width:7px; height:7px; border-radius:50%; background:#ff5a7a; box-shadow:0 0 6px #ff5a7a; }
-  @media (max-width:360px){ .store-cat .ht-lbl{ font-size:9px; } .store-cat{ min-width:52px; } }
+  @media (max-width:560px){ .store-cats{ grid-template-columns:repeat(4,1fr); } .store-cat{ min-height:46px; } }
+  @media (max-width:360px){ .store-cat .ht-lbl{ font-size:9px; } }
   /* ---- social screen ---- */
   #screen-social .scr-title{ color:#ff9fb8; }
   #social-body{ padding:12px; display:flex; flex-direction:column; }

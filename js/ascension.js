@@ -244,8 +244,8 @@
     return '<button class="asc-btn row' + (n > 1 ? ' alt' : '') + '" data-asc="' + key + ':' + md.id + ':' + n + '"' + (afford1 ? '' : ' disabled') + '>' +
       '<span class="ab-n">' + lbl + '</span>' +
       '<span class="ab-cost">' + (n > 1 ? '<i>≈</i>' : '') +
-        '<em' + (okG ? '' : ' class="short"') + '>● ' + fmt(g) + '</em>' +
-        '<em' + (okR ? '' : ' class="short"') + '>' + RES[md.res].glyph + ' ' + fmt(r) + '</em></span></button>';
+        '<em style="color:' + RES.gold.c + '"' + (okG ? '' : ' class="short"') + '>● ' + fmt(g) + '</em>' +
+        '<em style="color:' + RES[md.res].c + '"' + (okR ? '' : ' class="short"') + '>' + RES[md.res].glyph + ' ' + fmt(r) + '</em></span></button>';
   }
 
   function wire(body) {
@@ -454,7 +454,7 @@
   .asc-btn.row .ab-cost i{ font-style:normal; opacity:.7; }
   .asc-btn.row.alt{ color:#dfe9f5; background:color-mix(in srgb,var(--tc) 12%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 60%,transparent); box-shadow:none; }
   .asc-btn.row.alt .ab-n{ color:var(--tc); }
-  .asc-btn.row.alt .ab-cost{ color:#a9bccf; }
+  .asc-btn.row .ab-cost em{ text-shadow:0 1px 2px rgba(0,0,0,.45); }
   .asc-btn.row .ab-cost em.short{ opacity:.45; text-decoration:line-through; }
   .asc-btn:active{ transform:scale(.97); }
   .asc-btn:disabled{ opacity:.38; cursor:default; }

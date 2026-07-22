@@ -394,6 +394,12 @@
     host.querySelectorAll('[data-mono]').forEach((b) => b.addEventListener('click', async () => {
       const m = MONO_SHIPS.find((x) => x.key === b.dataset.mono); if (!m) return;
       const sh2 = window.CONFIG.SHIP_BY_KEY[m.key];
+      // HARD one-time guards — never charge for a hull already in the hangar,
+      // never skip the sequential chain (stale pane / double-tap safe)
+      const ow = G().state.ownedShips || {};
+      if (ow[m.key]) { S().toast('✓ Already in your hangar — switch to it in Hangar ▸ Ships', '#7ce0a0'); renderMain(host); return; }
+      const prev = MONO_SHIPS[MONO_SHIPS.indexOf(m) - 1];
+      if (prev && !ow[prev.key]) { S().toast('🔒 Build the ' + window.CONFIG.SHIP_BY_KEY[prev.key].name + ' first', '#e23b4e'); renderMain(host); return; }
       b.disabled = true; b.textContent = '⬡ …';
       try {
         await S().rpc('social_spend', { p_kind: 'ac', p_amount: m.cost });

@@ -44,11 +44,12 @@
     -webkit-font-smoothing:antialiased; line-height:1.5; overflow-x:hidden;
   }
   a{color:inherit;text-decoration:none;}
+  html,body{overflow-x:hidden;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 22px;}
   .amber{color:var(--gold);}
 
   /* ambient starfield + galaxy layer */
-  .space-bg{position:fixed;inset:0;z-index:-1;background:
+  .space-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:
     radial-gradient(110% 70% at 50% -10%, #16203a 0%, #0a0f1b 45%, #05070d 100%);}
   /* drifting nebula clouds — violet + cyan + gold */
   .space-bg::before{content:'';position:absolute;inset:-12%;
@@ -366,6 +367,19 @@
     .nav-link{display:none;}
     .nav-toggle{display:flex;}
   }
+  /* small phones — tighter paddings, nothing overlaps or overflows */
+  @media (max-width:520px){
+    .wrap{padding:0 16px;}
+    .hero{padding:36px 0 14px;}
+    .hero-sub{font-size:16px;}
+    .trust{gap:12px 16px;}
+    .ships-grid{gap:10px;}
+    .ship-tile img{width:72px;height:72px;}
+    .feat,.step{padding:18px;}
+    .cta-band{padding:34px 18px;border-radius:16px;}
+    .foot-in{flex-direction:column;align-items:flex-start;gap:10px;}
+    .adm-kpis{grid-template-columns:1fr;}
+  }
 
   /* ===== ART UPLIFT — motion & light layer ===== */
   /* the nebula glow behind everything slowly breathes and drifts */
@@ -503,6 +517,16 @@
   .nav-ver{font-family:'Rajdhani',sans-serif;font-size:9.5px;font-weight:800;letter-spacing:.14em;color:var(--gold);border:1px solid rgba(242,178,75,.35);border-radius:6px;padding:1px 6px;margin-left:8px;white-space:nowrap;align-self:center;}
   @media (max-width:560px){.nav-ver{display:none;}}
 </style>
+<script>
+// nav build badge follows version.json (the deploy truth) so it can never go stale
+addEventListener('DOMContentLoaded', function(){
+  if (location.pathname.indexOf('/serve/') !== -1) return;   // preview sandbox: skip beacon
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(v){ var el = document.getElementById('nav-ver'); if (el && v && v.build) el.textContent = (v.label || 'V1.0 BETA') + ' · B' + v.build; })
+    .catch(function(){});
+});
+</script>
 </head>
 <body>
 <div class="space-bg" aria-hidden="true">
@@ -515,7 +539,7 @@
   <div class="wrap nav-in">
     <a class="brand brand-lg" href="#top">
       <span class="wm"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
-      <span class="nav-ver">V1.0 BETA · B283</span>
+      <span class="nav-ver" id="nav-ver">V1.0 BETA · B297</span>
     </a>
     <div class="nav-cta">
       <a class="nav-link" href="features.html">Features</a>

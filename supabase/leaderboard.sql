@@ -12,10 +12,10 @@
 create table if not exists public.leaderboard (
   user_id    uuid primary key references auth.users(id) on delete cascade,
   name       text   not null default 'Operator',
-  power      bigint not null default 0,
+  power      numeric not null default 0,
   level      int    not null default 1,
   zone       int    not null default 1,
-  kills      bigint not null default 0,
+  kills      numeric not null default 0,
   fleet      jsonb  not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );
@@ -29,8 +29,9 @@ create policy "leaderboard_read" on public.leaderboard for select using (true);
 
 -- … writes only via the function below (owner is always auth.uid()).
 drop function if exists public.lb_upsert(text, bigint, int, int, bigint, jsonb);
+drop function if exists public.lb_upsert(text, numeric, int, int, numeric, jsonb);
 create or replace function public.lb_upsert(
-  p_name text, p_power bigint, p_level int, p_zone int, p_kills bigint, p_fleet jsonb
+  p_name text, p_power numeric, p_level int, p_zone int, p_kills numeric, p_fleet jsonb
 ) returns public.leaderboard
 language plpgsql security definer set search_path = public as $$
 declare result public.leaderboard;
@@ -47,4 +48,4 @@ begin
   returning * into result;
   return result;
 end; $$;
-grant execute on function public.lb_upsert(text, bigint, int, int, bigint, jsonb) to authenticated;
+grant execute on function public.lb_upsert(text, numeric, int, int, numeric, jsonb) to authenticated;

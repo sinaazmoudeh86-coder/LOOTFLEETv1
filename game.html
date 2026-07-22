@@ -50,12 +50,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style-v2.css?v=189">
 <link rel="stylesheet" href="css/theme.css?v=181">
-<link rel="stylesheet" href="css/web-v89.css?v=192">
+<link rel="stylesheet" href="css/web-v89.css?v=195">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=180">
 <link rel="stylesheet" href="css/fx-primordial.css?v=4">
 <link rel="stylesheet" href="css/moon-colony.css?v=169">
 <link rel="stylesheet" href="css/fx-aaa.css?v=171">
-<link rel="stylesheet" href="css/readability.css?v=2">
+<link rel="stylesheet" href="css/readability.css?v=4">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -326,7 +326,7 @@
 /* XP bar — visible track, value pinned INSIDE right */
 #hud .bar-wrap.xpw{ grid-column:1/4; position:relative; height:13px; border-radius:7px; background:#0e1a30; border:1px solid #2c3a52; overflow:hidden; margin:0; }
 #hud .bar-wrap.xpw .bar-fill.xp{ position:absolute; inset:0 auto 0 0; border-radius:7px 0 0 7px; background:linear-gradient(90deg,#2f6dd8,#7fb1ff); box-shadow:0 0 10px rgba(91,156,255,.55); }
-#hud .bar-wrap.xpw .bar-label{ position:absolute; inset:0; display:flex; align-items:center; justify-content:flex-end; padding:0 8px; font-size:9px; font-weight:800; letter-spacing:.03em; color:#dbe8ff; text-shadow:0 1px 3px #000, 0 0 6px rgba(0,0,0,.8); font-variant-numeric:tabular-nums; }
+#hud .bar-wrap.xpw .bar-label{ position:absolute; inset:0; display:flex; align-items:center; justify-content:flex-end; padding:1.5px 8px 0; line-height:1; font-size:9px; font-weight:800; letter-spacing:.03em; color:#dbe8ff; text-shadow:0 1px 3px #000, 0 0 6px rgba(0,0,0,.8); font-variant-numeric:tabular-nums; }
 #hud .lc-cta{ align-self:center; }
 /* battle row — HP owns the width, kills chip rides the end */
 #hud .hud-bars{ display:flex; flex-direction:row; align-items:center; gap:8px; margin-top:7px; }
@@ -336,11 +336,28 @@
 #hud .bar-wrap.hpw .bar-label{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:800; letter-spacing:.04em; color:#fff; text-shadow:0 1px 3px #000, 0 0 8px rgba(0,0,0,.7); font-variant-numeric:tabular-nums; }
 #hud .hud-chip{ flex:none; display:inline-flex; align-items:center; gap:5px; height:20px; box-sizing:border-box; font-size:10px; font-weight:800; letter-spacing:.06em; color:#a5f2c4; background:#0d1526; border:1px solid #1d2a44; border-radius:10px; padding:0 10px; white-space:nowrap; font-variant-numeric:tabular-nums; }
 @media (max-width:560px){
-  #hud .pb-fleet{ height:34px; gap:3px; }
-  #hud .pb-fleet img{ height:32px; max-width:46px; }
-  #hud .pb-fleet img.esc{ height:18px; margin-bottom:2px; }
-  #hud .pb-val{ font-size:20px; }
-  #hud .power-block{ gap:9px; padding:7px 10px; }
+  /* CONSOLE, mobile — hierarchy over cram: row 1 = score card (full width),
+     row 2 = slim CTA pair, row 3 = HP. Zero overlap at any width. */
+  #hud .hud-top{ flex-wrap:wrap; gap:6px; }
+  #hud .power-block{ flex:1 1 100%; gap:9px; padding:7px 10px; }
+  #hud .pb-fleet{ height:30px; gap:0; }
+  #hud .pb-fleet img{ height:30px; max-width:44px; }
+  #hud .pb-fleet img.esc{ display:none; }           /* flagship only — calm, minimal */
+  #hud .pb-val{ font-size:19px; }
+  #hud .pb-label{ font-size:8px; letter-spacing:.14em; }
+  #hud #vip-badge{ position:static; transform:none; }
+  #hud .lvl-badge{ height:36px; width:36px; }
+  #hud .lvl-badge .num{ font-size:12.5px; }
+  /* XP bar: a touch taller on mobile so the label sits centered with air */
+  #hud .bar-wrap.xpw{ height:15px; }
+  /* CTAs: one slim secondary row — never compete with the score */
+  #hud .cta-stack{ flex:1 1 100%; max-width:none; flex-direction:row; gap:6px; align-self:auto; }
+  #hud .cta-stack .lc-cta{ flex:1 1 0; min-width:0; height:28px; min-height:28px; padding:0 10px; justify-content:center; gap:6px; border-radius:9px; }
+  #hud .cta-stack .lch-gem{ width:13px; height:13px; flex:none; }
+  #hud .cta-stack .pro-star{ font-size:12px; flex:none; }
+  #hud .cta-stack .lch-t{ display:flex; flex-direction:row; align-items:center; gap:5px; min-width:0; overflow:hidden; }
+  #hud .cta-stack .lch-t .l1{ display:none; }
+  #hud .cta-stack .lch-t .l2{ font-size:9.5px; letter-spacing:.08em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 }
 </style>
 </head>
@@ -428,6 +445,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 4v6c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="M12 7v8M8.5 11h7"/></svg>
                 <span>Ship</span>
               </button>
+              <button class="hd-btn" id="hd-settings" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span>Settings</span>
+              </button>
             </div>
           </div>
         </div>
@@ -444,6 +465,11 @@
           </div>
         </div>
 
+        <!-- VOID ZONE -->
+        <div class="screen overlay" id="screen-voidzone">
+          <div class="scr-head"><span class="scr-title">Void Zone</span><span class="scr-sub" id="voidzone-sub">7 apex tiles · turf war</span></div>
+          <div class="scr-body" id="voidzone-body"></div>
+        </div>
         <!-- BAG -->
         <div class="screen overlay" id="screen-bag">
           <div class="scr-head"><span class="scr-title">Loot</span><span class="scr-sub" id="bag-sub"></span></div>
@@ -622,6 +648,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           <span class="nl">Moon Colony</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="voidzone">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11z"/><path d="M12 7l4 2.3v5.4L12 17l-4-2.3V9.3z"/></svg>
+          <span class="nl">Void Zone</span>
+        </button>
         <button class="nav-btn nav-grouped" data-screen="homecit">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l4-3 5 4 5-4 4 3v11z"/><path d="M9 21v-5h6v5"/></svg>
           <span class="nl">Home Citadel</span>
@@ -663,6 +693,11 @@
               <div class="mc-ic mc-vm"><img src="ships/ship-voidmaw.png" alt="Voidmaw"></div>
               <div><div class="mc-n">Season 1: Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
               <span class="mc-lock"></span><span class="badge" id="cmd-sdread-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-voidz" data-go="voidzone">
+              <div class="mc-ic mc-vz"><img src="ships/void-cit-4.png" alt="Void Zone"></div>
+              <div><div class="mc-n">Void Zone <em class="sd-live-tag">TURF WAR</em></div><div class="mc-s">7 apex tiles · 100× yield · citadel included · Lv 25+</div></div>
+              <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-galaxy" data-go="galaxy">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
@@ -793,14 +828,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
 <script src="js/analytics.js?v=1"></script>
-<script src="js/cloud.js?v=190"></script>
+<script src="js/cloud.js?v=191"></script>
 <script src="js/account.js?v=196"></script>
 <script src="js/session-lock.js?v=3"></script>
 <script src="js/vip.js?v=7"></script>
 <script src="js/territory.js?v=206"></script>
 <script src="js/payments-v91.js?v=191"></script>
-<script src="js/game-v93.js?v=247"></script>
-<script src="js/ui-v94.js?v=227"></script>
+<script src="js/game-v93.js?v=269"></script>
+<script src="js/ui-v94.js?v=235"></script>
 <script src="js/fx-cinematic.js?v=3"></script>
 <script src="js/fx-primordial.js?v=4"></script>
 <script src="js/fx-aaa.js?v=160"></script>
@@ -812,22 +847,24 @@
 <script src="js/prism-v5.js?v=192"></script>
 <script src="js/prism-fleet.js"></script>
 <script src="js/dreadnaught.js?v=191"></script>
-<script src="js/server-dreadnaught.js?v=11"></script>
+<script src="js/server-dreadnaught.js?v=12"></script>
 <script src="js/galaxy-box.js"></script>
 <script src="js/shipworks.js?v=7"></script>
-<script src="js/social.js?v=6"></script>
-<script src="js/mail.js?v=3"></script>
-<script src="js/alliance.js?v=11"></script>
+<script src="js/social.js?v=8"></script>
+<script src="js/mail.js?v=5"></script>
+<script src="js/alliance.js?v=12"></script>
 <script src="js/alliance-boss.js?v=6"></script>
-<script src="js/ascension.js?v=14"></script>
+<script src="js/void-zone.js?v=16"></script>
+<script src="js/ascension.js?v=15"></script>
 <script src="js/casino.js?v=6"></script>
 <script src="js/casino2.js?v=5"></script>
+<script src="js/redeem.js?v=2"></script>
 <script src="js/auth.js?v=182"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 296;
+  window.LF_BUILD = 344;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -849,6 +886,7 @@
       }
     }
     try{
+      if (location.pathname.indexOf('/serve/') !== -1) return;   // preview sandbox: no beacon (403 noise)
       fetch('version.json?t='+Date.now(), { cache:'no-store' })
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(gate)
@@ -968,6 +1006,11 @@
 @keyframes chipGlowPulse{0%,100%{box-shadow:0 0 7px rgba(242,169,60,.45),0 0 1px rgba(242,169,60,.7);}50%{box-shadow:0 0 16px rgba(242,169,60,.85),0 0 3px rgba(242,169,60,.9);}}
 .chip-earn{animation:chipEarn .7s ease-out;}
 @keyframes chipEarn{0%{transform:scale(1);}22%{transform:scale(1.2);filter:brightness(1.7) saturate(1.3);}100%{transform:scale(1);filter:none;}}
+/* Command cards, mobile: badges never shear ("LI", "TURF/WAR") — they wrap
+   WHOLE to the next line; subtitles clamp to 2 tidy lines */
+.mega-card .mc-n{ display:flex; flex-wrap:wrap; align-items:center; gap:2px 5px; }
+.mega-card .mc-n em, .mega-card .sd-live-tag{ white-space:nowrap; flex:none; }
+.mega-card .mc-s{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 </style>
 <script>
 /* Full-screen support — the toggle lives in ⚙ Account (openAccountSheet wires

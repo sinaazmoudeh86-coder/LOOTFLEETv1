@@ -70,6 +70,13 @@
   .nosay{border-left:3px solid var(--bad);}
   .say .q,.nosay .q{font-size:13px;font-weight:700;color:var(--text);line-height:1.5;}
   .say .why,.nosay .why{font-size:10.5px;color:var(--muted);margin-top:5px;}
+  /* mobile — grids collapse instead of squeezing */
+  @media (max-width:720px){
+    .grid4,.grid3{grid-template-columns:repeat(2,1fr);}
+    .grid2,.vox{grid-template-columns:1fr;}
+    .coin-stage{flex-wrap:wrap;}
+    .cover img.ship{width:150px;}
+  }
   @media print{
     html,body{background:#fff;}
     .page{margin:0;box-shadow:none;width:100%;min-height:auto;height:10.6in;}

@@ -1,306 +1,60 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Loot Fleet — Brand Guidelines</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --void:#05070d; --navy:#0c111b; --panel:#131a28; --line:#27324a;
-    --text:#dfe9ff; --muted:#8a97ab;
-    --gold:#f2b24b; --cyan:#5fd1ff; --blue:#5b9cff; --good:#5bc06b; --bad:#e23b4e;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{background:#1a1f2c;}
-  body{font-family:'Rajdhani',sans-serif;color:var(--text);-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  .page{width:8.5in;min-height:11in;margin:24px auto;background:var(--navy);padding:.75in .8in;position:relative;overflow:hidden;
-    box-shadow:0 20px 60px rgba(0,0,0,.5);page-break-after:always;display:flex;flex-direction:column;}
-  .page::after{content:'';position:absolute;left:.8in;right:.8in;bottom:.45in;border-top:1px solid var(--line);}
-  .pfoot{position:absolute;left:.8in;right:.8in;bottom:.22in;display:flex;justify-content:space-between;
-    font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;}
-  h1,h2,h3,.disp{font-family:'Orbitron',sans-serif;}
-  .kicker{font-size:11px;font-weight:700;letter-spacing:.3em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}
-  h2{font-size:26px;font-weight:900;letter-spacing:.04em;margin-bottom:6px;}
-  .lede{font-size:13.5px;color:var(--muted);line-height:1.6;max-width:5.6in;margin-bottom:26px;}
-  .sect{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;letter-spacing:.22em;color:var(--gold);
-    text-transform:uppercase;margin:22px 0 10px;}
-  p{font-size:12.5px;line-height:1.65;color:#b9c4d8;}
-  /* cover */
-  .cover{justify-content:center;align-items:center;text-align:center;background:
-    radial-gradient(120% 80% at 50% 0%, #131c30 0%, var(--navy) 55%, #070b14 100%);}
-  .stars i{position:absolute;width:2px;height:2px;border-radius:50%;background:#cfe0ff;opacity:.5;}
-  .wm{font-family:'Orbitron',sans-serif;font-weight:900;letter-spacing:.1em;}
-  .wm .l{color:var(--gold);text-shadow:0 0 24px rgba(242,178,75,.5);}
-  .wm .f{color:var(--cyan);text-shadow:0 0 24px rgba(95,209,255,.5);}
-  .cover .wm{font-size:54px;}
-  .cover .tag{font-size:16px;color:#b9c4d8;letter-spacing:.06em;margin-top:14px;}
-  .cover .meta{margin-top:60px;font-size:11px;letter-spacing:.25em;color:var(--muted);text-transform:uppercase;line-height:2;}
-  .cover img.ship{width:200px;margin:40px 0 8px;filter:drop-shadow(0 18px 40px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(242,178,75,.25));}
-  /* grids */
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;}
-  /* swatches */
-  .sw{border-radius:10px;border:1px solid var(--line);overflow:hidden;}
-  .sw .c{height:54px;}
-  .sw .m{padding:7px 10px;background:var(--panel);}
-  .sw .n{font-size:11px;font-weight:700;letter-spacing:.04em;}
-  .sw .h{font-size:10px;color:var(--muted);font-family:'Rajdhani';letter-spacing:.06em;}
-  .chip{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:4px 12px;font-size:11px;font-weight:700;
-    background:var(--panel);border:1px solid var(--line);margin:0 6px 6px 0;}
-  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;}
-  /* wordmark page */
-  .wm-stage{background:#070b14;border:1px solid var(--line);border-radius:14px;display:grid;place-items:center;padding:44px 10px;}
-  .donts li{font-size:12px;color:#b9c4d8;line-height:1.8;list-style:none;padding-left:18px;position:relative;}
-  .donts li::before{content:'✕';position:absolute;left:0;color:var(--bad);font-weight:700;}
-  .dos li{font-size:12px;color:#b9c4d8;line-height:1.8;list-style:none;padding-left:18px;position:relative;}
-  .dos li::before{content:'✓';position:absolute;left:0;color:var(--good);font-weight:700;}
-  /* type page */
-  .type-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px;}
-  .type-card .label{font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
-  /* coin */
-  .coin-stage{display:flex;gap:18px;align-items:center;}
-  svg.lc-big{width:84px;height:84px;filter:drop-shadow(0 0 16px rgba(242,169,60,.5));}
-  /* voice */
-  .vox{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  .say{border-left:3px solid var(--good);}
-  .nosay{border-left:3px solid var(--bad);}
-  .say .q,.nosay .q{font-size:13px;font-weight:700;color:var(--text);line-height:1.5;}
-  .say .why,.nosay .why{font-size:10.5px;color:var(--muted);margin-top:5px;}
-  /* mobile — grids collapse instead of squeezing */
-  @media (max-width:720px){
-    .grid4,.grid3{grid-template-columns:repeat(2,1fr);}
-    .grid2,.vox{grid-template-columns:1fr;}
-    .coin-stage{flex-wrap:wrap;}
-    .cover img.ship{width:150px;}
-  }
-  @media print{
-    html,body{background:#fff;}
-    .page{margin:0;box-shadow:none;width:100%;min-height:auto;height:10.6in;}
-  }
-  @page{size:letter;margin:0;}
-</style>
-</head>
-<body>
-<a href="index.html" style="position:fixed;left:14px;top:12px;z-index:9;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.08em;color:#8a97ab;text-decoration:none;background:rgba(12,17,27,.85);border:1px solid #27324a;border-radius:99px;padding:6px 13px;" class="no-print">← lootfleet.com</a>
-<style>@media print{.no-print{display:none}}</style>
+-- =============================================================================
+--  Loot Fleet — PLAYER CITADELS (turf-war add-on for territory.sql)
+--  Run AFTER territory.sql, in Supabase → SQL Editor → New query → Run.
+--  Safe to run more than once. Adds two columns + extends claim_tile() so a
+--  claim can flag the tile as a player Citadel and stamp the owner's fleet
+--  score (used as the CLONE-defender strength when someone attacks it).
+-- =============================================================================
 
-<!-- ════════ COVER ════════ -->
-<div class="page cover">
-  <div class="stars">
-    <i style="left:12%;top:18%"></i><i style="left:78%;top:12%"></i><i style="left:64%;top:30%"></i>
-    <i style="left:24%;top:42%"></i><i style="left:88%;top:55%"></i><i style="left:8%;top:70%"></i>
-    <i style="left:52%;top:8%"></i><i style="left:38%;top:24%"></i><i style="left:70%;top:74%"></i>
-  </div>
-  <div class="kicker">Brand Guidelines · v1.0</div>
-  <div class="wm"><span class="l">LOOT</span><span class="f">FLEET</span></div>
-  <div class="tag">Farm the galaxy. Build the fleet.</div>
-  <img class="ship" src="ships/ship-titan.png" alt="">
-  <div class="meta">Idle Space ARPG · lootfleet.com<br>June 2026 · for marketing &amp; social use</div>
-</div>
+alter table public.territory
+  add column if not exists citadel     boolean not null default false,
+  add column if not exists fleet_score numeric not null default 0;
 
-<!-- ════════ THE BRAND ════════ -->
-<div class="page">
-  <div class="kicker">01</div>
-  <h2>The Brand</h2>
-  <p class="lede">Loot Fleet is a free idle space-ARPG where the loot never stops: blast alien swarms, evolve a lone frigate into a titan fleet, and conquer a living galaxy — even while you're away.</p>
+-- Extended claim: optional p_citadel / p_fleet_score. The 3-arg and 2-arg
+-- versions from territory.sql keep working (the client falls back to them).
+drop function if exists public.claim_tile(text, text, integer, boolean, numeric);
+create or replace function public.claim_tile(
+  p_tile_id        text,
+  p_owner_name     text,
+  p_protect_minutes integer default 15,
+  p_citadel        boolean default false,
+  p_fleet_score    numeric default 0
+)
+returns public.territory
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing public.territory;
+  result   public.territory;
+  mins     integer := greatest(15, least(1440, coalesce(p_protect_minutes, 15)));
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
 
-  <div class="sect">Naming</div>
-  <div class="grid2">
-    <div class="card"><b style="font-family:Orbitron;font-size:13px">LOOT FLEET</b>
-      <p style="margin-top:6px">The game. Two words, always caps in display contexts. In body copy: "Loot Fleet". Never "Lootfleet" or "LootFleet" for the game itself.</p></div>
-    <div class="card"><b style="font-family:Orbitron;font-size:13px;color:var(--gold)">LootCoins</b>
-      <p style="margin-top:6px">The premium currency. One word, camel-case, always plural. Always paired with the coin mark when space allows.</p></div>
-    <div class="card"><b style="font-family:Orbitron;font-size:13px;color:#c8a4ff">LootFleet Pro</b>
-      <p style="margin-top:6px">The subscription. One word here — it reads as a product line. Benefits language: "⚡ 5× speed · ✨ 2× XP".</p></div>
-    <div class="card"><b style="font-family:Orbitron;font-size:13px;color:var(--cyan)">Descriptors</b>
-      <p style="margin-top:6px">"Idle Space ARPG" (primary) · "the loot never stops" (flavor) · "free · browser · no download" (proof points).</p></div>
-  </div>
+  select * into existing from public.territory where tile_id = p_tile_id for update;
 
-  <div class="sect">Taglines</div>
-  <p><b style="color:var(--text)">Primary:</b> Farm the galaxy. Build the fleet.<br>
-  <b style="color:var(--text)">Support:</b> The loot never stops. · Raze citadels. Claim the stars. · Even while you're away.</p>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>01 · The Brand</span></div>
-</div>
+  if found and existing.owner_id <> auth.uid() and existing.cooldown_until > now() then
+    raise exception 'tile protected (cooldown)';
+  end if;
 
-<!-- ════════ WORDMARK ════════ -->
-<div class="page">
-  <div class="kicker">02</div>
-  <h2>Wordmark</h2>
-  <p class="lede">The wordmark is set in Orbitron Black, two-tone: LOOT in Cargo Gold, FLEET in Ion Cyan — each with its soft signature glow. It lives on deep-space darks, always.</p>
-  <div class="wm-stage"><span class="wm" style="font-size:44px"><span class="l">LOOT</span><span class="f">FLEET</span></span></div>
+  insert into public.territory (tile_id, owner_id, owner_name, captured_at, cooldown_until, citadel, fleet_score)
+  values (p_tile_id, auth.uid(), coalesce(nullif(p_owner_name, ''), 'Operator'),
+          now(), now() + make_interval(mins => mins),
+          coalesce(p_citadel, false), coalesce(p_fleet_score, 0))
+  on conflict (tile_id) do update
+    set owner_id       = excluded.owner_id,
+        owner_name     = excluded.owner_name,
+        captured_at    = excluded.captured_at,
+        cooldown_until = excluded.cooldown_until,
+        citadel        = excluded.citadel,
+        fleet_score    = excluded.fleet_score
+  returning * into result;
 
-  <div class="grid2" style="margin-top:14px">
-    <div class="card">
-      <div class="sect" style="margin-top:0">Do</div>
-      <ul class="dos">
-        <li>Use on Void/Deep-Navy backgrounds (or photography darker than #20262f)</li>
-        <li>Keep the two-tone split exactly at LOOT|FLEET</li>
-        <li>Keep clear space of one "O" height on all sides</li>
-        <li>Use the glow at low opacity (≤50%) — it's an aura, not a lens flare</li>
-      </ul>
-    </div>
-    <div class="card">
-      <div class="sect" style="margin-top:0">Don't</div>
-      <ul class="donts">
-        <li>Place on white or light backgrounds</li>
-        <li>Recolor, outline, or single-tone the mark</li>
-        <li>Stretch, italicize, or change the letterspacing</li>
-        <li>Set body copy in Orbitron — it's display-only</li>
-      </ul>
-    </div>
-  </div>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>02 · Wordmark</span></div>
-</div>
+  return result;
+end;
+$$;
 
-<!-- ════════ COLOR ════════ -->
-<div class="page">
-  <div class="kicker">03</div>
-  <h2>Color</h2>
-  <p class="lede">Deep-space neutrals carry everything; Cargo Gold is the hero accent (rewards, CTAs, score); Ion Cyan is motion and energy. Red is reserved for threat.</p>
-
-  <div class="sect">Core palette</div>
-  <div class="grid4">
-    <div class="sw"><div class="c" style="background:#05070d"></div><div class="m"><div class="n">Void</div><div class="h">#05070D</div></div></div>
-    <div class="sw"><div class="c" style="background:#0c111b"></div><div class="m"><div class="n">Deep Navy</div><div class="h">#0C111B</div></div></div>
-    <div class="sw"><div class="c" style="background:#131a28"></div><div class="m"><div class="n">Hull Panel</div><div class="h">#131A28</div></div></div>
-    <div class="sw"><div class="c" style="background:#dfe9ff"></div><div class="m"><div class="n">Starlight</div><div class="h">#DFE9FF</div></div></div>
-    <div class="sw"><div class="c" style="background:#f2b24b"></div><div class="m"><div class="n">Cargo Gold ★</div><div class="h">#F2B24B</div></div></div>
-    <div class="sw"><div class="c" style="background:#5fd1ff"></div><div class="m"><div class="n">Ion Cyan</div><div class="h">#5FD1FF</div></div></div>
-    <div class="sw"><div class="c" style="background:#5b9cff"></div><div class="m"><div class="n">Warp Blue</div><div class="h">#5B9CFF</div></div></div>
-    <div class="sw"><div class="c" style="background:#e23b4e"></div><div class="m"><div class="n">Threat Red</div><div class="h">#E23B4E</div></div></div>
-  </div>
-
-  <div class="sect">Economy</div>
-  <div>
-    <span class="chip"><span class="dot" style="background:linear-gradient(135deg,#ffe27a,#f2a93c 55%,#b86adf)"></span>LootCoin gradient · #FFE27A → #F2A93C → #B86ADF</span>
-    <span class="chip"><span class="dot" style="background:#5bc0ff"></span>⬢ Fuel #5BC0FF</span>
-    <span class="chip"><span class="dot" style="background:#d0a060"></span>◆ Iron #D0A060</span>
-    <span class="chip"><span class="dot" style="background:#c07bff"></span>✦ Plasma #C07BFF</span>
-  </div>
-
-  <div class="sect">Rarity ladder — the loot rainbow</div>
-  <p style="margin-bottom:8px">Sacred order; never shuffle these meanings. Rarity color = excitement level in any asset.</p>
-  <div>
-    <span class="chip"><span class="dot" style="background:#9aa0a6"></span>Common #9AA0A6</span>
-    <span class="chip"><span class="dot" style="background:#5bc06b"></span>Uncommon #5BC06B</span>
-    <span class="chip"><span class="dot" style="background:#4a90e2"></span>Rare #4A90E2</span>
-    <span class="chip"><span class="dot" style="background:#b15cff"></span>Epic #B15CFF</span>
-    <span class="chip"><span class="dot" style="background:#f0972a"></span>Legendary #F0972A</span>
-    <span class="chip"><span class="dot" style="background:#ff3b4e"></span>Mythic #FF3B4E</span>
-    <span class="chip"><span class="dot" style="background:#21d4c4"></span>Ancient #21D4C4</span>
-    <span class="chip"><span class="dot" style="background:#ffe27a"></span>Divine #FFE27A</span>
-    <span class="chip"><span class="dot" style="background:#ff6ad5"></span>Cosmic #FF6AD5</span>
-    <span class="chip"><span class="dot" style="background:#9a5bff"></span>Void #9A5BFF</span>
-    <span class="chip"><span class="dot" style="background:#eae6ff"></span>Eternal #EAE6FF</span>
-    <span class="chip"><span class="dot" style="background:#ffe6a8"></span>Primordial #FFE6A8</span>
-  </div>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>03 · Color</span></div>
-</div>
-
-<!-- ════════ TYPOGRAPHY ════════ -->
-<div class="page">
-  <div class="kicker">04</div>
-  <h2>Typography</h2>
-  <p class="lede">Two faces, strict roles. Orbitron is the voice of the machine — headlines, scores, labels. Rajdhani does the talking — UI, body, numbers.</p>
-
-  <div class="type-card">
-    <div class="label">Display · Orbitron 700–900 · caps · tracking +4–10%</div>
-    <div class="disp" style="font-size:30px;font-weight:900;letter-spacing:.06em">FLEET SCORE 247B</div>
-    <div class="disp" style="font-size:15px;font-weight:700;letter-spacing:.18em;color:var(--gold);margin-top:8px">⚡ HOLD THE GALAXY</div>
-  </div>
-  <div class="type-card">
-    <div class="label">UI &amp; body · Rajdhani 500–700</div>
-    <div style="font-size:16px;font-weight:600;line-height:1.6">Deploy to Zone 7, raze the Void Citadel, and tow the spoils home. Every kill drops loot — the magnet does the rest.</div>
-    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums">Numbers always tabular: 29.16K · +14/h · 3.63Qa</div>
-  </div>
-
-  <div class="sect">Rules</div>
-  <ul class="dos">
-    <li>Big number energy: scores and damage are the largest thing on screen</li>
-    <li>Unit ladder for big numbers: K · M · B · T · Qa · Qi (never scientific notation)</li>
-    <li>Labels in caps with wide tracking; sentence case for everything conversational</li>
-  </ul>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>04 · Typography</span></div>
-</div>
-
-<!-- ════════ ICONOGRAPHY ════════ -->
-<div class="page">
-  <div class="kicker">05</div>
-  <h2>Iconography &amp; Motifs</h2>
-  <p class="lede">Hexagons everywhere — the galaxy is a hex grid, the LootCoin is a hex coin, shield cores are hexes. Glow means value: the rarer, the brighter.</p>
-
-  <div class="sect">The LootCoin mark</div>
-  <div class="coin-stage card">
-    <svg class="lc-big" viewBox="0 0 24 24"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".55" stop-color="#f2a93c"/><stop offset="1" stop-color="#b86adf"/></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#g1)" stroke="#2a1808" stroke-width="1.1"/><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"/><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#g1)"/><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"/></svg>
-    <p>Hex coin, gold-to-violet, with a loot-gem facet cut into the center — the currency literally contains the loot players chase. Never recolor, never flatten the gradient, never place on light backgrounds. Minimum size 14px; pair with amounts in Rajdhani 700.</p>
-  </div>
-
-  <div class="sect">Supporting glyph set</div>
-  <p>⬢ Fuel · ◆ Iron · ✦ Plasma · ⚡ speed/power · ⚔ combat · ⛴ citadel · ☠ boss · ★ featured/owned · ⌂ home — keep glyphs in their economy colors.</p>
-
-  <div class="sect">Ship &amp; fortress art</div>
-  <div class="grid3">
-    <div class="card" style="text-align:center"><img src="ships/ship-frigate.png" style="width:64px"><p style="margin-top:6px;font-size:11px">The starter Frigate — "day one" energy</p></div>
-    <div class="card" style="text-align:center"><img src="ships/ship-mothership.png" style="width:64px"><p style="margin-top:6px;font-size:11px">The Mothership — endgame aspiration</p></div>
-    <div class="card" style="text-align:center"><img src="ships/ship-citadel.png" style="width:84px"><p style="margin-top:6px;font-size:11px">The Void Citadel — the enemy monument</p></div>
-  </div>
-  <ul class="dos" style="margin-top:10px">
-    <li>Ships float on glows/shadows, never sit flat; nose-up or 3/4 hero angles</li>
-    <li>Progression pairs sell the fantasy: frigate → titan, before → after</li>
-  </ul>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>05 · Iconography</span></div>
-</div>
-
-<!-- ════════ VOICE ════════ -->
-<div class="page">
-  <div class="kicker">06</div>
-  <h2>Voice &amp; Tone</h2>
-  <p class="lede">You're the fleet's operations officer: confident, punchy, a little gallows-humor about the swarm. Imperatives over descriptions. Numbers over adjectives.</p>
-  <div class="vox">
-    <div class="card say"><div class="q">"Raze the citadel. Keep the loot."</div><div class="why">✓ Imperative, concrete, loot-first</div></div>
-    <div class="card nosay"><div class="q">"Experience an epic space adventure!"</div><div class="why">✕ Generic mobile-ad slop</div></div>
-    <div class="card say"><div class="q">"224 kills. 357 plasma. Zero effort — you were asleep."</div><div class="why">✓ Numbers + idle fantasy + wink</div></div>
-    <div class="card nosay"><div class="q">"Don't miss this amazing limited offer!!"</div><div class="why">✕ Pressure language; we never beg</div></div>
-    <div class="card say"><div class="q">"⚠ SUPER BOSS — premium loot · clear it for the big drops"</div><div class="why">✓ Threat + reward in one breath</div></div>
-    <div class="card nosay"><div class="q">"Purchase virtual currency to enhance gameplay"</div><div class="why">✕ Legal-brochure tone. Say "LootCoins buy cosmetics — never power."</div></div>
-  </div>
-  <div class="sect">House rules</div>
-  <ul class="dos">
-    <li>Player is "operator" or "pilot" — never "user"</li>
-    <li>Monetization is honest and proud: "cosmetics only — never power"</li>
-    <li>Emoji-glyphs (⚡⛴☠★) are punctuation, max 1–2 per line</li>
-  </ul>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>06 · Voice</span></div>
-</div>
-
-<!-- ════════ SOCIAL ════════ -->
-<div class="page">
-  <div class="kicker">07</div>
-  <h2>Social &amp; Campaign Use</h2>
-  <p class="lede">Every asset should look like a frame of the game: deep-space dark, one gold hero element, big numbers, loot glow.</p>
-  <div class="sect">The formula</div>
-  <div class="grid2">
-    <div class="card"><b>Background</b><p>Void → Deep Navy radial; starfield optional. Never white, never daylight.</p></div>
-    <div class="card"><b>Hero element</b><p>One ship / coin / citadel with its glow. One per asset — let it breathe.</p></div>
-    <div class="card"><b>Headline</b><p>Orbitron caps, ≤6 words, gold or two-tone. Body in Rajdhani.</p></div>
-    <div class="card"><b>CTA</b><p>"Play free in your browser" → lootfleet.com. Gold pill button.</p></div>
-  </div>
-  <div class="sect">Ready-made hooks</div>
-  <p>"Farm the galaxy. Build the fleet." · "The loot never stops." · "From one frigate to a fleet of titans." · "Your fleet fought while you slept." · "12 rarity tiers. One obsession."</p>
-  <div class="sect">Checklist before posting</div>
-  <ul class="dos">
-    <li>Wordmark two-tone and legible at thumbnail size</li>
-    <li>Rarity colors used in correct order (no purple "Legendary")</li>
-    <li>LootCoin mark unaltered; monetization copy includes "never power"</li>
-    <li>Screenshot assets use real gameplay — the game looks this good, show it</li>
-  </ul>
-  <div class="pfoot"><span>Loot Fleet · Brand Guidelines</span><span>07 · Social</span></div>
-</div>
-<script src="js/config.live.js?v=1"></script>
-<script src="js/analytics.js?v=1"></script>
-</body>
-</html>
+grant execute on function public.claim_tile(text, text, integer, boolean, numeric) to authenticated;

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loot Fleet Galaxy Guide — Territory, Resources & the Turf War</title>
+<meta name="description" content="Conquer Loot Fleet's galaxy: 1,950 hex tiles, fuel/iron/plasma economics, entry costs, deep-space risk, 100× citadel tiles and the real cross-player turf war — full strategy guide.">
+<link rel="canonical" href="https://lootfleet.com/guides/galaxy-territory.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Loot Fleet">
+<meta property="og:title" content="My Galaxy — Territory, Resources & the Turf War">
+<meta property="og:description" content="Build an empire that earns while you sleep — and defend it from other players.">
+<meta property="og:url" content="https://lootfleet.com/guides/galaxy-territory.html">
+<link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+<nav class="gnav"><div class="gnav-in">
+  <a class="wm" href="../index.html"><span class="l">LOOT</span><span class="f">FLEET</span></a>
+  <a class="play" href="../game.html">▸ Play free</a>
+</div></nav>
+
+<div class="wrap"><article>
+  <div class="crumb"><a href="../index.html">Home</a> / <a href="../guides.html">Guides</a> / My Galaxy</div>
+  <h1>My Galaxy — Territory, Resources &amp; the Turf War</h1>
+  <p class="standfirst">Beyond the zone grind lies a single massive hex galaxy: ~1,950 conquerable tiles in 25 rings around a neutral Home Citadel. It's Loot Fleet's strategy layer — capture, hold, earn, and out-grab everyone else.</p>
+  <p class="byline">Updated June 2026 · 9 min read</p>
+
+  <h2>How the map works</h2>
+  <p>Tiles radiate outward in rings. Each ring is a level band — Ring 1 suits Lv 10, Ring 8 expects Lv 130, and the curve runs to Lv ~470 at Ring 25. You can attack anything up to 10 levels above you. Pan, zoom and tap any hex for its full intel card: owner, output, difficulty, loot quality and cooldowns.</p>
+  <table>
+    <tr><th>Tile type</th><th>What it does</th></tr>
+    <tr><td>Combat sector</td><td>Strategic territory; 10-wave capture siege</td></tr>
+    <tr><td>Resource field</td><td>Hourly ⬢ fuel / ◆ iron / ✦ plasma while held</td></tr>
+    <tr><td>☠ Boss tile</td><td>Capture ends in a boss; pays the rare Void/Eternal loot table; owned = endless boss gauntlet</td></tr>
+    <tr><td>⛴ Citadel Siege zone</td><td>Full citadel encounter; razing it makes it YOURS at 100× output, sieged max once per day</td></tr>
+    <tr><td>⌂ Home Citadel</td><td>Neutral safe harbor at dead center — your gathering report lives here</td></tr>
+  </table>
+
+  <h2>The resource economy</h2>
+  <p>Three currencies run the galaxy: <b>⬢ Fuel</b> (the workhorse), <b>◆ Iron</b> (Ring 2+), and <b>✦ Plasma</b> (Ring 5+, the scarcest). They come from held tiles every hour, from selling loot, from kill scavenging, and from boss/citadel bounties.</p>
+  <p>They matter because <b>warping costs resources</b> — entry fees scale steeply with ring depth (Ring 1 costs ⬢30; Ring 10 runs ⬢1.9K ◆507 ✦213; Ring 25 is a war-chest expedition). Your own territory warps at half price, so supply lines are real strategy: capture stepping-stones before pushing deep.</p>
+
+  <div class="cta">
+    <div class="h">Ring 1 costs 30 fuel. You start with more.</div>
+    <p>Your first capture takes about three minutes.</p>
+    <a href="../game.html">▸ Play Loot Fleet free</a>
+    <span class="sub">Free · browser · no download</span>
+  </div>
+
+  <h2>Deep space: rings 18+</h2>
+  <p>The outer rings are a different game: <b>20× enemy density, 10× loot quality, 25× resource output</b> — and you lose <b>two items</b> on death instead of one. Deep space is where Cosmic-and-up gear becomes farmable and where a single held citadel can bankroll an entire playstyle.</p>
+
+  <h2>The turf war is real</h2>
+  <p>With a free cloud account, tile ownership is shared across <b>all players</b>. Red tiles belong to someone; attack one and the capture is <b>server-authoritative</b> — when several fleets besiege the same tile, whoever completes the siege <b>first</b> wins it. Lose the race by seconds and the game tells you exactly that. Normal tiles get a 15-minute protected window after capture; citadels get 24 hours.</p>
+  <p>The <b>Contested Space feed</b> above the map streams the war in real time — including the moment somebody takes a tile from <i>you</i>.</p>
+
+  <h2>An empire that earns while you sleep</h2>
+  <p>Hourly output accrues even offline. A modest mid-game spread — a dozen resource fields, one boss tile, one citadel — funds every warp you'll want plus steady progress toward the <a href="ships-and-fleet.html">Mothership's resource price</a>. Tap the Home Citadel anytime for your full gathering report.</p>
+
+  <h2>Opening strategy (first week)</h2>
+  <ol>
+    <li><b>Ring 1–2:</b> grab 4–6 cheap resource fields — fuel income compounds everything.</li>
+    <li><b>First boss tile:</b> the capture pays Void-tier loot well above your band.</li>
+    <li><b>First citadel:</b> 100× output transforms your economy; defend it — once a day is all anyone gets.</li>
+    <li><b>Push with purpose:</b> warp costs make aimless wandering expensive. Pick targets from the intel card before you fly.</li>
+  </ol>
+
+  <div class="cta">
+    <div class="h">Somebody is claiming your ring right now.</div>
+    <p>The turf war doesn't pause for reading.</p>
+    <a href="../game.html">▸ Launch Loot Fleet</a>
+    <span class="sub">Free · browser · cloud account optional</span>
+  </div>
+
+  <div class="related"><h2>Keep reading</h2>
+    <div class="cards">
+      <a class="gcard" href="zones-and-citadels.html"><span class="k">PvE</span><h3>Zones &amp; Citadel Sieges</h3><p>The encounter behind the 100× tiles.</p></a>
+      <a class="gcard" href="ships-and-fleet.html"><span class="k">Ships</span><h3>Hull Tier List &amp; Fleet Building</h3><p>What to fly into deep space.</p></a>
+    </div></div>
+</article></div>
+
+<footer><div class="gfoot">
+  <span>© <span id="yr"></span> Loot Fleet · lootfleet.com</span>
+  <span><a href="../guides.html">Guides</a> · <a href="../game.html">Play</a></span>
+</div></footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+</body>
+</html>

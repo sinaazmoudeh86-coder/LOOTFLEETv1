@@ -1,0 +1,152 @@
+/* =============================================================================
+   fx-cinematic.css — LootFleet visual uplift
+   1) Post-FX overlay layer chrome (bloom / grade / grain / flash positioning)
+   2) UI MOTION POLISH — premium entrances, presses, ticks, glows. Additive,
+      scoped to existing classes. No layout changes, gameplay untouched.
+   ============================================================================= */
+
+/* ---- 1. POST-FX LAYERS ------------------------------------------------- */
+/* Layers sit ABOVE the battle canvas (z:0) but BELOW the HUD / controls /
+   toasts (z:4-6), so nav, joystick, banners and level-up popups stay crisp. */
+.fx-bloom-layer { z-index: 1 !important; }
+.fx-grade-layer { z-index: 1 !important; }
+.fx-grain-layer { z-index: 2 !important; }
+.fx-flash-layer { z-index: 3 !important; opacity: 0; transition: opacity .04s linear; border-radius: inherit; }
+
+/* film grain — tiny tiled SVG noise, animated drift via background-position */
+.fx-grain-layer {
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  animation: fxGrainDrift 1.2s steps(4) infinite;
+}
+@keyframes fxGrainDrift {
+  0%   { background-position: 0 0; }
+  25%  { background-position: -60px 30px; }
+  50%  { background-position: 40px -50px; }
+  75%  { background-position: -30px -20px; }
+  100% { background-position: 50px 40px; }
+}
+
+/* The existing static CSS filter on #game-canvas is now lighter — the JS
+   layer carries grade/bloom. Keep a touch of pop as a baseline fallback. */
+#game-canvas { filter: saturate(1.12) contrast(1.05) brightness(1.03); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-grain-layer { animation: none; }
+}
+
+/* ---- 2. UI MOTION POLISH ---------------------------------------------- */
+
+/* a single spring curve used throughout for cohesive feel */
+:root { --fx-spring: cubic-bezier(.22,1.2,.36,1); --fx-ease: cubic-bezier(.4,0,.2,1); }
+
+/* --- overlay screens slide+fade in (Hangar, Loot, Zones, etc.) --- */
+@media (prefers-reduced-motion: no-preference) {
+  .screen.overlay.active { animation: fxScreenIn .34s var(--fx-spring) both; }
+  @keyframes fxScreenIn {
+    from { opacity: 0; transform: translateY(14px) scale(.992); }
+    to   { opacity: 1; transform: none; }
+  }
+  /* staggered rise for the rows inside an opened screen body */
+  .screen.overlay.active .scr-body > * {
+    animation: fxRowIn .42s var(--fx-spring) both;
+  }
+  .screen.overlay.active .scr-body > *:nth-child(1){ animation-delay:.02s; }
+  .screen.overlay.active .scr-body > *:nth-child(2){ animation-delay:.06s; }
+  .screen.overlay.active .scr-body > *:nth-child(3){ animation-delay:.10s; }
+  .screen.overlay.active .scr-body > *:nth-child(4){ animation-delay:.14s; }
+  .screen.overlay.active .scr-body > *:nth-child(5){ animation-delay:.18s; }
+  .screen.overlay.active .scr-body > *:nth-child(n+6){ animation-delay:.22s; }
+  @keyframes fxRowIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+/* --- buttons: tactile press + sheen on primary CTAs --- */
+.btn, .nav-btn, .hd-btn, .speed-row > *, .auto-btn, .bail-btn, .mega-card {
+  transition: transform .12s var(--fx-spring), box-shadow .2s var(--fx-ease), filter .15s var(--fx-ease);
+}
+.btn:active, .hd-btn:active, .speed-row > *:active,
+.auto-btn:active, .bail-btn:active { transform: scale(.94); }
+.nav-btn:active { transform: scale(.9); }
+
+/* gold CTAs get a moving sheen sweep */
+.btn.gold, .lg-primary, .daily-claim {
+  position: relative; overflow: hidden;
+}
+.btn.gold::after, .lg-primary::after, .daily-claim::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255,255,255,.55), transparent);
+  transform: skewX(-18deg); pointer-events: none;
+  animation: fxSheen 4.5s var(--fx-ease) infinite;
+}
+@keyframes fxSheen {
+  0%, 72% { left: -60%; }
+  86%     { left: 140%; }
+  100%    { left: 140%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.gold::after, .lg-primary::after, .daily-claim::after { animation: none; display: none; }
+}
+
+/* --- nav active indicator gets a spring pop + glow --- */
+.nav-btn.active svg { animation: fxNavPop .4s var(--fx-spring); }
+@keyframes fxNavPop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+/* --- HUD score / power: subtle glow breathe so it reads as "live" --- */
+.pb-val { transition: transform .18s var(--fx-spring), text-shadow .3s; }
+.pb-val.fx-tick { animation: fxNumTick .45s var(--fx-spring); }
+@keyframes fxNumTick {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.14); text-shadow: 0 0 18px rgba(242,178,75,.8); }
+  100% { transform: scale(1); }
+}
+
+/* --- toasts / unlock banners ride in on a spring --- */
+#toast-layer > :not(.lvl-toast):not(.aaa-shock), .toast, .unlock-toast {
+  animation: fxToastIn .46s var(--fx-spring) both;
+}
+@keyframes fxToastIn {
+  from { opacity: 0; transform: translateY(-14px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- mega-menu cards: lift on press already styled; add hover float --- */
+@media (hover: hover) {
+  .mega-card:hover { transform: translateY(-2px); filter: brightness(1.06); }
+}
+
+/* --- victory / result verdict: cinematic stamp-in --- */
+.br-verdict, .battle-result .br-verdict {
+  animation: fxStamp .6s var(--fx-spring) both;
+}
+@keyframes fxStamp {
+  0%   { opacity: 0; transform: scale(1.6); letter-spacing: .4em; filter: blur(6px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); letter-spacing: .04em; }
+}
+.br-line { animation: fxRowIn .5s var(--fx-spring) both; }
+.br-line:nth-child(1){ animation-delay:.18s; }
+.br-line:nth-child(2){ animation-delay:.30s; }
+.br-line:nth-child(3){ animation-delay:.42s; }
+
+/* --- loot feed entries pop --- */
+#loot-feed > * { animation: fxLootPop .5s var(--fx-spring) both; }
+@keyframes fxLootPop {
+  0% { opacity: 0; transform: translateX(-10px) scale(.9); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.overlay.active,
+  .screen.overlay.active .scr-body > *,
+  #toast-layer > *, .br-verdict, .br-line, #loot-feed > *,
+  .nav-btn.active svg { animation: none !important; }
+}

@@ -1,102 +1,87 @@
-# LOOT FLEET V1.0 BETA — Deploy v201 (build 390 · SW cache `lootfleet-v390`)
+# LOOT FLEET V1.0 BETA — Deploy v202 (build 395 · SW cache `lootfleet-v395`)
 
-Push this folder to GitHub → Vercel.
+Push this folder to GitHub → Vercel. Balance + bug release on top of v201.
 
 ## Database
 
-Nothing here is required to launch — every feature degrades silently without it.
-Run in this order when you want the server-side halves:
+One NEW file in this release, and it should be run — the simulated roster's kill
+counts are visibly wrong on the live board until it is:
 
 | # | File | Gives you |
 |---|---|---|
-| 1 | `supabase/pilot-ascension.sql` | ascension rank badges visible on OTHER players' rows |
-| 2 | `supabase/simulated-pilots.sql` | server-side simulated roster (shared across all clients) |
-| 3 | `supabase/simulated-pilots-behavior.sql` | their territory, alliances, friends and event activity |
-| — | `supabase/notifications.sql` | daily fleet-report email (still gated off in config.live.js) |
+| 1 | `supabase/sim-kills-sanity.sql` | **NEW** — caps simulated kill counts at a human-plausible career total (trigger + one-off backfill) |
 
-Then, for the roster only:
+Everything from v201 is unchanged and already run:
+`pilot-ascension.sql`, `simulated-pilots.sql`, `simulated-pilots-behavior.sql`,
+`sim-board-bignum-fix.sql`. All are idempotent — safe to re-run.
 
-```sql
-create extension if not exists pg_cron;
-select cron.schedule('lf-sim-tick',   '7 * * * *',    $$ select sim_tick()   $$);
-select cron.schedule('lf-sim-behave', '*/15 * * * *', $$ select sim_behave() $$);
-select sim_spawn(20);
-```
-
-Kill switch: `update sim_config set enabled = false;`
-
-Both sim files are idempotent — re-run them after any update.
+### Still outstanding (not in this folder)
+The alliance boss RPC `alliance_attack` clamps transmitted damage at **25× power**
+server-side. The client no longer caps damage at all (see below), so raise or drop
+that clamp wherever the alliance schema lives, or the payout won't match the meter
+players watch fill.
 
 ---
 
 ## What shipped in this release
 
-### Pilot Ascension (prestige)
-Command ▸ Pilot Ascension, unlocks at Lv 100. Thin pill across the top of the
-Command grid, plus an Ascend button in the battle-screen dock.
+### Lifesteal — cut 80% across the entire game
+Sustain had become the dominant stat, and in siege combat it made *both* fleets
+unkillable: five-minute stalemates where nobody could die.
 
-* **Points** — pilot level is the spine (Lv 100 = 1, 250 = 2, 500 = 4, 1000 = 8)
-  with capped bonuses for fleet score, deepest zone, systems, badges, wing size.
-  Live calculator shows every line before you commit.
-* **Rank badge** — 5 stars per tier, tier colours following the loot-rarity
-  ladder. Rendered on leaderboards, profiles and galaxy defender panels, and
-  published to the cloud so other players see yours.
-* **Legacy ship** — ONE hull survives, and only the hull: upgrade levels,
-  fittings and cargo are all surrendered. Its ascension-module stars remain.
-* **Reset** — level, zones, gold, resources, gear, citadels, Void spires, Home
-  Citadel, prism, the whole fleet. Territory is *released* so every tile falls
-  neutral and undefended with no cooldown. Kept: badges, career counters, perks,
-  purchases, Pro, VIP, LootCoins, cosmetics, friends, alliance, mail.
-* **12 perks** — 8 permanent multipliers plus 4 beacon perks (below).
-* **3 ascension-only loot tiers** — Ascendant ★1, Celestial ★20, Paragon ★50.
-  Hard-gated; no zone, boss or crate rolls them below the star requirement.
-  Every star also adds +25% weight to Primordial/Relic/Artifact, capped ×5.
-* Cinematic: rings collapse, level counter unwinds to 1, star slams in, tier
-  reveal. Skippable, honours reduced-motion.
+* Item rolls 1–5% → **0.2–1%**; plasma weapon-class bonus 1–2% → **0.2–0.4%**.
+* All 13 hull `lifeSteal` mods scaled (Titan Sina 146 → 29.2, Dread Omega 73 →
+  14.6, Oblivion Spear 9 → 1.8, …).
+* Skill tree 1%/rank → **0.2%/rank**. Pilot tree node roll 0.6–1.4% → **0.12–0.28%**.
+  Vampiric Engine legendary 4% → **0.8%**.
+* Global ceiling **95% → 19%**. PvP ceiling **5% → 1%**, plus no single hit can
+  siphon more than 6% of your hull.
+* One-time save migration scales lifesteal already rolled onto equipped gear, bag
+  items and every escort loadout — no pre-nerf fitting survives.
 
-### ◉ Beacon
-Manual swarm summon, Zone Grind only, never automated. Circular button above the
-speed row with a draining cooldown ring.
+### Pilot Ascension — the whole hangar comes with you
+Was: one Legacy Ship survived. Now: **every hull you own stays owned**, event and
+premium hulls included. Each one resets — upgrade levels wiped, fittings cleared,
+cargo gone; per-hull ascension-module stars survive. Step 1 of the flow is now a
+**flagship** pick (which hull you warp out flying), the wing disbands, and escort
+slots re-earn with pilot level.
 
-* ×50 burst arriving from ~1,500px out and charging in; reinforcements while it
-  runs; 45s window; 300s cooldown; field cap 220.
-* Defense tree shortens the recharge (−40% cap) and lengthens the call (+150%).
-* Four ascension perks stack on top: Distress Relay (recharge), Sustained Signal
-  (duration), Wideband Broadcast (size), Wreckfield Tithe (kill value +250%).
-* Duration is capped at 66% of the recharge so at least a third of every cycle
-  is quiet — the button always has a press moment.
+### Void Zone — unwinnable spires fixed
+Three compounding causes, all addressed:
 
-### Simulated pilots
-A living cohort that makes the galaxy feel populated. Invisible as bots by
-design; `is_simulated` is an internal column only.
+* Void Warden power scaled with tile tier (×2.8 at Lv 400), which after true-power
+  conversion made deep spires mathematically unwinnable. Now a flat ×1.15 with a
+  1.35 ratio ceiling; all clone fights are capped at ×6.
+* Defending-fleet repair was 5%/s of a 110-second hull — it out-healed everything.
+  Now an absolute HP/s figure, hard-capped at 15% of the attacker's DPS and
+  **suppressed for 2.5s after every hit**, so damage always shows.
+* Attacking a held tile and bailing showed it as NEUTRAL — unclaimed for 24h and
+  stripped of its garrison. The attack shield no longer blanks the tile's holder;
+  only a real capture does.
 
-* ~1.5 join per hour, filling to 400 over a fortnight. Nothing shows for the
-  first 24h.
-* Each levels on its own curve from its own join time; power follows from level.
-  Top pilot ≈ Lv 160 at one week, Lv 442 at a month, ascending by month three.
-* 12-step hull ladder — their ships visibly evolve as they climb.
-* Variance: casual/ordinary/committed/pusher paces, 22% plateau chance, ±40%
-  gear luck. Level 500 wall → they ascend and restart, like a human.
-* Fairness: never rank 1, max 2 in top 10, max 25 in top 100, humans never
-  displaced from the visible board, human territory never taken, rewards never
-  enter the player economy.
+### Alliance boss — no damage limit
+The 25×-power transmit ceiling is gone client-side: damage counts uncapped, the
+"TRANSMIT BUFFER FULL" banner is removed, and a run is worth
+`max(25× power, 2.4× the remaining pool)` — so a hull you can't dent no longer
+exists, and a heavy hitter flattens low marks in a hit or two.
 
-### Fixes in this release
-* Defending fleets: combat compared *compressed* scores, square-rooting the real
-  power gap. Now de-compressed — the stronger fleet wins from 0.95× upward, and
-  defenders run shield repair.
-* Starforge: exponential ILVL tariff overflowed to Infinity on deep-zone gear.
-  Repriced as fixed costs from pilot level, rarity and item level.
-* Account sync: progress-weighted merge, so a weaker device can no longer
-  clobber a stronger save. Server-arbitrated session lease.
-* Titan Sina and Voidmaw could be re-granted free after every ascension —
-  both now behind permanent grant flags.
-* Badges keep their claimed ranks and career counters through an ascension.
+### Simulated pilots — no longer identifiable at a glance
+* Kill counts were the tell (billions, on Level-1 rows). Kills are now a career
+  stat — 900 per level, each ascension star worth a 500-level career — clamped on
+  read *and* enforced server-side by `sim-kills-sanity.sql`.
+* Dropped the "xXpilot"-shaped name pattern.
+
+### Galaxy Supply
+Cosmic Cache tops out at **Artifact** again. The crate ceiling read "last rarity in
+the chain", which silently became Paragon once the ascension-exclusive tiers were
+appended. Ascendant / Celestial / Paragon are earned by ascending only.
 
 ## Smoke test (2 min)
-1. Command shows the Pilot Ascension pill (🔒 Lv 100 below level).
-2. Battle screen: ◉ Beacon above the speed row in a Zone Grind; greys to `BOSS`
-   during a boss; hidden on galaxy/void tiles.
-3. Ranks page lists simulated pilots below the humans, with varied hulls.
-4. Ascension ▸ Perks: 12 perks; Loot Tiers shows the two cards.
-5. Missions ▸ ⌘ Badges: 1,000-badge ladder, Titan Sina banner.
+1. Hangar ▸ stats: Life Steal reads a decimal (e.g. `0.4%`), not `0%`.
+2. Galaxy Supply ▸ Cosmic Cache chip says **Artifact chance**, and the odds bar's
+   top segment is Artifact red.
+3. Void Zone ▸ any tier: warp in, enemies take and deal damage; no stalemate.
+4. Attack a rival/NPC tile, bail — the tile still shows its holder, shielded 24h.
+5. Command ▸ Pilot Ascension: hero line reads "You keep **every ship**", Step 1 is
+   CHOOSE YOUR FLAGSHIP.
+6. Alliance ▸ raid: the ⚔ meter has no `/ cap` denominator.

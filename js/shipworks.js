@@ -100,8 +100,8 @@
     if (cr.lvl === 1) { const s = C().dungeonScale(hz()); return { gold: Math.round(11000000 * Math.pow(s, 0.7) + 6000000) }; }
     if (cr.lvl === 2) { const s = C().dungeonScale(hz()); return { gold: Math.round(45000000 * Math.pow(s, 0.7) + 25000000), iron: 12500000 }; }
     if (cr.lvl === 3) return { fuel: 45000000, plasma: 22500000 };
-    if (cr.lvl === 4) return { credits: 6000 };
-    return { credits: 20000, dreadCores: 500 };
+    if (cr.lvl === 4) return { credits: 15000 };
+    return { credits: 60000, dreadCores: 500 };
   }
   const BULK = 10, BULK_MULT = 9; // 10× opens for the price of 9 — odds unchanged
   function costFor(cr, qty) {
@@ -182,11 +182,12 @@
     const ready = readyCount();
     body.innerHTML =
       '<div class="sw-tabs">' +
-        '<button class="sw-tab' + (tab === 'crates' ? ' on' : '') + '" data-swtab="crates">Part Crates</button>' +
-        '<button class="sw-tab' + (tab === 'inv' ? ' on' : '') + '" data-swtab="inv">Parts Inventory' +
+        '<button class="sw-tab' + (tab === 'crates' ? ' on' : '') + '" data-swtab="crates">Crates</button>' +
+        '<button class="sw-tab' + (tab === 'inv' ? ' on' : '') + '" data-swtab="inv">Inventory' +
           (ready ? '<span class="sw-tab-badge">' + ready + '</span>' : '') + '</button>' +
+        '<button class="sw-tab' + (tab === 'ex' ? ' on' : '') + '" data-swtab="ex">⇄ Exchange</button>' +
       '</div>' +
-      (tab === 'crates' ? crateTab() : invTab());
+      (tab === 'crates' ? crateTab() : tab === 'ex' ? exTab() : invTab());
     wire(body);
     updateBadge();
   }
@@ -265,7 +266,7 @@
     const p = clamp(have / need * 100, 0, 100);
     let action = '';
     if (ready) action = '<button class="sw-asm" data-asm="' + key + '">ASSEMBLE</button>';
-    else if (isOwned && have > 0) action = '<button class="sw-salv" data-salv="' + key + '">Salvage ' + have + ' → <span style="color:#f2b24b">● ' + fmt(have * salvageValue(key)) + '</span></button>';
+    else if (isOwned && have > 0) action = (have >= EX_RATE && nextKey(key) ? '<button class="sw-salv" data-extrade="' + key + '" title="Shard Exchange" style="margin-right:6px">⇄</button>' : '') + '<button class="sw-salv" data-salv="' + key + '">Salvage ' + have + ' → <span style="color:#f2b24b">● ' + fmt(have * salvageValue(key)) + '</span></button>';
     else if (isOwned) action = '<span class="sw-ownchip">OWNED</span>';
     return '<div class="sw-row' + (ready ? ' ready' : '') + (isOwned ? ' own' : '') + '" data-comment-anchor="sw-row-' + key + '">' +
       '<img class="sw-row-img" src="' + shipImg(key) + '" alt="">' +
@@ -281,6 +282,77 @@
     '</div>';
   }
 
+  // ===========================================================================
+  // ⇄ SHARD EXCHANGE — trade parts UP the chain, 10 : 1 per step
+  // ===========================================================================
+  const EX_RATE = 10;   // 10 parts of a hull → 1 part of the NEXT hull in the chain
+  function nextKey(key) { const b = buildable(); const i = b.findIndex((s) => s.key === key); return i >= 0 && i < b.length - 1 ? b[i + 1].key : null; }
+
+  function exTab() {
+    const rows = buildable().filter((s) => partsOf(s.key) > 0 && nextKey(s.key)).map((s) => {
+      const key = s.key, have = partsOf(key), nk = nextKey(key), ns = C().SHIP_BY_KEY[nk];
+      const can = have >= EX_RATE;
+      return '<div class="sw-exrow' + (can ? '' : ' dim') + '">' +
+        '<img src="' + shipImg(key) + '" alt="">' +
+        '<div class="sw-exmid">' +
+          '<div class="sw-exname">' + s.name + (owned(key) ? ' <i class="sw-exspare">SPARES</i>' : '') + '</div>' +
+          '<div class="sw-exsub">× ' + fmt(have) + ' parts → <img src="' + shipImg(nk) + '" alt=""> ' + ns.name + '</div>' +
+        '</div>' +
+        '<button class="sw-exbtn" data-extrade="' + key + '"' + (can ? '' : ' disabled') + '>⇄ TRADE</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="sw-intro"><b>Shard Exchange</b> — trade <b>' + EX_RATE + ' parts</b> of any hull for <b>1 part of the next hull up the chain</b>. Spare parts from hulls you already own climb too — all the way to the <b>TITAN SINA</b>.</div>' +
+      (rows || '<div class="sw-exempty">No parts to trade yet — open crates first. Spares from hulls you own can climb instead of being salvaged.</div>');
+  }
+
+  function openExchange(key) {
+    const s = C().SHIP_BY_KEY[key], nk = nextKey(key); if (!s || !nk) return;
+    const ns = C().SHIP_BY_KEY[nk];
+    const o = overlay(); o.className = 'show';
+    let t = 1;   // number of trades (×10 parts each)
+    const maxT = () => Math.floor(partsOf(key) / EX_RATE);
+    o.innerHTML =
+      '<div class="sw-exch">' +
+        '<div class="sw-rev-t">SHARD EXCHANGE</div>' +
+        '<div class="sw-exflow">' +
+          '<div class="sw-excard"><img src="' + shipImg(key) + '" alt=""><b id="sw-exgive"></b><span>' + s.name + '</span></div>' +
+          '<div class="sw-exarr">⇄</div>' +
+          '<div class="sw-excard get"><img src="' + shipImg(nk) + '" alt=""><b id="sw-exget"></b><span>' + ns.name + '</span></div>' +
+        '</div>' +
+        '<div class="sw-exrate">' + EX_RATE + ' : 1 · you hold ' + fmt(partsOf(key)) + ' ' + s.name + ' parts</div>' +
+        '<div class="sw-exq">' +
+          '<button data-exq="-1">−</button><button data-exq="1">+</button><button data-exq="max">MAX</button>' +
+        '</div>' +
+        '<div class="sw-rev-btns">' +
+          '<button class="sw-accept" id="sw-exgo"></button>' +
+          '<button class="sw-skip" id="sw-excancel" style="margin-top:0">Cancel</button>' +
+        '</div>' +
+      '</div>';
+    const give = o.querySelector('#sw-exgive'), get = o.querySelector('#sw-exget'), go = o.querySelector('#sw-exgo');
+    const paint = () => {
+      t = clamp(t, 1, Math.max(1, maxT()));
+      give.textContent = '−' + fmt(t * EX_RATE);
+      get.textContent = '+' + fmt(t);
+      go.textContent = 'EXCHANGE → +' + fmt(t) + ' ' + ns.name.toUpperCase() + (t > 1 ? ' PARTS' : ' PART');
+      go.disabled = maxT() < 1;
+    };
+    o.querySelectorAll('[data-exq]').forEach((b) => b.onclick = () => {
+      const v = b.dataset.exq;
+      if (v === 'max') t = maxT(); else t += +v;
+      paint();
+    });
+    o.querySelector('#sw-excancel').onclick = () => { closeOverlay(); render(); };
+    go.onclick = () => {
+      const n = Math.min(t, maxT()); if (n < 1) return;
+      addParts(key, -n * EX_RATE); addParts(nk, n);
+      try { G().save(); } catch (e) {}
+      if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+      toast('⇄ ' + fmt(n * EX_RATE) + ' ' + s.name + ' parts → ' + fmt(n) + ' ' + ns.name + ' part' + (n > 1 ? 's' : ''));
+      closeOverlay(); tab = 'ex'; render();
+    };
+    paint();
+  }
+
   // ---- wiring ---------------------------------------------------------------
   function wire(body) {
     body.querySelectorAll('[data-swtab]').forEach((b) => b.onclick = () => { tab = b.dataset.swtab; render(); });
@@ -292,6 +364,7 @@
       const open = card.classList.toggle('open'); b.textContent = open ? 'Hide drop odds' : 'View live drop odds';
     });
     body.querySelectorAll('[data-asm]').forEach((b) => b.onclick = () => assemble(b.dataset.asm));
+    body.querySelectorAll('[data-extrade]').forEach((b) => b.onclick = () => openExchange(b.dataset.extrade));
     body.querySelectorAll('[data-salv]').forEach((b) => b.onclick = () => salvage(b.dataset.salv));
   }
 
@@ -463,8 +536,8 @@
   .sw-intro b{ color:#e7f0fb; }
 
   /* tabs */
-  .sw-tabs{ display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:4px; background:rgba(8,12,20,.72); border:1px solid #26324a; border-radius:13px; margin-bottom:12px; }
-  .sw-tab{ position:relative; appearance:none; border:0; cursor:pointer; padding:10px 8px; border-radius:9px; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; letter-spacing:.02em; color:#93a2ba; background:transparent; transition:color .18s, background .18s; }
+  .sw-tabs{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:4px; background:rgba(8,12,20,.72); border:1px solid #26324a; border-radius:13px; margin-bottom:12px; }
+  .sw-tab{ position:relative; appearance:none; border:0; cursor:pointer; padding:10px 4px; border-radius:9px; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:12.5px; letter-spacing:.02em; color:#93a2ba; background:transparent; transition:color .18s, background .18s; }
   .sw-tab.on{ color:#08131c; background:linear-gradient(180deg,#8ff0ff,#4fc3ef); box-shadow:0 6px 16px rgba(95,209,255,.25); }
   .sw-tab-badge{ position:absolute; top:2px; right:6px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:#ff495f; color:#fff; font-size:10px; font-weight:800; line-height:16px; box-shadow:0 0 0 2px #0b1019; }
 
@@ -540,6 +613,34 @@
     font-family:'Rajdhani',sans-serif; font-weight:700; font-size:10.5px; color:#a9c6da; }
   .sw-salv:active{ transform:scale(.96); }
   .sw-ownchip{ font-size:9px; font-weight:800; letter-spacing:.1em; color:#7f92a6; border:1px solid #2b4055; border-radius:7px; padding:3px 8px; }
+
+  /* ⇄ shard exchange */
+  .sw-exrow{ display:flex; align-items:center; gap:11px; border:1px solid #223245; border-radius:13px; padding:9px 11px; margin-bottom:8px; background:linear-gradient(180deg,#0e1725,#0b1220); }
+  .sw-exrow.dim{ opacity:.55; }
+  .sw-exrow > img{ width:38px; height:38px; object-fit:contain; flex:none; filter:drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+  .sw-exmid{ flex:1; min-width:0; }
+  .sw-exname{ font-family:'Orbitron',sans-serif; font-weight:700; font-size:11.5px; color:#eaf2fb; letter-spacing:.02em; }
+  .sw-exspare{ font-style:normal; font-size:8px; font-weight:800; letter-spacing:.1em; color:#7f92a6; border:1px solid #2b4055; border-radius:6px; padding:1px 5px; vertical-align:2px; margin-left:5px; }
+  .sw-exsub{ display:flex; align-items:center; gap:5px; font-size:10.5px; color:#9fb1c4; margin-top:4px; font-weight:700; }
+  .sw-exsub img{ width:16px; height:16px; object-fit:contain; }
+  .sw-exbtn{ flex:none; border:1px solid rgba(110,231,255,.55); border-radius:10px; padding:9px 12px; cursor:pointer; font-family:'Orbitron',sans-serif; font-weight:800; font-size:10px; letter-spacing:.06em; color:#8ff0ff; background:rgba(110,231,255,.08); transition:transform .08s; }
+  .sw-exbtn:active{ transform:scale(.95); }
+  .sw-exbtn:disabled{ opacity:.35; cursor:default; }
+  .sw-exempty{ font-size:12px; color:#7f92a6; text-align:center; padding:26px 12px; border:1px dashed #2b4055; border-radius:12px; }
+  .sw-exch{ width:100%; max-width:360px; text-align:center; }
+  .sw-exflow{ display:flex; align-items:center; justify-content:center; gap:10px; margin-top:6px; }
+  .sw-excard{ flex:1; max-width:130px; border:1px solid #2b4055; border-radius:13px; padding:12px 8px; background:linear-gradient(180deg,#0e1725,#0b1220); }
+  .sw-excard.get{ border-color:rgba(124,224,160,.6); box-shadow:0 0 16px -7px rgba(124,224,160,.8); }
+  .sw-excard img{ width:46px; height:46px; object-fit:contain; }
+  .sw-excard b{ display:block; font-family:'Orbitron',sans-serif; font-size:15px; color:#fff; margin-top:4px; }
+  .sw-excard.get b{ color:#9df0bb; }
+  .sw-excard span{ display:block; font-size:10px; font-weight:700; color:#8ba0b5; margin-top:3px; }
+  .sw-exarr{ font-size:20px; font-weight:800; color:#6ee7ff; flex:none; }
+  .sw-exrate{ font-size:10.5px; color:#8ba0b5; font-weight:700; margin-top:10px; letter-spacing:.03em; }
+  .sw-exq{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
+  .sw-exq button{ min-width:46px; padding:9px 12px; border:1px solid #2b4055; border-radius:10px; background:rgba(255,255,255,.05); color:#dbe8f5; font-family:'Rajdhani',sans-serif; font-weight:800; font-size:15px; cursor:pointer; }
+  .sw-exq button:active{ transform:scale(.94); }
+  .sw-accept:disabled{ opacity:.4; cursor:default; }
 
   /* overlay */
   #sw-overlay{ position:absolute; inset:0; z-index:14; display:none; align-items:center; justify-content:center; padding:18px;

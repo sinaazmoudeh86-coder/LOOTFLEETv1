@@ -15,7 +15,9 @@
   function getUsers() { try { return JSON.parse(localStorage.getItem(USERS)) || {}; } catch (e) { return {}; } }
   function setUsers(u) { try { localStorage.setItem(USERS, JSON.stringify(u)); } catch (e) {} }
   function getSession() { try { return JSON.parse(localStorage.getItem(SESS)); } catch (e) { return null; } }
-  function setSession(s) { try { localStorage.setItem(SESS, JSON.stringify(s)); } catch (e) {} }
+  // account.js PINS the signed-in identity per tab (so a login elsewhere can't
+  // re-point this tab's save slot) — tell it when THIS tab is the one changing.
+  function setSession(s) { try { localStorage.setItem(SESS, JSON.stringify(s)); } catch (e) {} try { if (window.ACCOUNT && window.ACCOUNT.repin) window.ACCOUNT.repin(); } catch (e) {} }
 
   function reveal(animate) {
     const lg = $('login');
@@ -36,6 +38,8 @@
   // ---- LOCAL sign-in (guest, and username accounts when cloud is off) -------
   function signInLocal(method, name) {
     setSession({ method, name, at: Date.now() });
+    try { if (window.ACCOUNT) window.ACCOUNT.rebind(); } catch (e) {}
+    try { if (window.SESSIONLOCK) window.SESSIONLOCK.claim(); } catch (e) {}
     const sso = $('lg-sso-status');
     const go = () => { boot(); reveal(true); };
     if (sso) { sso.style.display = 'block'; sso.textContent = `Signing in…`; setTimeout(go, 450); }
@@ -44,15 +48,16 @@
 
   // ---- CLOUD finalize (after a successful Supabase auth) --------------------
   async function finalizeCloud(user, fresh) {
-    // single-session rule: a fresh login claims the account (kicking any other
-    // device); a restored session first verifies it still owns the account.
-    try { if (window.SESSIONLOCK) await window.SESSIONLOCK.start(user, !!fresh); } catch (e) {}
-    if (window.__sessionKicked) return;   // lost the account mid-restore → kick screen is up
     const meta = user.user_metadata || {};
     const name = meta.name || meta.full_name || meta.user_name || (user.email ? user.email.split('@')[0] : 'Operator');
     setSession({ method: 'Supabase', name, id: user.id, email: user.email, at: Date.now() });
+    // pin THIS tab to the account it just signed into (account.js), then claim
+    // the slot — the newest login kicks any other tab/device on the SAME account
+    try { if (window.ACCOUNT) window.ACCOUNT.rebind(); } catch (e) {}
     const sso = $('lg-sso-status'); if (sso) { sso.style.display = 'block'; sso.textContent = 'Syncing your fleet…'; }
     try { if (window.ACCOUNT) await window.ACCOUNT.pull(); } catch (e) {}
+    try { if (window.SESSIONLOCK) window.SESSIONLOCK.claim(); } catch (e) {}
+    if (window.__sessionKicked) return;   // lost the account mid-restore → kick screen is up
     boot(); reveal(true);
     setTimeout(maybePromptName, 600);   // NEW accounts: pick a commander name first
   }
@@ -186,7 +191,7 @@
     }
     const s = getSession();
     if (s && s.method === 'Guest') { boot(); reveal(false); return; }   // local guest world
-    if (s && s.method === 'Supabase') { try { localStorage.removeItem(SESS); } catch (e) {} } // stale token
+    if (s && s.method === 'Supabase') { try { localStorage.removeItem(SESS); if (window.ACCOUNT) window.ACCOUNT.rebind(); } catch (e) {} } // stale token
     window.__cloudPending = false;   // unblock boot; gate stays for the user to sign in
   }
 

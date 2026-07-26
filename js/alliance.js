@@ -337,7 +337,7 @@
           // REAL damage from the arena run (Monolith bonus already applied; server clamps 25× power)
           const dmg = Math.max(1, Math.round(res.dmg || 1));
           try {
-            const r = await S().rpc('alliance_attack', { p_dmg: dmg, p_vip: !!(window.VIP && VIP.level && VIP.level() >= 1) });
+            const r = await S().rpc('alliance_attack', { p_dmg: dmg, p_vip: !!(window.VIP && VIP.level && VIP.level() >= 1), p_pow: Math.max(0, Math.round((G().score && G().score()) || 0)) });
             // pocket reward scales with raid performance
             G().state.gold = (G().state.gold || 0) + Math.round(res.frac * 2e6 * Math.pow(window.CONFIG.dungeonScale(Math.max(1, G().state.highestUnlocked || 1)), 0.7)); G().save();
             S().toast(r && (r.kills | 0) > 0 ? '☠ ' + r.kills + ' ARMADA LEVEL' + (r.kills > 1 ? 'S' : '') + ' DOWN — ⬡ paid to every member · now Mk-' + (r.boss_n || '?')

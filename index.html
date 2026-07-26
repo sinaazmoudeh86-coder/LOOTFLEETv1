@@ -4,27 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#05070d">
-<title>Loot Fleet — Free Idle Space Game in Your Browser | Space ARPG</title>
-<meta name="description" content="Play Loot Fleet free in your browser — an idle space ARPG with no download. Auto-battle endless zones, loot 14 rarity tiers, build a 31-ship fleet, mine moons and conquer a living galaxy.">
-<link rel="canonical" href="https://lootfleet.com/">
+<title>Loot Fleet — Idle Space ARPG</title>
+<meta name="description" content="Loot Fleet is a free idle space-ARPG. Farm infinite loot, evolve your fleet from frigate to titan carrier, and conquer a living galaxy. Play in your browser at lootfleet.com.">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Loot Fleet">
-<meta property="og:title" content="Loot Fleet — Free Idle Space Game in Your Browser">
-<meta property="og:description" content="An idle space ARPG where the loot never stops. 31 ships, 14 rarity tiers, moon mining, galaxy conquest — free, no download.">
-<meta property="og:url" content="https://lootfleet.com/">
+<meta property="og:title" content="Loot Fleet — Idle Space ARPG">
+<meta property="og:description" content="Farm the galaxy, evolve your fleet, climb the leaderboard. Play free in your browser.">
+<meta property="og:url" content="https://lootfleet.com">
 <meta property="og:image" content="https://lootfleet.com/icon-512.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Loot Fleet — Free Idle Space Game in Your Browser">
-<meta name="twitter:description" content="An idle space ARPG where the loot never stops. Free, no download — progress even while you're away.">
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"VideoGame","name":"Loot Fleet","url":"https://lootfleet.com/","image":"https://lootfleet.com/icon-512.png","description":"Free idle space ARPG played in the browser. Auto-battle endless zones, collect loot across 14 rarity tiers, evolve a 31-ship fleet, mine moon colonies, defend your Home Citadel and conquer a living galaxy — progress continues while you're offline.","genre":["Idle","Incremental","Action RPG","Space","Strategy"],"gamePlatform":["Web Browser","PC","Mobile"],"operatingSystem":"Any (browser-based)","applicationCategory":"Game","playMode":["SinglePlayer","MultiPlayer"],"inLanguage":"en","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD","availability":"https://schema.org/InStock"},"publisher":{"@type":"Organization","name":"Loot Fleet","url":"https://lootfleet.com/","logo":"https://lootfleet.com/icon-512.png"}}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","name":"Loot Fleet","url":"https://lootfleet.com/","potentialAction":{"@type":"PlayAction","target":"https://lootfleet.com/game.html"}}
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -44,12 +35,11 @@
     -webkit-font-smoothing:antialiased; line-height:1.5; overflow-x:hidden;
   }
   a{color:inherit;text-decoration:none;}
-  html,body{overflow-x:hidden;}
   .wrap{max-width:1140px;margin:0 auto;padding:0 22px;}
   .amber{color:var(--gold);}
 
   /* ambient starfield + galaxy layer */
-  .space-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:
+  .space-bg{position:fixed;inset:0;z-index:-1;background:
     radial-gradient(110% 70% at 50% -10%, #16203a 0%, #0a0f1b 45%, #05070d 100%);}
   /* drifting nebula clouds — violet + cyan + gold */
   .space-bg::before{content:'';position:absolute;inset:-12%;
@@ -367,19 +357,6 @@
     .nav-link{display:none;}
     .nav-toggle{display:flex;}
   }
-  /* small phones — tighter paddings, nothing overlaps or overflows */
-  @media (max-width:520px){
-    .wrap{padding:0 16px;}
-    .hero{padding:36px 0 14px;}
-    .hero-sub{font-size:16px;}
-    .trust{gap:12px 16px;}
-    .ships-grid{gap:10px;}
-    .ship-tile img{width:72px;height:72px;}
-    .feat,.step{padding:18px;}
-    .cta-band{padding:34px 18px;border-radius:16px;}
-    .foot-in{flex-direction:column;align-items:flex-start;gap:10px;}
-    .adm-kpis{grid-template-columns:1fr;}
-  }
 
   /* ===== ART UPLIFT — motion & light layer ===== */
   /* the nebula glow behind everything slowly breathes and drifts */
@@ -513,20 +490,6 @@
     .adm-cols{grid-template-columns:1fr;}
   }
 </style>
-<style>
-  .nav-ver{font-family:'Rajdhani',sans-serif;font-size:9.5px;font-weight:800;letter-spacing:.14em;color:var(--gold);border:1px solid rgba(242,178,75,.35);border-radius:6px;padding:1px 6px;margin-left:8px;white-space:nowrap;align-self:center;}
-  @media (max-width:560px){.nav-ver{display:none;}}
-</style>
-<script>
-// nav build badge follows version.json (the deploy truth) so it can never go stale
-addEventListener('DOMContentLoaded', function(){
-  if (location.pathname.indexOf('/serve/') !== -1) return;   // preview sandbox: skip beacon
-  fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
-    .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(v){ var el = document.getElementById('nav-ver'); if (el && v && v.build) el.textContent = (v.label || 'V1.0 BETA') + ' · B' + v.build; })
-    .catch(function(){});
-});
-</script>
 </head>
 <body>
 <div class="space-bg" aria-hidden="true">
@@ -539,7 +502,6 @@ addEventListener('DOMContentLoaded', function(){
   <div class="wrap nav-in">
     <a class="brand brand-lg" href="#top">
       <span class="wm"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
-      <span class="nav-ver" id="nav-ver">V1.0 BETA · B297</span>
     </a>
     <div class="nav-cta">
       <a class="nav-link" href="features.html">Features</a>
@@ -569,7 +531,7 @@ addEventListener('DOMContentLoaded', function(){
       <div>
         <span class="eyebrow"><span class="pip"></span>Free · Browser · No download</span>
         <h1 class="hero-title"><span class="g">Farm the galaxy.</span><br><span class="a">Build the fleet.</span></h1>
-        <p class="hero-sub">An idle space-ARPG where the loot never stops. Auto-battle through endless zones, chase 14 tiers of gear, and evolve a lone frigate through 31 hulls into the final-class Titan Sina — conquering a living galaxy even while you're away.</p>
+        <p class="hero-sub">An idle space-ARPG where the loot never stops. Auto-battle through endless zones, chase 11 tiers of gear, and evolve a single frigate into a titan carrier that conquers a living galaxy — even while you're away.</p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="game.html">▸ Play free</a>
           <a class="btn btn-ghost" href="game.html">Log in</a>
@@ -699,7 +661,7 @@ addEventListener('DOMContentLoaded', function(){
   <!-- RARITY STRIP -->
   <section class="rarity">
     <div class="wrap">
-      <div class="rarity-head">Fourteen rarity tiers — from Common to Artifact</div>
+      <div class="rarity-head">Eleven rarity tiers — from Common to Primordial</div>
       <div class="chips" id="chips"></div>
     </div>
   </section>
@@ -708,8 +670,8 @@ addEventListener('DOMContentLoaded', function(){
   <section class="block" id="ships" style="padding-top:40px;">
     <div class="wrap">
       <div class="sec-eyebrow">Command the fleet</div>
-      <h2 class="sec-title">Thirty-one hulls to master</h2>
-      <p class="sec-lead">Evolve from a scrappy Frigate to the final-class Titan Sina — blueprints, faction vessels, alliance siege hulls, Oblivion prototypes, six Dread-class warships and event exclusives. The endgame hulls can't even be bought with gold.</p>
+      <h2 class="sec-title">Twenty-two hulls to master</h2>
+      <p class="sec-lead">Evolve from a scrappy Frigate to the final-class Titan Sina — every hull adds weapons, plating, and drone bays. The endgame hulls can't even be bought with gold.</p>
       <div class="ships-grid" id="shipsGrid"></div>
     </div>
   </section>
@@ -724,62 +686,47 @@ addEventListener('DOMContentLoaded', function(){
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.3L18 20l-6-3-6 3 1.5-6.8L3 8.9 9 8z"/></svg></div>
           <h3>Infinite Loot</h3>
-          <p>Procedural gear across 14 glowing rarities — Common to Artifact — in six slots, with rare life-steal and multi-shot rolls. The chase scales forever.</p>
+          <p>Procedural gear across 12 glowing rarities and six slots, with rare life-steal and multi-shot rolls. The chase scales forever.</p>
         </div>
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l7 4v6c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="M12 7v8M8.5 11h7"/></svg></div>
-          <h3>31 Hulls to Master</h3>
-          <p>Frigate to Titan Sina: blueprints from bosses, faction vessels bought with conquest resources, alliance-exclusive siege hulls, six Dread-class warships and event exclusives at the top.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 21V10l4 2V8l4 2V6l4 2V4l4 2v15z"/><path d="M9 21v-4h6v4"/></svg></div>
-          <h3>Home Citadel</h3>
-          <p>Fortify DURING the fight: raise laser, cryo, missile and rail towers between waves, then hold the line. Your citadel mines ore 24/7 — fail a wave and you lose time, never progress.</p>
+          <h3>Evolve Your Fleet</h3>
+          <p>Earn blueprints from zone bosses and grow from a nimble frigate to a drone-launching titan carrier — ten hulls, each with its own fit.</p>
         </div>
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
           <h3>Conquer the Galaxy</h3>
-          <p>One living hex galaxy, 1,950 tiles. Siege systems in 10-wave battles and hold them for hourly fuel, iron, and plasma — against real opponents.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></div>
-          <h3>Moon Mining Empire</h3>
-          <p>Terraform five resource-biased moons — Luna to Prisma — each running its own 24/7 colony. Pirates raid; underdefended moons get knocked offline.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
-          <h3>Shipworks</h3>
-          <p>Manufacture hulls from part crates with published live odds — five crate bands from Rare all the way to the Titan Reliquary. Collect the parts, assemble the ship, skip the gates.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
-          <h3>Dreadnaught Hunt &amp; Pilot Tree</h3>
-          <p>Hunt the weekly Dreadnaught for ◇ Dread Cores and spend them on an endless hex talent tree — permanent bonuses for every ship you'll ever fly.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2c2 4 6 5 6 10a6 6 0 1 1-12 0c0-5 4-6 6-10z"/></svg></div>
-          <h3>Season Events</h3>
-          <p>Server-wide raid bosses with infinite scaling stages — the whole server chips away at the Voidmaw together. Rank daily, earn parts, assemble the event-exclusive hull before the season ends.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M6 6H3v2a3 3 0 0 0 3 3M18 6h3v2a3 3 0 0 1-3 3"/></svg></div>
-          <h3>PvP &amp; Leaderboards</h3>
-          <p>Weekly heats against operators on your exact timeline, plus the Fleet Rank ladder — raid real players' citadels for spoils.</p>
+          <p>Warp an infinite hex map, siege systems in 10-wave battles, and hold them for hourly fuel, iron, and plasma.</p>
         </div>
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg></div>
           <h3>Daily Missions</h3>
-          <p>Ten fresh orders a day, tracked while you fight. Clear the board for the Commander's Crate — and 1,000 lifetime missions earns the Veridian, a hull money can't buy.</p>
+          <p>Ten fresh orders every day, tracked automatically while you fight. Clear the board for the Commander's Crate — 100 LootCoins, free.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></div>
+          <h3>Moon Colony</h3>
+          <p>Claim moons and build a mining industry that produces 24/7 — mines, drones, defenses. Pirates raid; underdefended colonies go dark.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M6 6H3v2a3 3 0 0 0 3 3M18 6h3v2a3 3 0 0 1-3 3"/></svg></div>
+          <h3>PvP &amp; Leaderboards</h3>
+          <p>Weekly heats against operators on your exact timeline, plus the Level-50 Fleet Rank ladder — raid real players' citadels for spoils.</p>
         </div>
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg></div>
-          <h3>Idle, AFK &amp; Cloud</h3>
-          <p>Auto-pilot does the fighting — close the tab and the haul keeps growing. One account syncs your save to every device.</p>
+          <h3>Idle &amp; AFK</h3>
+          <p>Auto-pilot does the fighting. Close the tab and your operator keeps farming kills, loot, and XP — collect the haul when you return.</p>
         </div>
         <div class="feat">
-          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l4 5-4 15-4-15z"/><path d="M2 7l6 0M16 7l6 0M2 7l10 15L22 7"/></svg></div>
-          <h3>Nebula Casino &amp; Prism</h3>
-          <p>Stake gold in the casino, mine ◈ prism in the deep zones, and take the Prism Fleet boss gauntlet at Level 200 — endgame currencies with real teeth.</p>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+          <h3>Skills &amp; Pilot Tree</h3>
+          <p>Three deep skill branches plus a permanent Pilot Tree fuelled by weekly Dreadnaught hunts — bonuses that survive every refit.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
+          <h3>Galaxy Supply</h3>
+          <p>Skip the RNG: buy the exact gear tier you want with farmed resources — every crate a guaranteed drop at your zone depth.</p>
         </div>
       </div>
     </div>
@@ -793,21 +740,7 @@ addEventListener('DOMContentLoaded', function(){
       <div class="steps">
         <div class="step"><h3>Auto-battle</h3><p>Deploy to a zone and your fleet fights on its own. Tune speed up to 10× and let the kills — and loot — pour in.</p></div>
         <div class="step"><h3>Equip the best</h3><p>Auto-equip upgrades, auto-sell the junk, and watch your Hero Power climb. Bigger numbers, deeper zones.</p></div>
-        <div class="step"><h3>Push the frontier</h3><p>Beat bosses for blueprints, warp to new systems, and chase the rarities only the deepest zones drop.</p></div>
-        <div class="step"><h3>Build the empire</h3><p>Command turns loot into territory: fortify your Home Citadel, terraform moons, hunt Dreadnaughts, and hold your corner of the galaxy.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- WHAT IS LOOT FLEET — descriptive copy for search + new players -->
-  <section class="block" id="about">
-    <div class="wrap" style="max-width:860px">
-      <div class="sec-eyebrow">About the game</div>
-      <h2 class="sec-title">What is Loot Fleet?</h2>
-      <div style="color:var(--muted);font-size:15.5px;line-height:1.7;display:grid;gap:14px">
-        <p><strong style="color:var(--text)">Loot Fleet is a free idle space game</strong> — an ARPG you play right in your browser with no download and no install. Your fleet auto-battles through endless bullet-hell zones while procedural loot pours in across fourteen rarity tiers, from Common all the way to Artifact. Every upgrade pushes you a zone deeper; every zone drops something rarer.</p>
-        <p>It's also a <strong style="color:var(--text)">space strategy and mining game</strong>: capture territory in a living 1,950-tile galaxy, terraform five moon colonies that mine resources 24/7, and defend your Home Citadel in tower-defense waves where you build lasers, cryo spires and rail cannons <em>during</em> the fight. Manufacture new hulls in the Shipworks, hunt the weekly Dreadnaught to grow your permanent Pilot Tree, and take on server-wide season raid bosses with every other player.</p>
-        <p>Progress never stops — <strong style="color:var(--text)">Loot Fleet keeps farming while you're offline</strong>, and one free account syncs your save across phone, tablet and desktop. New to idle ARPGs? Start with the <a href="guides/how-to-play.html" style="color:var(--cyan)">beginner's guide</a> or just <a href="game.html" style="color:var(--gold)">press play</a> — you'll be looting in ten seconds.</p>
+        <div class="step"><h3>Push the frontier</h3><p>Beat bosses for blueprints, warp to new systems, and chase the rarities that only the deepest zones can drop.</p></div>
       </div>
     </div>
   </section>
@@ -843,52 +776,13 @@ addEventListener('DOMContentLoaded', function(){
       <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">New · Systems</div>
       <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Command Systems — Missions, Moon Colony &amp; Fleet Rank</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.5">All seven Command systems and when they unlock.</div></a>
-    <a href="guides/zones-and-citadels.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
-      <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">New · Endgame</div>
-      <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Zone Grind, Citadels &amp; the Home Citadel</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5">Tower defense inside the battle — build, launch, hold.</div></a>
-    <a href="guides/loot-rarity.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
-      <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">Loot</div>
-      <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">The Rarity Ladder — Common to Artifact</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5">All 14 tiers, drop odds, and where to farm each.</div></a>
     <a href="guides/ships-and-fleet.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
       <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">Ships</div>
       <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Hull Tier List &amp; Fleet Building</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5">All 31 hulls — Frigate to Titan Sina — plus 5-ship fleets.</div></a>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Frigate to Mothership, plus 5-ship fleets.</div></a>
   </div>
   <p style="margin-top:16px"><a href="guides.html" style="color:var(--cyan,#5fd1ff);font-weight:700">All guides →</a></p>
 </section>
-
-<!-- FAQ -->
-<section id="faq" class="wrap" style="margin-top:70px;max-width:860px">
-  <h2 style="font-family:var(--disp);font-weight:900;font-size:clamp(22px,4vw,30px);letter-spacing:.02em;margin-bottom:18px">Frequently Asked Questions</h2>
-  <div style="display:grid;gap:10px">
-    <details class="faq-item"><summary>Is Loot Fleet free to play?</summary><p>Yes — Loot Fleet is completely free to play in your browser. You can even start as a guest with no signup. Optional LootCoin packs exist for players who want to speed things up, but everything in the game can be earned by playing.</p></details>
-    <details class="faq-item"><summary>Do I need to download anything to play?</summary><p>No download, no install. Loot Fleet runs in any modern browser on desktop, laptop, tablet or phone. You can also add it to your home screen as an app and keep playing offline.</p></details>
-    <details class="faq-item"><summary>What kind of game is Loot Fleet?</summary><p>Loot Fleet is an idle space ARPG — part incremental game, part action RPG, part strategy. Your fleet auto-battles and farms loot on its own, while you make the big calls: gear, ships, skills, moon colonies, citadel defense and galaxy conquest.</p></details>
-    <details class="faq-item"><summary>Does the game progress while I'm offline?</summary><p>Yes. Your operator keeps farming kills, XP and loot while you're away, your moon colonies mine around the clock, and your Home Citadel stockpiles ore. Come back, collect the haul, and push deeper.</p></details>
-    <details class="faq-item"><summary>Can I play on multiple devices?</summary><p>Yes — create one free account and your save syncs to the cloud. Start a session on your PC, continue on your iPad or phone; your fleet, loot and progress follow you everywhere.</p></details>
-    <details class="faq-item"><summary>How many ships are in Loot Fleet?</summary><p>Thirty-one hulls, from the starter Frigate to the final-class Titan Sina — unlocked through boss blueprints, galaxy resources, Shipworks part crates, mission rewards, the alliance Monolith Shipyard and season-event exclusives.</p></details>
-  </div>
-</section>
-<style>
-  .faq-item{background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:0 18px;}
-  .faq-item summary{cursor:pointer;font-family:var(--disp);font-weight:700;font-size:14.5px;color:#fff;padding:15px 0;list-style:none;position:relative;padding-right:28px;}
-  .faq-item summary::-webkit-details-marker{display:none;}
-  .faq-item summary::after{content:'+';position:absolute;right:2px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:18px;font-weight:600;}
-  .faq-item[open] summary::after{content:'−';}
-  .faq-item p{color:var(--muted);font-size:14px;line-height:1.65;padding:0 0 16px;}
-</style>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"Is Loot Fleet free to play?","acceptedAnswer":{"@type":"Answer","text":"Yes — Loot Fleet is completely free to play in your browser. You can even start as a guest with no signup. Optional LootCoin packs exist for players who want to speed things up, but everything in the game can be earned by playing."}},
-{"@type":"Question","name":"Do I need to download anything to play?","acceptedAnswer":{"@type":"Answer","text":"No download, no install. Loot Fleet runs in any modern browser on desktop, laptop, tablet or phone. You can also add it to your home screen as an app and keep playing offline."}},
-{"@type":"Question","name":"What kind of game is Loot Fleet?","acceptedAnswer":{"@type":"Answer","text":"Loot Fleet is an idle space ARPG — part incremental game, part action RPG, part strategy. Your fleet auto-battles and farms loot on its own, while you make the big calls: gear, ships, skills, moon colonies, citadel defense and galaxy conquest."}},
-{"@type":"Question","name":"Does the game progress while I'm offline?","acceptedAnswer":{"@type":"Answer","text":"Yes. Your operator keeps farming kills, XP and loot while you're away, your moon colonies mine around the clock, and your Home Citadel stockpiles ore. Come back, collect the haul, and push deeper."}},
-{"@type":"Question","name":"Can I play on multiple devices?","acceptedAnswer":{"@type":"Answer","text":"Yes — create one free account and your save syncs to the cloud. Start a session on your PC, continue on your iPad or phone; your fleet, loot and progress follow you everywhere."}},
-{"@type":"Question","name":"How many ships are in Loot Fleet?","acceptedAnswer":{"@type":"Answer","text":"Thirty-one hulls, from the starter Frigate to the final-class Titan Sina — unlocked through boss blueprints, galaxy resources, Shipworks part crates, mission rewards, the alliance Monolith Shipyard and season-event exclusives."}}
-]}
-</script>
 
 <footer>
   <div class="wrap foot-in">
@@ -907,39 +801,31 @@ addEventListener('DOMContentLoaded', function(){
       <a href="terms.html">Terms</a>
       <a href="#admin" id="admLink">Admin</a>
     </div>
-    <div>© <span id="yr"></span> Loot Fleet · lootfleet.com · <span style="color:var(--gold);font-weight:700">V1.0 BETA · BUILD 283</span> <button id="admTrigger" class="adm-trigger" title="Admin" aria-label="Admin dashboard"></button></div>
+    <div>© <span id="yr"></span> Loot Fleet · lootfleet.com <button id="admTrigger" class="adm-trigger" title="Admin" aria-label="Admin dashboard"></button></div>
   </div>
 </footer>
 
 <script>
   // rarity chips
   (function(){
-    const R=[['Common','#9aa0a6'],['Uncommon','#5bc06b'],['Rare','#4a90e2'],['Epic','#b15cff'],['Legendary','#f0972a'],['Mythic','#ff3b4e'],['Ancient','#21d4c4'],['Divine','#ffe27a'],['Cosmic','#ff6ad5'],['Void','#9a5bff'],['Eternal','#eae6ff'],['Primordial','#ffe6a8'],['Relic','#c061ff'],['Artifact','#ff2330']];
+    const R=[['Common','--c-common'],['Uncommon','--c-uncommon'],['Rare','--c-rare'],['Epic','--c-epic'],['Legendary','--c-legendary'],['Mythic','--c-mythic'],['Ancient','--c-ancient'],['Divine','--c-divine'],['Cosmic','--c-cosmic'],['Void','--c-void'],['Eternal','--c-eternal'],['Primordial','--c-primordial']];
+    const root=getComputedStyle(document.documentElement);
     const el=document.getElementById('chips');
-    el.innerHTML=R.map(([n,c])=>'<span class="chip" style="color:'+c+'"><span class="d" style="background:'+c+'"></span>'+n+'</span>').join('');
+    el.innerHTML=R.map(([n,v])=>{const c=root.getPropertyValue(v).trim();return '<span class="chip" style="color:'+c+'"><span class="d" style="background:'+c+'"></span>'+n+'</span>';}).join('');
     // the FULL hull roster — [img key, name, tag, tier color]
     const SHP=[
       ['frigate','Frigate','Tier 1','#7ed957'],
       ['interceptor','Interceptor','Tier 2','#4db8ff'],
       ['cruiser','Cruiser','Tier 3','#36d6c6'],
-      ['chromafang','Chroma Fang','Spectrum Tech','#ff7ad9'],
       ['heavycruiser','Heavy Cruiser','Tier 4','#a06bff'],
       ['destroyer','Destroyer','Tier 5','#ffc23c'],
       ['battleship','Battleship','Tier 6','#ff9a3c'],
-      ['veridian','Veridian','Mission Veteran','#46d27a'],
       ['dreadnought','Dreadnought','Tier 7','#ff5168'],
       ['carrier','Carrier','Tier 8','#e06bff'],
       ['aegis','Aegis','Fleet Support','#23d8c6'],
       ['supercarrier','Super Carrier','Tier 9','#c479ff'],
       ['titan','Titan Carrier','Flagship','#5fb0ff'],
       ['mothership','Mothership','Faction Vessel','#ffd450'],
-      ['monolith1','Monolith Shard','Alliance ⬡ I','#2ee6c9'],
-      ['monolith2','Monolith Bastion','Alliance ⬡ II','#2ee6c9'],
-      ['monolith3','Monolith Siegebreaker','Alliance ⬡ III','#2ee6c9'],
-      ['monolith4','Monolith Apex','Alliance ⬡ Apex','#2ee6c9'],
-      ['voidmaw','Voidmaw','Season 1 Exclusive','#9a6bff'],
-      ['chromaregent','Chroma Regent','Spectrum Mothership','#ff62d2'],
-      ['frostyfrost','FrostyFrost','Cryo Tech','#7fd4ff'],
       ['oblivionspear','Oblivion Spear','Oblivion T1','#ff62d2'],
       ['oblivionspearalpha','Oblivion Spear Alpha','Oblivion Alpha','#9a6bff'],
       ['oblivionfinal','Oblivion Final','Final Hull','#46d27a'],
@@ -952,7 +838,7 @@ addEventListener('DOMContentLoaded', function(){
       ['titansina','Titan Sina','Final Class','#f4f7ff']
     ];
     const sg=document.getElementById('shipsGrid');
-    if(sg) sg.innerHTML=SHP.map((s,i)=>'<div class="ship-tile" style="--tc:'+s[3]+'"><span class="tnum">'+(i+1)+'</span><img src="ships/ship-'+s[0]+'.png" alt="'+s[1]+' — '+s[2]+' ship in Loot Fleet" loading="lazy"><div class="tn">'+s[1]+'</div><div class="tt">'+s[2]+'</div></div>').join('');
+    if(sg) sg.innerHTML=SHP.map((s,i)=>'<div class="ship-tile" style="--tc:'+s[3]+'"><span class="tnum">'+(i+1)+'</span><img src="ships/ship-'+s[0]+'.png" alt="'+s[1]+'" loading="lazy"><div class="tn">'+s[1]+'</div><div class="tt">'+s[2]+'</div></div>').join('');
     document.getElementById('yr').textContent=new Date().getFullYear();
   })();
 
@@ -1084,7 +970,7 @@ addEventListener('DOMContentLoaded', function(){
     },1000);
   })();
 </script>
-<script src="js/showcase.js?v=63"></script>
+<script src="js/showcase.js?v=359"></script>
 
 <!-- ============================ ADMIN DASHBOARD ============================ -->
 <div id="adminApp" class="adm-overlay" aria-hidden="true">
@@ -1179,9 +1065,9 @@ addEventListener('DOMContentLoaded', function(){
   </div>
 </div>
 
-<script src="js/config.live.js?v=1"></script>
-<script src="js/analytics.js?v=1"></script>
-<script src="js/admin.js?v=1"></script>
+<script src="js/config.live.js?v=359"></script>
+<script src="js/analytics.js?v=359"></script>
+<script src="js/admin.js?v=359"></script>
 
 </body>
 </html>

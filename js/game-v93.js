@@ -144,6 +144,11 @@
       if (!it) return;
       for (const k in it.stats) s[k] = (s[k] || 0) + it.stats[k];
     });
+    // STARFORGE — every fitting hammered to +15 grants 1% flash-freeze chance on
+    // hit (cryo tech, earned instead of bought). Bosses stay immune.
+    { let cryo = 0;
+      Object.keys(state.equipped).forEach((slot) => { const it = state.equipped[slot]; if (it && it.enh && it.enh.lv >= 15) cryo++; });
+      s.cryoChance = cryo; }
     // FLEET fittings: escorts' stowed gear feeds the fleet at the same share
     // as their hull mods — auto-improved escort loadouts are real power.
     if (state.fleet && state.fleet.length) {
@@ -618,6 +623,24 @@
         }
       }
     }
+    // STARFORGE CRYO — 1% flash-freeze per +15 fitting (skipped when a FrostyFrost
+    // is aboard — its fleet cryo field already rolled above)
+    else if (!p.drone && !e.isBoss && !e.dying && (rt.stats.cryoChance || 0) > 0
+             && Math.random() * 100 < rt.stats.cryoChance && !(e.frozenT > 0) && (e.frostCd || 0) <= 0) {
+      e.chillT = Math.max(e.chillT || 0, 2.2);
+      e.frozenT = 1.8; e.frostCd = 5;
+      rt.floats.push(new E.FloatText(e.x, e.y - e.size - 12, '⚒ FROZEN', { color: '#aee6ff', size: 28 }));
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2, sp = 90 + Math.random() * 120;
+        rt.particles.push(new E.Particle(e.x, e.y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0.4 + Math.random()*0.3, size: 1.6 + Math.random()*2, color: i % 2 ? '#aee6ff' : '#e8f8ff', glow: true, drag: 0.86 }));
+      }
+    }
+    // VOIDMAW SINGULARITY — stun + collapsing black hole beneath the target
+    if (voidmawAboard() && !p.drone && !e.dying && (e.singCd || 0) <= 0 && Math.random() * 100 < SING.chance) {
+      e.singCd = SING.cd;
+      if (!e.isBoss) { e.stunT = Math.max(e.stunT || 0, SING.stun); e.frozenT = Math.max(e.frozenT || 0, 0); }
+      openSingularity(e);
+    }
     // PRISM AURA — 10% of your hit splashes as AOE to nearby foes
     if (state.shipAura && state.shipAura[state.ship]) prismSplash(e, p.damage);
     // AGGREGATED DAMAGE BUBBLES (Jul 2026): at endgame fire rates one bubble
@@ -1060,6 +1083,10 @@
     draw();
   }
   function loop(now) { if (!rt.running) return; step(now); requestAnimationFrame(loop); }
+  // SESSION KICK — a screen that lost the account lock must stop SIMULATING,
+  // not just stop saving: otherwise the player keeps banking progress behind
+  // the takeover notice that can never be written anywhere.
+  function freeze() { rt.running = false; }
 
   function update(dt) {
     const a = rt.archer;
@@ -1149,6 +1176,8 @@
     }
     // ASCENSION: Storm Conduit — per-second chain-lightning proc
     stormTick(dt);
+    // VOIDMAW: black holes drag and grind everything caught inside
+    singularityTick(dt);
 
     // enemies
     for (const e of rt.enemies) {
@@ -1398,6 +1427,8 @@
     R.drawArena(ctx, rt.worldW, rt.worldH, rt.time, state.currentDungeon);
     // VOID ZONE — black-hole arena dressing under everything else
     if (state.currentSystem) { try { drawVoidArena(ctx); } catch (e) {} }
+    // VOIDMAW SINGULARITIES — collapsing wells beneath stunned targets
+    if (rt.holes && rt.holes.length) { try { drawSingularities(ctx); } catch (e) {} }
     // PRISM MINING — ore field + miners, drawn in world space just above the
     // arena floor (enemies & player render on top).
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.render) { try { window.PRISM.render(ctx, rt.time, rt); } catch (e) {} }
@@ -2765,6 +2796,7 @@
       // player-built citadels: higher ranks are hardened vs the rival sim
       if (hasMyCitadel(id) && Math.random() < (0.7 + 0.06 * citadelLevel(id))) return null;
       const name = rndRivalName();
+      accrueResources();   // settle earnings up to the moment the tile falls
       delete state.ownedSystems[id]; state.rivalTiles[id] = name;
       // a rival takeover RAZES any citadel you built there — and the tile is
       // attack-shielded for 24 h (you can't instantly take it back)
@@ -2806,6 +2838,7 @@
   function realMyUid() { return (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null; }
   function syncRealTiles(map) {
     rt.realTiles = map || {};
+    accrueResources();   // settle at PRE-sync ownership — you earn for what you actually held until now
     const myUid = realMyUid();
     Object.keys(rt.realTiles).forEach((id) => {
       const r = rt.realTiles[id];
@@ -2825,6 +2858,7 @@
     if (ev.deleted) { delete rt.realTiles[ev.tileId]; }
     else {
       rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil, citadel: !!ev.citadel, fleetScore: ev.fleetScore || 0, defense: ev.defense || null };
+      accrueResources();   // settle before ownership flips either way
       if (myUid && ev.ownerId === myUid) { state.ownedSystems[ev.tileId] = true; }
       else if (state.ownedSystems[ev.tileId]) {
         delete state.ownedSystems[ev.tileId];
@@ -3170,6 +3204,7 @@
     // stale server protection (the old owner's fortress) hand the tile back.
     const razing = !!rt.razingClaim; rt.razingClaim = false;
     const fromRival = rivalOf(k);
+    accrueResources();   // settle earnings BEFORE ownership changes — new rate applies from now
     state.ownedSystems[k] = true;
     // VOID ZONE — the tile's fixed citadel comes WITH the conquest (no builds, no upgrades)
     if (tile.void) { if (!state.citadels) state.citadels = {}; if (!state.citadels[k]) state.citadels[k] = { score: Math.round(score() * citadelDefenseMult(3)), builtAt: Date.now(), lv: 1, void: true }; }
@@ -3247,6 +3282,7 @@
   function abandonTile(id) {
     if (!isOwned(id)) return { ok: false, reason: 'owned' };
     const t = sysAt(id); if (!t || t.home) return { ok: false, reason: 'home' };
+    accrueResources();   // settle earnings up to the abandon
     delete state.ownedSystems[id];
     if (state.citadels) delete state.citadels[id];
     if (state.tileCd) delete state.tileCd[id];
@@ -3267,7 +3303,10 @@
     const t = sysAt(id); if (!t) return null;
     // ~100 days of THIS tile's production (Jul 2026: ×10 economy pass) — proportional, never astronomical.
     const HRS = 100 * 24;
-    const rate = Math.max(20, (t.rate || 20) * (t.deep ? GX.DEEP_MULT.resource : 1));
+    // COST PARITY: anchor to the tile's UN-boosted yield — a natural ⛴ tile's
+    // baked ×1000 must never make citadel build/upgrade prices 1000× a player's.
+    const baseR = (t.rate || 20) / (t.citadel ? ((GX && GX.CITADEL_RATE_MULT) || 1000) : 1);
+    const rate = Math.max(20, baseR * (t.deep ? GX.DEEP_MULT.resource : 1));
     const base = Math.round(rate * HRS);
     const main = t.resource || 'fuel';
     const cost = { fuel: 0, iron: 0, plasma: 0 };
@@ -3298,6 +3337,7 @@
     if (lv >= CITADEL_LV_MAX) return { ok: false, reason: 'max' };
     const cost = citadelUpgradeCost(id);
     if (!canAfford(cost)) return { ok: false, reason: 'resources' };
+    accrueResources();   // settle at the old rank's rate before the new rank kicks in
     state.resources.fuel -= cost.fuel || 0; state.resources.iron -= cost.iron || 0; state.resources.plasma -= cost.plasma || 0;
     c.lv = lv + 1;
     // harder to take over: republish a rank-boosted defending fleet score
@@ -3313,6 +3353,7 @@
     if (citadelCount() >= citadelCap()) return { ok: false, reason: 'max' };
     const cost = citadelBuildCost(id);
     if (!canAfford(cost)) return { ok: false, reason: 'resources' };
+    accrueResources();   // settle at the old rate — the 10× starts NOW, not retroactively
     state.resources.fuel -= cost.fuel; state.resources.iron -= cost.iron; state.resources.plasma -= cost.plasma;
     state.citadels[id] = { score: Math.round(score()), builtAt: Date.now(), lv: 1 };
     if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: state.citadels[id].score, defense: defenseSnapshot() }); } catch (e) {} }
@@ -3400,8 +3441,12 @@
     const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
     const myS = Math.max(1, Math.round(score()));
     // EXACT score scaling — the fight is as hard as the defender is strong
-    // relative to you (wide sanity clamp only, no soft-capping).
-    const ratio = Math.max(0.3, Math.min(25, (cloneScore || myS) / myS));
+    // relative to you. HP is NOT soft-capped: a fleet 10,000× your power should
+    // be functionally unbeatable, exactly as its published ⚡ score promises.
+    const rawRatio = (cloneScore || myS) / myS;
+    const ratio = Math.max(0.3, Math.min(1e6, rawRatio));
+    // outgunned → their guns actually hurt (sqrt so near-even fights stay fair)
+    const dmgMult = Math.max(0.8, Math.min(40, Math.sqrt(Math.max(0.3, rawRatio))));
     const snap = def && def.snap;
     // (guard: snap may be missing entirely — a bare `snap && snap.escKeys || []`
     // chain left .slice() to crash the boss wave when a tile had no snapshot)
@@ -3409,7 +3454,7 @@
     // the flagship holds ~70% of the replica's total strength; escorts the rest
     const escShare = escKeys.length ? 0.3 : 0;
     b.maxHp = b.hp = Math.max(15000, Math.round(dps * 16 * ratio * (1 - escShare)));
-    b.damage = (b.damage || 10) * 2.5;
+    b.damage = (b.damage || 10) * 2.5 * dmgMult;
     b.speed *= 0.5; b.size = 124; b.ranged = true; b.range = 520; b.fireCd = 1.4; b.fireT = 1.1;
     if (snap && snap.ship) {
       const im = new Image(); im.src = 'ships/ship-' + snap.ship + '.png';
@@ -3425,7 +3470,7 @@
       const e2 = new E.Enemy(type, state.currentDungeon, ex, ey);
       e2.isBoss = false; e2.isCloneEscort = true;
       e2.maxHp = e2.hp = Math.max(4000, Math.round(dps * 16 * ratio * (escShare / escKeys.length)));
-      e2.damage = (e2.damage || 8) * 1.4;
+      e2.damage = (e2.damage || 8) * 1.4 * dmgMult;
       e2.speed *= 0.65; e2.size = 62; e2.ranged = true; e2.range = 430; e2.fireCd = 1.9; e2.fireT = 0.7 + i * 0.4;
       const im2 = new Image(); im2.src = 'ships/ship-' + key + '.png';
       e2.spriteImg = im2;
@@ -3579,6 +3624,95 @@
     }
     return rt._frostChk;
   }
+  // VOIDMAW anywhere in the fleet (flagship or escort) — memoized 500ms.
+  // Powers the SINGULARITY proc: stun + a collapsing black hole (see resolveHit).
+  function voidmawAboard() {
+    const n = performance.now();
+    if (rt._vmChk == null || n - (rt._vmT || 0) > 500) {
+      rt._vmT = n;
+      rt._vmChk = state.ship === 'voidmaw' || (typeof fleetShips === 'function' && fleetShips().some((f) => f.key === 'voidmaw'));
+    }
+    return rt._vmChk;
+  }
+  // ---- SINGULARITY (Voidmaw) -------------------------------------------------
+  // 12% per bolt (matching FrostyFrost's cryo cadence): the target is STUNNED
+  // 1.6s and a medium black hole (radius 165) tears open beneath it. Everything
+  // caught inside is dragged toward the core and takes 22% of your attack
+  // damage per second for 3s — sustained AoE that pays off in crowds, not a
+  // single-target burst. Bosses are immune to the stun but still take the pull
+  // damage. 6s cooldown per target, and at most 3 holes on the field at once.
+  const SING = { chance: 12, stun: 1.6, life: 3.0, radius: 165, dpsPct: 0.22, cd: 6, max: 3 };
+  function openSingularity(e) {
+    rt.holes = rt.holes || [];
+    if (rt.holes.length >= SING.max) rt.holes.shift();
+    rt.holes.push({ x: e.x, y: e.y, t: SING.life, life: SING.life, r: SING.radius, tick: 0 });
+    rt.floats.push(new E.FloatText(e.x, e.y - e.size - 12, '● SINGULARITY', { color: '#c07bff', size: 28 }));
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 150 + Math.random() * 160;
+      rt.particles.push(new E.Particle(e.x + Math.cos(a) * SING.radius * 0.9, e.y + Math.sin(a) * SING.radius * 0.9,
+        { vx: -Math.cos(a) * sp, vy: -Math.sin(a) * sp, life: 0.5 + Math.random() * 0.3, size: 1.6 + Math.random() * 2.4, color: i % 2 ? '#c07bff' : '#e9d6ff', glow: true, drag: 0.92 }));
+    }
+    rt.shake = Math.min(3.2, (rt.shake || 0) + 1.6);
+  }
+  // per-frame: drag everything inward and bleed hull inside every hole
+  function singularityTick(dt) {
+    const holes = rt.holes; if (!holes || !holes.length) return;
+    const dps = (rt.stats.attackDamage || 0) * SING.dpsPct;
+    for (let i = holes.length - 1; i >= 0; i--) {
+      const h = holes[i];
+      h.t -= dt;
+      if (h.t <= 0) { holes.splice(i, 1); continue; }
+      h.tick += dt;
+      const pulse = h.tick >= 0.25;
+      if (pulse) h.tick = 0;
+      for (const o of rt.enemies) {
+        if (o.dead || o.dying) continue;
+        const dx = h.x - o.x, dy = h.y - o.y, d = Math.hypot(dx, dy);
+        if (d > h.r) continue;
+        // gravitational drag — stronger the closer you are, bosses resist
+        const pull = (1 - d / h.r) * (o.isBoss ? 26 : 78) * dt;
+        if (d > 6) { o.x += (dx / d) * pull; o.y += (dy / d) * pull; }
+        if (pulse && dps >= 1) {
+          const dmg = dps * 0.25;
+          const k = o.takeDamage(dmg);
+          rt.dmgWindow.push({ t: rt.time, dmg });
+          if (k) onKill(o);
+        }
+      }
+      if (Math.random() < dt * 30) {
+        const a = Math.random() * Math.PI * 2, rr = h.r * (0.5 + Math.random() * 0.5);
+        rt.particles.push(new E.Particle(h.x + Math.cos(a) * rr, h.y + Math.sin(a) * rr,
+          { vx: -Math.cos(a) * 120, vy: -Math.sin(a) * 120, life: 0.45, size: 1.4 + Math.random() * 1.8, color: Math.random() < 0.5 ? '#c07bff' : '#7a3fd0', glow: true, drag: 0.93 }));
+      }
+    }
+  }
+  // canvas render: event horizon, accretion ring, inward-spiralling wisps
+  function drawSingularities(ctx) {
+    for (const h of rt.holes) {
+      const f = Math.max(0, Math.min(1, h.t / h.life));   // 1 → 0 as it collapses
+      const r = h.r * (0.55 + 0.45 * f);
+      const g = ctx.createRadialGradient(h.x, h.y, r * 0.05, h.x, h.y, r);
+      g.addColorStop(0, 'rgba(0,0,0,0.95)');
+      g.addColorStop(0.32, 'rgba(24,6,48,0.78)');
+      g.addColorStop(0.7, 'rgba(122,63,208,0.26)');
+      g.addColorStop(1, 'rgba(192,123,255,0)');
+      ctx.save();
+      ctx.globalAlpha = 0.45 + 0.55 * f;
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(h.x, h.y, r, 0, 7); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineWidth = 2.5;
+      for (let i = 0; i < 3; i++) {
+        const a0 = rt.time * (2.2 + i * 0.8) + i * 2.1;
+        ctx.strokeStyle = 'rgba(192,123,255,' + (0.5 - i * 0.13).toFixed(2) + ')';
+        ctx.beginPath(); ctx.arc(h.x, h.y, r * (0.42 + i * 0.2), a0, a0 + 2.4); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(233,214,255,0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(h.x, h.y, r * 0.22, 0, 7); ctx.stroke();
+      ctx.restore();
+    }
+  }
   function zoneAdvice() {
     const rec = recommendedZone(), cur = state.currentDungeon, s = rt.stats;
     if (cur < 1) return { kind: 'safe', rec, msg: 'Safe Zone — no threats here. Pick a combat zone to deploy.' };
@@ -3592,6 +3726,18 @@
   // SAVE / LOAD + OFFLINE (AFK) PROGRESS
   // --------------------------------------------------------------------------
   function save() { state.lastSave = Date.now(); try { if (window.ACCOUNT) window.ACCOUNT.push(state); else localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
+  // ADOPT — a cloud CAS conflict merged another device's timeline into ours
+  // mid-session; fold the result into the LIVE state so the player keeps
+  // playing the merged save instead of a copy that's already been superseded.
+  function adoptSave(obj) {
+    if (!obj || obj === state) return;
+    try {
+      Object.assign(state, JSON.parse(JSON.stringify(obj)));
+      refreshStats();
+      if (rt.archer && rt.stats) rt.archer.hp = Math.min(rt.archer.hp || rt.stats.maxHp, rt.stats.maxHp);
+      if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    } catch (e) {}
+  }
   function load() { try { const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); return true; } catch (e) { return false; } }
 
   // Rich offline sim (always on — free). Simulates kills, loot (auto
@@ -3803,7 +3949,7 @@
 
     rt.running = true; rt.last = performance.now();
     requestAnimationFrame(loop);
-    setInterval(() => { if (rt.running) { const now = performance.now(); if (now - rt.last > 120) step(now); } }, 1000/30);
+    setInterval(() => { if (rt.running && !window.__sessionKicked) { const now = performance.now(); if (now - rt.last > 120) step(now); } }, 1000/30);
   }
 
   // --------------------------------------------------------------------------
@@ -3987,7 +4133,7 @@
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,
-    getStats: () => rt.stats, getDps: () => rt.dps, score,
+    getStats: () => rt.stats, getDps: () => rt.dps, score, freeze, adoptSave,
     getHp: () => ({ cur: rt.archer ? rt.archer.hp : 0, max: rt.stats.maxHp, dead: rt.archer && rt.archer.dead, awaiting: rt.awaitingRespawn }),
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
     buyCosmetic, setCosmetic, addCredits,

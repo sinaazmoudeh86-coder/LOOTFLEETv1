@@ -49,8 +49,15 @@
     }
     const sh = (C().SHIP_BY_KEY || {})[(G().state || {}).ship] || {};
     const bonus = sh.siegeBonus || 0;
+    // UNIT NORMALIZATION — arena hits are raw combat damage (grows geometrically
+    // with zones); the alliance pool + server clamp run on POWER units (25×
+    // leaderboard power). Convert at a rate where a full 2:30 of your
+    // theoretical DPS ≈ your server max attack — so the ⚔ meter fills across
+    // the whole run and "what you watched accumulate" is what transmits.
+    const theory = Math.max(1, (G().rt && G().rt.stats && G().rt.stats.theoryDps) || 1);
+    const norm = (power * 25) / (theory * T);
     run = { left: T, dealt: 0, burned: 0, kills: 0, boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false, capWarned: false,
-            n, bonus, poolHp: Math.max(1, Number(opts.bossHp) || 1), died: false, submitted: false,
+            n, bonus, norm, poolHp: Math.max(1, Number(opts.bossHp) || 1), died: false, submitted: false,
             cap: power * 25, prevAuto, prevSpeed, onDone: opts.onDone };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
@@ -69,7 +76,7 @@
     // damage dealt = boss HP delta (the engine resolved the real hits);
     // Monolith siegeBonus multiplies what transmits
     const delta = Math.max(0, run.lastHp - b.hp);
-    if (delta > 0) run.dealt += delta * (1 + run.bonus);
+    if (delta > 0) run.dealt += delta * (1 + run.bonus) * run.norm;   // raw combat → power units
     if (b.hp < b.maxHp * 0.5) b.hp = b.maxHp * 0.96;       // pool lives on the server — never dies locally
     if (b.hp <= 0 || b.dying) { b.hp = b.maxHp * 0.96; b.dying = false; }
     run.lastHp = b.hp;
@@ -246,7 +253,7 @@
     const t = Math.max(0, run.left), m = Math.floor(t / 60), s = Math.floor(t % 60);
     const tg = $('awb-tag'); if (tg) tg.textContent = '⬡ Mk-' + run.n + (run.kills ? ' · ☠' + run.kills : '');
     const tm = $('awb-timer'); if (tm) { tm.textContent = m + ':' + String(s).padStart(2, '0'); tm.classList.toggle('enr', run.enraged); }
-    const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(Math.min(run.dealt, run.cap)) + '</b>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
+    const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(Math.min(run.dealt, run.cap)) + '</b><i style="font-style:normal;color:#5f8d84"> / ' + fmt(run.cap) + '</i>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
     const f = $('awb-fill'); if (f) f.style.width = clamp((1 - (Math.min(run.dealt, run.cap) - run.burned) / run.poolHp) * 100, 0, 100) + '%';
   }
 

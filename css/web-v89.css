@@ -1026,3 +1026,22 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 @media (prefers-reduced-motion: reduce){
   #screen-galaxy::before, #screen-galaxy::after{ animation:none; }
 }
+
+
+/* ===== PRO BADGE — nebula glow, drifting stars & comet streak (Jul 2026) ===== */
+/* space elements — twinkling stars + a drifting comet streak across the badge */
+.pro-offer.active::before{ content:''; position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(1.5px 1.5px at 12% 30%, #fff, transparent 55%),
+    radial-gradient(1px 1px at 28% 72%, #d9c4ff, transparent 55%),
+    radial-gradient(1.5px 1.5px at 46% 22%, #b9d4ff, transparent 55%),
+    radial-gradient(1px 1px at 63% 64%, #fff, transparent 55%),
+    radial-gradient(2px 2px at 78% 34%, #e7c4ff, transparent 55%),
+    radial-gradient(1px 1px at 91% 58%, #cfe0ff, transparent 55%);
+  animation:proTwinkle 2.6s ease-in-out infinite; }
+@keyframes proTwinkle{ 0%,100%{ opacity:.45; } 50%{ opacity:1; } }
+.pro-offer.active::after{ content:''; position:absolute; top:0; bottom:0; left:-40%; width:34%; pointer-events:none;
+  background:linear-gradient(105deg, transparent, rgba(210,180,255,.16) 45%, rgba(255,255,255,.22) 50%, rgba(210,180,255,.16) 55%, transparent);
+  animation:proComet 4.5s linear infinite; }
+@keyframes proComet{ 0%{ left:-40%; } 60%,100%{ left:110%; } }
+@media (prefers-reduced-motion: reduce){ .pro-offer.active, .pro-offer.active::before, .pro-offer.active::after{ animation:none; }

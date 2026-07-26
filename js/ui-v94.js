@@ -137,6 +137,7 @@
     else if (name === 'social') { if (window.SOCIAL) window.SOCIAL.open(); }
     else if (name === 'mail') { if (window.MAIL) window.MAIL.render(); }
     else if (name === 'voidzone') { if (window.VOIDZ) window.VOIDZ.render(); }
+    else if (name === 'forge') { if (window.STARFORGE) window.STARFORGE.render(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
     else if (name === 'sdread') { if (window.SDREAD) window.SDREAD.render(); }
     else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
@@ -1539,7 +1540,7 @@
     // ×25 galaxy yield — EARNING NOW always matches what actually deposits
     // (and updates live after a citadel build or rank-up)
     const _cit = (G.state.citadels && G.state.citadels[id]) || null;
-    if (ratePerH && _cit) ratePerH *= (GM.CITADEL_RATE_MULT || 10) * (_cit.lv || 1);
+    if (ratePerH && _cit && !t.void) ratePerH *= 10 * (_cit.lv || 1);   // PLAYER CITADEL — 10× per rank (matches CITADEL_MULT; VOID premium is baked into t.rate)
     if (ratePerH) ratePerH *= 25;
     const cdTxt = t.cooldown > 0 ? (t.cooldown >= 3600 ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
     const blocked = !t.owned && t.cooldown > 0;
@@ -1556,7 +1557,7 @@
     if (t.citadel) valChips.push('⛴ CITADEL ×' + GM.CITADEL_RATE_MULT);
     if (t.deep) valChips.push('☢ DEEP SPACE ×' + GM.DEEP_MULT.resource);
     if (t.rarity) valChips.push(t.rarity === 2 ? '★★ RARE' : '★ UNCOMMON');
-    if (_cit) valChips.push('⛓ YOUR CITADEL ×' + ((GM.CITADEL_RATE_MULT || 10) * (_cit.lv || 1)));
+    if (_cit && !t.void) valChips.push('⛓ YOUR CITADEL ×' + (10 * (_cit.lv || 1)));
     const valueBlock = ratePerH ? `<div class="gx-value" style="--vc:${GM.RES[t.resource].color}">
       <div class="gxv-k">${t.owned ? '▸ EARNING NOW' : 'VALUE IF HELD'}</div>
       <div class="gxv-n">${GM.RES[t.resource].glyph} ${G.formatNum(ratePerH)}<i>${GM.RES[t.resource].name} / hour</i></div>
@@ -1605,13 +1606,18 @@
           '<div style="font-size:11px;color:#c9b39a;line-height:1.45">' + statBits.join(' · ') + '</div></div></div>' +
         '<div style="font-size:11px;color:#9fb0c4;margin-top:7px">A <b style="color:#ffce8a">clone of their fleet</b> garrisons this zone — beat it' + (d.citadel ? ', <b style="color:#ff8a64">then raze their citadel (Rank-hardened)</b>,' : '') + ' to take the tile.</div>' +
       '</div>';
+    } else if (t.owned && t.citadel) {
+      citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
+        '<div style="font-size:12px;font-weight:700;color:#ffd24d">⛴ Natural Citadel — captured intact</div>' +
+        '<div style="font-size:11px;color:#9fb0c4;margin-top:5px">Its ×' + GM.CITADEL_RATE_MULT + ' output is built into the fortress — nothing to build or rank up here.</div>' +
+      '</div>';
     } else if (t.owned && G.citadelBuildCost) {
       const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0, cap = G.citadelCap ? G.citadelCap() : 50;
       const af = bc && GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (bc[k2] || 0));
       const can = G.canBuildCitadel && G.canBuildCitadel(id);
       const chips = GM.RES_KEYS.filter((k2) => bc && bc[k2]).map((k2) => '<span style="color:' + ((myRes[k2] || 0) >= bc[k2] ? GM.RES[k2].color : 'var(--bad)') + '">' + GM.RES[k2].glyph + ' ' + G.formatNum(bc[k2]) + '</span>').join(' &nbsp; ');
       citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
-        '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;gap:8px">⛓ Build Citadel <span style="color:#9fb0c4;font-weight:600">10× output · ' + cn + '/50 owned</span></div>' +
+        '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;gap:8px">⛓ Build Citadel <span style="color:#9fb0c4;font-weight:600">10× output · ' + cn + '/' + cap + ' owned</span></div>' +
         '<div style="font-size:12.5px;font-variant-numeric:tabular-nums;margin:7px 0;font-weight:700">' + chips + '</div>' +
         (cn >= cap ? '<div style="font-size:10.5px;color:#ffcf7a;margin-bottom:6px">Citadel limit reached (' + cap + ') — abandon one, or raise your VIP level (+5 cap each).</div>' : '') +
         '<button class="btn gold" data-build-cit="' + id + '" ' + (can && af ? '' : 'disabled') + ' style="width:100%">Build Citadel</button>' +
@@ -1790,7 +1796,7 @@
     Battleship:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l3.6 3.2v11.6L12 21l-3.6-3.2V6.2z"/><path d="M8.4 7.4H5.6v4.2h2.8"/><path d="M15.6 7.4h2.8v4.2h-2.8"/><path d="M10 4.4V2.2M12 4V2M14 4.4V2.2"/></svg>',
     Carrier:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2.6 2 4.1 5.2 4.1 9.2V18l-4.1 2-4.1-2v-5.8C7.9 8.2 9.4 5 12 3z"/><path d="M12 8.5v8"/><circle cx="6.2" cy="13" r="1.1"/><circle cx="17.8" cy="13" r="1.1"/><circle cx="7.6" cy="18.2" r="1"/><circle cx="16.4" cy="18.2" r="1"/></svg>',
   };
-  const MOD_LABEL = { dmgPct:'DMG', hpPct:'HP', critChance:'Crit', critDamage:'Crit Dmg', moveSpeed:'Move', atkSpeedPct:'Rate', multiShot:'Multi-Shot', lifeSteal:'Lifesteal' };
+  const MOD_LABEL = { dmgPct:'DMG', hpPct:'HP', critChance:'Crit', critDamage:'Crit Dmg', moveSpeed:'Move', atkSpeedPct:'Rate', multiShot:'Multi-Shot', lifeSteal:'Lifesteal', rangePct:'Range', regen:'Regen', dodge:'Dodge', armorPct:'Armor' };
   function storeHead(ico, title, right) { return `<div class="sec-head"><span class="sec-ic">${ico}</span><h3>${title}</h3>${right?`<span class="sec-right">${right}</span>`:''}</div>`; }
   // Unified Hangar segment header — shared by the "My Ship" (hero) view and the
   // store categories, so Ship + Store live under one tab.
@@ -1892,6 +1898,7 @@
         <div class="ship-act">${action}</div>
       </div>
       <div class="ship-desc">${ship.desc}</div>
+      ${ship.perk ? `<div class="ship-perk">${ship.perk}</div>` : ''}
       ${mods ? `<div class="ship-mods">${mods}</div>` : ''}
       ${upg}
       ${body}
@@ -2070,6 +2077,7 @@
         <div class="ship-act">${action}</div>
       </div>
       <div class="ship-desc">${ship.desc}</div>
+      ${ship.perk ? `<div class="ship-perk">${ship.perk}</div>` : ''}
       ${mods?`<div class="ship-mods">${mods}</div>`:''}
       ${upg}
       ${lock}
@@ -2476,6 +2484,7 @@
     }
     const sheet = showSheet(`<div class="sheet-head">Acquire ${ship.name}</div><div class="sheet-body">
       <p style="margin-bottom:8px">${ship.desc}</p>
+      ${ship.perk ? `<div class="ship-perk" style="margin-bottom:9px">${ship.perk}</div>` : ''}
       <div class="ip-stat"><span class="ip-sname">Hardpoints</span><span class="v">⚔ ${ship.weapons} · ⊕ ${ship.ammo} · ⛨ ${ship.hull}${ship.drones?` · ◎ ${ship.drones}`:''}</span></div>
       ${priceRows}
       ${afford?'':`<p style="font-size:11px;color:var(--bad);margin-top:6px">Not enough ${st.resPrice?'Galaxy Resources':'gold'} yet.</p>`}
@@ -2837,7 +2846,7 @@
     else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); showScreen(s && s.voidzone ? 'voidzone' : 'galaxy'); }
     else if (kind === 'wave') { toast('Wave ' + s.wave + ' / ' + s.total, '#9ec5ff'); }
     else if (kind === 'boss') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '22px'; t.textContent = '☠ BOSS WAVE'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700); }
-    else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(sys.rate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
+    else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; const _capRate = (sys.rate || 0) * (sys.deep ? GM.DEEP_MULT.resource : 1) * 25; /* mirror resourceRates(): deep ×25 + global ×25 galaxy yield */ t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(_capRate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
   }
   // Small wreck notice — the ship has already been auto-towed to the hangar.
   function onDeathReturn(lostItem, killerName, zone, hullReset, lostList) {

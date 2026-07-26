@@ -100,7 +100,7 @@
   function bossSprite() { return 'ships/ship-voidmaw.png'; }                 // the Voidmaw itself
 
   // ---- THE VOIDMAW — Season 1 grand-prize hull ----------------------------
-  const VM_KEY = 'voidmaw', VM_NEED = 100;
+  const VM_KEY = 'voidmaw', VM_NEED = 150;   // Jul 2026: 100 → 150 — the Voidmaw is the apex hull now (Singularity proc), so the season grind matches
   function vmParts() { try { return (G().state.shipParts && G().state.shipParts[VM_KEY]) | 0; } catch (e) { return 0; } }
   function vmOwned() { try { return !!G().state.ownedShips[VM_KEY]; } catch (e) { return false; } }
   function vmAssemble() {
@@ -115,7 +115,7 @@
       '<div class="sdm-kicker">SEASON 1 GRAND PRIZE</div>' +
       '<div class="sdm-title">VOIDMAW ASSEMBLED</div>' +
       '<div class="sdm-art"><img src="ships/ship-voidmaw.png" alt=""></div>' +
-      '<div class="sdm-cd">' + VM_NEED + ' parts forged into a Mothership-grade hull.<br>Switch to it in the <b>Hangar ▸ Ships</b>.</div>' +
+      '<div class="sdm-cd">' + VM_NEED + ' parts forged into the apex hull of Season 1.<br>Its cannons open <b>singularities</b> — switch to it in the <b>Hangar ▸ Ships</b>.</div>' +
       '<button class="sdm-ok" id="sdm-ok">Magnificent</button>'
     );
     _modal.querySelector('#sdm-ok').addEventListener('click', () => { closeModal(); render(); });
@@ -315,7 +315,7 @@
   const COIN = '✦';
   function storeItems() {
     return [
-      { id: 'vmpart', ic: '❖', name: 'Voidmaw Shard',       sub: 'grand prize · ' + VM_NEED + ' assemble the ship', cost: 1000, key: VM_KEY,        hide: () => vmOwned() },
+      { id: 'vmpart', ic: '❖', name: 'Voidmaw Shard',       sub: 'grand prize · ' + VM_NEED + ' assemble the ship', cost: 1500, key: VM_KEY,        hide: () => vmOwned() },
       { id: 'sina',   ic: '★', name: 'Titan Sina Shard',    sub: 'the apex hull · rainbow tracers',               cost: 2500, key: 'titansina' },
       { id: 'dread',  ic: '◈', name: 'Dread-class Shard',   sub: 'random recovered Dreadnaught hull',              cost: 2000, key: () => 'dread' + (1 + (Math.random() * 6 | 0)) },
       { id: 'obfin',  ic: '⬡', name: 'Oblivion Final Shard', sub: 'the final Oblivion hull',                       cost: 1800, key: 'oblivionfinal' },
@@ -593,7 +593,7 @@
     }
     removeWarbar();
     // FIRST FIGHT OF THE DAY — guaranteed Voidmaw Part (the daily pacing pillar:
-    // ~2 from rank + 1 here + drops + store ≈ a month of consistent play)
+    // ~2 from rank + 1 here + drops + store ≈ six weeks of consistent play)
     if (!vmOwned() && s.partDay !== dayIdx()) {
       s.partDay = dayIdx();
       addPart(VM_KEY, 1);
@@ -758,7 +758,7 @@
     return '<div class="sd-vm" id="sd-vmstrip">' +
       '<img src="ships/ship-voidmaw.png" alt="">' +
       '<div class="sd-vm-t"><b>THE VOIDMAW — SEASON 1 GRAND PRIZE</b>' +
-        '<span>Mothership-grade hull — collect <b>' + VM_NEED + ' parts</b> to fly it. Stages 5+ · first fight daily · ✦ Event Store. Gone after ' + SEASON.endsTxt + '.</span>' +
+        '<span>The apex hull — cannons that stun and collapse <b>black holes</b>. Collect <b>' + VM_NEED + ' parts</b> to fly it. Stages 5+ · first fight daily · ✦ Event Store. Gone after ' + SEASON.endsTxt + '.</span>' +
         (owned
           ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
           : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / VM_NEED * 100) + '%"></i><span>❖ ' + parts + ' / ' + VM_NEED + ' parts</span></div>') +
@@ -1041,7 +1041,7 @@
     // keep the live board ranks fresh (throttled internally) so settlements
     // and the run summary use REAL standings
     if (lvl() >= UNLOCK && !ended()) ensureCloud();
-    // GRAND PRIZE — auto-assemble the moment the 100th part lands (never mid-run)
+    // GRAND PRIZE — auto-assemble the moment the final part lands (never mid-run)
     if (!run && lvl() >= UNLOCK && !vmOwned() && vmParts() >= VM_NEED) vmAssemble();
     // command-card badge = attempts remaining (only once unlocked & live)
     const b = $('cmd-sdread-badge');

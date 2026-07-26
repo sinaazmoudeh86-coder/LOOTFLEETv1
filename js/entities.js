@@ -146,6 +146,8 @@
       this.chillT = 0;        // FROSTYFROST cryo: >0 → slowed (movement + fire rate)
       this.frozenT = 0;       // FROSTYFROST cryo: >0 → flash-frozen solid (ice cube)
       this.frostCd = 0;       // refreeze immunity — stops the ice cube strobing under high fire rates
+      this.stunT = 0;         // VOIDMAW singularity: >0 → stunned (no move, no guns)
+      this.singCd = 0;        // per-target singularity cooldown
       this.range = 230;                              // ≈ the player's own 250
       this.holdAt = this.range * (0.55 + (this.seed % 1) * 0.25);
       this.fireT = 1.2 + (this.seed % 1.4);          // first shot is staggered
@@ -171,6 +173,14 @@
       }
       // FROSTYFROST cryo — frozen solid: an ice cube. No movement, no attacks.
       if (this.frostCd > 0) this.frostCd -= dt;
+      if (this.singCd > 0) this.singCd -= dt;
+      // VOIDMAW singularity — stunned: held fast in the gravity well.
+      if (this.stunT > 0) {
+        this.stunT -= dt;
+        this.moving = false;
+        this.contactTimer = Math.max(0, this.contactTimer - dt);
+        return;
+      }
       if (this.frozenT > 0) {
         this.frozenT -= dt;
         this.moving = false;
@@ -226,7 +236,10 @@
     takeDamage(amount) {
       if (window.MONO_MULT) amount *= window.MONO_MULT(this);   // Monolith siege bonus vs boss-class targets
       this.hp -= amount;
-      this.hitFlash = 1;
+      // high game speeds fire many hits per frame — hold the flash instead of
+      // restarting it every hit so fast play doesn't strobe
+      { const _gs = (window.GAME && window.GAME.state && window.GAME.state.gameSpeed) || 1;
+        this.hitFlash = (_gs > 2 && this.hitFlash > 0.15) ? Math.max(this.hitFlash, 0.5) : 1; }
       if (this.hp <= 0 && !this.dying) {
         this.dying = true;
         return true; // signals death this frame
@@ -260,7 +273,8 @@
       // Sustained swarm pressure still kills — burst alone can't delete you.
       if (this.maxHp > 1) dmg = Math.min(dmg, this.maxHp * 0.22);
       this.hp = Math.max(0, this.hp - dmg);
-      this.hurtFlash = 1;
+      { const _gs2 = (window.GAME && window.GAME.state && window.GAME.state.gameSpeed) || 1;
+        this.hurtFlash = (_gs2 > 2 && this.hurtFlash > 0.15) ? Math.max(this.hurtFlash, 0.5) : 1; }
       if (this.hp <= 0) { this.dead = true; this.justDied = true; this.killer = src || null; }
     }
     update(dt) {

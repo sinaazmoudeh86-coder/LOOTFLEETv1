@@ -52,6 +52,7 @@
   async function deleteAccountData(userId) {
     try { await client.from('territory').delete().eq('owner_id', userId); } catch (e) {}   // release EVERY held tile — My Galaxy AND Void Zone
     try { await client.from('saves').delete().eq('user_id', userId); } catch (e) {}
+    try { await client.from('save_conflicts').delete().eq('user_id', userId); } catch (e) {}
     try { await client.from('leaderboard').delete().eq('user_id', userId); } catch (e) {}
     try { await client.from('wallets').delete().eq('user_id', userId); } catch (e) {}
     try { await client.functions.invoke('delete-account'); } catch (e) {}
@@ -86,6 +87,72 @@
         { onConflict: 'user_id' }
       );
     } catch (e) {}
+  }
+
+  // ---- COMPARE-AND-SET saves (supabase/save-cas.sql) -------------------------
+  // The blind upsert above is last-write-wins: two live devices silently erase
+  // each other. These read/write the row THROUGH its revision instead — a push
+  // that isn't based on the current revision is refused and handed the row it
+  // missed, so the client can merge and retry. When the migration hasn't been
+  // run yet every call reports unsupported and account.js falls back.
+  let _casOff = false;
+  async function pullSave(userId) {
+    if (_casOff) return { ok: false, unsupported: true };
+    try {
+      const { data, error } = await client.rpc('save_pull');
+      if (error) { if (isMissing(error)) _casOff = true; return { ok: false, unsupported: _casOff }; }
+      if (!data || data.ok !== true) return { ok: false };
+      return { ok: true, data: data.data || null, rev: data.rev | 0 };
+    } catch (e) { return { ok: false }; }
+  }
+  async function pushSave(userId, save, rev, lock) {
+    if (_casOff) return { ok: false, unsupported: true };
+    try {
+      const { data, error } = await client.rpc('save_push', { p_rev: rev == null ? -1 : rev, p_data: save, p_lock: lock || null });
+      if (error) { if (isMissing(error)) _casOff = true; return { ok: false, unsupported: _casOff }; }
+      if (!data) return { ok: false };
+      if (data.ok === true) return { ok: true, rev: data.rev | 0 };
+      if (data.conflict) return { ok: false, conflict: true, rev: data.rev | 0, data: data.data || null };
+      return { ok: false };
+    } catch (e) { return { ok: false }; }
+  }
+  // quarantine — a timeline that lost a merge is never destroyed
+  async function saveConflict(userId, save, reason, weight) {
+    try { await client.from('save_conflicts').insert({ user_id: userId, data: save, reason: reason || null, weight: weight || null }); } catch (e) {}
+  }
+
+  // ---- session lease (server time is the only clock) -------------------------
+  let _leaseOff = false;
+  async function claimSession(sessionId, label) {
+    if (_leaseOff) return { ok: false, unsupported: true };
+    try {
+      const { data, error } = await client.rpc('claim_session', { p_session: sessionId, p_device: label || null });
+      if (error) { if (isMissing(error)) _leaseOff = true; return { ok: false, unsupported: _leaseOff }; }
+      return data && data.ok ? { ok: true, at: data.at, now: data.now, prev: data.prev || null } : { ok: false };
+    } catch (e) { return { ok: false }; }
+  }
+  async function touchSession(sessionId) {
+    if (_leaseOff) return { ok: false, unsupported: true };
+    try {
+      const { data, error } = await client.rpc('touch_session', { p_session: sessionId });
+      if (error) { if (isMissing(error)) _leaseOff = true; return { ok: false, unsupported: _leaseOff }; }
+      return data && data.ok ? { ok: true, owner: data.owner || sessionId, mine: data.mine !== false && (!data.owner || data.owner === sessionId), at: data.at, now: data.now } : { ok: false };
+    } catch (e) { return { ok: false }; }
+  }
+  // realtime on the LEASE ROW — persisted, so a device that was asleep still
+  // learns who owns the account the moment it reconnects
+  function onSessionRow(userId, cb) {
+    try {
+      const ch = client.channel('lf-lease-' + userId)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: 'user_id=eq.' + userId },
+            (p) => { try { cb(p && p.new ? p.new : null); } catch (e) {} })
+        .subscribe();
+      return ch;
+    } catch (e) { return null; }
+  }
+  function isMissing(err) {
+    const m = ((err && (err.message || err.details || err.code)) || '') + '';
+    return /does not exist|not find|schema cache|PGRST202|42883|42P01/i.test(m);
   }
 
   // ---- global leaderboard (one public row per user in `leaderboard`) ----------
@@ -140,5 +207,7 @@
     } catch (e) { return null; }
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, pullMeta, push, lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, pullMeta, push,
+    pullSave, pushSave, saveConflict, claimSession, touchSession, onSessionRow,
+    lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
 })();

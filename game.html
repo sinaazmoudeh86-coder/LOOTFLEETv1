@@ -48,14 +48,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=189">
-<link rel="stylesheet" href="css/theme.css?v=181">
-<link rel="stylesheet" href="css/web-v89.css?v=195">
-<link rel="stylesheet" href="css/fx-cinematic.css?v=180">
-<link rel="stylesheet" href="css/fx-primordial.css?v=4">
-<link rel="stylesheet" href="css/moon-colony.css?v=169">
-<link rel="stylesheet" href="css/fx-aaa.css?v=171">
-<link rel="stylesheet" href="css/readability.css?v=4">
+<link rel="stylesheet" href="css/style-v2.css?v=359">
+<link rel="stylesheet" href="css/theme.css?v=359">
+<link rel="stylesheet" href="css/web-v89.css?v=359">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=359">
+<link rel="stylesheet" href="css/fx-primordial.css?v=359">
+<link rel="stylesheet" href="css/moon-colony.css?v=359">
+<link rel="stylesheet" href="css/fx-aaa.css?v=359">
+<link rel="stylesheet" href="css/readability.css?v=359">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -183,9 +183,9 @@
 @media (prefers-reduced-motion:reduce){ #fly-now{ animation:none; } }
 </style>
 <style id="lock-gate-css">
-.lock-veil{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;
+.lock-veil{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;overflow-y:auto;
   background:rgba(7,11,20,.82);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
-.lock-veil .lock-card{max-width:300px;text-align:center;background:linear-gradient(180deg,#1a2333,#121925);
+.lock-veil .lock-card{max-width:300px;text-align:center;background:linear-gradient(180deg,#1a2333,#121925);margin:auto;
   border:1px solid #37475f;border-radius:18px;padding:24px 22px;box-shadow:0 24px 60px rgba(0,0,0,.6);}
 .lock-veil .lock-ic{font-size:42px;line-height:1;filter:drop-shadow(0 0 16px rgba(242,178,75,.4));}
 .lock-veil h3{font-family:'Orbitron',sans-serif;font-weight:800;font-size:18px;letter-spacing:.04em;color:#f2b24b;margin:12px 0 6px;}
@@ -193,6 +193,20 @@
 .lock-veil .lock-lv{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.04em;color:#eaf0fa;
   background:#0f1623;border:1px solid #37475f;border-radius:10px;padding:8px 12px;}
 .lock-veil .lock-lv b{color:#f2b24b;}
+.lock-veil .lock-card.wide{max-width:340px;}
+.lock-veil .lock-card.forge{border-color:#4a341c;background:linear-gradient(180deg,#1d1409,#120c07);padding:20px 18px;}
+.lock-veil .lock-card.forge h3{color:#ffab4a;}
+.lock-veil .lock-card.forge .lock-ic{filter:drop-shadow(0 0 16px rgba(255,171,74,.55));}
+.lk-feats{display:grid;gap:7px;text-align:left;margin:0 0 13px;}
+.lk-feat{display:flex;gap:9px;align-items:flex-start;font-family:'Rajdhani',sans-serif;font-size:12.5px;line-height:1.45;color:#9fb1c4;
+  border:1px solid #3a2a17;border-radius:10px;padding:8px 10px;background:rgba(255,171,74,.045);}
+.lk-feat i{font-style:normal;font-size:14px;line-height:1.2;color:#ffab4a;flex:none;}
+.lk-feat b{color:#ffd9ae;font-weight:700;}
+.lk-prog{margin-top:10px;}
+.lk-prog .lk-bar{height:7px;border-radius:5px;background:#17110b;overflow:hidden;border:1px solid #3a2a17;}
+.lk-prog .lk-bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#ff7a4a,#ffab4a,#ffd24d);box-shadow:0 0 10px rgba(255,171,74,.6);transition:width .4s;}
+.lk-prog .lk-ptxt{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:.05em;color:#8ba0b5;margin-top:6px;}
+.lk-prog .lk-ptxt b{color:#ffab4a;}
 .nav-btn.nav-locked{opacity:.5;}
 .nav-btn.nav-locked .nl{opacity:.7;}
 .nav-btn .lk-badge{position:absolute;top:3px;right:50%;margin-right:-20px;font-size:9px;font-weight:700;
@@ -588,6 +602,22 @@
           <div class="scr-body" id="shipworks-body"></div>
         </div>
 
+        <!-- STARFORGE (Command) -->
+        <div class="screen overlay" id="screen-forge" data-screen-label="Starforge">
+          <div class="scr-head"><span class="scr-title">Starforge</span><span class="scr-sub" id="forge-sub"></span></div>
+          <div class="scr-body" id="forge-body"></div>
+          <div class="lock-veil" id="lock-forge"><div class="lock-card wide forge"><div class="lock-ic">⚒</div><h3>Starforge</h3><p>The master armourer only takes veteran commanders. Bring your best fitting and hammer it past what its maker intended.</p>
+            <div class="lk-feats">
+              <div class="lk-feat"><i>⚒</i><span><b>Temper +1 → +15.</b> Each strike costs gold &amp; iron and bakes <b>+6% damage, hull, fire rate, crit &amp; thrust</b> into that item — odds fall the higher you push.</span></div>
+              <div class="lk-feat"><i>🔥</i><span><b>Forge Heat.</b> Every miss heats the anvil <b>+3%</b> success for your next strike — a failed run is never wasted.</span></div>
+              <div class="lk-feat"><i>⚠</i><span><b>Slip risk past +10.</b> A miss can knock a level off — but never below the <b>+10 checkpoint</b>.</span></div>
+              <div class="lk-feat"><i>❄</i><span><b>+15 is cryo-hardened.</b> Each maxed fitting adds <b>1% flash-freeze</b> on hit · <b>Purity 60–130%</b> rerolls multiply the whole temper.</span></div>
+            </div>
+            <div class="lock-lv">Unlocks at <b>Level 100</b> · you're Level <span id="lk-fg-cur">1</span></div>
+            <div class="lk-prog"><div class="lk-bar"><i id="lk-fg-bar" style="width:0%"></i></div><div class="lk-ptxt" id="lk-fg-txt"></div></div>
+          </div></div>
+        </div>
+
         <!-- GALAXY BOXES (Command) -->
         <div class="screen overlay" id="screen-boxes">
           <div class="scr-head"><span class="scr-title">Galaxy Supply</span><span class="scr-sub" id="boxes-sub"></span></div>
@@ -663,6 +693,10 @@
         <button class="nav-btn nav-grouped" data-screen="boxes">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M3 6.5L12 11l9-4.5M12 11v11"/></svg>
           <span class="nl">Galaxy Supply</span>
+        </button>
+        <button class="nav-btn nav-grouped" data-screen="forge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M8 16l4-4M10.5 8.5L14 12l2-2-3.5-3.5z"/></svg>
+          <span class="nl">Starforge</span>
         </button>
         <button class="nav-btn nav-grouped" data-screen="shipworks">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 8v8M8 12h8"/></svg>
@@ -741,13 +775,18 @@
             </div>
             <div class="mega-card cmd-msn" data-go="missions">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg></div>
-              <div><div class="mc-n">Missions</div><div class="mc-s">10 daily orders · resources, coins &amp; a bonus crate</div></div>
+              <div><div class="mc-n">Missions</div><div class="mc-s">Daily · weekly · monthly boards + lifetime badges</div></div>
               <span class="badge cmd-cardbadge" id="cmd-msn-badge" style="display:none">0</span>
             </div>
             <div class="mega-card cmd-works" data-go="shipworks">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 8v8M8 12h8"/></svg></div>
               <div><div class="mc-n">Shipworks</div><div class="mc-s">Open part crates &amp; assemble hulls — up to the Titan Sina</div></div>
               <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-works-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-forge" data-go="forge">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M8 16l4-4M10.5 8.5L14 12l2-2-3.5-3.5z"/></svg></div>
+              <div><div class="mc-n">Starforge</div><div class="mc-s">Temper your gear — forge heat, purity rolls &amp; +15 glory</div></div>
+              <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-ascend" data-go="ascend">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg></div>
@@ -819,52 +858,54 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=213"></script>
-<script src="js/items.js?v=191"></script>
-<script src="js/entities.js?v=217"></script>
-<script src="js/render.js?v=218"></script>
-<script src="js/galaxy.js?v=2"></script>
-<script src="js/leaderboard.js?v=175"></script>
+<script src="js/config-v2.js?v=359"></script>
+<script src="js/items.js?v=359"></script>
+<script src="js/entities.js?v=359"></script>
+<script src="js/render.js?v=359"></script>
+<script src="js/galaxy.js?v=359"></script>
+<script src="js/leaderboard.js?v=359"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
-<script src="js/analytics.js?v=1"></script>
-<script src="js/cloud.js?v=191"></script>
-<script src="js/account.js?v=197"></script>
-<script src="js/session-lock.js?v=4"></script>
-<script src="js/vip.js?v=7"></script>
-<script src="js/territory.js?v=206"></script>
-<script src="js/payments-v91.js?v=191"></script>
-<script src="js/game-v93.js?v=269"></script>
-<script src="js/ui-v94.js?v=235"></script>
-<script src="js/fx-cinematic.js?v=3"></script>
-<script src="js/fx-primordial.js?v=4"></script>
-<script src="js/fx-aaa.js?v=160"></script>
-<script src="js/moon-scene.js?v=166"></script>
-<script src="js/moon-colony.js?v=187"></script>
-<script src="js/home-citadel.js?v=25"></script>
-<script src="js/missions.js?v=192"></script>
-<script src="js/coach-v89.js?v=167"></script>
-<script src="js/prism-v5.js?v=192"></script>
+<script src="js/analytics.js?v=359"></script>
+<script src="js/cloud.js?v=359"></script>
+<script src="js/account.js?v=359"></script>
+<script src="js/session-lock.js?v=359"></script>
+<script src="js/vip.js?v=359"></script>
+<script src="js/territory.js?v=359"></script>
+<script src="js/payments-v91.js?v=359"></script>
+<script src="js/game-v93.js?v=359"></script>
+<script src="js/ui-v94.js?v=359"></script>
+<script src="js/fx-cinematic.js?v=359"></script>
+<script src="js/fx-primordial.js?v=359"></script>
+<script src="js/fx-aaa.js?v=359"></script>
+<script src="js/moon-scene.js?v=359"></script>
+<script src="js/moon-colony.js?v=359"></script>
+<script src="js/home-citadel.js?v=359"></script>
+<script src="js/missions.js?v=359"></script>
+<script src="js/achievements.js?v=359"></script>
+<script src="js/coach-v89.js?v=359"></script>
+<script src="js/prism-v5.js?v=359"></script>
 <script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js?v=191"></script>
-<script src="js/server-dreadnaught.js?v=12"></script>
+<script src="js/dreadnaught.js?v=359"></script>
+<script src="js/server-dreadnaught.js?v=359"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/shipworks.js?v=7"></script>
-<script src="js/social.js?v=8"></script>
-<script src="js/mail.js?v=5"></script>
-<script src="js/alliance.js?v=13"></script>
-<script src="js/alliance-boss.js?v=6"></script>
-<script src="js/void-zone.js?v=16"></script>
-<script src="js/ascension.js?v=15"></script>
-<script src="js/casino.js?v=6"></script>
-<script src="js/casino2.js?v=5"></script>
-<script src="js/redeem.js?v=2"></script>
-<script src="js/auth.js?v=183"></script>
+<script src="js/shipworks.js?v=359"></script>
+<script src="js/starforge.js?v=359"></script>
+<script src="js/social.js?v=359"></script>
+<script src="js/mail.js?v=359"></script>
+<script src="js/alliance.js?v=359"></script>
+<script src="js/alliance-boss.js?v=359"></script>
+<script src="js/void-zone.js?v=359"></script>
+<script src="js/ascension.js?v=359"></script>
+<script src="js/casino.js?v=359"></script>
+<script src="js/casino2.js?v=359"></script>
+<script src="js/redeem.js?v=359"></script>
+<script src="js/auth.js?v=359"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 346;
+  window.LF_BUILD = 359;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -945,7 +986,8 @@
   (function(){
     const GATES={ galaxy:{lv:25,name:'My Galaxy',veil:'lock-galaxy',cur:'lk-gal-cur'},
                   boxes:{lv:30,name:'Galaxy Supply',veil:'lock-boxes',cur:'lk-bx-cur'},
-                  moon:{lv:30,name:'Moon Colony',veil:'lock-moon',cur:'lk-mn-cur'} };
+                  moon:{lv:30,name:'Moon Colony',veil:'lock-moon',cur:'lk-mn-cur'},
+                  forge:{lv:100,name:'Starforge',veil:'lock-forge',cur:'lk-fg-cur',bar:'lk-fg-bar',txt:'lk-fg-txt'} };
     const tip=document.createElement('div'); tip.className='lock-tip'; document.getElementById('app').appendChild(tip);
     let tipT;
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
@@ -954,6 +996,8 @@
       for(const scr in GATES){ const g=GATES[scr], locked=L<g.lv;
         const v=document.getElementById(g.veil); if(v) v.style.display=locked?'flex':'none';
         const c=document.getElementById(g.cur); if(c) c.textContent=L;
+        if(g.bar){ const b2=document.getElementById(g.bar); if(b2) b2.style.width=Math.min(100,L/g.lv*100).toFixed(1)+'%';
+          const t2=document.getElementById(g.txt); if(t2) t2.innerHTML=locked?('<b>'+Math.max(0,g.lv-L)+'</b> level'+(g.lv-L===1?'':'s')+' to go · '+L+' / '+g.lv):'Forge open — bring your best fitting'; }
         const btn=document.querySelector('.nav-btn[data-screen="'+scr+'"]');
         if(btn){ btn.classList.toggle('nav-locked',locked);
           let b=btn.querySelector('.lk-badge');
@@ -963,7 +1007,7 @@
       }
     }
     // tapping a locked tab → quick tooltip (the veil over the screen explains the rest)
-    document.querySelectorAll('.nav-btn[data-screen="galaxy"]').forEach(btn=>{
+    document.querySelectorAll('.nav-btn[data-screen="galaxy"],.nav-btn[data-screen="forge"]').forEach(btn=>{
       btn.addEventListener('click',()=>{ const g=GATES[btn.dataset.screen];
         if(g && lvl()<g.lv){ tip.innerHTML='🔒 '+g.name+' unlocks at <b>Level '+g.lv+'</b>';
           tip.classList.add('show'); clearTimeout(tipT); tipT=setTimeout(()=>tip.classList.remove('show'),2200); }
@@ -977,7 +1021,7 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,dread:30,sdread:50,homecit:150,pilot:30,boxes:30,moon:30,casino:15};
+    const LOCKS={galaxy:25,dread:30,sdread:50,homecit:150,pilot:30,boxes:30,moon:30,casino:15,forge:100};
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
@@ -993,7 +1037,7 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
+      const on=document.querySelector('#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
       cmd.classList.toggle('active', !!on);
     },500);
   })();

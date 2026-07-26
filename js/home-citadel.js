@@ -116,8 +116,10 @@
     return o;
   }
   function twUpCost(k, lv) {
+    // FIXED upgrade price: every level costs the same (anchored to hourly
+    // production at purchase time) — no per-level exponent.
     const t = TOWERS[k];
-    const gold = Math.round(twHourly() * t.hrs * 0.65 * Math.pow(1.75, lv));
+    const gold = Math.round(twHourly() * t.hrs * 0.65);
     const o = { gold };
     for (const r in t.mix) o[r] = Math.round(gold / t.mix[r]);
     return o;

@@ -113,6 +113,7 @@
     let xp = (120 + 120 * level) * Math.pow(1.11, level - 1) * Math.pow(12, band);
     xp *= 3;                      // global 3× leveling cost
     if (level >= 100) xp *= 20 * Math.pow(3, band - 1);   // 20× past 100, 60× past 200, 180× past 300…
+    xp *= [1, 2, 3, 6, 10, 10][band];   // Jul 2026 band-difficulty pass: 100s ×2, 200s ×3, 300s ×6, 400s+ ×10
     return Math.floor(xp);
   }
 
@@ -382,10 +383,12 @@
     // hardpoints (7 total), increased natural weapon range, top-tier built-in
     // modifiers and superior base stats.
     { key:'mothership',  name:'Mothership',     cls:'Carrier',    price:0, resPrice:{ fuel:500000, iron:200000, plasma:120000 }, reqKills:90000, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:4}, tag:'MOTHERSHIP', desc:'The ultimate faction vessel — 7 weapons, extended weapon range, 12 drone bays and superior base stats. Acquired exclusively with Galaxy Resources.' },
-    // VOIDMAW — the Season 1 Server Dreadnaught event exclusive. Mothership-grade
-    // stats. NEVER purchasable: assembled from 100 Voidmaw Parts earned only in
-    // the event (stage drops, leaderboard ranks, Voidmaw Store).
-    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:4}, tag:'SEASON 1 EXCLUSIVE', event:'sdread', desc:'The Server Dreadnaught itself, refit for your fleet — Mothership-grade performance with a void-light hull. Assembled ONLY from Voidmaw Parts earned in the Season 1: Voidmaw event. When the season ends, so does the chance.' },
+    // VOIDMAW — the Season 1 Server Dreadnaught event exclusive, and the most
+    // expensive hull in the game. Above Mothership-grade, with the SINGULARITY
+    // proc: 12% per bolt to stun a target and tear open a black hole beneath it.
+    // NEVER purchasable: assembled from 150 Voidmaw Parts earned only in the
+    // event (stage drops, leaderboard ranks, Voidmaw Store).
+    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:5}, tag:'SEASON 1 EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of Season 1. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Season 1: Voidmaw event. When the season ends, so does the chance.' },
     // CHROMA REGENT — LootCoin mothership at Titan Carrier performance, firing
     // the same full-spectrum rainbow cannons as the Chroma Fang.
     { key:'chromaregent', name:'Chroma Regent', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'SPECTRUM MOTHERSHIP', purchase:{ lc:75000 },

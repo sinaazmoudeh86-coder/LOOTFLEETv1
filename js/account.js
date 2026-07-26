@@ -21,7 +21,35 @@
   // everything stays local & per-browser.
   function cloudOn() { return !!(window.CLOUD && window.CLOUD.enabled); }
 
-  function session() { try { return JSON.parse(localStorage.getItem(SESS)); } catch (e) { return null; } }
+  // SESSION PINNING — a tab serves ONE account for its whole life. io-auth is
+  // shared by every tab of the browser, so re-reading it live meant a second
+  // login in another tab silently re-pointed this tab's save key: account A's
+  // in-flight state then wrote into account B's slot. The pin freezes the
+  // identity at first read; if the stored session later names someone else,
+  // this tab stops writing and shows the takeover screen instead of following.
+  let _pin = null, _pinChecked = 0;
+  function readSess() { try { return JSON.parse(localStorage.getItem(SESS)); } catch (e) { return null; } }
+  function sameAcct(a, b) {
+    if (!a || !b) return !a === !b;
+    if (a.id || b.id) return a.id === b.id;
+    return (a.name || '') === (b.name || '');
+  }
+  function session() {
+    if (_pin) {
+      const now = Date.now();
+      if (now - _pinChecked > 1000) {   // cheap drift check: another account signed in on this browser
+        _pinChecked = now;
+        const live = readSess();
+        if (live && !sameAcct(live, _pin)) {
+          try { if (window.SESSIONLOCK && !window.__sessionKicked) window.SESSIONLOCK.kick('account'); } catch (e) {}
+        }
+      }
+      return _pin;
+    }
+    _pin = readSess(); _pinChecked = Date.now();
+    return _pin;
+  }
+  function repin() { _pin = readSess(); _pinChecked = Date.now(); return _pin; }
   function uid() {
     const s = session();
     if (s && s.id) return 'u_' + s.id;   // stable Supabase user id
@@ -40,11 +68,44 @@
   // copy has been successfully fetched this session — a device that never
   // managed to pull must never clobber the server save with stale state.
   let pending = null, timer = 0, lastSent = '', _pullOk = false, _cloudWeight = 0;
+  let _rev = null;          // revision of the cloud row this device last saw (CAS)
+  let _casOn = false;       // save-cas.sql present — concurrent writes are safe
+  let _retry = 0;
   // "How much life is in this save?" — playtime + kills + levels. Used to stop
   // fresh-boot states from ever outranking a real account by timestamp alone.
-  function saveWeight(s) { if (!s) return 0; return (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600; }
+  // v2 (SinaNoCheats incident): playtime alone could outweigh real power — a
+  // low-level phone idling with the tab open beat a billions-strong browser
+  // save. Weight now reads the POWER signals too: log-gold (economy is
+  // exponential), deepest zone, hull upgrade levels, ascension investment.
+  function saveWeight(s) {
+    if (!s) return 0;
+    let hull = 0; try { const sl = s.shipLevels || {}; for (const k in sl) hull += sl[k] || 0; } catch (e) {}
+    let asc = 0; try { const a = s.ascension || {}; for (const sh in a) { const mods = a[sh]; for (const m in mods) { const md = mods[m] || {}; asc += (md.t | 0) * 250 + (md.s | 0) * 50 + Math.max(0, (md.l | 0) - 1) * 10; } } } catch (e) {}
+    return (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600
+      + Math.log10(1 + Math.max(0, s.gold || 0)) * 7200
+      + Math.max(s.highestDungeonReached | 0, s.highestUnlocked | 0) * 1800
+      + hull * 900 + asc * 60;
+  }
+  // BEST-EVER VAULT — every ~45s the heaviest save this account has ever had on
+  // this device is copied to lf-best::<uid>. Max-only: weaker data never touches
+  // it, and kicked tabs still write it (it's the rescue copy). Save Recovery
+  // (Account sheet) lists it for one-tap restore.
+  let _vaultAt = 0;
+  function vault(state, force) {
+    try {
+      if (!state) return;
+      if (!force && Date.now() - _vaultAt < 45000) return;
+      const w = saveWeight(state), kw = 'lf-bestw::' + uid();
+      if (w < (parseFloat(localStorage.getItem(kw)) || 0)) return;
+      _vaultAt = Date.now();
+      localStorage.setItem('lf-best::' + uid(), JSON.stringify(state));
+      localStorage.setItem(kw, String(w));
+    } catch (e) {}
+  }
   function push(state) {
+    vault(state);                         // rescue copy FIRST — even a kicked tab keeps its strongest save reachable
     if (window.__sessionKicked) return;   // kicked by a newer login — stop ALL writes (local too: same-browser tabs share this slot)
+    if (window.SESSIONLOCK && window.SESSIONLOCK.canWrite && !window.SESSIONLOCK.canWrite()) return;   // background-opened tab that never claimed: stay inert until visible
     // stamp the save with MY session lock — the cloud row always names the
     // device that last owned the account (offline-takeover detection reads it)
     try { const li = window.SESSIONLOCK && window.SESSIONLOCK.lockInfo && window.SESSIONLOCK.lockInfo(); if (li && li.at) state._lock = { dev: li.dev, at: li.at }; } catch (e) {}
@@ -68,9 +129,54 @@
     let ser = '';
     try { ser = JSON.stringify(data); } catch (e) {}
     if (ser && ser === lastSent) return;
+
+    // ---- COMPARE-AND-SET WRITE ---------------------------------------------
+    // The row can only be replaced from the revision this device last read. If
+    // another device moved it on, the write is REFUSED and we get their row
+    // back: merge it with ours, quarantine whichever timeline loses, retry.
+    if (_casOn && window.CLOUD.pushSave) {
+      let payload = data, rev = _rev;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const r = await window.CLOUD.pushSave(s.id, payload, rev);
+        if (r && r.ok) {
+          _rev = r.rev; _cloudWeight = saveWeight(payload);
+          try { lastSent = JSON.stringify(payload); } catch (e) {}
+          saveLocal(payload);
+          publishLb(s, payload);
+          _retry = 0;
+          return;
+        }
+        if (r && r.unsupported) { _casOn = false; break; }          // migration not run — legacy path
+        if (!r || !r.conflict) {                                     // network/RPC failure — keep the data, try later
+          pending = payload;
+          if (!timer) timer = setTimeout(flush, Math.min(60000, 8000 * Math.pow(2, Math.min(3, _retry++))));
+          return;
+        }
+        // CONFLICT — another device advanced the row while we played
+        const theirs = r.data, mineW = saveWeight(payload), theirW = saveWeight(theirs);
+        const merged = mergeSaves(payload, theirs) || payload;
+        // the timeline that did NOT become the merge base is preserved, never dropped
+        try {
+          const loser = theirW < mineW ? theirs : payload;
+          if (loser && Math.min(mineW, theirW) > 0 && window.CLOUD.saveConflict) {
+            window.CLOUD.saveConflict(s.id, loser, 'concurrent-session', Math.min(mineW, theirW));
+          }
+          localStorage.setItem('lf-conflict::' + uid(), JSON.stringify({ at: Date.now(), mine: mineW, theirs: theirW, data: loser }));
+        } catch (e) {}
+        saveLocal(merged);
+        payload = merged; rev = r.rev;
+        if (window.GAME && window.GAME.adoptSave) { try { window.GAME.adoptSave(merged); } catch (e) {} }
+      }
+      if (_casOn) { pending = payload; if (!timer) timer = setTimeout(flush, 12000); return; }
+    }
+
+    // ---- legacy path (save-cas.sql not installed) ---------------------------
     lastSent = ser;
     await window.CLOUD.push(s.id, data);
-    // also publish a public row to the global leaderboard (non-sensitive fields)
+    publishLb(s, data);
+  }
+  // public leaderboard row (non-sensitive fields)
+  function publishLb(s, data) {
     try {
       if (window.CLOUD.lbUpsert) {
         const G = window.GAME;
@@ -88,14 +194,21 @@
   window.addEventListener('beforeunload', flush);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
   // WAKE CHECK — a device that slept through the live kick (Realtime doesn't
-  // queue for sleepers) asks the cloud row who owns the account now. Someone
-  // newer → kick overlay ("Take back control" reloads into a fresh merge).
-  // Still me → re-claim so both channels hear the active session again.
+  // queue for sleepers) asks the server who owns the account now.
+  // With the lease installed the SERVER decides (touch_session compares its own
+  // now()); the legacy _lock comparison below is client-clock based and only
+  // runs when the lease RPCs aren't available.
   document.addEventListener('visibilitychange', async () => {
     if (document.hidden || window.__sessionKicked) return;
     if (!cloudOn()) return;
     const s = session(); if (!s || !s.id || !window.SESSIONLOCK) return;
     try {
+      if (window.SESSIONLOCK.leaseOn && window.SESSIONLOCK.leaseOn() && window.CLOUD.touchSession) {
+        const me = window.SESSIONLOCK.deviceId();
+        const r = await window.CLOUD.touchSession(me);
+        if (r && r.ok && !r.mine && r.owner && r.owner !== me) window.SESSIONLOCK.kick('device');
+        return;   // the lease is authoritative — never second-guess it with local clocks
+      }
       const res = window.CLOUD.pullMeta ? await window.CLOUD.pullMeta(s.id) : null;
       const rl = res && res.ok && res.data && res.data._lock;
       const li = window.SESSIONLOCK.lockInfo();
@@ -111,11 +224,16 @@
   function mergeSaves(local, cloud) {
     if (!cloud) return local || null;
     if (!local) return cloud;
-    let base = (cloud.lastSave || 0) >= (local.lastSave || 0) ? cloud : local;
-    let other = base === cloud ? local : cloud;
-    // FRESH-BOOT GUARD: a newer timestamp never outranks real progress — if the
-    // "newer" copy holds under 20% of the other's weight, the heavier copy wins.
-    if (saveWeight(base) < saveWeight(other) * 0.2) { const t = base; base = other; other = t; }
+    // BASE PICK — PROGRESSION FIRST (Jul 2026, the SinaNoCheats incident): the
+    // clearly-more-progressed copy wins no matter whose timestamp is newer — a
+    // low-level phone can no longer clobber a billions-strong browser save just
+    // by having played last. Timestamps only break ties between copies of
+    // comparable weight (within ×1.3), i.e. devices genuinely taking turns.
+    const wl = saveWeight(local), wc = saveWeight(cloud);
+    let base, other;
+    if (wl > wc * 1.3) { base = local; other = cloud; }
+    else if (wc > wl * 1.3) { base = cloud; other = local; }
+    else { base = (cloud.lastSave || 0) >= (local.lastSave || 0) ? cloud : local; other = base === cloud ? local : cloud; }
     base.proUntil = Math.max(base.proUntil || 0, other.proUntil || 0);
     ['purchases', 'ownedShips', 'blueprints'].forEach((k) => {
       if (!other[k]) return;
@@ -140,6 +258,12 @@
     }
     base.lifetimeMissions = Math.max(base.lifetimeMissions | 0, other.lifetimeMissions | 0);
     base.vipPts = Math.max(base.vipPts | 0, other.vipPts | 0);   // ⚜ VIP points never regress
+    // lifetime tallies exist on both timelines — keep the larger of each
+    base.totalKills = Math.max(base.totalKills || 0, other.totalKills || 0);
+    base.playTime = Math.max(base.playTime || 0, other.playTime || 0);
+    base.itemsFound = Math.max(base.itemsFound || 0, other.itemsFound || 0);
+    base.highestDungeonReached = Math.max(base.highestDungeonReached || 1, other.highestDungeonReached || 1);
+    base.highestUnlocked = Math.max(base.highestUnlocked || 1, other.highestUnlocked || 1);
     if (other.sdread && base.sdread) {
       base.sdread.total = Math.max(base.sdread.total || 0, other.sdread.total || 0);
       base.sdread.bestEver = Math.max(base.sdread.bestEver || 0, other.sdread.bestEver || 0);
@@ -156,16 +280,31 @@
     const s = session();
     if (!s || !s.id) return null;
     let res;
-    try {
-      res = window.CLOUD.pullMeta ? await window.CLOUD.pullMeta(s.id)
-                                  : { ok: true, data: await window.CLOUD.pull(s.id) };
-    } catch (e) { res = { ok: false }; }
+    // revision-aware read first (save-cas.sql) — it's what makes writes safe
+    if (window.CLOUD.pullSave) {
+      const r = await window.CLOUD.pullSave(s.id);
+      if (r && r.ok) { _casOn = true; _rev = r.rev; res = { ok: true, data: r.data }; }
+      else if (r && r.unsupported) _casOn = false;
+    }
+    if (!res) {
+      try {
+        res = window.CLOUD.pullMeta ? await window.CLOUD.pullMeta(s.id)
+                                    : { ok: true, data: await window.CLOUD.pull(s.id) };
+      } catch (e) { res = { ok: false }; }
+    }
     if (!res || !res.ok) return null;   // fetch FAILED — cloud writes stay blocked this session
     _pullOk = true;
     // recovery net + clobber baseline: stash the untouched cloud copy, remember its weight
     try { if (res.data) { localStorage.setItem('lf-backup::' + uid(), JSON.stringify(res.data)); _cloudWeight = saveWeight(res.data); } } catch (e) {}
     const merged = mergeSaves(load(), res.data);
-    if (merged) { saveLocal(merged); try { window.SESSIONLOCK && window.SESSIONLOCK.claim(); } catch (e) {} return merged; }
+    if (merged) {
+      saveLocal(merged); vault(merged, true);
+      // REPAIR PUSH — when local progress beat the cloud copy, publish the strong
+      // save NOW so other devices pull it instead of re-pushing weak state.
+      if (saveWeight(merged) > _cloudWeight * 1.02) { pending = merged; flush(); }
+      try { window.SESSIONLOCK && window.SESSIONLOCK.claim(); } catch (e) {}
+      return merged;
+    }
     try { window.SESSIONLOCK && window.SESSIONLOCK.claim(); } catch (e) {}   // this login takes over — kick every older tab/device
     return null;
   }
@@ -207,5 +346,5 @@
     refreshBar();
     return true;
   }
-  window.ACCOUNT = { key, current, session, load, save: saveLocal, push, pull, flushNow, refreshBar, cloudOn, setName };
+  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, casOn: () => _casOn };
 })();

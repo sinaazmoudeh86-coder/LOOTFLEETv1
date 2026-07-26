@@ -253,7 +253,7 @@
       else if (wc.key === 'gatling') stats.multiShot = (stats.multiShot || 0) + 1;
       else if (wc.key === 'missile') { if (stats.attackDamage) stats.attackDamage = Math.round(stats.attackDamage * 1.2); }
       else if (wc.key === 'rail')    stats.critDamage = Math.round(((stats.critDamage || 0) + 15 + rarityIdx * 3) * 10) / 10;
-      else if (wc.key === 'plasma')  stats.lifeSteal = Math.round((((stats.lifeSteal || 0)) + 1 + (rarityIdx >= 4 ? 1 : 0)) * 10) / 10;
+      else if (wc.key === 'plasma')  stats.lifeSteal = Math.round((((stats.lifeSteal || 0)) + 0.2 + (rarityIdx >= 4 ? 0.2 : 0)) * 10) / 10;
       // 'support' (Warden Array) carries no extra item stat — its power is the
       // fleet aura, computed at runtime from rarity (see supportAura).
     } else {
@@ -290,7 +290,7 @@
       case 'laser':   return p - 0.9 * (2 + 0.8 * r);                 // attackSpeed bonus
       case 'gatling': return p - 0.8;                                  // +1 multiShot
       case 'rail':    return p - 0.28 * (15 + 3 * r);                  // critDamage bonus
-      case 'plasma':  return p - 1.4 * (1 + (r >= 4 ? 1 : 0));         // lifeSteal bonus
+      case 'plasma':  return p - 1.4 * (0.2 + (r >= 4 ? 0.2 : 0));     // lifeSteal bonus
       case 'missile': {                                                // ×1.2 attackDamage
         const ad = item.stats.attackDamage || 0;
         const base = (C.STATS.attackDamage && C.STATS.attackDamage.base) || 14;

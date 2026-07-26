@@ -144,20 +144,23 @@
   const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
 
   // ---- PILOT ASCENSION -------------------------------------------------------
-  // Reset the account to Level 1, carry ONE legacy ship, bank the points.
+  // Reset the account to Level 1, carry THE WHOLE HANGAR, bank the points.
   // Called by pilot-ascension.js at the flash of its cinematic.
   function pilotAscend(legacyKey, pts) {
     const keepShip = (state.ownedShips && state.ownedShips[legacyKey]) ? legacyKey : (state.ship || 'frigate');
     // 1 — stash everything that survives
     const keep = {};
     ASC_KEEP.forEach((k) => { if (state[k] !== undefined) keep[k] = state[k]; });
-    const legacy = {
-      key: keepShip,
-      // THE HULL ONLY. No hull upgrade levels, no fittings, no cargo — the pilot
-      // brings the ship and nothing else. Its ascension-module stars survive
-      // because that is the hull's own prestige track, not run progression.
-      asc: JSON.parse(JSON.stringify((state.ascension || {})[keepShip] || {})),
-    };
+    // EVERY HULL COMES WITH YOU (Jul 2026 — was one Legacy Ship). Ownership of
+    // the whole hangar carries; each ship RESETS — hull upgrade levels, fittings
+    // and cargo are all surrendered, so every hull arrives bare, exactly as it
+    // left the yard. Ascension-module stars survive: that's the hull's own
+    // prestige track, not run progression.
+    const hangar = Object.keys(state.ownedShips || {}).filter((k) => state.ownedShips[k] && C.SHIP_BY_KEY[k]);
+    if (hangar.indexOf(keepShip) === -1) hangar.push(keepShip);
+    const hullAsc = {};
+    hangar.forEach((k) => { hullAsc[k] = JSON.parse(JSON.stringify((state.ascension || {})[k] || {})); });
+    const legacy = { key: keepShip, asc: hullAsc[keepShip] || {} };
     const entitled = ASC_KEEP_SHIPS.filter((k) => state.ownedShips && state.ownedShips[k]);
     const before = { lvl: state.level | 0, ship: (C.SHIP_BY_KEY[keepShip] || {}).name || keepShip };
 
@@ -203,18 +206,19 @@
     // 3 — restore the permanents
     Object.keys(keep).forEach((k) => { state[k] = keep[k]; });
 
-    // 4 — ONE HULL. The hangar holds your Legacy Ship and nothing else — no
-    // starter frigate, no event hulls. If you want to keep flying the Voidmaw or
-    // the Titan Sina you pick it as your Legacy Ship; that IS the choice. The
-    // entitlement is still recorded in pasc.entitled (nothing is unrecoverable)
-    // and the permanent grant guards in achievements.js / server-dreadnaught.js
-    // stop a surrendered event hull from being re-earned for free.
-    state.ownedShips = {}; state.ownedShips[legacy.key] = true;
+    // 4 — THE WHOLE HANGAR. Every hull you owned is still yours, including event
+    // and premium hulls — but stripped: no upgrade levels, no fittings, no cargo,
+    // and the wing is disbanded (escort slots re-earn with pilot level). You fly
+    // out in the flagship you picked; the rest wait in the hangar.
+    state.ownedShips = {};
+    hangar.forEach((k) => { state.ownedShips[k] = true; });
     state.ship = legacy.key;
-    state.shipLevels = {};                 // hull upgrades surrendered — back to Lv 1
+    state.shipLevels = {};                 // hull upgrades surrendered — every hull back to Lv 1
     state.fittings = {};                   // no saved loadouts
-    state.ascension = {}; state.ascension[legacy.key] = legacy.asc;
-    state.shipKills = {}; state.shipKills[legacy.key] = 0;
+    state.fleet = null; state.drones = 0;   // wing disbanded — re-form it as slots unlock
+    state.ascension = hullAsc;             // per-hull ascension stars survive
+    state.shipKills = {};
+    hangar.forEach((k) => { state.shipKills[k] = 0; });
     // the ship arrives BARE — every slot empty, exactly as it left the yard
     state.equipped = { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null, bow2: null, arrows2: null };
     state.inventory = [];
@@ -360,7 +364,7 @@
     // Lv100+ the screen stops being a hose of rounds; every shell lands huge.
     if (s.attacksPerSec > 2.2) { s.attackDamage *= s.attacksPerSec / 2.2; s.attacksPerSec = 2.2; }
     if (s.multiShot > 200) { s.attackDamage *= (1 + s.multiShot / 100) / 3; s.multiShot = 200; }
-    s.lifeSteal = Math.min(95, s.lifeSteal);
+    s.lifeSteal = Math.min(19, s.lifeSteal);   // global ceiling — was 95 before the 80% sustain cut
     s.multiShot = Math.min(100, s.multiShot);
     s.maxHp = s.health;
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
@@ -456,16 +460,39 @@
   // No gimmick and no scripted outcome: both sides race honest DPS against
   // honest HP, and the stronger fleet wins because the numbers say so.
   const TTK_ATT = 22, TTK_DEF = 20;
-  function cloneMatchup(cloneScore) {
+  // RATIO CEILING — a fight that can't be won in a 5-minute sitting isn't a
+  // fight, it's a wall. Synthetic garrisons (Void Wardens) pass a tight cap so
+  // a pilot who cleared the level gate always has a real shot; real players'
+  // clones keep a wide-but-finite ceiling so their ⚡ still means something.
+  const RATIO_CAP = 6;
+  function cloneMatchup(cloneScore, maxRatio) {
     const myRaw = powerRaw();
     const defRaw = Math.max(1, rawFromScore(cloneScore || score()));
-    const ratio = Math.max(0.15, Math.min(2000, defRaw / myRaw));
+    const cap = Math.max(0.5, Math.min(RATIO_CAP, maxRatio || RATIO_CAP));
+    const ratio = Math.max(0.15, Math.min(cap, defRaw / myRaw));
     return {
       ratio,
       hp: Math.max(15000, Math.round(effectiveDps() * TTK_ATT * ratio)),
       dps: Math.max(1, myEhp() / (TTK_DEF / ratio)),
       outmatched: ratio > 0.92,
     };
+  }
+  // FLEET SUSTAIN, BOUNDED — a defending fleet repairs, but its repair rate can
+  // never approach the attacker's DPS, or the fight stalls forever (the void
+  // spire bug: 5%/s of a 110-second hull out-healed everything). Absolute HP/s,
+  // hard-capped at a fraction of what the attacker actually puts out, and
+  // suppressed for 2.5s after every hit so damage always shows.
+  const REGEN_SHARE = 0.15, REGEN_SUPPRESS = 2.5;
+  // PvP-shaped encounter? (clone garrisons, citadels, void wardens, sparring)
+  const PVP_LIFESTEAL = 1;
+  function pvpFight() {
+    const w = rt.waves;
+    return !!(w && w.active && (w.clone || w.citadel || w.thenCitadel || w.playerCit));
+  }
+  function setCloneRegen(e, ratio) {
+    const soft = e.maxHp * Math.min(0.05, Math.max(0, (ratio - 1) * 0.02));
+    e.cloneRegen = Math.max(0, Math.min(soft, effectiveDps() * REGEN_SHARE));
+    e.regenHold = 0;
   }
 
   function refreshStats() {
@@ -1070,9 +1097,14 @@
     // crit: a little screen punch
     if (p.crit) rt.shake = Math.min(2.5, (rt.shake || 0) + 1.2);
     rt.dmgWindow.push({ t: rt.time, dmg: p.damage });
-    // LIFE STEAL
-    if (rt.stats.lifeSteal > 0 && !rt.archer.dead) {
-      const heal = p.damage * (rt.stats.lifeSteal / 100);
+    if (e.cloneRegen) e.regenHold = REGEN_SUPPRESS;   // being shot stops fleet repair
+    // LIFE STEAL — hard-capped in fights against player-shaped fleets (clone
+    // garrisons, citadels, void wardens). A 90% siphon made siege duels
+    // unloseable on both sides: nobody died, the timer just ran out.
+    const ls = Math.min(rt.stats.lifeSteal, pvpFight() ? PVP_LIFESTEAL : 19);
+    if (ls > 0 && !rt.archer.dead) {
+      // ...and no single hit may siphon more than 6% of your hull
+      const heal = Math.min(p.damage * (ls / 100), rt.stats.maxHp * 0.06);
       if (heal >= 1 && rt.archer.hp < rt.stats.maxHp) {
         rt.archer.hp = Math.min(rt.stats.maxHp, rt.archer.hp + heal);
         if (Math.random() < 0.25) rt.floats.push(new E.FloatText(rt.archer.x, rt.archer.y - 20, '+' + formatNum(heal), { color: '#2f9e4f', size: 13, vy: -40, life: 0.7 }));
@@ -3055,7 +3087,10 @@
   // holdings, which shift a little each day. Real claims always override.
   function npcOwner(k) {
     if (isOwned(k)) return null;
-    if (state.tileCd && (state.tileCd[k] || 0) > Date.now()) return null;   // freshly fought — leave neutral until claims stream in
+    // NOTE: a live contest cooldown used to blank the owner here, which meant
+    // attacking a held tile and bailing showed it as NEUTRAL — unclaimed for
+    // 24 h (and dropped its garrison). Only an actual capture (isOwned) clears
+    // the holder now.
     const day = Math.floor(Date.now() / 864e5);
     const s = k + '·' + day;
     let h = 2166136261 >>> 0;
@@ -3353,10 +3388,13 @@
       rt.siege = null;
       const vpool = ['battleship', 'dreadnought', 'carrier', 'supercarrier', 'titan', 'mothership'];
       const wardenShip = vpool[Math.min(vpool.length - 1, Math.floor(tile.vtier / 100))];
-      const wardenScore = Math.round(Math.max(1, score()) * (1.2 + tile.vtier / 250));
+      // WARDEN STRENGTH — a flat, honest edge over the pilot who unlocked the
+      // gate. This used to scale with vtier (×2.8 at Lv400) which, once run
+      // through true-power, made deep spires mathematically unwinnable.
+      const wardenScore = Math.round(Math.max(1, score()) * 1.15);
       const wsnap = { ship: wardenShip, nm: 'Void Warden', lvl: tile.vtier, score: wardenScore, hp: 0, dps: 0, esc: 2, escKeys: ['destroyer', 'carrier'] };
       rt.waves = { active: true, total: 6, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.1, super: false,
-                   clone: true, cloneScore: wardenScore, cloneDef: { name: 'THE VOID WARDEN', real: false, score: wardenScore, snap: wsnap }, plainTake: true, claimTile: k };
+                   clone: true, cloneScore: wardenScore, maxRatio: 1.35, cloneDef: { name: 'THE VOID WARDEN', real: false, score: wardenScore, snap: wsnap }, plainTake: true, claimTile: k };
     } else {
       // neutral → capture siege (Boss Tiles end on a boss wave)
       rt.siege = { active: true, total: 10, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.0, boss: tile.boss };
@@ -3437,10 +3475,10 @@
       c.name = ((def.name || 'ENEMY').toUpperCase()) + "'S CITADEL";
       // TRUE-POWER ratio (the compressed-score version under-scaled fortresses
       // the same way the clone flagship was under-scaled)
-      const mu = cloneMatchup(waves.cloneScore);
+      const mu = cloneMatchup(waves.cloneScore, waves.maxRatio);
       c.maxHp = c.hp = Math.max(Math.round(c.maxHp), Math.round(effectiveDps() * TTK_ATT * 0.8 * mu.ratio));
       c.damage = Math.max(c.damage || 1, mu.dps * 0.7 * (c.fireCd || 1.6));
-      c.cloneRegen = Math.min(0.04, Math.max(0, (mu.ratio - 1) * 0.015));
+      setCloneRegen(c, mu.ratio);
       c.tint = '#ff6a5e';
     }
     rt.enemies.push(c);
@@ -3522,7 +3560,7 @@
     if (s.spawnT > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
-        if (s.pendingBoss) { if (s.clone) spawnCloneBoss(s.cloneScore, s.cloneDef); else if (s.citadel) spawnCitadel(s); else if (s.dread) spawnDreadnaught(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
+        if (s.pendingBoss) { if (s.clone) spawnCloneBoss(s.cloneScore, s.cloneDef, s.maxRatio); else if (s.citadel) spawnCitadel(s); else if (s.dread) spawnDreadnaught(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
         else spawnWave(s.wave, s.dread ? (1.3 + Math.min(1.3, s.wave * 0.045)) : 1.8); // dread density ramps each wave
       }
       return;
@@ -3821,7 +3859,7 @@
   // tile: THEIR flagship sprite, THEIR name, THEIR published ship score — and
   // their ESCORT hulls spawn alongside as real combatants, each drawn with its
   // own ship art. Beat the whole replica to take the zone.
-  function spawnCloneBoss(cloneScore, def) {
+  function spawnCloneBoss(cloneScore, def, maxRatio) {
     const pool = allowedEnemies(); const type = pool[pool.length - 1];
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
     const b = new E.Enemy(type, state.currentDungeon, cx, cy);
@@ -3830,7 +3868,7 @@
     // scores and set HP to "16s of theoryDps", so a defender four times your real
     // power read as twice and died in eleven seconds — which is why attacking
     // down, or even up, was a guaranteed win.
-    const mu = cloneMatchup(cloneScore);
+    const mu = cloneMatchup(cloneScore, maxRatio);
     const ratio = mu.ratio;
     const snap = def && def.snap;
     // (guard: snap may be missing entirely — a bare `snap && snap.escKeys || []`
@@ -3845,7 +3883,7 @@
     // FLEET SUSTAIN — a defending fleet runs shield repair and life support just
     // like yours. Zero when you outgun them, real when they outgun you: this is
     // what stops a weaker attacker chipping down a fortress fleet forever.
-    b.cloneRegen = Math.min(0.05, Math.max(0, (ratio - 1) * 0.02));
+    setCloneRegen(b, ratio);
     if (snap && snap.ship) {
       const im = new Image(); im.src = 'ships/ship-' + snap.ship + '.png';
       b.spriteImg = im;                                   // render THEIR flagship
@@ -3862,7 +3900,7 @@
       e2.maxHp = e2.hp = Math.max(4000, Math.round(mu.hp * (escShare / escKeys.length)));
       e2.speed *= 0.65; e2.size = 62; e2.ranged = true; e2.range = 430; e2.fireCd = 1.9; e2.fireT = 0.7 + i * 0.4;
       e2.damage = Math.max(1, mu.dps * (escShare / escKeys.length) * e2.fireCd);
-      e2.cloneRegen = b.cloneRegen;
+      e2.cloneRegen = Math.max(0, b.cloneRegen * (e2.maxHp / Math.max(1, b.maxHp))); e2.regenHold = 0;
       const im2 = new Image(); im2.src = 'ships/ship-' + key + '.png';
       e2.spriteImg = im2;
       e2.tint = '#ffce8a';
@@ -3891,8 +3929,9 @@
   function cloneTick(dt) {
     for (const e of rt.enemies) {
       if (!e || e.dead || e.dying || !e.cloneRegen) continue;
+      if (e.regenHold > 0) { e.regenHold -= dt; continue; }   // suppressed while under fire
       if (e.hp >= e.maxHp) continue;
-      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.cloneRegen * dt);
+      e.hp = Math.min(e.maxHp, e.hp + e.cloneRegen * dt);      // absolute HP/s, pre-capped
     }
   }
   // Won a citadel siege vs a PLAYER-built citadel — you TAKE their fortress
@@ -4329,6 +4368,19 @@
       (state.inventory || []).forEach(capCrit);
       Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => capCrit(fit[k])); });
       state.critVer = 4;
+      if (loaded) save();
+    }
+    // ---- ONE-TIME LIFESTEAL CUT: every source in the game dropped 80% -------
+    // Sustain had become the dominant stat — in PvP it made both fleets literally
+    // unkillable. Hull mods, skill/pilot trees and new drops are all rebalanced in
+    // config; this scales the lifesteal ALREADY rolled onto live gear, so nobody
+    // keeps a pre-nerf fitting wherever it happens to be stowed.
+    if (state.lsVer !== 1) {
+      const cutLS = (i2) => { if (i2 && i2.stats && i2.stats.lifeSteal) i2.stats.lifeSteal = Math.round(i2.stats.lifeSteal * 0.2 * 10) / 10; };
+      Object.keys(state.equipped || {}).forEach((k) => cutLS(state.equipped[k]));
+      (state.inventory || []).forEach(cutLS);
+      Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => cutLS(fit[k])); });
+      state.lsVer = 1;
       if (loaded) save();
     }
 

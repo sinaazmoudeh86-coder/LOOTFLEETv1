@@ -1153,7 +1153,7 @@
       ['Move Speed', st.moveSpeed.toFixed(0) + '%'],
     ];
     let html = rows.map(([n, v]) => `<div class="stat-row"><span class="s-name">${n}</span><span class="s-val">${v}</span></div>`).join('');
-    if (st.lifeSteal > 0) html += `<div class="stat-row special"><span class="s-name">Life Steal</span><span class="s-val">${Math.round(st.lifeSteal)}%</span></div>`;
+    if (st.lifeSteal > 0) html += `<div class="stat-row special"><span class="s-name">Life Steal</span><span class="s-val">${Math.round(st.lifeSteal * 10) / 10}%</span></div>`;
     if (st.multiShot > 0) html += `<div class="stat-row special"><span class="s-name">Multi-Shot</span><span class="s-val">${Math.round(st.multiShot)}% · 10 tgt</span></div>`;
     html += `<button class="signout-btn" id="signout-btn">Sign Out</button>`;
     el['stat-list'].innerHTML = html;

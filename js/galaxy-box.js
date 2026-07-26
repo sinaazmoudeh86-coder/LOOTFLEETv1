@@ -56,7 +56,11 @@
   function boxes() {
     if (_boxes) return _boxes;
     const R = C().RARITY;
-    const TOP = R.length - 1; // Artifact tier index
+    // ARTIFACT is the crate ceiling — the last tier with no ascension gate. This
+    // used to read R.length - 1, which silently became PARAGON when the three
+    // ascension-exclusive tiers were appended to the rarity chain. Those tiers are
+    // earned by ascending, never bought out of a crate.
+    let TOP = 0; R.forEach((x, i) => { if (!(x.ascReq | 0)) TOP = i; });
 
     // one guaranteed box per rarity tier, Common → Cosmic
     const tierBoxes = [];

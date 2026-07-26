@@ -55,10 +55,15 @@
     // theoretical DPS ≈ your server max attack — so the ⚔ meter fills across
     // the whole run and "what you watched accumulate" is what transmits.
     const theory = Math.max(1, (G().rt && G().rt.stats && G().rt.stats.theoryDps) || 1);
-    const norm = (power * 25) / (theory * T);
-    run = { left: T, dealt: 0, burned: 0, kills: 0, boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false, capWarned: false,
-            n, bonus, norm, poolHp: Math.max(1, Number(opts.bossHp) || 1), died: false, submitted: false,
-            cap: power * 25, prevAuto, prevSpeed, onDone: opts.onDone };
+    const pool = Math.max(1, Number(opts.bossHp) || 1);
+    // A full run is worth 25× your power — or, when the remaining pool is bigger
+    // than that, enough to flatten the current mark 2.4× over. Nobody ever
+    // shoots a hull they mathematically cannot dent; whales still burn marks in
+    // a hit or two because 25× their power dwarfs the pool.
+    const norm = Math.max(power * 25, pool * 2.4) / (theory * T);
+    run = { left: T, dealt: 0, burned: 0, kills: 0, boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false,
+            n, bonus, norm, poolHp: pool, died: false, submitted: false,
+            prevAuto, prevSpeed, onDone: opts.onDone };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     warbar();
@@ -81,9 +86,10 @@
     if (b.hp <= 0 || b.dying) { b.hp = b.maxHp * 0.96; b.dying = false; }
     run.lastHp = b.hp;
     // LEVEL BURN — pool to 0 → the Armada resets FULL at the next mark,
-    // exponentially harder (×1.55, mirrors the server), and you KEEP FIGHTING
-    const capped = Math.min(run.dealt, run.cap);
-    while (capped - run.burned >= run.poolHp) {
+    // exponentially harder (×1.55, mirrors the server), and you KEEP FIGHTING.
+    // NO TRANSMIT CEILING (Jul 2026): damage used to stop counting past 25× your
+    // power, which made low marks unkillable no matter how hard you hit.
+    while (run.dealt - run.burned >= run.poolHp) {
       run.burned += run.poolHp;
       run.kills += 1; run.n += 1;
       run.poolHp = Math.max(1, Math.round(run.poolHp * 1.55));
@@ -92,7 +98,6 @@
       rt.shake = Math.min(8, (rt.shake || 0) + 4);
       banner('☠ Mk-' + (run.n - 1) + ' DESTROYED', 'The Armada rebuilds at Mk-' + run.n + ' — full hull, ×1.55 harder · more ⬡ for every member');
     }
-    if (!run.capWarned && run.dealt >= run.cap) { run.capWarned = true; banner('⚠ TRANSMIT BUFFER FULL', 'Damage beyond 25× your power can\u2019t transmit this run — survive it out'); }
     run.left -= dt;
     // ENRAGE — final 20s: faster zones + faster boss fire
     if (!run.enraged && run.left <= 20) {
@@ -202,7 +207,7 @@
     if (!run) return;
     const r = run; run = null;
     const killed = r.kills > 0;
-    const dmg = Math.max(1, Math.floor(Math.min(r.dealt, r.cap)));
+    const dmg = Math.max(1, Math.floor(r.dealt));
     const frac = clamp((T - Math.max(0, r.left)) / T, 0, 1);
     const app = $('app'); if (app) app.classList.remove('sd-noauto');
     try { G().setAuto(!!r.prevAuto); } catch (e) {}
@@ -253,8 +258,8 @@
     const t = Math.max(0, run.left), m = Math.floor(t / 60), s = Math.floor(t % 60);
     const tg = $('awb-tag'); if (tg) tg.textContent = '⬡ Mk-' + run.n + (run.kills ? ' · ☠' + run.kills : '');
     const tm = $('awb-timer'); if (tm) { tm.textContent = m + ':' + String(s).padStart(2, '0'); tm.classList.toggle('enr', run.enraged); }
-    const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(Math.min(run.dealt, run.cap)) + '</b><i style="font-style:normal;color:#5f8d84"> / ' + fmt(run.cap) + '</i>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
-    const f = $('awb-fill'); if (f) f.style.width = clamp((1 - (Math.min(run.dealt, run.cap) - run.burned) / run.poolHp) * 100, 0, 100) + '%';
+    const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(run.dealt) + '</b>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
+    const f = $('awb-fill'); if (f) f.style.width = clamp((1 - (run.dealt - run.burned) / run.poolHp) * 100, 0, 100) + '%';
   }
 
   const CSS = `

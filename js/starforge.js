@@ -1,27 +1,34 @@
 /* =============================================================================
-   starforge.js — STARFORGE (Command ▸ Starforge) — ITEM ENHANCEMENT
+   starforge.js — STARFORGE (Command ▸ Starforge) — HARDPOINT ENHANCEMENT
    -----------------------------------------------------------------------------
-   Per-ITEM enhancement: the gear-side sibling of Ship Ascension and a gold /
-   iron / plasma sink with real gambling tension.
+   SLOT-BASED (Jul 2026). Temper and purity live on the HARDPOINT, not on the
+   fitting docked in it: the work you hammer into a slot stays there when the
+   fitting changes. Find a better gun, dock it, and it inherits the barrel's
+   temper instantly — losing gear no longer means losing the forge.
 
-     • TEMPER (+0 → +15): every strike costs Gold + Iron and rolls a published
-       success chance — gentle to +5, then a steep geometric collapse (60% at
-       +5 down to ~12% at +15). Each level bakes +6% into the item's combat
-       stats (damage, hull, fire rate, crit damage, thrust).
+     • TEMPER (+0 → +15) per hardpoint: every strike costs Gold + Iron and rolls
+       a published success chance — gentle to +5, then a steep geometric collapse
+       (60% at +5 down to ~12% at +15). Each level adds +6% to the docked
+       fitting's combat stats (damage, hull, fire rate, crit damage, thrust).
        - FORGE HEAT (pity): every failure adds +3% success to the NEXT strike on
-         that item (cap +45%). Success resets the heat.
+         that hardpoint (cap +45%). Success resets the heat.
        - SLIP RISK: above +10, a failed strike has a 40% chance to knock the
          temper down one level — but never below the +10 checkpoint.
-     • AT +15: the fitting is cryo-hardened — +1% chance on hit to flash-freeze
-       the target solid (FrostyFrost tech). Stacks across every +15 slot; bosses
-       are immune. Surfaces as stats.cryoChance in game-v93 computeStats.
-     • PURITY (60–130%): latent forge purity multiplies the whole temper bonus.
-       Rerolling costs Plasma and REPLACES the old roll — pure gamble — but the
-       minimum possible roll creeps up +1% per reroll (to 95%). 125%+ = PRISTINE.
+     • AT +15: the hardpoint is cryo-hardened — +1% chance on hit to flash-freeze
+       the target solid (FrostyFrost tech). Stacks across every +15 hardpoint
+       with a fitting docked; bosses are immune. Surfaces as stats.cryoChance.
+     • PURITY (60–130%) per hardpoint: latent forge purity multiplies the whole
+       temper bonus. Rerolling costs Plasma and REPLACES the old roll — pure
+       gamble — but the minimum possible roll creeps up +1% per reroll (to 95%).
+       125%+ = PRISTINE.
+     • PRICING is per-PILOT, never per-fitting: level + deepest zone reached +
+       the temper level being climbed to, ×2.5 because the work is permanent.
+       Keying it to the docked item's rarity would just mean forging with a
+       common fitting in the slot and swapping the Primordial in for free.
 
-   Enhancement lives ON the item (it.enh) and is baked into it.stats, so it
-   counts everywhere — flagship, escorts, power score, auto-equip — and is LOST
-   with the item (death drops, selling). State rides the normal save.
+   The forge lives on the account (state.forge, keyed by slot) and is applied at
+   stat-computation time in game-v93's computeStats — item stats are never
+   mutated, so an item's own worth is always its own numbers.
    ========================================================================== */
 (function () {
   'use strict';
@@ -33,27 +40,69 @@
 
   const BOOST = ['attackDamage', 'health', 'attackSpeed', 'critDamage', 'moveSpeed'];
   const MAX_LV = 15, SLIP_FLOOR = 10, PRISTINE = 125, PCT_PER_LV = 6;
+  const SLOT_ORDER = ['bow', 'bow2', 'arrows', 'arrows2', 'armor', 'boots', 'gloves', 'amulet'];
   function bank(res) { const st = G().state; return res === 'gold' ? (st.gold || 0) : ((st.resources || {})[res] || 0); }
 
-  // ---- item enhancement state -----------------------------------------------
-  function ensure(it) {
-    if (!it.enh) {
-      const base = {};
-      BOOST.forEach((k) => { if (it.stats && it.stats[k] != null) base[k] = it.stats[k]; });
-      it.enh = { lv: 0, heat: 0, pur: 100, rr: 0, n0: it.name, base };
-    }
-    return it.enh;
+  // ---- HARDPOINT forge state -------------------------------------------------
+  function forge() {
+    const st = G().state;
+    if (!st.forge) st.forge = {};
+    if (!st.forge.v) migrate(st);
+    return st.forge;
+  }
+  function fs(slot) {
+    const f = forge();
+    if (!f[slot]) f[slot] = { lv: 0, heat: 0, pur: 100, rr: 0 };
+    return f[slot];
+  }
+  function slotKeys() {
+    const eq = G().state.equipped || {};
+    const out = SLOT_ORDER.filter((k) => k in eq);
+    Object.keys(eq).forEach((k) => { if (out.indexOf(k) === -1) out.push(k); });
+    return out;
   }
   function mult(e) { return 1 + (PCT_PER_LV / 100) * e.lv * (e.pur / 100); }
-  function recompute(it) {
-    const e = it.enh; if (!e) return;
-    const m = mult(e);
-    for (const k in e.base) {
-      const v = e.base[k] * m;
-      it.stats[k] = (k === 'attackDamage' || k === 'health') ? Math.max(1, Math.round(v)) : Math.round(v * 10) / 10;
-    }
-    it.name = e.n0 + (e.lv > 0 ? ' +' + e.lv : '');
+  // PUBLIC — computeStats multiplies the docked fitting's boostable lines by this
+  function slotMult(slot) { try { return mult(fs(slot)); } catch (e) { return 1; } }
+  function slotTemper(slot) { try { const e = fs(slot); return { lv: e.lv | 0, pur: e.pur | 0 }; } catch (x) { return { lv: 0, pur: 100 }; } }
+  const boosts = (k) => BOOST.indexOf(k) !== -1;
+
+  // ---- ONE-TIME MIGRATION — item tempers → hardpoints ------------------------
+  // Pre-slot saves baked the bonus into it.stats and recorded it in it.enh. Every
+  // hardpoint inherits the BEST temper ever rolled for a fitting of its kind, so
+  // nobody loses an investment, and every item is restored to its base stats.
+  function migrate(st) {
+    st.forge = st.forge || {};
+    const best = {};
+    const consider = (slot, e) => {
+      if (!slot || !e) return;
+      const cur = best[slot], lv = e.lv | 0, pur = (e.pur | 0) || 100;
+      if (!cur || lv > cur.lv || (lv === cur.lv && pur > cur.pur)) best[slot] = { lv, heat: 0, pur, rr: e.rr | 0 };
+    };
+    const strip = (it) => {
+      if (!it || !it.enh) return;
+      const e = it.enh;
+      for (const k in (e.base || {})) it.stats[k] = e.base[k];
+      if (e.n0) it.name = e.n0;
+      delete it.enh;
+    };
+    try {
+      const eq = st.equipped || {};
+      Object.keys(eq).forEach((k) => { const it = eq[k]; if (it && it.enh) { consider(k, it.enh); strip(it); } });
+      (st.inventory || []).forEach((it) => {
+        if (!it || !it.enh) return;
+        // bag gear seeds every hardpoint of its family (either barrel, either magazine)
+        Object.keys(eq).forEach((k) => { if (baseSlot(k) === it.slot) consider(k, it.enh); });
+        strip(it);
+      });
+      const fits = st.fittings || {};
+      Object.keys(fits).forEach((sh) => Object.keys(fits[sh] || {}).forEach((k) => strip(fits[sh][k])));
+    } catch (e) {}
+    Object.keys(best).forEach((k) => { if (!st.forge[k]) st.forge[k] = best[k]; });
+    st.forge.v = 2;
+    try { G().refreshStats(); G().save(); } catch (e) {}
   }
+
   // ODDS: gentle to +5, then a steep geometric collapse — each strike past +5 is
   // ~16% harder than the last (60% → 12% at +15). Heat pity is the counterweight.
   function chance(e) {
@@ -61,70 +110,51 @@
     return clamp(Math.round(base + e.heat), 5, 100);
   }
   // ---- PRICING ---------------------------------------------------------------
-  // FIXED COSTS — never a share of your balance. A strike's price is a pure
-  // function of three things: your PILOT LEVEL (which sets the economic tier),
-  // the fitting's RARITY, and its ITEM LEVEL — then the temper level it's
-  // climbing to. Two pilots at the same level forging the same item always pay
-  // the same. Every term is log/polynomial-bounded, so nothing can overflow the
-  // way the old exponential ILVL tariff did (2^2022 = Infinity at ILVL 250k).
+  // FIXED COSTS, PER PILOT — never a share of your balance and never a function
+  // of the fitting docked in the slot (that would be free to game: forge with a
+  // common in the barrel, then dock the Primordial). A strike's price is your
+  // PILOT LEVEL, the deepest ZONE you've reached, and the temper level it's
+  // climbing to — ×2.5 because a hardpoint's work is permanent.
   const COST_CAP = 1e295;
   const fin = (n, alt) => (Number.isFinite(n) && n > 0 ? Math.min(n, COST_CAP) : (alt || 1));
   const plv = () => Math.max(1, G().state.level | 0);
-  const izone = (it) => {
-    // ECONOMIC ZONE — the deepest zone this pilot has ACTUALLY reached, capped
-    // by the item's own drop zone. Pricing off the item's zone alone breaks on
-    // gear that arrived by event/reward: a zone-500 fitting priced at zone-500
-    // yield asks millions of times what a pilot farming zone 3 will ever hold.
+  const zref = () => {
     const st = G().state;
-    const reached = Math.max(1, st.highestDungeonReached | 0, st.highestUnlocked | 0, st.currentDungeon | 0);
-    return Math.max(1, Math.min(1000, Math.min((it.dungeon | 0) || 1, reached)));
+    return Math.max(1, Math.min(1000, Math.max(st.highestDungeonReached | 0, st.highestUnlocked | 0, st.currentDungeon | 0, 1)));
   };
   // PILOT LEVEL — a flat difficulty ramp across the whole game (×1 → ×1.5 at 500)
   const lvlF = () => 1 + plv() / 1000;
   // gold economy is geometric in ZONE — anchor to what one kill pays there
-  function econGold(it) { try { return fin(C().enemyGold(izone(it)), 1000); } catch (e) { return 1000; } }
+  function econGold() { try { return fin(C().enemyGold(zref()), 1000); } catch (e) { return 1000; } }
   // iron/plasma economies are polynomial, not geometric — priced separately
-  function econRes(it) { return fin(Math.pow(1 + izone(it), 1.6), 1); }
-  function ilvlMult(it) { const L = Math.max(1, it.ilvl | 0); return fin(Math.pow(1 + Math.log10(1 + L), 0.35), 1); }
-  function tariff(it) {
-    const L = it.ilvl | 0;
-    return L > 300 ? fin(0.25 * Math.log10(L / 300), 0) : 0;   // surcharge only: ILVL 3,000 +25% · 250,000 +73%
-  }
-  // RARITY PREMIUM — a Primordial fitting costs ~3× a Common one to work.
-  function rarMult(it) { return Math.pow(1.18, it.rarity || 0); }
-  function zr(it) { return fin(rarMult(it) * ilvlMult(it) * (1 + tariff(it)) * lvlF(), 1); }
-  // NO BANK-SHARE CEILING. An earlier build clamped every strike to a share of
-  // your current gold — that silently turned the model back into %-of-balance
-  // pricing (farm gold → price rises; spend it → price falls; nothing ever
-  // gates). The formula below IS the price, full stop. When you can't afford it
-  // the Strike button says exactly how much more you need and roughly how many
-  // kills that is — unaffordable is a gate you can farm through, not a wall.
+  function econRes() { return fin(Math.pow(1 + zref(), 1.6), 1); }
+  const PERMA = 2.5;   // permanence premium
   const floorAt = (v, fl) => Math.max(fl, Math.floor(fin(v, fl)));
   // costs are computed ONCE per render and reused on click, so the price shown
   // is exactly the price charged
   let _cCache = {};
-  const ckey = (it, kind) => { const e = ensure(it); return (it.id || it.name) + '|' + kind + '|' + e.lv + '|' + e.rr; };
-  function costT(it) {
-    const k = ckey(it, 't'); if (_cCache[k]) return _cCache[k];
-    const e = ensure(it), m = zr(it), step = Math.pow(1.25, e.lv);
+  function costT(slot) {
+    const e = fs(slot), k = slot + '|t|' + e.lv;
+    if (_cCache[k]) return _cCache[k];
+    const step = Math.pow(1.25, e.lv), m = PERMA * lvlF();
     return (_cCache[k] = {
-      gold: floorAt(econGold(it) * 40 * m * step, 1000),      // ≈ 40 kills in the item's zone × difficulty
-      iron: floorAt(250 * econRes(it) * m * step, 100),
+      gold: floorAt(econGold() * 40 * m * step, 1000),      // ≈ 100 kills at your depth
+      iron: floorAt(250 * econRes() * m * step, 100),
     });
   }
-  function costR(it) {
-    const k = ckey(it, 'r'); if (_cCache[k]) return _cCache[k];
-    const e = ensure(it), m = zr(it);
-    return (_cCache[k] = { plasma: floorAt(150 * econRes(it) * m * Math.pow(1.25, e.rr), 200) });
+  function costR(slot) {
+    const e = fs(slot), k = slot + '|r|' + e.rr;
+    if (_cCache[k]) return _cCache[k];
+    return (_cCache[k] = { plasma: floorAt(150 * econRes() * PERMA * lvlF() * Math.pow(1.25, e.rr), 200) });
   }
   // "you need X more ● — about N kills in Zone Z" — makes the gate legible
-  function shortfall(it, c) {
+  function shortfall(c) {
     const need = [];
     const gGap = c.gold - bank('gold'), iGap = (c.iron || 0) - bank('iron');
     if (gGap > 0) need.push('<span style="color:#f2b24b">● ' + fmt(gGap) + '</span>');
     if (iGap > 0) need.push('<span style="color:#d0a060">◆ ' + fmt(iGap) + '</span>');
     if (!need.length) return '';
-    const z = izone(it);
+    const z = zref();
     let kills = 0;
     try { kills = Math.ceil(gGap / Math.max(1, C().enemyGold(z))); } catch (e) {}
     return '<div class="fg-short">Need ' + need.join(' + ') +

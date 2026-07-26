@@ -40,18 +40,30 @@
 
   function enabled() { return !!(_cfg && _cfg.enabled) || SEEDS.length > 0; }
 
+  // ---- PLAUSIBLE KILL COUNT -------------------------------------------------
+  // The server's hourly tick added kills unbounded, so long-lived rows drifted
+  // into the billions — a number no human account can reach, which made every
+  // simulated pilot instantly identifiable on the board. Kills are a career
+  // stat: they follow career level (ascension rank included) and nothing else.
+  // Clamped on read, so already-inflated rows read sane before any SQL is run.
+  function killCap(level, asc) {
+    const career = Math.max(1, level | 0) + 500 * Math.max(0, asc | 0);
+    return Math.max(1200, Math.round(900 * career));
+  }
+
   // ---- one server row, in the exact shape leaderboard.js expects -------------
   function map(r) {
     // dedupe the server's fleet — unique hulls only, same rule as the cohort
     const raw = Array.isArray(r.fleet) ? r.fleet.filter((k) => window.CONFIG && window.CONFIG.SHIP_BY_KEY[k]) : null;
     const fleet = raw ? raw.filter((k, i) => raw.indexOf(k) === i).slice(0, 5) : null;
+    const lvl = capLevel(r.level || 1), stars = r.asc_stars | 0;
     return {
       name: r.name || 'Pilot',
-      level: capLevel(r.level || 1),
+      level: lvl,
       zone: r.zone || 1,
       power: Number(r.power) || 0,
-      kills: Number(r.kills) || 0,
-      asc: r.asc_stars | 0,
+      kills: Math.min(Number(r.kills) || 0, killCap(lvl, stars)),
+      asc: stars,
       _fleet: fleet,
       _loadout: null,
       // PROTECTED designation — read from the column, never guessed
@@ -105,8 +117,6 @@
     'reach','lance','shade','bloom','gate','helm','vault','drake','shard','tide','watch','maw','wing','helix'];
   const NAME_S = ['Vanta','Kestrel','Halo','Juno','Rook','Cinder','Pyx','Lux','Wren','Onyx','Sable','Bex','Nix','Tor','Vex','Kade'];
   const NAME_TAG = ['ARC','VOID','9TH','SOL','RVN','OBS','KRN','HEX','ZNT','APEX','NULL','VLT'];
-  const NAME_G = ['xX','no','big','lil','real','ur','iam','pro','mr','ms','the'];
-  const NAME_H = ['scope','clutch','gamer','sniper','tank','main','carry','goat','diff','andy','pilot','sweat'];
   const HULLS = [
     ['frigate','interceptor'],
     ['interceptor','cruiser','heavycruiser'],
@@ -121,14 +131,15 @@
   }
   function nameFrom(r) {
     const pick = (a) => a[(r() * a.length) | 0];
-    switch ((r() * 7) | 0) {
+    // No "xXpilot"-shaped handles: the gamer-slop pattern was the single
+    // biggest tell that a row wasn't a person.
+    switch ((r() * 6) | 0) {
       case 0: return pick(NAME_A);
       case 1: return pick(NAME_A) + pick(NAME_B).replace(/^./, (c) => c.toUpperCase());
       case 2: return pick(NAME_A) + (r() < 0.5 ? '_' : '') + (r() < 0.4 ? (10 + ((r() * 89) | 0)) : (100 + ((r() * 899) | 0)));
       case 3: return '[' + pick(NAME_TAG) + '] ' + pick(NAME_S);
       case 4: return (pick(NAME_A).slice(0, 4) + '-' + pick(NAME_B)).toUpperCase();
-      case 5: return pick(NAME_S);
-      default: return pick(NAME_G) + pick(NAME_H) + (r() < 0.35 ? (2 + ((r() * 97) | 0)) : '');
+      default: return pick(NAME_S) + (r() < 0.3 ? pick(NAME_B) : '');
     }
   }
   // ---------------------------------------------------------------------------
@@ -242,7 +253,7 @@
         name: p.name, level,
         zone: Math.max(1, Math.min(1000, Math.round(level * (0.72 + p.rr * 0.5)))),
         power,
-        kills: Math.round(h * 900 * p.pace * (0.7 + p.rr * 0.7)),
+        kills: Math.min(Math.round(h * 900 * p.pace * (0.7 + p.rr * 0.7)), killCap(level, stars)),
         asc: stars,
         _fleet: fleet, _loadout: null, _sim: true, _local: true,
         _joinedH: h,

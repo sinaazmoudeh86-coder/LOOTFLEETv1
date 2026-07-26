@@ -74,8 +74,10 @@
     health:        { key: 'health',        name: 'Health',       short: 'HP',    fmt: 'flat', base: 22.0, icon: '' },
     moveSpeed:     { key: 'moveSpeed',     name: 'Move Speed',   short: 'MOVE',  fmt: 'pct',  base: 0.7,  icon: '' },
     // SPECIAL: never rolled by the normal stat picker. Added rarely as a bonus
-    // line (see items.js). Value is a flat 1–5% and does NOT scale with zone.
-    lifeSteal:     { key: 'lifeSteal',     name: 'Life Steal',   short: 'LS',    fmt: 'pctint', base: 0, icon: '', special: true },
+    // line (see items.js). Value is a flat 0.2–1% and does NOT scale with zone.
+    // (Jul 2026: every lifesteal source in the game was cut by 80% — sustain had
+    // become the dominant stat, and in PvP it made both fleets unkillable.)
+    lifeSteal:     { key: 'lifeSteal',     name: 'Life Steal',   short: 'LS',    fmt: 'pct', base: 0, icon: '', special: true },
   };
   // Core rollable stats (excludes specials like life steal).
   const STAT_KEYS = Object.keys(STATS).filter((k) => !STATS[k].special);
@@ -299,14 +301,14 @@
   // of the normal stat roll. They do NOT scale with zone (they'd break the
   // game), and they appear infrequently, which makes finding one exciting.
   // ---------------------------------------------------------------------------
-  // Life Steal: heal a % of damage dealt. 1–5%, with 5% extremely rare.
+  // Life Steal: heal a % of damage dealt. 0.2–1%, with 1% extremely rare.
   function rollLifeSteal() {
     const r = Math.random();
-    if (r < 0.50) return 1;
-    if (r < 0.78) return 2;
-    if (r < 0.92) return 3;
-    if (r < 0.985) return 4;
-    return 5; // very rare
+    if (r < 0.50) return 0.2;
+    if (r < 0.78) return 0.4;
+    if (r < 0.92) return 0.6;
+    if (r < 0.985) return 0.8;
+    return 1; // very rare
   }
   // Multi-Shot: % chance per attack to also fire at up to MULTISHOT_MAX_TARGETS
   // additional nearby enemies. 10–25%, higher values rarer.
@@ -406,13 +408,13 @@
     // Resources (no gold), priced to be a weeks-long goal. Three extra weapon
     // hardpoints (7 total), increased natural weapon range, top-tier built-in
     // modifiers and superior base stats.
-    { key:'mothership',  name:'Mothership',     cls:'Carrier',    price:0, resPrice:{ fuel:500000, iron:200000, plasma:120000 }, reqKills:90000, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:4}, tag:'MOTHERSHIP', desc:'The ultimate faction vessel — 7 weapons, extended weapon range, 12 drone bays and superior base stats. Acquired exclusively with Galaxy Resources.' },
+    { key:'mothership',  name:'Mothership',     cls:'Carrier',    price:0, resPrice:{ fuel:500000, iron:200000, plasma:120000 }, reqKills:90000, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:0.8}, tag:'MOTHERSHIP', desc:'The ultimate faction vessel — 7 weapons, extended weapon range, 12 drone bays and superior base stats. Acquired exclusively with Galaxy Resources.' },
     // VOIDMAW — the Season 1 Server Dreadnaught event exclusive, and the most
     // expensive hull in the game. Above Mothership-grade, with the SINGULARITY
     // proc: 12% per bolt to stun a target and tear open a black hole beneath it.
     // NEVER purchasable: assembled from 150 Voidmaw Parts earned only in the
     // event (stage drops, leaderboard ranks, Voidmaw Store).
-    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:5}, tag:'SEASON 1 EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of Season 1. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Season 1: Voidmaw event. When the season ends, so does the chance.' },
+    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:1}, tag:'SEASON 1 EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of Season 1. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Season 1: Voidmaw event. When the season ends, so does the chance.' },
     // CHROMA REGENT — LootCoin mothership at Titan Carrier performance, firing
     // the same full-spectrum rainbow cannons as the Chroma Fang.
     { key:'chromaregent', name:'Chroma Regent', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'SPECTRUM MOTHERSHIP', purchase:{ lc:75000 },
@@ -432,7 +434,7 @@
       desc:'Layered wreck-plate over triple hardpoints — a battleship that shrugs off return fire while it cracks fortifications. +35% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada.' },
     { key:'monolith3', name:'Monolith Siegebreaker', cls:'Carrier', price:0, reqKills:0, weapons:5, ammo:2, hull:3, drones:10, mods:{dmgPct:260,hpPct:380,multiShot:55,critChance:35,critDamage:110,atkSpeedPct:55,rangePct:75}, tag:'ALLIANCE ⬡ III', alliance:true, acPrice:9000, siegeBonus:0.50, monoReq:'monolith2',
       desc:'A carrier-grade wall-breaker — five cannons and a drone screen tuned to one job: bringing down fortifications. +50% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada.' },
-    { key:'monolith4', name:'Monolith Apex', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:44, mods:{hpPct:1000,dmgPct:560,multiShot:150,critChance:125,critDamage:440,moveSpeed:95,atkSpeedPct:190,rangePct:300,lifeSteal:28}, tag:'ALLIANCE ⬡ APEX', alliance:true, acPrice:15000, siegeBonus:0.75, monoReq:'monolith3',
+    { key:'monolith4', name:'Monolith Apex', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:44, mods:{hpPct:1000,dmgPct:560,multiShot:150,critChance:125,critDamage:440,moveSpeed:95,atkSpeedPct:190,rangePct:300,lifeSteal:5.6}, tag:'ALLIANCE ⬡ APEX', alliance:true, acPrice:15000, siegeBonus:0.75, monoReq:'monolith3',
       desc:'The shipyard\u2019s final cut — Dread Reaver-grade performance whose entire mass is a siege weapon. +75% damage to Zone Bosses, Citadels, Event Bosses and the Hollow Armada itself.' },
     // OBLIVION SPEAR T1 — a forbidden new class one tier ABOVE the Mothership,
     // with roughly DOUBLE its combat performance. It can't be bought: you must
@@ -440,7 +442,7 @@
     // the Zone Grind), prove yourself with 1,000,000 Mothership kills, pay a
     // staggering resource fortune, then WAIT 2 weeks for the hull to be built.
     { key:'oblivionspear', name:'Oblivion Spear', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:16,
-      mods:{ hpPct:320, dmgPct:180, multiShot:48, critChance:40, critDamage:140, moveSpeed:30, atkSpeedPct:60, rangePct:95, lifeSteal:9 },
+      mods:{ hpPct:320, dmgPct:180, multiShot:48, critChance:40, critDamage:140, moveSpeed:30, atkSpeedPct:60, rangePct:95, lifeSteal:1.8 },
       tag:'OBLIVION SPEAR T1',
       desc:'A forbidden tier above the Mothership — twice the firepower, twice the plating, 16 drone bays. Forged only from a stolen blueprint, a million kills, and a fortune in resources.',
       bpDrop:{ minCitLevel:300, chance:0.01 },
@@ -451,7 +453,7 @@
     // own the T1 and have ground 2,000,000 kills in it, costs a king's ransom,
     // and takes a full MONTH to build.
     { key:'oblivionspearalpha', name:'Oblivion Spear Alpha', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:24,
-      mods:{ hpPct:640, dmgPct:360, multiShot:96, critChance:60, critDamage:280, moveSpeed:40, atkSpeedPct:120, rangePct:150, lifeSteal:16 },
+      mods:{ hpPct:640, dmgPct:360, multiShot:96, critChance:60, critDamage:280, moveSpeed:40, atkSpeedPct:120, rangePct:150, lifeSteal:3.2 },
       tag:'OBLIVION SPEAR · ALPHA',
       desc:'The apex prototype — double the Oblivion Spear again, 24 drone bays, reality-bending output. The single hardest vessel in the galaxy to forge.',
       bpDrop:{ minCitLevel:500, chance:0.005, reqOwn:'oblivionspear' },
@@ -460,7 +462,7 @@
     // 2.5× the original Oblivion Spear in every stat, renders at colossal scale,
     // and projects a unique GREEN reactor aura.
     { key:'oblivionfinal', name:'Oblivion Final', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:40,
-      mods:{ hpPct:800, dmgPct:450, multiShot:120, critChance:100, critDamage:350, moveSpeed:75, atkSpeedPct:150, rangePct:240, lifeSteal:22 },
+      mods:{ hpPct:800, dmgPct:450, multiShot:120, critChance:100, critDamage:350, moveSpeed:75, atkSpeedPct:150, rangePct:240, lifeSteal:4.4 },
       tag:'OBLIVION FINAL',
       desc:'The final hull. 2.5× the Oblivion Spear in every dimension, wreathed in a green reactor aura. Sold outright for LootCoins — no level gate, no blueprint.',
       greenAura:true,
@@ -469,32 +471,32 @@
     // every currency at a steeper price than the Oblivion Final, each one a step
     // beyond it in raw performance. Gated by account level, not the blueprint chain.
     { key:'dread1', name:'Dread Reaver', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:44,
-      mods:{ hpPct:1040, dmgPct:585, multiShot:156, critChance:130, critDamage:455, moveSpeed:98, atkSpeedPct:195, rangePct:312, lifeSteal:29 },
+      mods:{ hpPct:1040, dmgPct:585, multiShot:156, critChance:130, critDamage:455, moveSpeed:98, atkSpeedPct:195, rangePct:312, lifeSteal:5.8 },
       tag:'DREAD-CLASS I', dreadAura:true, reqLevel:100,
       desc:'First of the recovered Dreadnaughts — already a tier beyond the Oblivion Final. Bought with a mix of every currency.',
       megaCost:{ gold:5e9, fuel:60e6, iron:40e6, plasma:25e6, prism:4000, credits:350000, dreadCores:6 } },
     { key:'dread2', name:'Dread Sovereign', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:52,
-      mods:{ hpPct:1280, dmgPct:720, multiShot:192, critChance:160, critDamage:560, moveSpeed:120, atkSpeedPct:240, rangePct:384, lifeSteal:35 },
+      mods:{ hpPct:1280, dmgPct:720, multiShot:192, critChance:160, critDamage:560, moveSpeed:120, atkSpeedPct:240, rangePct:384, lifeSteal:7 },
       tag:'DREAD-CLASS II', dreadAura:true, reqLevel:120,
       desc:'A command Dreadnaught bristling with hardpoints. Strictly superior to the Reaver.',
       megaCost:{ gold:10e9, fuel:120e6, iron:80e6, plasma:50e6, prism:8000, credits:450000, dreadCores:12 } },
     { key:'dread3', name:'Dread Leviathan', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:60,
-      mods:{ hpPct:1560, dmgPct:878, multiShot:234, critChance:195, critDamage:683, moveSpeed:146, atkSpeedPct:293, rangePct:468, lifeSteal:43 },
+      mods:{ hpPct:1560, dmgPct:878, multiShot:234, critChance:195, critDamage:683, moveSpeed:146, atkSpeedPct:293, rangePct:468, lifeSteal:8.6 },
       tag:'DREAD-CLASS III', dreadAura:true, reqLevel:140,
       desc:'A leviathan-scale hull whose reactor output dwarfs the lesser Dreads.',
       megaCost:{ gold:15e9, fuel:180e6, iron:120e6, plasma:75e6, prism:12000, credits:550000, dreadCores:18 } },
     { key:'dread4', name:'Dread Harbinger', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:72,
-      mods:{ hpPct:1880, dmgPct:1058, multiShot:282, critChance:235, critDamage:823, moveSpeed:176, atkSpeedPct:353, rangePct:564, lifeSteal:52 },
+      mods:{ hpPct:1880, dmgPct:1058, multiShot:282, critChance:235, critDamage:823, moveSpeed:176, atkSpeedPct:353, rangePct:564, lifeSteal:10.4 },
       tag:'DREAD-CLASS IV', dreadAura:true, reqLevel:160,
       desc:'A harbinger of the apex Dreads — overwhelming firepower across 72 drone bays.',
       megaCost:{ gold:20e9, fuel:240e6, iron:160e6, plasma:100e6, prism:16000, credits:650000, dreadCores:24 } },
     { key:'dread5', name:'Dread Tyrant', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:84,
-      mods:{ hpPct:2240, dmgPct:1260, multiShot:336, critChance:280, critDamage:980, moveSpeed:210, atkSpeedPct:420, rangePct:672, lifeSteal:62 },
+      mods:{ hpPct:2240, dmgPct:1260, multiShot:336, critChance:280, critDamage:980, moveSpeed:210, atkSpeedPct:420, rangePct:672, lifeSteal:12.4 },
       tag:'DREAD-CLASS V', dreadAura:true, reqLevel:180,
       desc:'A tyrant hull that rewrites the battlefield — second only to the Omega.',
       megaCost:{ gold:30e9, fuel:360e6, iron:240e6, plasma:150e6, prism:24000, credits:775000, dreadCores:36 } },
     { key:'dread6', name:'Dread Omega', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:96,
-      mods:{ hpPct:2640, dmgPct:1485, multiShot:396, critChance:330, critDamage:1155, moveSpeed:248, atkSpeedPct:495, rangePct:792, lifeSteal:73 },
+      mods:{ hpPct:2640, dmgPct:1485, multiShot:396, critChance:330, critDamage:1155, moveSpeed:248, atkSpeedPct:495, rangePct:792, lifeSteal:14.6 },
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
       megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:900000, dreadCores:60 } },
@@ -503,7 +505,7 @@
     // Its fire renders as full-spectrum gatling tracers — lasers of all colors.
     // Cost: 1,000,000 LootCoins FLAT — no level gate, no other currencies.
     { key:'titansina', name:'Titan Sina', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:128,
-      mods:{ hpPct:5280, dmgPct:2970, multiShot:792, critChance:660, critDamage:2310, moveSpeed:496, atkSpeedPct:990, rangePct:4000, lifeSteal:146 },
+      mods:{ hpPct:5280, dmgPct:2970, multiShot:792, critChance:660, critDamage:2310, moveSpeed:496, atkSpeedPct:990, rangePct:4000, lifeSteal:29.2 },
       tag:'FINAL CLASS · TITAN SINA', sinaTracers:true,
       desc:'The final-class hero ship — twice the Dread Omega in every dimension. Its guns reach across the entire battle zone, spraying full-spectrum tracer fire. Sold outright for 1,000,000 LootCoins.',
       megaCost:{ credits:1000000 } },
@@ -641,7 +643,7 @@
         ['Overcharge','Devastation','Annihilation','Apex Predator']),
       buildBranch('defense',
         [ { mod:'hpPct', label:'Max HP', per:5, unit:'%' },
-          { mod:'lifeSteal', label:'Life Steal', per:1, unit:'%' },
+          { mod:'lifeSteal', label:'Life Steal', per:0.2, unit:'%' },
           { mod:'hpPct', label:'Plating', per:7, unit:'%' },
           { mod:'critChance', label:'Resolve', per:1, unit:'%' } ],
         { mod:'hpPct', label:'Max HP', per:18, unit:'%' },

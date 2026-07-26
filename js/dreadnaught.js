@@ -66,7 +66,7 @@
     { key: 'regen', label: 'Shield Regen', unit: '%/s', lo: 0.4, hi: 1.0 },
     { key: 'dmgReduce', label: 'Armor', unit: '%', lo: 1.5, hi: 3 },
     { key: 'dmgReduce', label: 'Damage Reduction', unit: '%', lo: 1.5, hi: 3 },
-    { key: 'lifeSteal', label: 'Life Steal', unit: '%', lo: 0.6, hi: 1.4 },
+    { key: 'lifeSteal', label: 'Life Steal', unit: '%', lo: 0.12, hi: 0.28 },
   ];
   const UTILITY = [
     { key: 'lootQuality', label: 'Loot Quality', unit: '%', lo: 4, hi: 8, util: true },
@@ -80,7 +80,7 @@
     { label: 'Apex Predator', bonus: { bossDamage: 16, eliteDamage: 16 }, special: null },
     { label: 'Core Resonance', bonus: { dmgPct: 8, critDamage: 18 }, special: 'coreLuck' },
     { label: 'Aegis Lattice', bonus: { hpPct: 14, dmgReduce: 6 }, special: null },
-    { label: 'Vampiric Engine', bonus: { lifeSteal: 4, dmgPct: 6 }, special: null },
+    { label: 'Vampiric Engine', bonus: { lifeSteal: 0.8, dmgPct: 6 }, special: null },
     { label: 'Treasure Sense', bonus: { lootQuality: 14 }, util: true, special: null },
     { label: 'Overclocked Reactor', bonus: { atkSpeedPct: 10, moveSpeed: 8 }, special: null },
     { label: 'Dread Harvester', bonus: { bossDamage: 12 }, special: 'coreLuck' },

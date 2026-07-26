@@ -8,9 +8,9 @@
        the spine (Lv 100 = 1 pt, 250 = 2, 500 = 4, 1000 = 8, exactly per spec),
        with bonus points for fleet score, deepest zone, territory, badge ranks
        and wing size. The full arithmetic is shown BEFORE you commit.
-     • ONE LEGACY SHIP is carried across — the HULL ONLY. Its upgrade levels,
-       fitted equipment and cargo are all surrendered; only the hull's own
-       ascension-module stars survive. Everything else in the hangar is gone.
+     • THE WHOLE HANGAR is carried across — every hull you own, HULLS ONLY. All
+       upgrade levels, fitted equipment and cargo are surrendered; each hull's
+       own ascension-module stars survive. You pick the flagship you fly out in.
      • ASCENSION STARS (one per ascension) sit next to the pilot name and gate
        the three ASCENSION-EXCLUSIVE loot tiers — Ascendant (★1), Celestial
        (★3), Paragon (★6). Those tiers cannot drop for an un-ascended pilot at
@@ -19,7 +19,7 @@
        future run.
 
    Nothing here is reversible, so the confirm gate is deliberately heavy: an
-   itemised keep/lose ledger, the exact point total, the legacy ship, and a
+   itemised keep/lose ledger, the exact point total, the flagship, and a
    typed-intent button. See ascendFlow().
    ========================================================================== */
 (function () {
@@ -182,7 +182,7 @@
         '<div class="pa-hero-t">PILOT ASCENSION</div>' +
         '<div class="pa-hero-s">' + (locked
           ? 'Reach <b>Level ' + UNLOCK_LV + '</b> to unlock — you are Level ' + fmt(S.level)
-          : 'Trade this run for permanent power. You keep <b>one ship</b>.') + '</div>' +
+          : 'Trade this run for permanent power. You keep <b>every ship</b>.') + '</div>' +
         (locked ? '<div class="pa-lvbar"><i style="width:' + Math.min(100, S.level / UNLOCK_LV * 100).toFixed(1) + '%"></i></div>' : '') +
       '</div>' +
 
@@ -205,14 +205,14 @@
             '<li>Void Zone progress</li>' +
             '<li>Gold &amp; all Galaxy resources</li>' +
             '<li>All equipment, bag and Starforge tempers</li>' +
-            '<li><b>Every hull upgrade level</b> — including your Legacy Ship’s</li>' +
+            '<li><b>Every hull upgrade level</b> — on every ship in the hangar</li>' +
             '<li>Home Citadel &amp; defence towers</li>' +
             '<li><b>Every claimed system, citadel &amp; Void spire</b> — they fall to neutral immediately, no cooldown</li>' +
-            '<li>The whole fleet <em>except your Legacy Ship</em></li>' +
+            '<li>Your wing — escorts disband (the hulls stay in the hangar)</li>' +
             '<li>Prism mining rigs &amp; ingots</li>' +
           '</ul></div>' +
           '<div class="pa-led keep"><div class="pa-led-h">✓ CARRIED OVER</div><ul>' +
-            '<li><b>Your Legacy Ship</b> — the hull only (ascension-module stars stay)</li>' +
+            '<li><b>Every hull in your hangar</b> — the hulls only, stripped bare (ascension-module stars stay)</li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
             '<li>Lifetime badges &amp; achievements</li>' +
             '<li>Every badge already claimed — <em>chains never reset</em></li>' +
@@ -220,7 +220,7 @@
             '<li>Premium purchases, Pro, VIP, Loot Coins</li>' +
             '<li>Cosmetics &amp; hangar skins</li>' +
             '<li>Friends, alliance &amp; mail</li>' +
-            '<li>Event hulls (Voidmaw, Titan Sina) — <em>only if you pick one as your Legacy Ship</em></li>' +
+            '<li>Event hulls (Voidmaw, Titan Sina) — <em>they come with you</em></li>' +
           '</ul></div>' +
         '</div>' +
         '<div class="pa-gain">' +
@@ -234,7 +234,7 @@
 
       (locked
         ? '<div class="pa-locked">Ascension opens at <b>Level ' + UNLOCK_LV + '</b>. There is no rush — every level past 100 makes the payout bigger.</div>'
-        : '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button><div class="pa-go-note">You will choose your Legacy Ship and confirm before anything is reset.</div>') +
+        : '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button><div class="pa-go-note">You will choose the hull you fly out in and confirm before anything is reset.</div>') +
 
       (p.hist.length ? '<div class="pa-card"><div class="pa-card-h">PREVIOUS ASCENSIONS</div>' +
         p.hist.slice(-6).reverse().map((h, i) => '<div class="pa-hist"><span>★ ' + (p.hist.length - i) + '</span><b>Lv ' + fmt(h.lvl) + '</b><em>+' + h.pts + ' pts · ' + (h.ship || '—') + '</em></div>').join('') +
@@ -326,7 +326,7 @@
   function toast(m, c) { try { window.UI.toast ? window.UI.toast(m, c) : window.UI.unlockToast(m); } catch (e) {} }
 
   // ===========================================================================
-  // THE ASCEND FLOW — legacy ship pick → confirm ledger → cinematic
+  // THE ASCEND FLOW — flagship pick → confirm ledger → cinematic
   // ===========================================================================
   function overlay() {
     let o = $('pa-overlay');
@@ -350,7 +350,7 @@
     return out;
   }
 
-  // STEP 1 — pick exactly ONE ship
+  // STEP 1 — pick the flagship you fly out in (every hull comes with you)
   function ascendFlow() {
     const pv = preview(); if (!pv.eligible) return;
     const ships = ownedList();
@@ -365,8 +365,8 @@
       '</button>').join('');
     const paint = () => {
       o.innerHTML = '<div class="pa-modal">' +
-        '<div class="pa-mh"><b>CHOOSE YOUR LEGACY SHIP</b><em>Step 1 of 2</em></div>' +
-        '<p class="pa-mp">Exactly <b>one</b> hull survives — and only the <b>hull itself</b>. Its <b>upgrade levels, fitted equipment and cargo are all surrendered</b>: the ship arrives bare, exactly as it left the yard. Only its ascension-module stars stay. Pick the hull you want to start your next life flying.</p>' +
+        '<div class="pa-mh"><b>CHOOSE YOUR FLAGSHIP</b><em>Step 1 of 2</em></div>' +
+        '<p class="pa-mp"><b>Every hull comes with you</b> — but the hulls only. <b>Upgrade levels, fitted equipment and cargo are all surrendered</b>: each ship arrives bare, exactly as it left the yard, and only its ascension-module stars stay. Pick the one you want to be flying when you warp out.</p>' +
         '<div class="pa-picks">' + cards() + '</div>' +
         '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
         '<button class="pa-btn go" data-next' + (pick ? '' : ' disabled') + '>Continue →</button></div>' +
@@ -395,19 +395,20 @@
           '<li>All citadels &amp; Void spires — undefended instantly</li>' +
           '<li>All gear &amp; tempers</li>' +
           '<li>Every hull upgrade level</li>' +
-          '<li>Every hull but one</li></ul>' +
+          '<li>Your wing — escorts disband</li></ul>' +
         '</div>' +
         '<div class="pa-conf-side keep"><span>YOU KEEP</span>' +
           '<b>' + (sh.name || '—') + '</b>' +
           '<img class="pa-conf-img" src="ships/ship-' + key + '.png" alt="">' +
           '<ul><li>+' + pv.total + ' ascension point' + (pv.total === 1 ? '' : 's') + '</li>' +
           '<li>Rank ' + tierDef(stars() + 1).name + ' ★' + starOf(stars() + 1) + '</li>' +
+          '<li>Every hull in your hangar</li>' +
           '<li>All perks &amp; badges</li>' +
           '<li>All purchases</li></ul>' +
         '</div>' +
       '</div>' +
       (willUnlock ? '<div class="pa-unlock-pre" style="--tc:' + willUnlock.color + '">✦ This ascension unlocks the <b>' + willUnlock.name.toUpperCase() + '</b> loot tier</div>' : '') +
-      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my account resets to Level 1 and only the ' + (sh.name || 'chosen hull') + ' survives.</label>' +
+      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my account resets to Level 1 and every hull comes back stripped — flying out in the ' + (sh.name || 'chosen hull') + '.</label>' +
       '<div class="pa-mb"><button class="pa-btn ghost" data-x>Go back</button>' +
       '<button class="pa-btn danger" id="pa-do" disabled>✦ ASCEND</button></div>' +
     '</div>';
@@ -471,7 +472,7 @@
         '<div class="pa-out-rows">' +
           '<div><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '</em></div>' +
           '<div><b>Lv 1</b><em>a clean record</em></div>' +
-          '<div><b>' + (sh.name || '—') + '</b><em>legacy ship</em></div>' +
+          '<div><b>' + (sh.name || '—') + '</b><em>flagship · hangar intact</em></div>' +
         '</div>' +
         (unlocked ? '<div class="pa-out-unlock" style="--tc:' + unlocked.color + '">' +
           '<span>NEW LOOT TIER UNLOCKED</span><b>' + unlocked.name.toUpperCase() + '</b>' +

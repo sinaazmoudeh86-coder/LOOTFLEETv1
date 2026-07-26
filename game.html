@@ -48,14 +48,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=359">
-<link rel="stylesheet" href="css/theme.css?v=359">
-<link rel="stylesheet" href="css/web-v89.css?v=359">
-<link rel="stylesheet" href="css/fx-cinematic.css?v=359">
-<link rel="stylesheet" href="css/fx-primordial.css?v=359">
-<link rel="stylesheet" href="css/moon-colony.css?v=359">
-<link rel="stylesheet" href="css/fx-aaa.css?v=359">
-<link rel="stylesheet" href="css/readability.css?v=359">
+<link rel="stylesheet" href="css/style-v2.css?v=390">
+<link rel="stylesheet" href="css/theme.css?v=390">
+<link rel="stylesheet" href="css/web-v89.css?v=390">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=390">
+<link rel="stylesheet" href="css/fx-primordial.css?v=390">
+<link rel="stylesheet" href="css/moon-colony.css?v=390">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=390">
+<link rel="stylesheet" href="css/fx-aaa.css?v=390">
+<link rel="stylesheet" href="css/readability.css?v=390">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -193,6 +194,50 @@
 .lock-veil .lock-lv{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:.04em;color:#eaf0fa;
   background:#0f1623;border:1px solid #37475f;border-radius:10px;padding:8px 12px;}
 .lock-veil .lock-lv b{color:#f2b24b;}
+.hd-btn.hd-asc{position:relative;border-color:rgba(180,140,255,.55);}
+.hd-btn.hd-asc svg{color:#c9a8ff;}
+.hd-btn .hd-dot{position:absolute;top:7px;right:9px;width:9px;height:9px;border-radius:50%;background:#7ce0a0;box-shadow:0 0 8px #7ce0a0;}
+
+/* ◉ BEACON — manual swarm summon, sits directly above the speed row */
+.beacon-btn{position:relative;pointer-events:auto;align-self:flex-end;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:62px;height:62px;margin-bottom:8px;border-radius:50%;cursor:pointer;
+  border:1px solid rgba(255,138,61,.55);background:radial-gradient(70% 70% at 50% 32%,rgba(255,138,61,.22),rgba(14,20,32,.9));
+  color:#ff8a3d;box-shadow:0 6px 20px -8px rgba(255,138,61,.85);transition:transform .09s,filter .2s,border-color .2s;}
+.beacon-btn:active{transform:scale(.94);}
+.beacon-btn .bc-ic{width:24px;height:24px;}
+.beacon-btn .bc-lbl{font-family:'Orbitron',sans-serif;font-size:7px;font-weight:800;letter-spacing:.12em;margin-top:1px;font-variant-numeric:tabular-nums;}
+.beacon-btn .bc-ring{position:absolute;inset:-3px;width:calc(100% + 6px);height:calc(100% + 6px);transform:rotate(-90deg);pointer-events:none;}
+.beacon-btn .bc-trk{fill:none;stroke:rgba(255,255,255,.08);stroke-width:2.4;}
+.beacon-btn .bc-arc{fill:none;stroke:#ff8a3d;stroke-width:2.4;stroke-linecap:round;
+  stroke-dasharray:106.8;stroke-dashoffset:0;transition:stroke-dashoffset .3s linear;}
+/* READY — breathing pull so the player notices it is available */
+.beacon-btn.ready{animation:bcReady 2.4s ease-in-out infinite;}
+@keyframes bcReady{0%,100%{box-shadow:0 6px 20px -8px rgba(255,138,61,.85);}50%{box-shadow:0 6px 26px -6px rgba(255,138,61,1);}}
+.beacon-btn.ready .bc-ic{filter:drop-shadow(0 0 7px rgba(255,138,61,.95));}
+/* COOLING — dimmed, the arc drains */
+.beacon-btn.cool{filter:saturate(.45);border-color:rgba(255,138,61,.22);color:#9a7b62;cursor:default;}
+.beacon-btn.cool .bc-arc{stroke:#6b4a33;}
+/* LIVE — the swarm is inbound */
+.beacon-btn.live{border-color:#ff5a68;color:#ff8a96;animation:bcLive .7s ease-in-out infinite;}
+@keyframes bcLive{0%,100%{box-shadow:0 0 0 0 rgba(255,90,104,.55);}50%{box-shadow:0 0 0 9px rgba(255,90,104,0);}}
+.beacon-btn.live .bc-arc{stroke:#ff5a68;}
+@media (prefers-reduced-motion: reduce){.beacon-btn.ready,.beacon-btn.live{animation:none;}}
+
+/* beacon panel on the Defense skill tab */
+.sk-beacon{border:1px solid rgba(255,138,61,.4);border-radius:13px;padding:11px 12px;margin:0 0 11px;
+  background:linear-gradient(180deg,rgba(255,138,61,.1),rgba(255,138,61,.03));}
+.skb-h{display:flex;align-items:center;gap:8px;}
+.skb-ic{font-size:15px;color:#ff8a3d;}
+.skb-h b{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:800;letter-spacing:.14em;color:#ffc79a;}
+.skb-h em{font-style:normal;margin-left:auto;font-size:8.5px;font-weight:800;letter-spacing:.1em;color:#9a7b62;}
+.skb-p{font-size:11.5px;line-height:1.55;color:#c3b0a2;margin:7px 0 9px;}
+.skb-p b{color:#ffd9be;}
+.skb-row{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+.skb-row > div{text-align:center;border:1px solid rgba(255,138,61,.25);border-radius:10px;padding:7px 4px;background:rgba(0,0,0,.2);}
+.skb-row span{display:block;font-size:7.5px;font-weight:800;letter-spacing:.1em;color:#9a7b62;}
+.skb-row b{display:block;font-family:'Orbitron',sans-serif;font-size:15px;color:#fff;margin-top:2px;}
+.skb-row em{display:block;font-style:normal;font-size:9px;color:#ff8a3d;margin-top:1px;}
+.skb-note{margin-top:8px;font-size:9px;color:#8a7566;letter-spacing:.03em;line-height:1.5;}
 .lock-veil .lock-card.wide{max-width:340px;}
 .lock-veil .lock-card.forge{border-color:#4a341c;background:linear-gradient(180deg,#1d1409,#120c07);padding:20px 18px;}
 .lock-veil .lock-card.forge h3{color:#ffab4a;}
@@ -443,6 +488,11 @@
             <div id="toast-layer"></div>
             <div id="joystick"><div class="knob"></div></div>
             <div id="battle-controls">
+              <button class="beacon-btn" id="beacon-btn" type="button" title="Beacon — summon a swarm" style="display:none">
+                <svg class="bc-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.6"/></svg>
+                <svg class="bc-ring" viewBox="0 0 40 40" aria-hidden="true"><circle class="bc-trk" cx="20" cy="20" r="17"></circle><circle class="bc-arc" id="beacon-arc" cx="20" cy="20" r="17"></circle></svg>
+                <span class="bc-lbl" id="beacon-lbl">BEACON</span>
+              </button>
               <div class="speed-row" id="speed-row"></div>
               <div class="auto-wrap">
                 <button class="bail-btn" id="bail-btn"><span class="bail-ic">⏏</span><span>Bail to Hangar</span></button>
@@ -458,6 +508,11 @@
               <button class="hd-btn" data-screen="hero">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 4v6c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="M12 7v8M8.5 11h7"/></svg>
                 <span>Ship</span>
+              </button>
+              <button class="hd-btn hd-asc" data-screen="pasc" id="hd-pasc" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.4L21 9.2l-5 4.3 1.4 6.5L12 16.6 6.6 20l1.4-6.5-5-4.3 6.6-.8z"/></svg>
+                <span>Ascend</span>
+                <i class="hd-dot" id="hd-pasc-dot" style="display:none"></i>
               </button>
               <button class="hd-btn" id="hd-settings" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -590,6 +645,12 @@
           <div class="scr-body" id="casino-body"></div>
         </div>
 
+        <!-- PILOT ASCENSION (Command · prestige) -->
+        <div class="screen overlay" id="screen-pasc" data-screen-label="Pilot Ascension">
+          <div class="scr-head"><span class="scr-title">Pilot Ascension</span><span class="scr-sub" id="pasc-sub"></span></div>
+          <div class="scr-body" id="pasc-body"></div>
+        </div>
+
         <!-- SHIP ASCENSION (Command) -->
         <div class="screen overlay" id="screen-ascend" data-screen-label="Ascension">
           <div class="scr-head"><span class="scr-title">Ship Ascension</span><span class="scr-sub" id="ascend-sub"></span></div>
@@ -702,6 +763,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 8v8M8 12h8"/></svg>
           <span class="nl">Shipworks</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="pasc">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.4L21 9.2l-5 4.3 1.4 6.5L12 16.6 6.6 20l1.4-6.5-5-4.3 6.6-.8z"/></svg>
+          <span class="nl">Pilot Ascension</span>
+        </button>
         <button class="nav-btn nav-grouped" data-screen="ascend">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 16V8M8.5 11.5L12 8l3.5 3.5"/></svg>
           <span class="nl">Ascension</span>
@@ -783,6 +848,16 @@
               <div><div class="mc-n">Shipworks</div><div class="mc-s">Open part crates &amp; assemble hulls — up to the Titan Sina</div></div>
               <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-works-badge" style="display:none">0</span>
             </div>
+            <div class="mega-card pa-pill" data-go="pasc" id="cmd-pasc">
+              <div class="pa-pill-ic">✦</div>
+              <div class="pa-pill-txt">
+                <div class="pa-pill-k">PRESTIGE · THE ENDLESS LOOP</div>
+                <div class="pa-pill-n">Pilot Ascension<span id="cmd-pasc-badge"></span></div>
+                <div class="pa-pill-s" id="cmd-pasc-sub">Reset to Level 1 for <b>permanent</b> account power. Keep <b>one ship</b>. Unlock loot tiers no un-ascended pilot can ever see.</div>
+                <div class="pa-pill-meta" id="cmd-pasc-meta"></div>
+              </div>
+              <div class="pa-pill-go">›</div>
+            </div>
             <div class="mega-card cmd-forge" data-go="forge">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M8 16l4-4M10.5 8.5L14 12l2-2-3.5-3.5z"/></svg></div>
               <div><div class="mc-n">Starforge</div><div class="mc-s">Temper your gear — forge heat, purity rolls &amp; +15 glory</div></div>
@@ -858,54 +933,56 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=359"></script>
-<script src="js/items.js?v=359"></script>
-<script src="js/entities.js?v=359"></script>
-<script src="js/render.js?v=359"></script>
-<script src="js/galaxy.js?v=359"></script>
-<script src="js/leaderboard.js?v=359"></script>
+<script src="js/config-v2.js?v=390"></script>
+<script src="js/items.js?v=390"></script>
+<script src="js/entities.js?v=390"></script>
+<script src="js/render.js?v=390"></script>
+<script src="js/galaxy.js?v=390"></script>
+<script src="js/leaderboard.js?v=390"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
-<script src="js/analytics.js?v=359"></script>
-<script src="js/cloud.js?v=359"></script>
-<script src="js/account.js?v=359"></script>
-<script src="js/session-lock.js?v=359"></script>
-<script src="js/vip.js?v=359"></script>
-<script src="js/territory.js?v=359"></script>
-<script src="js/payments-v91.js?v=359"></script>
-<script src="js/game-v93.js?v=359"></script>
-<script src="js/ui-v94.js?v=359"></script>
-<script src="js/fx-cinematic.js?v=359"></script>
-<script src="js/fx-primordial.js?v=359"></script>
-<script src="js/fx-aaa.js?v=359"></script>
-<script src="js/moon-scene.js?v=359"></script>
-<script src="js/moon-colony.js?v=359"></script>
-<script src="js/home-citadel.js?v=359"></script>
-<script src="js/missions.js?v=359"></script>
-<script src="js/achievements.js?v=359"></script>
-<script src="js/coach-v89.js?v=359"></script>
-<script src="js/prism-v5.js?v=359"></script>
+<script src="js/analytics.js?v=390"></script>
+<script src="js/cloud.js?v=390"></script>
+<script src="js/account.js?v=390"></script>
+<script src="js/session-lock.js?v=390"></script>
+<script src="js/vip.js?v=390"></script>
+<script src="js/territory.js?v=390"></script>
+<script src="js/payments-v91.js?v=390"></script>
+<script src="js/game-v93.js?v=390"></script>
+<script src="js/ui-v94.js?v=390"></script>
+<script src="js/fx-cinematic.js?v=390"></script>
+<script src="js/fx-primordial.js?v=390"></script>
+<script src="js/fx-aaa.js?v=390"></script>
+<script src="js/moon-scene.js?v=390"></script>
+<script src="js/moon-colony.js?v=390"></script>
+<script src="js/home-citadel.js?v=390"></script>
+<script src="js/missions.js?v=390"></script>
+<script src="js/achievements.js?v=390"></script>
+<script src="js/coach-v89.js?v=390"></script>
+<script src="js/prism-v5.js?v=390"></script>
 <script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js?v=359"></script>
-<script src="js/server-dreadnaught.js?v=359"></script>
+<script src="js/dreadnaught.js?v=390"></script>
+<script src="js/server-dreadnaught.js?v=390"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/shipworks.js?v=359"></script>
-<script src="js/starforge.js?v=359"></script>
-<script src="js/social.js?v=359"></script>
-<script src="js/mail.js?v=359"></script>
-<script src="js/alliance.js?v=359"></script>
-<script src="js/alliance-boss.js?v=359"></script>
-<script src="js/void-zone.js?v=359"></script>
-<script src="js/ascension.js?v=359"></script>
-<script src="js/casino.js?v=359"></script>
-<script src="js/casino2.js?v=359"></script>
-<script src="js/redeem.js?v=359"></script>
-<script src="js/auth.js?v=359"></script>
+<script src="js/shipworks.js?v=390"></script>
+<script src="js/starforge.js?v=390"></script>
+<script src="js/pilot-ascension.js?v=390"></script>
+<script src="js/sim-pilots.js?v=390"></script>
+<script src="js/social.js?v=390"></script>
+<script src="js/mail.js?v=390"></script>
+<script src="js/alliance.js?v=390"></script>
+<script src="js/alliance-boss.js?v=390"></script>
+<script src="js/void-zone.js?v=390"></script>
+<script src="js/ascension.js?v=390"></script>
+<script src="js/casino.js?v=390"></script>
+<script src="js/casino2.js?v=390"></script>
+<script src="js/redeem.js?v=390"></script>
+<script src="js/auth.js?v=390"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 359;
+  window.LF_BUILD = 390;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1026,6 +1103,38 @@
     function sync(){ const L=lvl();
       mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
         c.classList.toggle('locked',!!locked); const lk=c.querySelector('.mc-lock'); if(lk) lk.textContent=locked?('🔒 Lv '+need):''; });
+      syncPasc(L);
+    }
+    // PILOT ASCENSION pill — the one card that carries live numbers, so the
+    // decision (ascend now, or push further for a bigger payout) is legible
+    // without opening the screen.
+    function syncPasc(L){
+      const card=document.getElementById('cmd-pasc'); if(!card) return;
+      const need=100, locked=L<need;
+      card.classList.toggle('locked',locked);
+      let lk=card.querySelector('.pa-pill-lock');
+      if(!lk){ lk=document.createElement('span'); lk.className='pa-pill-lock'; card.appendChild(lk); }
+      lk.textContent = locked ? ('🔒 LV '+need) : '';
+      const badge=document.getElementById('cmd-pasc-badge');
+      const sub=document.getElementById('cmd-pasc-sub');
+      const meta=document.getElementById('cmd-pasc-meta');
+      let stars=0, pts=0, pv=null, tier=null;
+      try{ if(window.PASCEND){ stars=PASCEND.stars(); pts=PASCEND.points(); pv=PASCEND.preview(); tier=PASCEND.tierDef(Math.max(1,stars)); } }catch(e){}
+      if(badge) badge.innerHTML = (stars&&window.PASCEND) ? PASCEND.badge(null,stars) : '';
+      if(locked){
+        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset to Level 1 for <b>permanent</b> account power, keep <b>one ship</b>, and unlock loot tiers no un-ascended pilot can ever see.';
+        if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / 100</span>'+
+          '<span class="pa-pill-chip">'+(100-L)+' TO GO</span>'+
+          '<span class="pa-pill-chip">3 EXCLUSIVE LOOT TIERS</span>'+
+          '<div class="pa-pill-bar" style="flex-basis:100%"><i style="width:'+Math.min(100,L).toFixed(1)+'%"></i></div>';
+      } else {
+        if(sub) sub.innerHTML='Ready to ascend — you keep <b>one ship</b> with its stars, hull level and fittings. Everything else resets to Level 1 in exchange for permanent perks.';
+        if(meta) meta.innerHTML=
+          '<span class="pa-pill-chip hot">+<b>'+(pv?pv.total:0)+'</b> POINTS NOW</span>'+
+          (pts?'<span class="pa-pill-chip hot"><b>'+pts+'</b> UNSPENT</span>':'')+
+          (stars?'<span class="pa-pill-chip">'+tier.name.toUpperCase()+' ★'+PASCEND.starOf(stars)+'</span>':'<span class="pa-pill-chip">NEVER ASCENDED</span>')+
+          '<span class="pa-pill-chip">NEXT POINT AT LV <b>'+((Math.floor(L/125)+1)*125)+'</b></span>';
+      }
     }
     function open(){ sync(); mega.classList.add('open'); }
     function close(){ mega.classList.remove('open'); }
@@ -1037,9 +1146,25 @@
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
+      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
       cmd.classList.toggle('active', !!on);
+      syncDock();
     },500);
+    // DOCK / PILL STATE must not depend on the Command menu ever being opened —
+    // sync() only ran from open(), so the battle-screen Ascend button stayed
+    // display:none for a Lv 500 pilot until they happened to tap Command.
+    function syncDock(){
+      const L=lvl(), hd=document.getElementById('hd-pasc');
+      if(hd){ const want = L>=100 ? 'flex' : 'none';
+        if(hd.style.display!==want) hd.style.display=want;
+        const dot=document.getElementById('hd-pasc-dot');
+        if(dot){ let un=0; try{ un=window.PASCEND?PASCEND.points():0; }catch(e){}
+          const dw=un?'block':'none'; if(dot.style.display!==dw) dot.style.display=dw; } }
+      if(mega.classList.contains('open')) syncPasc(L);
+    }
+    syncDock();
+    document.addEventListener('DOMContentLoaded', syncDock);
+    setTimeout(syncDock, 1200);
   })();
 </script>
 <script>

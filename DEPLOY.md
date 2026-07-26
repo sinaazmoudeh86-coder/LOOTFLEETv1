@@ -1,84 +1,102 @@
-# LOOT FLEET V1.0 BETA — Deploy v201 (build 348 · SW cache `lootfleet-v348`)
+# LOOT FLEET V1.0 BETA — Deploy v201 (build 390 · SW cache `lootfleet-v390`)
 
-## ⚠ RUN ONE SQL MIGRATION: `supabase/save-cas.sql`
+Push this folder to GitHub → Vercel.
 
-This release fixes the duplicate-login corruption at the root, and the fix needs
-a database change. Until you run it the client silently falls back to the old
-last-write-wins path (no crash, no benefit).
+## Database
 
-**What it does:** adds `saves.rev`, a `save_conflicts` quarantine table, and
-four RPCs — `save_pull` / `save_push` (compare-and-set), `claim_session` /
-`touch_session` (server-timestamped session lease).
+Nothing here is required to launch — every feature degrades silently without it.
+Run in this order when you want the server-side halves:
 
-### Why duplicate logins still corrupted saves
-Every protection we had ran when a device *read* the cloud. Nothing guarded the
-*write*: `saves` was a blind upsert, so two signed-in devices were pure
-last-write-wins — whichever pushed second erased everything the other did since
-it booted. Four smaller holes fed it: the tab didn't pin its account (a second
-login in another tab re-pointed the save key mid-session, writing account A's
-state into account B's slot), a kicked tab kept simulating so players banked
-progress that could never be saved, kick arbitration compared `Date.now()`
-across devices (a skewed clock could never be kicked), and the lock rode on
-ephemeral broadcasts a sleeping device simply missed.
+| # | File | Gives you |
+|---|---|---|
+| 1 | `supabase/pilot-ascension.sql` | ascension rank badges visible on OTHER players' rows |
+| 2 | `supabase/simulated-pilots.sql` | server-side simulated roster (shared across all clients) |
+| 3 | `supabase/simulated-pilots-behavior.sql` | their territory, alliances, friends and event activity |
+| — | `supabase/notifications.sql` | daily fleet-report email (still gated off in config.live.js) |
 
-### The fix
-- **Compare-and-set writes.** Every save carries the revision it was based on.
-  A push from a stale revision is REFUSED and handed the row it missed; the
-  client merges, retries, and only then commits. Unseen work can't be erased.
-- **Conflict quarantine.** When two timelines merge, the losing copy is written
-  to `save_conflicts` (and `lf-conflict::<uid>` locally). Nothing is destroyed.
-- **Server-time session lease.** `active_sessions` is now claimed and renewed
-  through RPCs that stamp with Postgres `now()`; clients subscribe to the row
-  (persisted — survives sleep/reconnect) and the 20s heartbeat doubles as a
-  poll. Client clocks no longer decide anything.
-- **Pinned account per tab** — a tab serves one account for its life; a
-  different login elsewhere freezes it with an explicit notice.
-- **Kicked screens freeze the simulation**, not just saving.
-- Live merges are adopted into the running game (`GAME.adoptSave`), so play
-  continues on the merged save instead of a superseded copy.
+Then, for the roster only:
 
-Push this folder to GitHub → Vercel. **No new SQL migrations** — the schema is
-unchanged from v200 (build 346). If you skipped earlier releases, run the
-migrations listed in `deploy-v200/DEPLOY.md` first.
+```sql
+create extension if not exists pg_cron;
+select cron.schedule('lf-sim-tick',   '7 * * * *',    $$ select sim_tick()   $$);
+select cron.schedule('lf-sim-behave', '*/15 * * * *', $$ select sim_behave() $$);
+select sim_spawn(20);
+```
 
-## What this release is
+Kill switch: `update sim_config set enabled = false;`
 
-v201 is a **reconciliation build**. Two lineages of the game had drifted apart:
-the deployed line (v168 → v200: alliances, social, mail, redeem, Void Zone,
-Monolith hulls) and the working line (Starforge, lifetime badges, mission
-tiers, save-sync fixes). Everything now lives in one tree.
+Both sim files are idempotent — re-run them after any update.
 
-### Recovered — features that were missing from the working build
-- **Void Zone** — 7 apex turf-war tiles beyond the rim (Lv 25/50/100/200/300/
-  400/500), 1000× entry toll, 100× yield, citadel included with the conquest,
-  Void Warden garrisons, marathon sieges, black-hole arena dressing.
-- **Alliances + Hollow Armada raid** (`alliance.js`, `alliance-boss.js`),
-  **Social**, **Mail** (war reports, season/daily prize delivery), **Redeem
-  codes**.
-- **Monolith hull line** (Shard / Bastion / Siegebreaker / Apex) + the
-  `MONO_MULT` siege bonus vs boss-class targets.
-- Engine: smooth-aim v2, smooth camera glide, safe-hangar routing after every
-  event exit, fleet-wide FrostyFrost cryo, citadels captured **intact** (one
-  rank down, under your flag), resource settlement on every ownership change,
-  extended number ladder (…Dc → Vg), pilot-tree zoom, Home Citadel towers.
+---
 
-### Kept — work from the newer working line
-- **Starforge** (Command ▸ Starforge, Lv 100) — temper +1→+15, forge heat pity,
-  slip risk past +10, purity rerolls (60–130%), costs scaling with rarity and
-  item level (ILVL 300+ tariff), +15 grants 1% flash-freeze per fitting.
-- **Lifetime badges** (`achievements.js`) — 15 career chains, 1,000 ranks,
-  Titan Sina at full completion; **mission tiers** (daily/weekly/monthly).
-- **Save-sync fixes** — progress-weighted merge (a weaker device can no longer
-  clobber a stronger save), best-ever save vault, in-app **Save recovery**
-  (Account ▸ Save recovery), repair push when local beats cloud.
-- **Shipworks Shard Exchange** (10:1 up the hull chain) + buffed crate rewards.
-- **XP band pass** — 100s ×2, 200s ×3, 300s ×6, 400s+ ×10 on top of the curve.
-- High-speed flash smoothing on damage, Pro badge nebula/comet styling.
+## What shipped in this release
 
-## Smoke test (90s)
-1. Command menu shows **Void Zone** and **Starforge** (🔒 Lv 100 under level).
-2. Void Zone ▸ tap a spire — level gate, toll and Void Warden intel all render.
-3. Starforge ▸ pick a fitting — temper odds, rarity/ILVL cost badges, purity.
-4. Missions ▸ Daily / Weekly / Monthly / ⌘ Badges tabs all populate.
-5. Account ▸ Save recovery lists save copies with a Restore button.
-6. Mail + Social + Alliance screens open; a rival tile loss files a war report.
+### Pilot Ascension (prestige)
+Command ▸ Pilot Ascension, unlocks at Lv 100. Thin pill across the top of the
+Command grid, plus an Ascend button in the battle-screen dock.
+
+* **Points** — pilot level is the spine (Lv 100 = 1, 250 = 2, 500 = 4, 1000 = 8)
+  with capped bonuses for fleet score, deepest zone, systems, badges, wing size.
+  Live calculator shows every line before you commit.
+* **Rank badge** — 5 stars per tier, tier colours following the loot-rarity
+  ladder. Rendered on leaderboards, profiles and galaxy defender panels, and
+  published to the cloud so other players see yours.
+* **Legacy ship** — ONE hull survives, and only the hull: upgrade levels,
+  fittings and cargo are all surrendered. Its ascension-module stars remain.
+* **Reset** — level, zones, gold, resources, gear, citadels, Void spires, Home
+  Citadel, prism, the whole fleet. Territory is *released* so every tile falls
+  neutral and undefended with no cooldown. Kept: badges, career counters, perks,
+  purchases, Pro, VIP, LootCoins, cosmetics, friends, alliance, mail.
+* **12 perks** — 8 permanent multipliers plus 4 beacon perks (below).
+* **3 ascension-only loot tiers** — Ascendant ★1, Celestial ★20, Paragon ★50.
+  Hard-gated; no zone, boss or crate rolls them below the star requirement.
+  Every star also adds +25% weight to Primordial/Relic/Artifact, capped ×5.
+* Cinematic: rings collapse, level counter unwinds to 1, star slams in, tier
+  reveal. Skippable, honours reduced-motion.
+
+### ◉ Beacon
+Manual swarm summon, Zone Grind only, never automated. Circular button above the
+speed row with a draining cooldown ring.
+
+* ×50 burst arriving from ~1,500px out and charging in; reinforcements while it
+  runs; 45s window; 300s cooldown; field cap 220.
+* Defense tree shortens the recharge (−40% cap) and lengthens the call (+150%).
+* Four ascension perks stack on top: Distress Relay (recharge), Sustained Signal
+  (duration), Wideband Broadcast (size), Wreckfield Tithe (kill value +250%).
+* Duration is capped at 66% of the recharge so at least a third of every cycle
+  is quiet — the button always has a press moment.
+
+### Simulated pilots
+A living cohort that makes the galaxy feel populated. Invisible as bots by
+design; `is_simulated` is an internal column only.
+
+* ~1.5 join per hour, filling to 400 over a fortnight. Nothing shows for the
+  first 24h.
+* Each levels on its own curve from its own join time; power follows from level.
+  Top pilot ≈ Lv 160 at one week, Lv 442 at a month, ascending by month three.
+* 12-step hull ladder — their ships visibly evolve as they climb.
+* Variance: casual/ordinary/committed/pusher paces, 22% plateau chance, ±40%
+  gear luck. Level 500 wall → they ascend and restart, like a human.
+* Fairness: never rank 1, max 2 in top 10, max 25 in top 100, humans never
+  displaced from the visible board, human territory never taken, rewards never
+  enter the player economy.
+
+### Fixes in this release
+* Defending fleets: combat compared *compressed* scores, square-rooting the real
+  power gap. Now de-compressed — the stronger fleet wins from 0.95× upward, and
+  defenders run shield repair.
+* Starforge: exponential ILVL tariff overflowed to Infinity on deep-zone gear.
+  Repriced as fixed costs from pilot level, rarity and item level.
+* Account sync: progress-weighted merge, so a weaker device can no longer
+  clobber a stronger save. Server-arbitrated session lease.
+* Titan Sina and Voidmaw could be re-granted free after every ascension —
+  both now behind permanent grant flags.
+* Badges keep their claimed ranks and career counters through an ascension.
+
+## Smoke test (2 min)
+1. Command shows the Pilot Ascension pill (🔒 Lv 100 below level).
+2. Battle screen: ◉ Beacon above the speed row in a Zone Grind; greys to `BOSS`
+   during a boss; hidden on galaxy/void tiles.
+3. Ranks page lists simulated pilots below the humans, with varied hulls.
+4. Ascension ▸ Perks: 12 perks; Loot Tiers shows the two cards.
+5. Missions ▸ ⌘ Badges: 1,000-badge ladder, Titan Sina banner.

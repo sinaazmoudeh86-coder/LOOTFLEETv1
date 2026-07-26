@@ -88,7 +88,9 @@
   function fmtTime(ms) { let s = Math.ceil(ms / 1000); const h = Math.floor(s / 3600); s -= h * 3600; const m = Math.floor(s / 60); s -= m * 60; const z = (n) => (n < 10 ? '0' + n : '' + n); return h > 0 ? (h + ':' + z(m) + ':' + z(s)) : (z(m) + ':' + z(s)); }
   // VIP perk: +2% prism yield per VIP level past 7 (VIP 8 = +2% … VIP 15 = +16%)
   function vipPrism() { const lv = window.VIP ? window.VIP.level() : 0; return 1 + Math.max(0, lv - 7) * 0.02; }
-  function ratePerSec(tier) { let r = 0; P().miners.forEach((m) => r += MINERS[m.type].rate); return r * tierMult(tier) * coreMult() * refMult() * MINE_SPEED * vipPrism(); }
+  // ASCENSION perk: Deep Core Drills — permanent mining speed
+  function ascMine() { return window.PASCEND ? window.PASCEND.mult('mine') : 1; }
+  function ratePerSec(tier) { let r = 0; P().miners.forEach((m) => r += MINERS[m.type].rate); return r * tierMult(tier) * coreMult() * refMult() * MINE_SPEED * vipPrism() * ascMine(); }
 
   // per-kill refine bonus (secondary faucet; mining is primary)
   function killYield(dungeon, isBoss) {
@@ -176,7 +178,7 @@
     }
     // production
     if (RUN.ore > 0 && rate > 0) {
-      const prod = Math.min(RUN.ore, rate * tierMult(RUN.tier) * coreMult() * refMult() * MINE_SPEED * vipPrism() * dt);
+      const prod = Math.min(RUN.ore, rate * tierMult(RUN.tier) * coreMult() * refMult() * MINE_SPEED * vipPrism() * ascMine() * dt);
       RUN.ore -= prod; bank(prod);
       const pp = P(); ensureDaily(pp); pp.daily.used[RUN.tier] = (pp.daily.used[RUN.tier] || 0) + prod;
       RUN.floatAcc += prod; RUN.floatT -= dt;

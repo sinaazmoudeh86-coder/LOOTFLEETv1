@@ -114,6 +114,166 @@
     startWeek: null,        // heat assignment (week index when account created)
     lastSave: Date.now(),
   };
+  // PRISTINE DEFAULTS — snapshotted before any save is loaded. Pilot Ascension
+  // rebuilds the account from this, which is far safer than enumerating every
+  // field to zero: anything a module bolted on is wiped unless it is explicitly
+  // on the KEEP list below.
+  const DEFAULTS = JSON.parse(JSON.stringify(state));
+  // Everything that survives an ascension: money the player SPENT REAL CASH on,
+  // lifetime recognition, the social graph, and the ascension record itself.
+  const ASC_KEEP = [
+    'pasc',                                                    // stars, points, perks, history
+    // PAID ENTITLEMENTS — anything real money or LootCoins bought is permanent.
+    // `purchases` carries the one-time 4× battle-speed unlock (speed4lc) and
+    // `proUntil` carries the LootFleet Pro subscription window, so the Pro badge,
+    // its 5× speed and 2× XP all survive an ascension untouched.
+    'purchases', 'credits', 'proUntil', 'vipPts', 'iap', 'payments', 'redeemedCodes',
+    'cosmetics', 'shipAura', 'dreadCores',
+    'achieve', 'achv', 'achClaimed', 'badgeRanks', 'lifeStats',   // lifetime badges (achievements.js keys off state.achieve)
+    // CAREER COUNTERS — the metrics lifetime badge chains measure. These record
+    // what the pilot has DONE, not power they hold, so they carry across every
+    // ascension. Without them a chain regresses to zero: claimed rank is a floor
+    // so there is no double payout, but every progress bar would lie.
+    'totalKills', 'playTime', 'itemsFound', 'itemsLost', 'lifetimeLooted', 'lifetimeMissions', 'stats',
+    'friends', 'alliance', 'allianceId', 'mail', 'social',
+    'sdread', 'season', 'shipParts',                           // event progress & entitlements
+    'startWeek', 'name', 'sellTier', 'keepUpgrades', 'autoEquipAlways', 'auto', 'gameSpeed',
+    'deathExplained', 'joystick', 'fs',
+  ];
+  // Event / premium hulls are entitlements, not progress — never taken.
+  const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
+
+  // ---- PILOT ASCENSION -------------------------------------------------------
+  // Reset the account to Level 1, carry ONE legacy ship, bank the points.
+  // Called by pilot-ascension.js at the flash of its cinematic.
+  function pilotAscend(legacyKey, pts) {
+    const keepShip = (state.ownedShips && state.ownedShips[legacyKey]) ? legacyKey : (state.ship || 'frigate');
+    // 1 — stash everything that survives
+    const keep = {};
+    ASC_KEEP.forEach((k) => { if (state[k] !== undefined) keep[k] = state[k]; });
+    const legacy = {
+      key: keepShip,
+      // THE HULL ONLY. No hull upgrade levels, no fittings, no cargo — the pilot
+      // brings the ship and nothing else. Its ascension-module stars survive
+      // because that is the hull's own prestige track, not run progression.
+      asc: JSON.parse(JSON.stringify((state.ascension || {})[keepShip] || {})),
+    };
+    const entitled = ASC_KEEP_SHIPS.filter((k) => state.ownedShips && state.ownedShips[k]);
+    const before = { lvl: state.level | 0, ship: (C.SHIP_BY_KEY[keepShip] || {}).name || keepShip };
+
+    // 1b — LIFETIME BADGE COUNTERS: badges are a career record, so their
+    // accumulators must absorb this run's totals BEFORE the wipe. Otherwise a
+    // chain measured against live gold / tiles / hull levels would read as
+    // though the pilot had never done any of it.
+    try {
+      const r0 = state.resources || {}, L = (state.lifeStats = state.lifeStats || {});
+      L.gold   = Math.max(L.gold || 0, state.gold || 0);
+      L.fuel   = Math.max(L.fuel || 0, r0.fuel || 0);
+      L.iron   = Math.max(L.iron || 0, r0.iron || 0);
+      L.plasma = Math.max(L.plasma || 0, r0.plasma || 0);
+      L.res    = Math.max(L.res || 0, (r0.fuel || 0) + (r0.iron || 0) + (r0.plasma || 0));
+      L.tiles  = Math.max(L.tiles || 0, Object.keys(state.ownedSystems || {}).length);
+      let hulls = 0; const sl0 = state.shipLevels || {}; for (const k in sl0) hulls += sl0[k] || 0;
+      L.hullLv = Math.max(L.hullLv || 0, hulls);
+      // moon / colony are wiped by the reset — freeze their career sums so the
+      // Lunar Baron and Master Builder chains don't fall back to zero
+      try { const lt = (state.moon && state.moon.lifetime) || {}; let mt = 0; for (const k in lt) mt += lt[k] || 0; L.moonRes = Math.max(L.moonRes || 0, mt); } catch (e) {}
+      try { let ct = 0; const mr = state.moon; if (mr && mr.moons) mr.moons.forEach((mm) => { const b = mm.b || {}; for (const k in b) ct += (b[k] && b[k].lv) || 0; }); L.colony = Math.max(L.colony || 0, ct); } catch (e) {}
+      L.cits   = Math.max(L.cits || 0, Object.keys(state.citadels || {}).length);
+      L.ascend = (L.ascend || 0) + 1;
+    } catch (e) {}
+
+    // 1c — SURRENDER EVERY HOLDING. Citadels, galaxy systems and Void spires all
+    // fall the moment you ascend: the server claim is RELEASED so each tile goes
+    // straight to neutral and undefended with NO cooldown — anyone can take it
+    // immediately. A Level 1 pilot must not be left holding fortresses.
+    try {
+      accrueResources();   // settle earnings up to the ascension
+      const held = Object.keys(state.ownedSystems || {});
+      if (window.TERRITORY && window.TERRITORY.enabled() && window.TERRITORY.release) {
+        held.forEach((id) => { try { window.TERRITORY.release(id); } catch (e) {} });
+      }
+      held.forEach((id) => { if (rt.realTiles && rt.realTiles[id]) delete rt.realTiles[id]; });
+    } catch (e) {}
+
+    // 2 — wipe the account back to a factory save
+    Object.keys(state).forEach((k) => { delete state[k]; });
+    Object.assign(state, JSON.parse(JSON.stringify(DEFAULTS)));
+
+    // 3 — restore the permanents
+    Object.keys(keep).forEach((k) => { state[k] = keep[k]; });
+
+    // 4 — ONE HULL. The hangar holds your Legacy Ship and nothing else — no
+    // starter frigate, no event hulls. If you want to keep flying the Voidmaw or
+    // the Titan Sina you pick it as your Legacy Ship; that IS the choice. The
+    // entitlement is still recorded in pasc.entitled (nothing is unrecoverable)
+    // and the permanent grant guards in achievements.js / server-dreadnaught.js
+    // stop a surrendered event hull from being re-earned for free.
+    state.ownedShips = {}; state.ownedShips[legacy.key] = true;
+    state.ship = legacy.key;
+    state.shipLevels = {};                 // hull upgrades surrendered — back to Lv 1
+    state.fittings = {};                   // no saved loadouts
+    state.ascension = {}; state.ascension[legacy.key] = legacy.asc;
+    state.shipKills = {}; state.shipKills[legacy.key] = 0;
+    // the ship arrives BARE — every slot empty, exactly as it left the yard
+    state.equipped = { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null, bow2: null, arrows2: null };
+    state.inventory = [];
+
+    // 5 — bank the reward
+    if (!state.pasc) state.pasc = { stars: 0, pts: 0, spent: 0, perks: {}, legacy: null, hist: [] };
+    // event/premium hulls kept through the reset — recorded so the entitlement is
+    // provable even if a later migration touches the hangar
+    state.pasc.entitled = Array.from(new Set((state.pasc.entitled || []).concat(entitled)));
+    state.pasc.stars = (state.pasc.stars | 0) + 1;
+    state.pasc.pts = (state.pasc.pts | 0) + Math.max(0, pts | 0);
+    state.pasc.legacy = legacy.key;
+    state.pasc.hist = (state.pasc.hist || []).concat([{ lvl: before.lvl, pts: Math.max(0, pts | 0), ship: before.ship, at: Date.now() }]).slice(-40);
+
+    state.lastSave = Date.now();
+    refreshStats();
+    // land the pilot in the SAFE HANGAR, not zone 1 — a fresh Level 1 fleet
+    // should never materialise mid-combat. Zone 0 is the parked-hull bay.
+    state.currentDungeon = 0;
+    state.currentSystem = null;
+    state.highestUnlocked = 1;
+    state.highestDungeonReached = 1;
+    rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null;
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null; state.prismRun = null;
+    state.fleet = null; state.drones = 0;   // no wing, no drones — one hull only
+    // no territory, no fortresses, and no cooldown blocking anyone from taking them
+    state.ownedSystems = {}; state.citadels = {}; state.rivalCitadels = {}; state.tileCd = {};
+    rt.realTiles = {};
+    rt.hangarHits = [];                      // drop cached parked-hull hit regions
+    rt.drones = [];
+    try { resetZone(); } catch (e) {}
+    if (rt.archer) { rt.archer.hp = rt.stats.maxHp; rt.archer.dead = false; rt.archer.killer = null; rt.archer.invuln = 6; }
+    try { goSafeHangar(); } catch (e) {}
+    save();
+    if (window.UI) window.UI.refreshAll();
+    return { stars: state.pasc.stars, pts: state.pasc.pts, ship: legacy.key };
+  }
+  function ascStars() { return (state.pasc && state.pasc.stars) | 0; }
+  // LIFETIME COUNTER BUMP — the single write path for the badge metrics no other
+  // system already tracks. Monotonic by construction, so nothing here regresses
+  // across an ascension.
+  function bumpLife(k, n) {
+    if (!(n > 0)) return;
+    if (!state.lifeStats) state.lifeStats = {};
+    state.lifeStats[k] = (state.lifeStats[k] || 0) + n;
+  }
+  // RELIC HUNTER (Primordial+) and BEYOND THE ARTIFACT (ascension-tier) badges
+  function countRareFind(it) {
+    if (!it) return;
+    const r = it.rarity | 0;
+    if (r >= (C.TOP_TIER == null ? 11 : C.TOP_TIER)) bumpLife('topLoot', 1);
+    if (r >= 14) bumpLife('ascLoot', 1);   // Ascendant / Celestial / Paragon
+  }
+  function peakLife(k, v) {
+    if (!(v > 0)) return;
+    if (!state.lifeStats) state.lifeStats = {};
+    if (v > (state.lifeStats[k] || 0)) state.lifeStats[k] = v;
+  }
 
   // runtime (not persisted)
   const rt = {
@@ -256,10 +416,63 @@
     const raw = s.theoryDps + s.maxHp * 0.5;
     return Math.floor(raw <= 1e6 ? raw : 1e6 * Math.sqrt(raw / 1e6));
   }
+  // ---- TRUE POWER (combat maths must never use the compressed score) --------
+  // score() is sqrt-compressed above 1e6 purely so the HUD number stays
+  // readable. Comparing two COMPRESSED scores square-roots the real power gap:
+  // a defender with 100× your power reads as only 10×, and 4× reads as 2×.
+  // Every balance decision below therefore de-compresses first.
+  function powerRaw() { const s = rt.stats; if (!s) return 1; return Math.max(1, s.theoryDps + s.maxHp * 0.5); }
+  function rawFromScore(sc) { const s = Math.max(0, sc || 0); return s <= 1e6 ? s : (s * s) / 1e6; }
+  // Your EFFECTIVE throughput, not the theoretical number. Multishot, drones,
+  // escorts, prism splash and singularity all land damage theoryDps never
+  // counted, which is the other half of why defenders melted.
+  function effectiveDps() {
+    const th = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
+    const measured = rt.dps || 0;
+    let fleetBoost = 1;
+    try { fleetBoost += Math.min(1.2, (fleetShips() || []).length * 0.16); } catch (e) {}
+    fleetBoost += Math.min(0.6, (state.drones || 0) * 0.04);
+    return Math.max(th * fleetBoost, measured);
+  }
+  // Effective HP pool — what an attacker actually has to chew through.
+  function myEhp() {
+    const s = rt.stats || {};
+    const dr = Math.min(0.85, Math.max(0, (s.dmgReduce || 0) / 100));
+    return Math.max(1, (s.maxHp || 1) / (1 - dr));
+  }
+  // ---- THE MATCHUP CONTRACT -------------------------------------------------
+  // One place decides how a clone fight resolves, so the promise is honest:
+  //   your time-to-kill THEM  = TTK_ATT × ratio
+  //   their time-to-kill YOU  = TTK_DEF ÷ ratio
+  // ratio is TRUE power (theirs / yours). TTK_DEF is deliberately a shade lower
+  // than TTK_ATT, so the crossover sits at ratio ≈ 0.95: a fleet holding a
+  // citadel or a void spire wins from 95% of your power upward. Fortified
+  // positions get the defender's edge — you must out-power them to take one.
+  //   ratio 0.5 (you 2× stronger) → you 11s, them 40s  — you win clearly
+  //   ratio 0.95                   → ≈21s each         — knife-edge, flying decides it
+  //   ratio 1.0 (dead even)        → you 22s, them 20s  — defender edges it
+  //   ratio 1.5                    → you 33s, them 13s  — you lose
+  //   ratio 10+                    → hopeless, exactly as their ⚡ promises
+  // No gimmick and no scripted outcome: both sides race honest DPS against
+  // honest HP, and the stronger fleet wins because the numbers say so.
+  const TTK_ATT = 22, TTK_DEF = 20;
+  function cloneMatchup(cloneScore) {
+    const myRaw = powerRaw();
+    const defRaw = Math.max(1, rawFromScore(cloneScore || score()));
+    const ratio = Math.max(0.15, Math.min(2000, defRaw / myRaw));
+    return {
+      ratio,
+      hp: Math.max(15000, Math.round(effectiveDps() * TTK_ATT * ratio)),
+      dps: Math.max(1, myEhp() / (TTK_DEF / ratio)),
+      outmatched: ratio > 0.92,
+    };
+  }
 
   function refreshStats() {
     const prevMax = rt.stats ? rt.stats.maxHp : 0;
     rt.stats = computeStats();
+    // APEX COMMANDER badge — peak fleet power ever reached, on the display scale
+    try { peakLife('peakPower', score()); } catch (e) {}
     if (rt.archer) {
       rt.archer.dmgReduce = rt.stats.dmgReduce || 0;
       rt.archer.maxHp = rt.stats.maxHp;
@@ -290,6 +503,7 @@
     if (isPro()) amount *= 2;   // LootFleet Pro — 2× XP on every source, account-wide
     if (window.VIP) amount *= window.VIP.mult('xp');   // VIP program XP perk
     if (window.DREAD && window.DREAD.mult) amount *= window.DREAD.mult('xpGain');   // PILOT: XP Gain nodes
+    if (window.PASCEND) amount *= window.PASCEND.mult('xp');   // ASCENSION: Neural Uplink
     if (window.ASCEND && window.ASCEND.xpMult) amount *= window.ASCEND.xpMult();    // ASCENSION: Combat Computer
     state.xp += amount;
     let gained = 0;
@@ -347,6 +561,156 @@
       rt.nodes.push({ x, y, enemy: null, respawnT: 0 });
     }
   }
+  // ===========================================================================
+  // ◉ BEACON — manual swarm summon (Zone Grind only)
+  // ---------------------------------------------------------------------------
+  // A distress beacon that floods the sector with a 20× swarm. Deliberately
+  // constrained:
+  //   • ZONE GRIND ONLY. No galaxy tile, void spire, citadel siege, dreadnaught,
+  //     prism field or home defence — those encounters are authored, and letting
+  //     a player inflate their spawn counts would break every one of them.
+  //   • NEVER AUTOMATED. Autopilot cannot fire it; it is a human decision to
+  //     invite that much danger, which is the whole appeal.
+  //   • 5 MINUTE cooldown, and the swarm runs for a fixed window before the
+  //     survivors withdraw.
+  // The DEFENSE tree feeds it: every rank invested there both shortens the
+  // cooldown and LENGTHENS the swarm window, so a tank build farms far more from
+  // one beacon than a glass cannon does. Other systems (Pro, VIP, ascension
+  // perks) can hook the same two numbers later — see beaconStats().
+  // ===========================================================================
+  const BEACON = { cd: 300, mult: 50, life: 45, cap: 220, ring: 1500 };
+  // Total ranks invested in the Defense branch — the beacon's scaling input.
+  function defenseRanks() {
+    let n = 0;
+    try { C.SKILLS.nodes.forEach((nd) => { if (nd.br === 'defense') n += state.skills[nd.id] || 0; }); } catch (e) {}
+    return n;
+  }
+  // Defense investment pays two ways, both capped so it stays a bonus and not a
+  // rewrite: up to −40% cooldown (300s → 180s) and up to +150% swarm duration
+  // (45s → 112s), plus a modest widening of the initial swarm.
+  // ASCENSION PERKS stack ON TOP of that and are far stronger — four perks
+  // (Distress Relay / Sustained Signal / Wideband Broadcast / Wreckfield Tithe)
+  // are the headline reward for spending ascension points. Fully ranked they turn
+  // the beacon from an occasional panic button into an ascended pilot's whole
+  // farming loop: back in ~35s, running minutes, four times the swarm, and every
+  // kill in it worth 3.5×. The floors below are what keep that sane.
+  function beaconStats() {
+    const r = defenseRanks();
+    const pm = (window.PASCEND && window.PASCEND.beaconMods) ? window.PASCEND.beaconMods()
+             : { cdCut: 0, life: 1, size: 1, loot: 1 };
+    const dCut = Math.min(0.4, r * 0.005);
+    // reductions are multiplicative, so neither source can ever reach zero
+    const cd = Math.max(30, Math.round(BEACON.cd * (1 - dCut) * (1 - pm.cdCut)));
+    let life = Math.round(BEACON.life * (1 + Math.min(1.5, r * 0.019)) * pm.life);
+    // A DOWNTIME FLOOR. Fully stacked, duration outran the cooldown (506s of swarm
+    // on a 72s recharge), so the beacon was permanently on — it stops being a
+    // decision and the zone is simply always a swarm. Duration is capped so at
+    // least a third of every cycle stays quiet.
+    life = Math.min(life, Math.round(cd * 0.66));
+    // the advertised swarm size must be one the field can actually hold, or the
+    // tooltip promises ×320 and delivers the cap
+    const mult = Math.min(BEACON.cap, Math.round(BEACON.mult * (1 + Math.min(0.6, r * 0.008)) * pm.size));
+    return { ranks: r, cd, life, mult, loot: pm.loot, cdLeft: Math.max(0, (rt.beaconT || 0)) };
+  }
+  // Zone Grind means: a plain numbered zone with no special encounter running.
+  // VISIBILITY and PERMISSION are separate on purpose. The button used to hide
+  // itself whenever the beacon could not fire — including every time a routine
+  // zone boss spawned — so it appeared to randomly vanish mid-session. It now
+  // stays put for the whole grind and simply greys out when it can't fire.
+  function beaconVisible() {
+    if (state.currentSystem) return false;                 // galaxy / void tile
+    if (state.currentDungeon < 1) return false;            // safe hangar
+    if (state.dreadRun || rt.sdrun || rt.hcrun) return false;
+    if (state.prismRun && state.prismRun.active) return false;
+    if (rt.siege || rt.waves) return false;                // capture / clone fight
+    return true;
+  }
+  function beaconAllowed() {
+    if (!beaconVisible()) return false;
+    if (rt.bossAlive) return false;                        // never during a boss
+    return true;
+  }
+  function beaconState() {
+    const s = beaconStats();
+    return { visible: beaconVisible(), allowed: beaconAllowed(),
+             blocked: beaconVisible() && !beaconAllowed(),
+             ready: beaconAllowed() && (rt.beaconT || 0) <= 0,
+             cd: s.cd, left: s.cdLeft, mult: s.mult, life: s.life, loot: s.loot, ranks: s.ranks,
+             active: (rt.beaconSwarm || 0) > 0, activeLeft: Math.max(0, rt.beaconSwarm || 0) };
+  }
+  function fireBeacon() {
+    if (!beaconAllowed() || (rt.beaconT || 0) > 0) return { ok: false };
+    const s = beaconStats();
+    rt.beaconT = s.cd;
+    rt.beaconSwarm = s.life;
+    rt.beaconLife = s.life;
+    const a = rt.archer, zone = state.currentDungeon;
+    // THEY ARRIVE FROM OUTSIDE. Two hundred hostiles materialising on top of you
+    // is a jump-scare, not a fight — so they spawn far out at the rim and CHARGE
+    // inward. `rush` overrides the normal hold-at-range behaviour so they close
+    // hard, and a staggered arrival reads as a converging fleet, not a wall.
+    const room = Math.max(0, BEACON.cap - rt.enemies.length);
+    const n = Math.min(room, Math.max(1, s.mult));
+    // WRECKFIELD TITHE is stamped on the entity, so the bonus follows the kill
+    // even if the swarm window closed before it died
+    const tithe = s.loot || 1;
+    rt.beaconTithe = tithe;   // reused by the reinforcement trickle in beaconTick
+    for (let i = 0; i < n; i++) {
+      const ang = (Math.PI * 2 * i) / n + Math.random() * 0.5;
+      const rad = BEACON.ring + Math.random() * 700;
+      const x = Math.max(24, Math.min(rt.worldW - 24, a.x + Math.cos(ang) * rad));
+      const y = Math.max(24, Math.min(rt.worldH - 24, a.y + Math.sin(ang) * rad));
+      const e = new E.Enemy(pickType(), zone, x, y);
+      e.beacon = true;
+      e.tithe = tithe;
+      e.rush = 1;                          // charge the pilot instead of holding station
+      e.spawnFx = 0.5;
+      rt.enemies.push(e);
+    }
+    rt.shake = Math.min(5, (rt.shake || 0) + 3);
+    burst(a.x, a.y, '#ff8a3d', 70, { speed: 420, life: 1.1, glow: true });
+    rt.floats.push(new E.FloatText(a.x, a.y - 34, '◉ BEACON — ' + n + ' INBOUND', { color: '#ff8a3d', size: 28, vy: -30, life: 1.5 }));
+    if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    return { ok: true, spawned: n, life: s.life };
+  }
+  // per-frame: burn the cooldown, and clear the swarm when its window closes
+  function beaconTick(dt) {
+    if (rt.beaconT > 0) rt.beaconT = Math.max(0, rt.beaconT - dt);
+    if (rt.beaconSwarm > 0) {
+      rt.beaconSwarm -= dt;
+      // while the beacon RUNS it keeps calling: a trickle of reinforcements, so a
+      // longer window is genuinely worth more rather than just a longer countdown
+      rt.beaconCall = (rt.beaconCall || 0) - dt;
+      if (rt.beaconCall <= 0 && rt.enemies.length < BEACON.cap) {
+        rt.beaconCall = 0.7;
+        // tithe is resolved ONCE per batch — beaconStats() reaches into PASCEND and
+        // the skill tree, which is not work to repeat per spawned ship
+        const tithe = rt.beaconTithe || 1;
+        for (let k = 0; k < 2 && rt.enemies.length < BEACON.cap; k++) {
+          const a2 = rt.archer, ang = Math.random() * Math.PI * 2, rad = BEACON.ring + Math.random() * 600;
+          const e2 = new E.Enemy(pickType(), state.currentDungeon,
+            Math.max(24, Math.min(rt.worldW - 24, a2.x + Math.cos(ang) * rad)),
+            Math.max(24, Math.min(rt.worldH - 24, a2.y + Math.sin(ang) * rad)));
+          e2.beacon = true; e2.rush = 1; e2.spawnFx = 0.5;
+          e2.tithe = tithe;
+          rt.enemies.push(e2);
+        }
+      }
+      if (rt.beaconSwarm <= 0) {
+        // survivors withdraw rather than vanishing mid-fight next to the player
+        for (const e of rt.enemies) {
+          if (e.beacon && !e.dead && !e.dying) {
+            if (Math.hypot(e.x - rt.archer.x, e.y - rt.archer.y) > 700) { e.dead = true; e.hp = 0; }
+            else { e.beacon = false; e.rush = 0; }   // too close to leave politely — let it fight
+          }
+        }
+      }
+    }
+    // the beacon is void the moment the encounter stops being a zone grind. A
+    // boss spawning mid-swarm does NOT cancel it — only leaving the grind does.
+    if (!beaconVisible() && rt.beaconSwarm > 0) rt.beaconSwarm = 0.01;
+  }
+
   function spawnAtNode(node) {
     const a = Math.random() * Math.PI * 2, r = Math.random() * RESPAWN_SPREAD;
     const x = Math.max(20, Math.min(rt.worldW - 20, node.x + Math.cos(a) * r));
@@ -602,6 +966,8 @@
     // PILOT: bonus damage vs bosses / elites (Dreadnaughts & Super Bosses count as both)
     let _dmg = p.damage;
     if (e.isBoss && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
+    // ASCENSION: Siege Protocols — bonus damage vs boss-class targets
+    if (window.PASCEND && (e.isBoss || e.isCitadel || e.isClone || e.isDread || e.isSuper)) _dmg *= window.PASCEND.mult('boss');
     const killed = e.takeDamage(_dmg);
     // FROSTYFROST — cryo tech is FLEET tech: if a FrostyFrost is anywhere in
     // your fleet (flagship OR escort), every player bolt chills the target and
@@ -719,8 +1085,8 @@
     state.shipKills[state.ship] = (state.shipKills[state.ship] || 0) + 1;
     maybeDropDrone(e);
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
-    gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1));
-    state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1);   // PILOT: Gold Find
+    gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1));
+    state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1) * (window.PASCEND ? window.PASCEND.mult('gold') : 1);   // PILOT: Gold Find · ASCENSION: Prize Courts · BEACON: Wreckfield Tithe
     // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
     // iron & plasma are the rare finds (rarer, but a real grind faucet now).
     // Bosses always pay a wreck's worth of all three.
@@ -741,6 +1107,7 @@
       const rg = kind === 'fuel' ? '⬢' : kind === 'iron' ? '◆' : '✦';
       rt.floats.push(new E.FloatText(e.x, e.y - e.size - 14, rg + ' +' + formatNum(amt), { color: rc, size: 13, vy: -34, life: 0.8 }));
     }
+    if (e.isClone) bumpLife('clones', 1);            // FLEETBREAKER badge
     if (e.isCitadel) { citadelDown(e); if (window.UI) window.UI.syncStatsTab(); return; }
 
     // PRISM MINING — kills inside a Prism Field refine into Prism Ingots.
@@ -772,11 +1139,11 @@
     if (!rt.bossAlive) rt.bossTimer = Math.max(0, rt.bossTimer - 4);
     // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
     const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
-    if (Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1)) {
+    if (Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1)) {
       const _q = _swarmKill ? 1 : lootQ();
       let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
-      state.itemsFound++;
+      state.itemsFound++; countRareFind(item);
       lootBurst(e.x, e.y, item.rarity);
       rt.ground.push(new E.GroundItem(e.x, e.y, item, false));
       if (window.UI) window.UI.onLoot(item, true);
@@ -987,7 +1354,7 @@
       let boosted = Math.min(rcap, base + (isSuper ? 5 : 3) + ((Math.random() * 2) | 0));
       if (isSuper && i < 2) boosted = Math.max(boosted, Math.min(rcap, 4)); // guarantee Legendary+ where the zone allows
       const item = I.generate(zone, boosted);
-      state.itemsFound++;
+      state.itemsFound++; countRareFind(item);
       const a = Math.PI * 2 * (i / drops), r = 26 + Math.random() * 26;
       rt.ground.push(new E.GroundItem(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, item, false));
       lootBurst(e.x, e.y, item.rarity);
@@ -1176,8 +1543,12 @@
     }
     // ASCENSION: Storm Conduit — per-second chain-lightning proc
     stormTick(dt);
+    // ◉ BEACON — cooldown + swarm lifetime
+    beaconTick(dt);
     // VOIDMAW: black holes drag and grind everything caught inside
     singularityTick(dt);
+    // defending fleets run shield repair while they hold the field
+    cloneTick(dt);
 
     // enemies
     for (const e of rt.enemies) {
@@ -2126,6 +2497,7 @@
         const p = new E.Projectile(es.x, es.y, best, 0, false);
         const crit = Math.random() * 100 < s.critChance;
         let dmg = s.attackDamage * C.FLEET.escortDmgFrac * (0.9 + Math.random() * 0.2);
+        if (window.PASCEND) dmg *= window.PASCEND.mult('fleet');   // ASCENSION: Wing Tactics
         if (crit) dmg *= 1 + s.critDamage / 100;
         if (state.auto) dmg *= 0.8;
         p.damage = Math.max(1, Math.round(dmg)); p.crit = crit;
@@ -3063,9 +3435,12 @@
     if (waves && waves.playerCit) {
       const def = waves.cloneDef || {};
       c.name = ((def.name || 'ENEMY').toUpperCase()) + "'S CITADEL";
-      const myS = Math.max(1, Math.round(score()));
-      const ratio = Math.max(0.6, Math.min(5, (waves.cloneScore || myS) / myS));
-      c.maxHp = c.hp = Math.round(c.maxHp * Math.min(2.2, 0.55 + ratio * 0.45));
+      // TRUE-POWER ratio (the compressed-score version under-scaled fortresses
+      // the same way the clone flagship was under-scaled)
+      const mu = cloneMatchup(waves.cloneScore);
+      c.maxHp = c.hp = Math.max(Math.round(c.maxHp), Math.round(effectiveDps() * TTK_ATT * 0.8 * mu.ratio));
+      c.damage = Math.max(c.damage || 1, mu.dps * 0.7 * (c.fireCd || 1.6));
+      c.cloneRegen = Math.min(0.04, Math.max(0, (mu.ratio - 1) * 0.015));
       c.tint = '#ff6a5e';
     }
     rt.enemies.push(c);
@@ -3085,7 +3460,7 @@
     for (let i = 0; i < drops; i++) {
       const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 4));
       const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
-      state.itemsFound++;
+      state.itemsFound++; countRareFind(item);
       const a = Math.PI * 2 * (i / drops), r = 42 + Math.random() * 36;
       rt.ground.push(new E.GroundItem(rt.archer.x + Math.cos(a) * r, rt.archer.y + Math.sin(a) * r, item, false));
       lootBurst(e.x, e.y, item.rarity);
@@ -3245,6 +3620,7 @@
     rt.nodes = [];
     rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9;
     rt._towVoid = !!tile.void;   // route the post-capture tow back to the right screen
+    if (tile.void) bumpLife('voidTiles', 1);          // WARDEN OF THE VOID badge
     rt.towT = 3.0;
     burst(rt.archer.x, rt.archer.y, '#5bc06b', 40, { speed: 240, life: 1.0, glow: true });
     if (window.UI) { window.UI.siegeEvent('captured', { sys: tile, fromRival: fromRival, full: false }); window.UI.refreshAll(); }
@@ -3260,7 +3636,7 @@
     if (Math.random() < 0.10) drops.push(I.generate(Math.max(1, Math.round(lvl * 0.5)), Math.min(rcap, ETERNAL)));
     if (Math.random() < 0.01) drops.push(I.generate(lvl, Math.min(rcap, ETERNAL)));
     drops.forEach((it, i) => {
-      state.itemsFound++;
+      state.itemsFound++; countRareFind(it);
       const a = Math.PI * 2 * (i / Math.max(1, drops.length)), r = 24 + Math.random() * 20;
       rt.ground.push(new E.GroundItem(rt.archer.x + Math.cos(a) * r, rt.archer.y + Math.sin(a) * r, it, false));
       lootBurst(rt.archer.x, rt.archer.y, it.rarity);
@@ -3356,6 +3732,7 @@
     accrueResources();   // settle at the old rate — the 10× starts NOW, not retroactively
     state.resources.fuel -= cost.fuel; state.resources.iron -= cost.iron; state.resources.plasma -= cost.plasma;
     state.citadels[id] = { score: Math.round(score()), builtAt: Date.now(), lv: 1 };
+    bumpLife('cits', 1);                              // FORTRESS DYNASTY badge
     if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: state.citadels[id].score, defense: defenseSnapshot() }); } catch (e) {} }
     pushFeed('You raised a Citadel on ' + ((sysAt(id) || {}).name || 'a system'));
     save(); if (window.UI) window.UI.refreshAll();
@@ -3385,6 +3762,7 @@
     const sh = C.SHIP_BY_KEY[state.ship] || {};
     const s = rt.stats || computeStats();
     return { ship: state.ship, nm: sh.name || 'Fleet', lvl: state.level | 0,
+             asc: ascStars(),
              score: Math.round(score()), hp: Math.round(s.maxHp || 0), dps: Math.round(s.theoryDps || 0),
              esc: (typeof fleetShips === 'function' ? fleetShips().length : 0),
              escKeys: (typeof fleetShips === 'function' ? fleetShips().map((f) => f.key) : []) };
@@ -3416,6 +3794,16 @@
     }
     const nm = rivalOf(id);
     if (!nm || isOwned(id)) return null;
+    // SIMULATED PILOT GARRISON — when the server roster is live a real simulated
+    // pilot holds this tile (deterministic per tile id) instead of an anonymous
+    // procedural rival. Same shape, same combat maths, and the tile sheet can
+    // show who they are plus their ascension rank.
+    try {
+      if (window.SIMPILOTS && window.SIMPILOTS.enabled()) {
+        const sp = window.SIMPILOTS.defenderFor(id);
+        if (sp) return sp;
+      }
+    } catch (e) {}
     let h = 0; for (let i = 0; i < id.length; i++) h = ((h * 31 + id.charCodeAt(i)) >>> 0);
     const rnd = (h % 1000) / 1000;
     const t = sysAt(id);
@@ -3438,24 +3826,26 @@
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
     const b = new E.Enemy(type, state.currentDungeon, cx, cy);
     b.isBoss = true; b.isSuper = true; b.isClone = true;
-    const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
-    const myS = Math.max(1, Math.round(score()));
-    // EXACT score scaling — the fight is as hard as the defender is strong
-    // relative to you. HP is NOT soft-capped: a fleet 10,000× your power should
-    // be functionally unbeatable, exactly as its published ⚡ score promises.
-    const rawRatio = (cloneScore || myS) / myS;
-    const ratio = Math.max(0.3, Math.min(1e6, rawRatio));
-    // outgunned → their guns actually hurt (sqrt so near-even fights stay fair)
-    const dmgMult = Math.max(0.8, Math.min(40, Math.sqrt(Math.max(0.3, rawRatio))));
+    // TRUE-POWER MATCHUP (see cloneMatchup). Previously this compared COMPRESSED
+    // scores and set HP to "16s of theoryDps", so a defender four times your real
+    // power read as twice and died in eleven seconds — which is why attacking
+    // down, or even up, was a guaranteed win.
+    const mu = cloneMatchup(cloneScore);
+    const ratio = mu.ratio;
     const snap = def && def.snap;
     // (guard: snap may be missing entirely — a bare `snap && snap.escKeys || []`
     // chain left .slice() to crash the boss wave when a tile had no snapshot)
     const escKeys = ((snap && Array.isArray(snap.escKeys) && snap.escKeys) || []).filter((k) => k && C.SHIP_BY_KEY[k]).slice(0, 4);
     // the flagship holds ~70% of the replica's total strength; escorts the rest
     const escShare = escKeys.length ? 0.3 : 0;
-    b.maxHp = b.hp = Math.max(15000, Math.round(dps * 16 * ratio * (1 - escShare)));
-    b.damage = (b.damage || 10) * 2.5 * dmgMult;
+    b.maxHp = b.hp = Math.max(15000, Math.round(mu.hp * (1 - escShare)));
     b.speed *= 0.5; b.size = 124; b.ranged = true; b.range = 520; b.fireCd = 1.4; b.fireT = 1.1;
+    // sustained damage is set from the contract, not from the zone enemy base
+    b.damage = Math.max(1, mu.dps * (1 - escShare) * b.fireCd);
+    // FLEET SUSTAIN — a defending fleet runs shield repair and life support just
+    // like yours. Zero when you outgun them, real when they outgun you: this is
+    // what stops a weaker attacker chipping down a fortress fleet forever.
+    b.cloneRegen = Math.min(0.05, Math.max(0, (ratio - 1) * 0.02));
     if (snap && snap.ship) {
       const im = new Image(); im.src = 'ships/ship-' + snap.ship + '.png';
       b.spriteImg = im;                                   // render THEIR flagship
@@ -3469,9 +3859,10 @@
       const ey = cy + 70 + (i % 2) * 50;
       const e2 = new E.Enemy(type, state.currentDungeon, ex, ey);
       e2.isBoss = false; e2.isCloneEscort = true;
-      e2.maxHp = e2.hp = Math.max(4000, Math.round(dps * 16 * ratio * (escShare / escKeys.length)));
-      e2.damage = (e2.damage || 8) * 1.4 * dmgMult;
+      e2.maxHp = e2.hp = Math.max(4000, Math.round(mu.hp * (escShare / escKeys.length)));
       e2.speed *= 0.65; e2.size = 62; e2.ranged = true; e2.range = 430; e2.fireCd = 1.9; e2.fireT = 0.7 + i * 0.4;
+      e2.damage = Math.max(1, mu.dps * (escShare / escKeys.length) * e2.fireCd);
+      e2.cloneRegen = b.cloneRegen;
       const im2 = new Image(); im2.src = 'ships/ship-' + key + '.png';
       e2.spriteImg = im2;
       e2.tint = '#ffce8a';
@@ -3480,7 +3871,29 @@
     });
     burst(cx, cy, '#ffce8a', 90, { speed: 360, life: 1.2, glow: true });
     if (window.UI) window.UI.bossEvent('super');
+    // TELL THE PLAYER THE ODDS — the fight is honest, so the forecast can be too
+    try {
+      if (window.UI && window.UI.siegeEvent) {
+        const pct = Math.round(ratio * 100);
+        window.UI.siegeEvent('clone', {
+          name: (def && def.name) || 'Enemy fleet',
+          odds: mu.outmatched ? 'outmatched' : ratio < 0.75 ? 'favoured' : 'even',
+          text: mu.outmatched
+            ? 'THEIR FLEET IS ' + (ratio >= 2 ? Math.round(ratio) + '×' : pct + '% OF') + ' YOUR POWER — YOU WILL LOSE THIS TRADE'
+            : ratio < 0.75 ? 'YOU OUTGUN THEM — PRESS THE ATTACK'
+            : 'EVENLY MATCHED — THIS ONE IS DECIDED BY FLYING',
+        });
+      }
+    } catch (e) {}
     return b;
+  }
+  // CLONE SUSTAIN — ticked from the main update loop
+  function cloneTick(dt) {
+    for (const e of rt.enemies) {
+      if (!e || e.dead || e.dying || !e.cloneRegen) continue;
+      if (e.hp >= e.maxHp) continue;
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.cloneRegen * dt);
+    }
   }
   // Won a citadel siege vs a PLAYER-built citadel — you TAKE their fortress
   // (Jul 2026): it is not destroyed. The captured citadel drops ONE rank
@@ -3495,6 +3908,7 @@
     // the fortress changes hands, downgraded one rank
     if (!state.citadels) state.citadels = {};
     state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(prevLv)), builtAt: Date.now(), lv: prevLv, captured: true };
+    bumpLife('cits', 1);                              // FORTRESS DYNASTY badge
     pushFeed('You seized the citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' — now Rank ' + prevLv + ' under your flag');
     // publish: the fortress still stands — under YOUR flag now
     if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: Math.round(score() * citadelDefenseMult(prevLv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
@@ -3758,7 +4172,7 @@
     for (let i = 0; i < kills; i++) {
       if (Math.random() < dropP * (isSwarmZone(d) ? SWARM_DROP_MULT : 1)) { found++; const _q = isSwarmZone(d) ? 1 : qualityMult(d); let _it = _q > 1 ? I.generate(d, rollRarityBoosted(d, _q)) : I.generate(d); if (isSwarmZone(d) && _it.rarity > 0) _it = I.generate(d, Math.max(0, _it.rarity - SWARM_RARITY_PENALTY)); if (newItems.length < 40) newItems.push(_it); }
     }
-    newItems.forEach((it) => { if (!state.equipped[it.slot]) state.equipped[it.slot] = it; else if (state.inventory.length < invCap()) state.inventory.push(it); else addSalvage(it); });
+    newItems.forEach((it) => { countRareFind(it); if (!state.equipped[it.slot]) state.equipped[it.slot] = it; else if (state.inventory.length < invCap()) state.inventory.push(it); else addSalvage(it); });
     state.itemsFound += found;
     // deaths: estimate from how dangerous the zone is
     const lethal = dmg / (rt.stats.maxHp || 1);
@@ -4126,6 +4540,10 @@
     getLCMarket, buyLCMarket, lcCosmicTimeLeft, lcPrimTimeLeft, LC_PRICES,
     secondUnlocked: (b) => secondUnlocked(b), equipLayout,
     recommendedZone, zoneAdvice, zoneBonuses, currentWeek,
+    powerRaw, rawFromScore, cloneMatchup, effectiveDps,
+    fireBeacon, beaconState, defenseRanks, beaconVisible,
+    bumpLife, peakLife,
+    pilotAscend, ascStars,
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,

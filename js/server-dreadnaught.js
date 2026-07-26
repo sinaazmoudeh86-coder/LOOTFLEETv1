@@ -102,11 +102,16 @@
   // ---- THE VOIDMAW — Season 1 grand-prize hull ----------------------------
   const VM_KEY = 'voidmaw', VM_NEED = 150;   // Jul 2026: 100 → 150 — the Voidmaw is the apex hull now (Singularity proc), so the season grind matches
   function vmParts() { try { return (G().state.shipParts && G().state.shipParts[VM_KEY]) | 0; } catch (e) { return 0; } }
-  function vmOwned() { try { return !!G().state.ownedShips[VM_KEY]; } catch (e) { return false; } }
+  // PERMANENT GRANT GUARD — Pilot Ascension empties the hangar, so a plain
+  // ownedShips check would re-assemble the Voidmaw for free after every
+  // ascension. The flag lives on the season record, which survives the reset.
+  function vmGranted() { try { const s = sd(); return !!(s && s.vmGranted); } catch (e) { return false; } }
+  function vmOwned() { try { return vmGranted() || !!G().state.ownedShips[VM_KEY]; } catch (e) { return false; } }
   function vmAssemble() {
     if (vmOwned() || vmParts() < VM_NEED) return;
     const g = G();
     g.state.shipParts[VM_KEY] -= VM_NEED;
+    try { sd().vmGranted = true; } catch (e) {}
     if (!g.grantShip || !g.grantShip(VM_KEY)) { g.state.ownedShips[VM_KEY] = true; }
     sd().hist.unshift({ d: Date.now(), s: -1, txt: '❖ VOIDMAW ASSEMBLED — the Season 1 hull is yours. Switch to it in the Hangar.' });
     try { g.save(); } catch (e) {}

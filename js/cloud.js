@@ -156,22 +156,38 @@
   }
 
   // ---- global leaderboard (one public row per user in `leaderboard`) ----------
+  // p_asc (Pilot Ascension stars) is sent optimistically — servers that haven't
+  // run supabase/pilot-ascension.sql yet reject the extra arg, so we retry
+  // without it rather than losing the whole row.
+  let _lbNoAsc = false;
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
-      await client.rpc('lb_upsert', {
+      const base = {
         p_name: p.name || 'Operator', p_power: Math.round(p.power || 0),
         p_level: p.level || 1, p_zone: p.zone || 1, p_kills: Math.round(p.kills || 0),
         p_fleet: p.fleet || [],
-      });
+      };
+      if (!_lbNoAsc) {
+        const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc: (p.asc | 0) }, base));
+        if (!error) return;
+        _lbNoAsc = true;   // legacy signature — stop trying
+      }
+      await client.rpc('lb_upsert', base);
     } catch (e) {}
   }
   async function lbTop(n) {
     try {
       if (!enabled) return null;
-      const { data, error } = await client.from('leaderboard')
-        .select('user_id,name,power,level,zone,kills,fleet')
+      let { data, error } = await client.from('leaderboard')
+        .select('user_id,name,power,level,zone,kills,fleet,asc_stars')
         .order('power', { ascending: false }).limit(n || 100);
+      if (error) {   // column not migrated yet — fall back to the legacy shape
+        const r = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = r.data; error = r.error;
+      }
       return error ? null : (data || null);
     } catch (e) { return null; }
   }

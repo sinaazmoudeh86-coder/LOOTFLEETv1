@@ -13,6 +13,10 @@
 window.LOOTFLEET = {
   supabaseUrl:     'https://emldvvlaanyivpmxyylr.supabase.co',
   supabaseAnonKey: 'sb_publishable_IQWzW1tsUf-Rsg9Q55sJrA_RkdNIe6R',
+  // Daily "fleet report" email opt-in in Account & Settings. Leave FALSE until
+  // the Supabase side is deployed — otherwise the toggle is a dead end.
+  // Setup: FLEET-REPORT-SETUP.md · NOTIFICATIONS-ARCHITECTURE.md
+  fleetReport: false,
   // Stripe Payment Links (LIVE). Buy buttons activate per-pack the moment a
   // link is present; missing packs politely say "coming soon".
   stripeLinks: {

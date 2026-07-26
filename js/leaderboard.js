@@ -13,7 +13,7 @@
   //      roster so the board is never empty. Fetched from window.CLOUD.lbTop. ----
   let _real = null, _realT = 0, _realInflight = false;
   function myId(){ try { return (window.AUTH && AUTH.session && AUTH.session()) ? AUTH.session().id : null; } catch (e) { return null; } }
-  function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true }; }
+  function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true }; }
   function ensureReal(cb){
     if (!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.lbTop)) return;
     if (_realInflight || Date.now() - _realT < 8000) return;
@@ -151,28 +151,33 @@
     const s = GAME.state, st = GAME.getStats();
     return { name: 'You', isMe: true, zone: s.highestDungeonReached, level: s.level,
       power: GAME.score ? GAME.score() : Math.round((st ? st.theoryDps : 0) + (st ? st.maxHp : 0) * 0.5), kills: s.totalKills,
+      asc: (s.pasc && s.pasc.stars) | 0,
       fleet: [s.ship].concat(GAME.fleetShips ? GAME.fleetShips().map((x) => x.key) : []),
       _loadout: s.equipped };
   }
 
   function heatBoard(GAME) {
-    // REAL live ladder — every signed-in operator (from the cloud leaderboard)
-    // plus you, ranked by fleet progression. No simulated rivals: the board
-    // reflects actual players, so it grows as real operators sign in and play.
+    // LIVE ladder — every signed-in operator (from the cloud leaderboard), plus
+    // the SIMULATED roster (server-owned, capped by sim_config so bots can never
+    // hold #1 or flood the top 10), plus you. Sim rows arrive in the same shape
+    // as human rows, so ranking and rendering treat them identically.
     const heat = heatNumber(GAME.state.startWeek || GAME.currentWeek());
     const board = realOthers().map((p) => ({ ...p }));
+    const real = board.length;
     board.push(meEntry(GAME));
+    try { if (window.SIMPILOTS && window.SIMPILOTS.enabled()) board.push(...window.SIMPILOTS.forBoard(board)); } catch (e) {}
     rankBoard(board);
-    return { heat, label: weekLabel(heat), board, real: board.length - 1 };
+    return { heat, label: weekLabel(heat), board, real };
   }
   function allTimeBoard(GAME) {
-    // REAL all-time POWER ladder: every known operator (all cloud accounts) plus
-    // you, ranked strictly by power, highest first. Real players only.
+    // REAL all-time POWER ladder + the simulated roster, ranked strictly by power.
     const me = meEntry(GAME);
     const board = realOthers().map((p) => ({ ...p }));
+    const real = board.length;
     board.push(me);
+    try { if (window.SIMPILOTS && window.SIMPILOTS.enabled()) board.push(...window.SIMPILOTS.forBoard(board)); } catch (e) {}
     rankByPower(board);                     // real fleets → true power ranks
-    return { board, real: board.length - 1 };
+    return { board, real };
   }
 
   window.LEADERBOARD = { heatBoard, allTimeBoard, loadoutFor, fleetFor, heatNumber, weekLabel, ensureReal, byName };

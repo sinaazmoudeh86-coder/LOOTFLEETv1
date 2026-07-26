@@ -49,7 +49,7 @@
   function init(game) {
     G = game;
     ['hud-level','xp-fill','xp-label','hp-fill','hp-label','hud-gold','hud-dps','hud-kills',
-     'zb-name','zb-sub','advice','loot-feed','cargo-full','toast-layer','joystick','speed-row','auto-btn','auto-lbl',
+     'zb-name','zb-sub','advice','loot-feed','cargo-full','toast-layer','joystick','speed-row','auto-btn','auto-lbl','beacon-btn','beacon-lbl','beacon-arc',
      'hero-sub','char-power','equip-grid','stat-list','bag-sub','bag-body','zones-sub','zones-body','galaxy-sub','galaxy-body',
      'store-body','board-sub','board-body','modal-root','bag-badge',
      'boss-bar','bb-fill','bb-label','hero-badge','skills-sub','skills-body','hud-power','pb-ship','hud-fuel','hud-iron','hud-plasma','hud-lc','hud-fuel-rate','hud-iron-rate','hud-plasma-rate',
@@ -63,6 +63,21 @@
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => { if (b.dataset.screen) showScreen(b.dataset.screen); }));
     buildSpeedRow();
     el['auto-btn'].addEventListener('click', () => { G.setAuto(!G.getAuto()); syncAuto(); });
+    // ◉ BEACON — HUMAN-PRESS ONLY. Nothing else calls fireBeacon and autopilot has
+    // no path to it: inviting a 20× swarm is a decision, not a behaviour. Zone
+    // Grind only — the engine refuses everywhere else.
+    if (el['beacon-btn']) {
+      el['beacon-btn'].addEventListener('click', () => {
+        const st = G.beaconState();
+        if (!st.visible) { toast('◉ The beacon only answers in Zone Grind', '#e8a34a'); return; }
+        if (st.blocked) { toast('◉ Not while a boss is on the field', '#e8a34a'); return; }
+        if (!st.ready) { toast('◉ Beacon recharging — ' + Math.ceil(st.left) + 's', '#e8a34a'); return; }
+        const r = G.fireBeacon();
+        if (r && r.ok) toast('◉ BEACON — ' + r.spawned + ' hostiles inbound for ' + Math.round(r.life) + 's', '#ff8a3d');
+        syncBeacon();
+      });
+      setInterval(syncBeacon, 250);
+    }
     const bailBtn = $('bail-btn');
     if (bailBtn) bailBtn.addEventListener('click', () => {
       G.selectDungeon(0);            // drop into the safe Hangar bay, leaving combat
@@ -138,6 +153,7 @@
     else if (name === 'mail') { if (window.MAIL) window.MAIL.render(); }
     else if (name === 'voidzone') { if (window.VOIDZ) window.VOIDZ.render(); }
     else if (name === 'forge') { if (window.STARFORGE) window.STARFORGE.render(); }
+    else if (name === 'pasc') { if (window.PASCEND) window.PASCEND.render(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
     else if (name === 'sdread') { if (window.SDREAD) window.SDREAD.render(); }
     else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
@@ -381,10 +397,20 @@
       <p class="acct-hint" id="ac-code-msg" style="margin:4px 0 0;display:none"></p>
       <div class="lo-sect" style="margin-top:11px">Security</div>
       <div class="acct-row">${cloud && s.email ? '<button class="btn" id="ac-reset">Send password-reset email</button>' : '<span class="acct-hint">Password reset needs a cloud account — sign up with email to enable it.</span>'}</div>
-      <div class="lo-sect" style="margin-top:11px">📱 Text alerts</div>
-      <p class="acct-hint" style="margin-bottom:6px">Get a text for big updates, heat resets &amp; exclusive drops.</p>
-      <div class="acct-row"><input id="ac-phone" class="acct-in" type="tel" placeholder="+1 555 123 4567" value="${G.state.smsPhone || ''}"><button class="btn" id="ac-sms">${G.state.smsOptIn ? 'Update' : 'Sign up'}</button></div>
-      ${G.state.smsOptIn ? '<p class="acct-hint" style="color:#7ce0a0">✓ Signed up — you can opt out anytime here.</p>' : ''}
+      ${(window.LOOTFLEET || {}).fleetReport ? `<div class="lo-sect" style="margin-top:11px">✉ Fleet report</div>
+      ${cloud && s.email
+        ? `<p class="acct-hint" style="margin-bottom:7px">A short daily email — what your fleet did, what happened in the galaxy while you were away. No spam, unsubscribe in one tap.</p>
+           <div class="acct-row" style="gap:9px;align-items:center">
+             <label class="acct-tog"><input type="checkbox" id="ac-brief"><span></span></label>
+             <span class="acct-hint" id="ac-brief-lbl" style="flex:1;margin:0">Loading…</span>
+           </div>
+           <div class="acct-row" id="ac-brief-when" style="display:none;gap:9px;align-items:center;margin-top:7px">
+             <select class="acct-in" id="ac-brief-freq" style="flex:1"><option value="daily">Every day</option><option value="weekly">Weekly (Mondays)</option></select>
+             <select class="acct-in" id="ac-brief-hour" style="flex:1"></select>
+           </div>
+           <p class="acct-hint" id="ac-brief-msg" style="margin:6px 0 0;display:none"></p>
+           <p class="acct-hint" style="margin:6px 0 0;font-size:9.5px;color:#66798d">Sent to ${s.email}</p>`
+        : `<p class="acct-hint">The daily fleet report needs a cloud account — sign up with email to enable it.</p>`}` : ''}
       <div class="lo-sect" style="margin-top:11px">🛠 Support</div>
       <div class="acct-row"><a class="btn" href="support.html" target="_blank" rel="noopener" style="text-decoration:none;text-align:center;flex:1">Help &amp; Support</a></div>
       ${(window.LF_FS && window.LF_FS.supported) ? `<div class="lo-sect" style="margin-top:11px">Display</div>
@@ -423,12 +449,62 @@
           .catch(() => { toast('Could not send — try again later', '#e23b4e'); rs.disabled = false; rs.textContent = 'Send password-reset email'; });
       } catch (e) { toast('Could not send — try again later', '#e23b4e'); rs.disabled = false; }
     });
-    const sm = $s('ac-sms'); if (sm) sm.addEventListener('click', () => {
-      const v = ($s('ac-phone').value || '').trim();
-      if (!/^[+0-9][0-9 ()\-]{6,18}$/.test(v)) { toast('Enter a valid phone number (with country code)', '#e23b4e'); return; }
-      G.state.smsPhone = v; G.state.smsOptIn = true; G.save();
-      toast('✓ Text alerts on — ' + v, '#7ce0a0'); closeSheet();
-    });
+    // ---- FLEET REPORT (daily brief) ----------------------------------------
+    // Prefs live SERVER-side in notify_prefs — never in the save, so they can't
+    // be lost to a save merge and the consent record survives independently.
+    const bt = $s('ac-brief');
+    if (bt) {
+      const lbl = $s('ac-brief-lbl'), when = $s('ac-brief-when'),
+            freq = $s('ac-brief-freq'), hour = $s('ac-brief-hour'), msg = $s('ac-brief-msg');
+      const CONSENT = 'Daily fleet report by email — opted in from Account & Settings';
+      for (let h = 0; h < 24; h++) {
+        const o = document.createElement('option');
+        o.value = h; o.textContent = (h % 12 || 12) + (h < 12 ? ' AM' : ' PM');
+        hour.appendChild(o);
+      }
+      const paint = (on) => {
+        bt.checked = !!on;
+        lbl.textContent = on ? 'On — you’ll get the report' : 'Off — no emails';
+        lbl.style.color = on ? '#7ce0a0' : '';
+        when.style.display = on ? 'flex' : 'none';
+      };
+      let busy = false;
+      const save = async () => {
+        if (busy) return; busy = true;
+        const on = bt.checked;
+        msg.style.display = 'none';
+        try {
+          const { error } = await window.CLOUD.client.rpc('notify_save_prefs', {
+            p_email_ok: on, p_digest: freq.value, p_hour: +hour.value,
+            p_tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+            p_consent: on ? CONSENT : null,
+          });
+          if (error) throw error;
+          paint(on);
+          toast(on ? '✓ Fleet report on' : 'Fleet report off', on ? '#7ce0a0' : '#93a2ba');
+        } catch (e) {
+          bt.checked = !on; paint(!on);
+          msg.style.display = 'block'; msg.style.color = '#ff8a96';
+          msg.textContent = /function|schema|does not exist/i.test(e.message || '')
+            ? 'Email reports aren’t switched on for this server yet.'
+            : 'Could not save — try again.';
+        }
+        busy = false;
+      };
+      bt.addEventListener('change', save);
+      freq.addEventListener('change', () => { if (bt.checked) save(); });
+      hour.addEventListener('change', () => { if (bt.checked) save(); });
+      (async () => {
+        try {
+          const { data, error } = await window.CLOUD.client.rpc('notify_get_prefs');
+          if (error) throw error;
+          const p = data || {};
+          freq.value = p.digest === 'weekly' ? 'weekly' : 'daily';
+          hour.value = p.send_hour != null ? p.send_hour : 8;
+          paint(!!p.email_ok);
+        } catch (e) { paint(false); lbl.textContent = 'Off — no emails'; }
+      })();
+    }
     const so = $s('ac-signout'); if (so) so.addEventListener('click', () => {
       if (confirm('Sign out of ' + (s.name || 'this account') + '?')) { if (window.AUTH && window.AUTH.signOut) window.AUTH.signOut(); }
     });
@@ -519,6 +595,39 @@
       else { closeSheet(); toast('Cannot unlock', '#e23b4e'); }
     });
   }
+  // ◉ BEACON button state — hidden outside Zone Grind, arc drains on cooldown,
+  // pulses red while the swarm is live.
+  const BC_CIRC = 106.8;   // 2πr for r=17, matches the CSS stroke-dasharray
+  function syncBeacon() {
+    const b = el['beacon-btn']; if (!b || !G || !G.beaconState) return;
+    const st = G.beaconState();
+    // stay visible for the whole grind; grey out rather than vanish
+    if (!st.visible) { if (b.style.display !== 'none') b.style.display = 'none'; return; }
+    if (b.style.display !== 'flex') b.style.display = 'flex';
+    const arc = el['beacon-arc'], lbl = el['beacon-lbl'];
+    let cls = 'beacon-btn ', frac = 1, text = 'BEACON';
+    if (st.active) {
+      cls += 'live'; frac = st.life > 0 ? st.activeLeft / st.life : 0;
+      text = Math.ceil(st.activeLeft) + 's';
+    } else if (st.blocked) {
+      cls += 'cool'; frac = 1; text = 'BOSS';
+    } else if (!st.ready) {
+      cls += 'cool'; frac = st.cd > 0 ? 1 - (st.left / st.cd) : 1;
+      const mm = Math.floor(st.left / 60), ss = Math.ceil(st.left % 60);
+      text = mm > 0 ? mm + ':' + String(Math.min(59, ss)).padStart(2, '0') : Math.ceil(st.left) + 's';
+    } else {
+      cls += 'ready';
+    }
+    if (b.className !== cls) b.className = cls;
+    if (arc) arc.style.strokeDashoffset = (BC_CIRC * (1 - Math.max(0, Math.min(1, frac)))).toFixed(1);
+    if (lbl && lbl.textContent !== text) lbl.textContent = text;
+    const tip = st.active ? 'Beacon live — swarm inbound'
+      : st.blocked ? 'Beacon locked out while a boss is on the field'
+      : st.ready ? 'Beacon — summon a ×' + st.mult + ' swarm for ' + st.life + 's (' + st.cd + 's cooldown)'
+      : 'Beacon recharging';
+    if (b.title !== tip) b.title = tip;
+  }
+
   function syncAuto() {
     const on = G.getAuto();
     el['auto-btn'].classList.toggle('on', on);
@@ -1599,8 +1708,22 @@
       if (sn.hp) statBits.push('~' + G.formatNum(sn.hp) + ' hull');
       if (sn.dps) statBits.push('~' + G.formatNum(sn.dps) + ' DPS');
       if (sn.esc) statBits.push(sn.esc + ' escort' + (sn.esc > 1 ? 's' : ''));
+      // MATCHUP FORECAST — true-power odds, published before you commit
+      let odds = '';
+      try {
+        const mu = G.cloneMatchup(d.score);
+        const r = mu.ratio, mult = r >= 2 ? Math.round(r) + '×' : Math.round(r * 100) + '%';
+        const col = mu.outmatched ? '#ff6b78' : r < 0.75 ? '#7ce0a0' : '#ffd24d';
+        const verdict = mu.outmatched
+          ? 'They out-power you (' + mult + ') — <b>you will lose this fight</b>'
+          : r < 0.75 ? 'You out-power them (' + mult + ' of yours) — <b>you should win</b>'
+          : 'Evenly matched (' + mult + ') — <b>decided by flying</b>';
+        odds = '<div style="margin-top:8px;font-size:11px;line-height:1.5;color:' + col + '">⚔ ' + verdict + '</div>';
+      } catch (e) {}
+      const dAsc = (d.snap && (d.snap.asc | 0)) || (d.asc | 0);
+      const dBadge = (dAsc && window.PASCEND) ? ' ' + window.PASCEND.badge(null, dAsc) : '';
       citBlock = '<div style="background:rgba(255,140,90,.07);border:1px solid rgba(255,140,90,.35);border-radius:10px;padding:9px 11px;margin-top:8px">' +
-        '<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#ff9a70">⛨ DEFENDING FLEET — ' + d.name.toUpperCase() + (d.real ? '' : ' <span style="opacity:.6;font-weight:600">(sim)</span>') + '</div>' +
+        '<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#ff9a70">⛨ DEFENDING FLEET — ' + d.name.toUpperCase() + dBadge + '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;margin-top:7px">' + shipImg +
           '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:#ffce8a">' + (sn.nm || 'Clone Fleet') + (sn.approx ? ' <span style="opacity:.55;font-size:10px;font-weight:700">· scouted fleet</span>' : '') + '</div>' +
           '<div style="font-size:11px;color:#c9b39a;line-height:1.45">' + statBits.join(' · ') + '</div></div></div>' +
@@ -2507,7 +2630,7 @@
     let signedIn = false; try { signedIn = !!(window.ACCOUNT && ACCOUNT.current && ACCOUNT.current()); } catch (e) {}
     let html = hangarTabsHTML('board');
     const data = LB.allTimeBoard(G);
-    html += `<div class="lb-info">All-time ranking of every real operator, by fleet power.</div>`;
+    html += `<div class="lb-info">All-time ranking of every operator, by fleet power.</div>`;
     if ((data.real || 0) === 0) {
       html += `<div style="text-align:center;padding:26px 18px;border:1px dashed var(--line-2,#37475f);border-radius:14px;margin:4px 0 12px;background:rgba(95,209,255,.04);">
         <div style="font-size:30px;line-height:1;margin-bottom:8px;">🛰️</div>
@@ -2519,7 +2642,7 @@
       <div class="lb-row ${p.isMe?'me':''}" data-rank="${i}">
         <div class="lb-rank ${p.rank<=3?'top':''}">${p.rank}</div>
         <div class="lb-nm">
-          <div class="lb-topline"><span class="lb-name">${p.isMe?'★ ':''}${p.name}</span>
+          <div class="lb-topline"><span class="lb-name">${p.isMe?'★ ':''}${p.name}</span>${ascBadge(p)}${simChip(p)}
             <span class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</span></div>
           <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div></div>
         <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.power)}</div></div>`).join('');
@@ -2551,8 +2674,9 @@
       grid += `<div class="lo-slot ${it?bl(it.rarity):''}"><div class="lo-ic ${it?rc(it.rarity):''}">${it?itemIcon(it):def.icon}</div>
         <div style="min-width:0"><div class="lo-nm ${it?rc(it.rarity):''}">${it?it.name:'—'}</div><div class="lo-r">${it?C.RARITY[it.rarity].name:'empty'}</div></div></div>`;
     });
-    const sheet = showSheet(`<div class="sheet-head">${p.isMe?'Your Loadout':p.name}</div><div class="sheet-body">
-      <p style="margin-bottom:10px">Rank <b>#${p.rank}</b> · Zone <b>${p.zone}</b> · Level <b>${p.level}</b> · Power <b style="color:var(--gold)">${G.formatNum(p.power)}</b></p>
+    const sheet = showSheet(`<div class="sheet-head">${p.isMe?'Your Loadout':p.name}${ascBadge(p)}${simChip(p)}</div><div class="sheet-body">
+      ${p._sim ? '' : ''}
+      <p style="margin-bottom:10px">Rank <b>#${p.rank}</b> · Zone <b>${p.zone}</b> · Level <b>${p.level}</b> · Power <b style="color:var(--gold)">${G.formatNum(p.power)}</b>${ascLine(p)}</p>
       <div class="lo-fleet">${fleetHtml}</div>
       <div class="lo-sect">Flagship loadout</div>
       <div class="loadout-grid">${grid}</div>
@@ -2638,6 +2762,25 @@
         ${investable?'<span class="skt-dot"></span>':''}</button>`;
     });
     html += '</div>';
+
+    // ---- ◉ BEACON — the Defense branch's shared payoff ---------------------
+    // Shown on the Defense tab so the link between "tank ranks" and "bigger, more
+    // frequent swarms" is legible while you are spending points.
+    if (skillBranch === 'defense' && G.beaconState) {
+      const bs = G.beaconState();
+      const cdPct = Math.round((1 - bs.cd / 300) * 100);
+      const lifePct = Math.round((bs.life / 30 - 1) * 100);
+      html += `<div class="sk-beacon">
+        <div class="skb-h"><span class="skb-ic">◉</span><b>BEACON</b><em>Defense payoff</em></div>
+        <p class="skb-p">Fire it from the battle screen to flood a <b>Zone Grind</b> sector with a swarm. Every <b>Defense</b> rank shortens the recharge and lengthens the call — tanks farm the most from one beacon.</p>
+        <div class="skb-row">
+          <div><span>RECHARGE</span><b>${bs.cd}s</b><em>${cdPct > 0 ? '−' + cdPct + '%' : 'base'}</em></div>
+          <div><span>SWARM RUNS</span><b>${bs.life}s</b><em>${lifePct > 0 ? '+' + lifePct + '%' : 'base'}</em></div>
+          <div><span>SIZE</span><b>×${bs.mult}</b><em>${bs.ranks} ranks</em></div>
+        </div>
+        <div class="skb-note">Caps at −40% recharge and +150% duration · never fires on autopilot · Zone Grind only</div>
+      </div>`;
+    }
 
     // ---- active-branch progress --------------------------------------------
     const caps = C.SKILLS.nodes.filter((n) => n.br === br.key && n.cap);
@@ -2836,6 +2979,30 @@
   }
   function galaxyChanged() { if (_inited && screen === 'galaxy') renderGalaxy(); }
   function galaxyContestToast(name, tile) { if (_inited) toast('⚔ ' + name + ' captured your ' + tile + ' — retake it!', '#e8a34a'); }
+  // ---- PILOT ASCENSION rank badge -----------------------------------------
+  // One helper used everywhere a pilot name appears: boards, profiles, galaxy
+  // tooltips, war reports. Stars are coloured by the loot-rarity tier the pilot
+  // has climbed to (5 stars per rarity), matching Ship Ascension's model.
+  function ascOf(p) {
+    if (!p) return 0;
+    if (p.isMe) { try { return window.PASCEND ? window.PASCEND.stars() : 0; } catch (e) { return 0; } }
+    return (p.asc | 0) || 0;
+  }
+  function ascBadge(p, opts) {
+    const n = ascOf(p);
+    if (!n || !window.PASCEND) return '';
+    return window.PASCEND.badge(null, n, opts || {});
+  }
+  // SIM designation — never inferred from a name; comes from the protected
+  // is_simulated column via SIMPILOTS.
+  function simChip(p) { try { return window.SIMPILOTS ? window.SIMPILOTS.chip(p) : ''; } catch (e) { return ''; } }
+  function ascLine(p) {
+    const n = ascOf(p);
+    if (!n || !window.PASCEND) return '';
+    const t = window.PASCEND.tierDef(n);
+    return ` · Ascension <b style="color:${t.color}">${n}</b> <span style="font-size:11px;color:var(--muted)">(${t.name} ★${window.PASCEND.starOf(n)})</span>`;
+  }
+
   function siegeEvent(kind, s) {
     if (!_inited) return;
     if (kind === 'start') { toast('⚔ Siege begun — clear 10 waves', '#5b9cff'); }
@@ -2846,6 +3013,17 @@
     else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); showScreen(s && s.voidzone ? 'voidzone' : 'galaxy'); }
     else if (kind === 'wave') { toast('Wave ' + s.wave + ' / ' + s.total, '#9ec5ff'); }
     else if (kind === 'boss') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '22px'; t.textContent = '☠ BOSS WAVE'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700); }
+    else if (kind === 'clone') {
+      // MATCHUP FORECAST — the clone fight is decided by true fleet power, so say
+      // so out loud before the shooting starts.
+      const o = (s && s.odds) || 'even';
+      const col = o === 'outmatched' ? '#ff5a68' : o === 'favoured' ? '#7ce0a0' : '#ffd24d';
+      const t = document.createElement('div'); t.className = 'lvl-toast';
+      t.style.color = col; t.style.fontSize = '19px';
+      t.innerHTML = '⚔ ' + ((s && s.name) ? String(s.name).toUpperCase() : 'ENEMY') + "'S FLEET" +
+        '<br><span style="font-size:11.5px;color:#dbe8f5;letter-spacing:.04em">' + ((s && s.text) || '') + '</span>';
+      el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 3200);
+    }
     else if (kind === 'captured') { const sys = s.sys || {}; const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#5bc06b'; t.style.fontSize = '20px'; const _capRate = (sys.rate || 0) * (sys.deep ? GM.DEEP_MULT.resource : 1) * 25; /* mirror resourceRates(): deep ×25 + global ×25 galaxy yield */ t.innerHTML = '★ SYSTEM CAPTURED<br><span style="font-size:13px;color:#cfe9ff">' + (sys.name || '') + (sys.resource ? ' · +' + GM.RES[sys.resource].glyph + ' ' + G.formatNum(_capRate) + '/h' : '') + '</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
   }
   // Small wreck notice — the ship has already been auto-towed to the hangar.

@@ -134,7 +134,18 @@
       if (id && window.CLOUD && window.CLOUD.enabled && window.CLOUD.client) {
         if (chan) { try { window.CLOUD.client.removeChannel(chan); } catch (e) {} chan = null; }
         chan = window.CLOUD.client.channel('lf-session-' + id);
-        chan.on('broadcast', { event: 'claim' }, (p) => { const m = (p && p.payload) || {}; if (beats(m)) kick('device'); })
+        chan.on('broadcast', { event: 'claim' }, (p) => {
+          // PRESENCE ONLY once the server lease is installed. This payload's
+          // `at` is the PEER's Date.now() — comparing it to ours arbitrates
+          // across two unsynchronised clocks, which is exactly what the lease
+          // exists to replace: a peer whose clock runs fast would kick the true
+          // lease owner and survive itself. Cross-device ownership is decided
+          // by onLeaseRow (persisted row changes) + the 20s touch_session,
+          // both stamped with Postgres now().
+          if (_leaseOn) return;
+          const m = (p && p.payload) || {};
+          if (beats(m)) kick('device');
+        })
             .subscribe((st) => { if (st === 'SUBSCRIBED') { try { chan.send({ type: 'broadcast', event: 'claim', payload: { dev: deviceId(), at: claimedAt } }); } catch (e) {} } });
         claimLease(id);
       }

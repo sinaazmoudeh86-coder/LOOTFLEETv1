@@ -118,6 +118,9 @@
     } catch (e) {}
   }
 
+  // OAuth failures— social sign-in was removed from the login screen (no
+  // provider is configured), so nothing calls this. Kept out deliberately:
+  // see OAUTH-SETUP.md if it ever comes back.
   function prettyAuthError(ex) {
     const m = (ex && ex.message) || 'Something went wrong.';
     if (/invalid login/i.test(m)) return 'Incorrect email or password.';
@@ -199,12 +202,6 @@
     const lg = $('login');
     if (!lg) return;
 
-    document.querySelectorAll('.sso').forEach((b) => b.addEventListener('click', async () => {
-      if (cloudOn()) {
-        try { await window.CLOUD.oauth((b.dataset.sso || '').toLowerCase()); }
-        catch (ex) { err('Could not start ' + b.dataset.sso + ' sign-in. Enable this provider in Supabase.'); }
-      } else { signInLocal(b.dataset.sso, b.dataset.sso + ' Operator'); }
-    }));
     $('lg-form').addEventListener('submit', (e) => (cloudOn() ? submitFormCloud(e) : submitFormLocal(e)));
     $('lg-toggle').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
     $('lg-guest').addEventListener('click', () => signInLocal('Guest', 'Guest Operator'));

@@ -14,11 +14,20 @@
   // the chain progressively harder to reach.
   function rollRarity(dungeon) {
     const luck = 1 + dungeon * 0.004;             // gentle depth pressure
-    const cap = C.rarityCap ? C.rarityCap(dungeon) : 11;   // zone-gated ceiling
+    // ceiling = the stricter of the zone gate and the ascension gate
+    const zCap = C.rarityCap ? C.rarityCap(dungeon) : 11;
+    const cap = Math.min(zCap, C.ascRarityCap ? C.ascRarityCap() : 13);
+    // ASCENSION: flat bonus to Primordial-and-above weight (+25%/star, max 5×)
+    const top = C.ascTopBoost ? C.ascTopBoost() : 1;
+    const TT = C.TOP_TIER == null ? 11 : C.TOP_TIER;
+    // FORTUNE LATTICE perk: lifts every above-common weight
+    const perk = (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('rare') : 1;
     // Steeper per-tier dampener (1.30) — each rarity step is markedly rarer than
     // the last, so top-end drops are a genuine grind even once unlocked.
     const weights = C.RARITY.map((r) =>
-      r.tier > cap ? 0 : (r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.30, r.tier))
+      r.tier > cap ? 0
+        : r.tier === 0 ? r.weight
+        : r.weight * Math.pow(luck, r.tier) / Math.pow(1.30, r.tier) * perk * (r.tier >= TT ? top : 1)
     );
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = Math.random() * total;
@@ -335,9 +344,14 @@
   // array of probabilities (0..1) indexed by rarity tier, summing to 1.
   function rarityChances(dungeon) {
     const luck = 1 + dungeon * 0.0045;
-    const cap = C.rarityCap ? C.rarityCap(dungeon) : 11;
+    const cap = Math.min(C.rarityCap ? C.rarityCap(dungeon) : 11, C.ascRarityCap ? C.ascRarityCap() : 13);
+    const top = C.ascTopBoost ? C.ascTopBoost() : 1;
+    const TT = C.TOP_TIER == null ? 11 : C.TOP_TIER;
+    const perk = (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('rare') : 1;
     const weights = C.RARITY.map((r) =>
-      r.tier > cap ? 0 : (r.tier === 0 ? r.weight : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier))
+      r.tier > cap ? 0
+        : r.tier === 0 ? r.weight
+        : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier) * perk * (r.tier >= TT ? top : 1)
     );
     const total = weights.reduce((a, b) => a + b, 0) || 1;
     return weights.map((w) => w / total);

@@ -32,9 +32,9 @@
 
   // ---- lifetime stat readers ------------------------------------------------
   const life = (k) => (S().lifeStats && S().lifeStats[k]) || 0;
-  function hullLevelSum() { const sl = S().shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return t; }
-  function moonLifetimeSum() { const lt = (S().moon && S().moon.lifetime) || {}; let t = 0; for (const k in lt) t += lt[k] || 0; return t; }
-  function colonyLevelSum() { const root = S().moon; if (!root || !root.moons) return 0; let t = 0; root.moons.forEach((mm) => { const b = mm.b || {}; for (const k in b) t += (b[k] && b[k].lv) || 0; }); return t; }
+  function hullLevelSum() { const sl = S().shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return Math.max(t, life('hullLv')); }
+  function moonLifetimeSum() { const lt = (S().moon && S().moon.lifetime) || {}; let t = 0; for (const k in lt) t += lt[k] || 0; return Math.max(t, life('moonRes')); }
+  function colonyLevelSum() { const root = S().moon; let t = 0; if (root && root.moons) root.moons.forEach((mm) => { const b = mm.b || {}; for (const k in b) t += (b[k] && b[k].lv) || 0; }); return Math.max(t, life('colony')); }
 
   // ---- CHAINS — rank counts SUM TO EXACTLY 1000 ------------------------------
   // t targets are geometric ladders: start × growth^i (strictly increasing).
@@ -56,7 +56,33 @@
     { id: 'level',  ic: '▲', name: 'Ascendant',          unit: 'account level',            n: 20,  t: genT(5, 1.32, 20),     v: () => S().level || 1 },
     { id: 'zone',   ic: '⌬', name: 'Frontier Legend',    unit: 'zones unlocked',           n: 10,  t: genT(3, 1.45, 10),     v: () => S().highestUnlocked || 1 },
   ];
-  const TOTAL = CHAINS.reduce((a, c) => a + c.n, 0); // = 1000
+  // ---- ENDGAME CHAINS -------------------------------------------------------
+  // 500 more badges on the SAME ladder, all counting toward the Titan Sina.
+  // Every one measures something only reachable deep in the endgame — ascension
+  // stars, +15 tempers, pristine purity rolls, Void spires, ascension-tier
+  // fittings — so they sit dark and unreachable on a new account and make the
+  // capstone a genuine end-of-everything prize.
+  const lin = (step, n) => { const t = []; for (let i = 1; i <= n; i++) t.push(step * i); return t; };
+  const ENDGAME = [
+    { id: 'asc',     ic: '✦', name: 'The Ascended',       unit: 'ascension stars',            n: 60, t: lin(1, 60),          v: () => ((S().pasc && S().pasc.stars) | 0), end: true },
+    { id: 'ascpts',  ic: '◈', name: 'Perk Sovereign',     unit: 'ascension points earned',    n: 50, t: genT(2, 1.11, 50),   v: () => (((S().pasc && S().pasc.pts) | 0) + ((S().pasc && S().pasc.spent) | 0)), end: true },
+    { id: 'temper',  ic: '⚒', name: 'Master Armourer',    unit: '+15 tempers forged',         n: 40, t: genT(1, 1.16, 40),   v: () => life('temper15'), end: true },
+    { id: 'purity',  ic: '✧', name: 'Pristine Forge',     unit: 'pristine purity rolls',      n: 30, t: genT(1, 1.2, 30),    v: () => life('pristine'), end: true },
+    { id: 'toploot', ic: '◉', name: 'Relic Hunter',       unit: 'Primordial+ fittings found', n: 60, t: genT(1, 1.19, 60),   v: () => life('topLoot'), end: true },
+    { id: 'ascloot', ic: '⬡', name: 'Beyond the Artifact', unit: 'ascension-tier fittings',   n: 40, t: genT(1, 1.17, 40),   v: () => life('ascLoot'), end: true },
+    { id: 'void',    ic: '●', name: 'Warden of the Void',  unit: 'Void spires taken',          n: 40, t: genT(1, 1.15, 40),   v: () => life('voidTiles'), end: true },
+    { id: 'cits',    ic: '⛴', name: 'Fortress Dynasty',   unit: 'citadels raised or seized',  n: 40, t: genT(1, 1.16, 40),   v: () => life('cits'), end: true },
+    { id: 'prism',   ic: '◈', name: 'Prism Emperor',      unit: 'prism refined',              n: 60, t: genT(500, 1.42, 60), v: () => Math.max((S().prism && S().prism.best) || 0, life('prism')), end: true },
+    { id: 'clones',  ic: '⚔', name: 'Fleetbreaker',       unit: 'rival fleets destroyed',     n: 40, t: genT(1, 1.18, 40),   v: () => life('clones'), end: true },
+    { id: 'peak',    ic: '⚡', name: 'Apex Commander',     unit: 'peak fleet power',           n: 40, t: genT(1e5, 1.6, 40),  v: () => life('peakPower'), end: true },
+  ];
+  // 1,000 career badges, exactly as originally shipped. ENDGAME above is kept as
+  // data (its readers and lifetime counters are all live) but is NOT merged into
+  // the rendered ladder — folding it in changed the look of the Badges tab, and
+  // the original card design read better. Re-enable by pushing ENDGAME into
+  // CHAINS here if it ever gets its own screen.
+  const SINA_AT = CHAINS.reduce((a, c) => a + c.n, 0);        // = 1000 — the gate
+  const TOTAL = SINA_AT;
   const gradeIdx = (ch, rank) => Math.min(9, Math.floor((rank - 1) / (ch.n / 10))); // rank is 1-based
   const gradeOf = (ch, rank) => GRADES[gradeIdx(ch, rank)];
 
@@ -104,9 +130,10 @@
 
   // ---- ★ TITAN SINA — the 1,000-badge capstone ------------------------------
   function sinaBanner() {
-    const owned = !!(S().ownedShips && S().ownedShips.titansina);
+    const a0 = ensure();
+    const owned = !!(S().ownedShips && S().ownedShips.titansina) || !!a0.sinaGranted;
     const have = totalClaimed();
-    const left = TOTAL - have;
+    const left = SINA_AT - have;
     const ready = !owned && left <= 0;
     let right;
     if (owned) right = '<div class="vrd-owned" style="color:#ff8a96;border-color:rgba(255,90,104,.5)">✓ IN YOUR HANGAR</div>';
@@ -117,12 +144,19 @@
       '<div class="vrd-mid">' +
         '<div class="vrd-t" style="color:#ffdfe2">THE TITAN SINA <em style="background:linear-gradient(90deg,#ff8a96,#ff5a68);color:#2a060a">1,000-BADGE PRIZE</em></div>' +
         '<div class="vrd-s" style="color:#c4a6ab">Claim <b style="color:#ffdfe2">all 1,000 lifetime badges</b> to be granted the FINAL-CLASS hull — full-spectrum gatling tracers, 128 drones, range across the entire zone.</div>' +
-        '<div class="vrd-bar" style="border-color:rgba(255,90,104,.35);background:#1a0d10"><i style="width:' + (have / TOTAL * 100) + '%;background:linear-gradient(90deg,#8a2f3a,#ff5a68);box-shadow:0 0 10px rgba(255,90,104,.6)"></i><span>★ ' + have.toLocaleString() + ' / ' + TOTAL.toLocaleString() + ' badges claimed</span></div>' +
+        '<div class="vrd-bar" style="border-color:rgba(255,90,104,.35);background:#1a0d10"><i style="width:' + Math.min(100, have / SINA_AT * 100) + '%;background:linear-gradient(90deg,#8a2f3a,#ff5a68);box-shadow:0 0 10px rgba(255,90,104,.6)"></i><span>★ ' + have.toLocaleString() + ' / ' + TOTAL.toLocaleString() + ' badges claimed</span></div>' +
       '</div>' + right + '</div>';
   }
   function acceptSina() {
-    if (S().ownedShips && S().ownedShips.titansina) return;
-    if (totalClaimed() < TOTAL) return;
+    // PERMANENT GRANT GUARD — gated on the badge record (which survives every
+    // ascension), NOT on hangar ownership. Pilot Ascension empties the hangar,
+    // so an ownership check let a 1,000-badge pilot re-claim the FINAL-CLASS
+    // hull once per ascension.
+    const a = ensure();
+    if (a.sinaGranted) return;
+    if (S().ownedShips && S().ownedShips.titansina) { a.sinaGranted = true; Gm().save(); return; }
+    if (totalClaimed() < SINA_AT) return;
+    a.sinaGranted = true;
     if (Gm().grantShip) Gm().grantShip('titansina');
     Gm().save();
     const tl = document.getElementById('toast-layer');

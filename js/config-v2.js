@@ -31,11 +31,35 @@
     { key: 'primordial',name: 'Primordial',color: '#ffe6a8', glow: 'rgba(255,230,168,1)',   minStats: 6, maxStats: 6, mult: 28.5, weight: 0.00004, particles: 22 },
     { key: 'relic',     name: 'Relic',     color: '#c061ff', glow: 'rgba(192,97,255,1)',    minStats: 6, maxStats: 6, mult: 38.0, weight: 0.0000016,  particles: 26 },
     { key: 'artifact',  name: 'Artifact',  color: '#ff2330', glow: 'rgba(255,35,48,1)',     minStats: 6, maxStats: 6, mult: 50.0, weight: 0.00000006, particles: 30 },
+    // ---- ASCENSION-EXCLUSIVE TIERS ----------------------------------------
+    // These three CANNOT drop until the pilot has ascended. No zone, boss or
+    // crate produces them below the required star count — the gate is the
+    // Ascension itself, which is what makes prestige feel like real access
+    // rather than a stat bump. `ascReq` = Ascension Stars needed.
+    { key: 'ascendant', name: 'Ascendant', color: '#5cffbe', glow: 'rgba(92,255,190,1)',    minStats: 6, maxStats: 7, mult: 68.0,  weight: 0.00000004,  particles: 34, ascReq: 1 },
+    { key: 'celestial', name: 'Celestial', color: '#5b7cff', glow: 'rgba(91,124,255,1)',    minStats: 7, maxStats: 7, mult: 92.0,  weight: 0.000000008, particles: 38, ascReq: 20 },
+    { key: 'paragon',   name: 'Paragon',   color: '#ffffff', glow: 'rgba(255,255,255,1)',   minStats: 7, maxStats: 8, mult: 125.0, weight: 0.0000000012, particles: 44, ascReq: 50, prismatic: true },
   ];
   // Post-mythic tiers (Ancient and beyond) are ~10× rarer across the board.
   RARITY.forEach((r, i) => { if (i >= 6) r.weight *= 0.1; });
   const RARITY_BY_KEY = {};
-  RARITY.forEach((r, i) => { r.tier = i; RARITY_BY_KEY[r.key] = r; });
+  RARITY.forEach((r, i) => { r.tier = i; RARITY_BY_KEY[r.key] = r; if (r.ascReq == null) r.ascReq = 0; });
+
+  // Highest rarity tier the pilot's ASCENSION rank permits, regardless of zone.
+  // Reads the live star count so every drop path (kills, bosses, crates, shop,
+  // offline sim) is gated identically from one place.
+  function ascStars() { try { return (window.PASCEND && window.PASCEND.stars()) | 0; } catch (e) { return 0; } }
+  function ascRarityCap(stars) {
+    const s = stars == null ? ascStars() : stars | 0;
+    let cap = 13;   // Artifact — the ceiling for an un-ascended pilot
+    for (let i = 14; i < RARITY.length; i++) if (s >= RARITY[i].ascReq) cap = i;
+    return cap;
+  }
+  // Each ascension also sharpens the TOP of the table — a flat, legible bonus to
+  // the drop weight of Primordial and above (tier 11+). +25% per star, capped at
+  // 5× so it stays a real edge without trivialising the rarest gear.
+  const TOP_TIER = 11;   // Primordial
+  function ascTopBoost(stars) { const s = stars == null ? ascStars() : stars | 0; return 1 + Math.min(4, s * 0.25); }
 
   // ---------------------------------------------------------------------------
   // STATS
@@ -656,5 +680,6 @@
     SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, dungeonScale, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
+    ascRarityCap, ascTopBoost, TOP_TIER,
   };
 })();

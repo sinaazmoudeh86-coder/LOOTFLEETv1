@@ -269,6 +269,7 @@
     recompute(it);
     finish('fg-temper', () => {
       flashText('fg-temper', ok, ok ? (e.lv >= MAX_LV ? '★ MAX TEMPER +' + e.lv : 'SUCCESS · +' + e.lv) : slipped ? 'MISS · SLIPPED TO +' + e.lv : 'MISS · 🔥 HEAT +' + e.heat + '%');
+      if (ok && e.lv >= MAX_LV) { try { G().bumpLife('temper15', 1); G().save(); } catch (x) {} }   // MASTER ARMOURER badge
       if (ok && e.lv >= MAX_LV) showCine(it, '⚒ +15 TEMPER', 'CRYO-HARDENED · +1% FLASH-FREEZE', '#ffab4a');
     });
   }
@@ -291,6 +292,7 @@
     finish('fg-purity', () => {
       const up = e.pur >= old;
       flashText('fg-purity', up, old + '% → ' + e.pur + '%' + (e.pur >= PRISTINE ? ' ✦ PRISTINE' : ''));
+      if (e.pur >= PRISTINE) { try { G().bumpLife('pristine', 1); G().save(); } catch (x) {} }      // PRISTINE FORGE badge
       if (e.pur >= PRISTINE) showCine(it, '✦ ' + e.pur + '% PURITY', 'PRISTINE FORGE', '#7df3ff');
     });
   }

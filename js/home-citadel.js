@@ -1010,7 +1010,7 @@
     run.N = Math.min(40, 10 + Math.ceil(next * 1.6));
     run.spawned = 0; run.refs = []; run.spawnT = 1.8; run.spawnIv = Math.max(0.55, 42 / run.N);
     run.unitHp = ps.dps * (1 + turretPct) * (55 + next * 4.5) / run.N;
-    run.dps = ps.dps; run.turretDps = ps.dps * turretPct;
+    run.dps = ps.dps; run.turretDps = ps.dps * turretPct * (window.PASCEND ? window.PASCEND.mult('tower') : 1);   // ASCENSION: Bastion Command
     run.fort.max = ps.maxHp * 12 * (1 + (s.b.turret | 0) * 0.05);
     run.fort.hp = run.fort.max;                       // field crews repair between waves
     ensureWarbar();

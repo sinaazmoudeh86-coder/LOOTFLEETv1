@@ -148,6 +148,8 @@
       this.frostCd = 0;       // refreeze immunity — stops the ice cube strobing under high fire rates
       this.stunT = 0;         // VOIDMAW singularity: >0 → stunned (no move, no guns)
       this.singCd = 0;        // per-target singularity cooldown
+      this.rush = 0;          // BEACON: 1 = charge the pilot, ignoring hold-at-range
+      this.tithe = 0;         // BEACON Wreckfield Tithe multiplier on this kill's payout
       this.range = 230;                              // ≈ the player's own 250
       this.holdAt = this.range * (0.55 + (this.seed % 1) * 0.25);
       this.fireT = 1.2 + (this.seed % 1.4);          // first shot is staggered
@@ -196,9 +198,11 @@
       this.dir = dx >= 0 ? 1 : -1;
       const reach = this.size + archer.size;
       const gunner = this.ranged || this.isBoss;
-      const holdAt = gunner ? Math.max(reach + 6, this.isBoss ? this.range * 0.8 : this.holdAt) : reach;
+      // BEACON RUSH — summoned swarms ignore hold-at-range and charge the pilot,
+      // and they close faster than a normal patrol so the wave actually arrives.
+      const holdAt = this.rush ? reach : (gunner ? Math.max(reach + 6, this.isBoss ? this.range * 0.8 : this.holdAt) : reach);
       if (dist > holdAt) {
-        const sp = this.speed * Math.min(1, this.spawnT * 1.5) * chill;
+        const sp = this.speed * Math.min(1, this.spawnT * 1.5) * chill * (this.rush ? 2.1 : 1);
         this.x += (dx / dist) * sp * dt;
         this.y += (dy / dist) * sp * dt;
         this.walk += dt * sp * 0.16;   // walk cycle speed tied to movement

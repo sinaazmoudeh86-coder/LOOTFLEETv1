@@ -35,7 +35,7 @@
 
   let _cfg = null;              // sim_config snapshot
   let _rows = [];               // mapped sim pilots, strongest first
-  let _at = 0, _inflight = false;
+  let _at = 0, _inflight = false, _tries = 0;
   const TTL = 120000;           // 2 min — the server ticks hourly, no need to poll hard
 
   function enabled() { return !!(_cfg && _cfg.enabled) || SEEDS.length > 0; }
@@ -73,7 +73,15 @@
       _inflight = false; _at = Date.now();
       if (!cfgRes.error && cfgRes.data) _cfg = cfgRes.data;
       if (!boardRes.error && Array.isArray(boardRes.data)) {
+        const had = _rows.length;
         _rows = boardRes.data.map(map).sort((a, b) => b.power - a.power);
+        // REPAINT. The board renders synchronously at boot, long before this
+        // promise lands — without this the roster only appeared if you navigated
+        // away and came back, which read as "the bots never showed up".
+        if (_rows.length !== had) { try { window.UI && window.UI.refreshAll && window.UI.refreshAll(); } catch (e2) {} }
+      } else if (!_rows.length && _tries < 4) {
+        // transient failure, or the SQL is not deployed — back off and retry
+        _tries++; _at = 0; setTimeout(() => refresh(), 4000 * _tries);
       }
       if (cb) cb(_rows);
     }).catch(() => { _inflight = false; _at = Date.now(); if (cb) cb(_rows); });
@@ -255,7 +263,11 @@
   // Nothing shows for the first day — a brand-new cohort has nothing to display.
   // After that the only global rule left is a CEILING: no simulated pilot may
   // out-power the strongest human. Their individual progression does the rest.
-  const HIDE_HOURS = 24;
+  // Nothing shows for the first couple of hours — a cohort that materialises the
+  // instant someone installs the game is the one thing that gives it away. Two
+  // hours reads as arrivals rather than a seeded list, without leaving a fresh
+  // install staring at an empty board all day.
+  const HIDE_HOURS = 2;
   function epoch() {
     try {
       let e = parseInt(localStorage.getItem('lf-sim-epoch') || '', 10);
@@ -358,7 +370,10 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   // warm the cache shortly after boot, then let the TTL handle it
-  setTimeout(() => refresh(), 2500);
+  setTimeout(() => refresh(), 1200);
+  // and again once the UI has certainly booted, so the first paint of the Ranks
+  // page always has the roster available
+  setTimeout(() => refresh(), 6000);
 
   window.SIMPILOTS = { refresh, forBoard, defenderFor, chip, stats, enabled, rows: () => roster() };
 })();

@@ -242,11 +242,20 @@ begin
 end; $$;
 
 -- fresh boss HP: anchored to the ALLIANCE's real strength, EXPONENTIAL in the
--- mark — every level is ×1.55 the last
-create or replace function public._al_boss_hp(aid uuid, n int)
+-- mark — every level is ×1.55 the last. The ×200 anchor means one MAX attack
+-- (25× a member's power) is ~1/8 of Mk-1: a level is a genuine group grind,
+-- never the one-shot it used to be when the anchor matched the damage cap.
+-- anchor_min lets a caller floor the anchor to the LIVE attacker power so a
+-- stale/low leaderboard sum can't collapse the boss to the hard floor.
+drop function if exists public._al_boss_hp(uuid, int);
+create or replace function public._al_boss_hp(aid uuid, n int, anchor_min numeric default 0)
 returns numeric language sql security definer set search_path = public as $$
-  select greatest(5e13, coalesce((select sum(l.power)::numeric from public.alliance_members m
-    join public.leaderboard l on l.user_id = m.user_id where m.alliance_id = aid), 0) * 25)
+  select greatest(5e13,
+    greatest(
+      coalesce((select sum(l.power)::numeric from public.alliance_members m
+        join public.leaderboard l on l.user_id = m.user_id where m.alliance_id = aid), 0),
+      greatest(coalesce(anchor_min, 0), 0)
+    ) * 200)
     * power(1.55::numeric, greatest(0, n - 1));
 $$;
 
@@ -504,10 +513,11 @@ grant execute on function public.alliance_donate(int) to authenticated;
 -- time a level's HP hits 0 the Armada resets FULL at the next mark (×1.55 HP)
 -- and EVERY member is paid — more ⬡ per level (250 + 50·mark). The whole
 -- ladder resets to Mk-1 every Sunday 12AM America/Chicago.
-create or replace function public.alliance_attack(p_dmg numeric, p_vip boolean)
+drop function if exists public.alliance_attack(numeric, boolean);
+create or replace function public.alliance_attack(p_dmg numeric, p_vip boolean, p_pow numeric default 0)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare me uuid := auth.uid(); aid uuid; maxa int; att int; pw numeric; dmg numeric; tot numeric;
-        hp numeric; n int; wk int; bw int; kills int := 0; coins bigint := 0; nm text;
+        hp numeric; bmax numeric; cmax numeric; anch numeric; n int; wk int; bw int; kills int := 0; coins bigint := 0; nm text;
 begin
   select alliance_id into aid from public.alliance_members where user_id = me;
   if aid is null then raise exception 'no alliance'; end if;
@@ -517,24 +527,37 @@ begin
   select attacks into att from public.alliance_members where user_id = me;
   if att >= maxa then raise exception 'no attacks left today'; end if;
   select coalesce(power,0)::numeric into pw from public.leaderboard where user_id = me;
+  -- damage clamp stays on the SERVER leaderboard power (never client-supplied) — fair.
   dmg := least(greatest(coalesce(p_dmg,0), 0), greatest(pw, 1) * 25);
   tot := dmg;
+  -- the boss anchor MAY use the client's live power to RAISE (never lower) the
+  -- pool, self-healing a stale leaderboard sum. Safe: it can only make the
+  -- boss harder — it never touches the damage clamp above.
+  anch := greatest(coalesce(pw,0), coalesce(p_pow,0));
   update public.alliance_members set attacks = attacks + 1, contrib = contrib + 5 where user_id = me;
   wk := public._al_bweek();
-  select boss_hp, boss_n, boss_week into hp, n, bw from public.alliances where id = aid for update;
+  select boss_hp, boss_max, boss_n, boss_week into hp, bmax, n, bw from public.alliances where id = aid for update;
   if bw is distinct from wk then                          -- WEEKLY RESET (Sun 00:00 Chicago)
-    n := 1; hp := public._al_boss_hp(aid, 1);
+    n := 1; hp := public._al_boss_hp(aid, 1, anch); bmax := hp;
     perform public._al_feed(aid, 'sys', '⟳ WEEKLY RESET — the Hollow Armada returns at Mk-1');
+  end if;
+  -- SELF-HEAL: if the current level's pool was built from a stale/low power
+  -- reading, rescale it up to the live anchor, preserving the % already burned.
+  cmax := public._al_boss_hp(aid, n, anch);
+  if bmax is null or bmax <= 0 then bmax := cmax; hp := cmax; end if;
+  if cmax > bmax * 4 then
+    hp := cmax * least(1, greatest(0, hp / bmax));
+    bmax := cmax;
   end if;
   while dmg >= hp loop                                    -- burn whole levels, overflow carries
     dmg := dmg - hp;
     coins := coins + 250 + 50 * n;                        -- more ⬡ per level
     kills := kills + 1; n := n + 1;
-    hp := public._al_boss_hp(aid, n);
+    hp := public._al_boss_hp(aid, n, anch);
     exit when kills >= 200;                               -- sanity valve
   end loop;
   hp := hp - dmg;
-  update public.alliances set boss_n = n, boss_hp = hp, boss_max = public._al_boss_hp(aid, n),
+  update public.alliances set boss_n = n, boss_hp = hp, boss_max = public._al_boss_hp(aid, n, anch),
     boss_week = wk, xp = xp + 200 * kills where id = aid;
   if kills > 0 then
     update public.social_wallets w set ac = ac + coins, updated_at = now()
@@ -548,7 +571,7 @@ begin
   end if;
   return jsonb_build_object('dmg', tot, 'kills', kills, 'boss_n', n, 'killed', kills > 0);
 end; $$;
-grant execute on function public.alliance_attack(numeric, boolean) to authenticated;
+grant execute on function public.alliance_attack(numeric, boolean, numeric) to authenticated;
 
 -- weekly ops: client reports completed mission points (10/25/60, ≤3 missions/wk)
 create or replace function public.alliance_week_add(p_pts int)

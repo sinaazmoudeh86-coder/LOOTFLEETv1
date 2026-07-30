@@ -1,87 +1,95 @@
-# LOOT FLEET V1.0 BETA — Deploy v202 (build 395 · SW cache `lootfleet-v395`)
+# LOOT FLEET V3.0 BETA — Deploy v203 (build 407 · SW cache `lootfleet-v407`)
 
-Push this folder to GitHub → Vercel. Balance + bug release on top of v201.
+Push this folder to GitHub → Vercel. **Stability + Hollow Armada release.**
+Built fresh from the working tree — v202's folder was still a build-396 shell
+with 406-era code mixed into it, so deploy this folder, not that one.
 
-## Database
-
-One NEW file in this release, and it should be run — the simulated roster's kill
-counts are visibly wrong on the live board until it is:
+## Database — run in this order
 
 | # | File | Gives you |
 |---|---|---|
-| 1 | `supabase/sim-kills-sanity.sql` | **NEW** — caps simulated kill counts at a human-plausible career total (trigger + one-off backfill) |
+| 1 | `supabase/social.sql` | **RESTORED to the folder** — the entire alliance / friends / wallet schema (`alliance_state`, `alliance_join`, `social_wallet`, `friend_*`, …). It had fallen out of the deploy folder after v168; already live on the server, so this is a no-op re-run there, but a fresh environment cannot build without it |
+| 2 | `supabase/alliance-boss-onekill.sql` | **NEW · REQUIRED** — must run **after** `social.sql`, which it supersedes: one kill per attack, anchor + clamp both ×50, `boss_max` only re-anchored on a kill, flat **⬡ 300** per kill to every member |
+| 3 | `supabase/lb-upsert-canonical.sql` | From v202 — collapses the two `lb_upsert` overloads (ambiguous 6-arg calls published no leaderboard row at all) |
+| 4 | `supabase/sim-kills-sanity.sql` | From v202 — caps simulated kill counts at a plausible career total |
 
-Everything from v201 is unchanged and already run:
-`pilot-ascension.sql`, `simulated-pilots.sql`, `simulated-pilots-behavior.sql`,
-`sim-board-bignum-fix.sql`. All are idempotent — safe to re-run.
+Everything else (`pilot-ascension.sql`, `simulated-pilots*.sql`,
+`sim-board-bignum-fix.sql`, `notifications.sql`, `territory*.sql`) is unchanged
+and already run. All files are idempotent — safe to re-run.
 
-### Still outstanding (not in this folder)
-The alliance boss RPC `alliance_attack` clamps transmitted damage at **25× power**
-server-side. The client no longer caps damage at all (see below), so raise or drop
-that clamp wherever the alliance schema lives, or the payout won't match the meter
-players watch fill.
+`alliance-boss-balance.sql` from v200 is **dead** — do not run it; #2 replaces it.
 
 ---
 
 ## What shipped in this release
 
-### Lifesteal — cut 80% across the entire game
-Sustain had become the dominant stat, and in siege combat it made *both* fleets
-unkillable: five-minute stalemates where nobody could die.
+### The blank-screen bug — nine screens, one cause
+Players reported the Starforge "sometimes loads nothing." The cause was a
+temporal-dead-zone crash, and an audit found the identical pattern in **eight
+more modules**: each called `boot()` from its module body while the `CSS` const
+that `boot()` reads is declared at the *bottom* of the file. Whenever the script
+finished parsing after `DOMContentLoaded` — cache miss, slow shell, restored tab,
+a cold service-worker fetch — `boot()` threw a `ReferenceError` that aborted the
+rest of the file, **including the `window.X = {…}` export at the end**. The
+screen's tab then had nothing to call and painted an empty panel. Intermittent by
+nature: on a warm cache the same code paths were fine.
 
-* Item rolls 1–5% → **0.2–1%**; plasma weapon-class bonus 1–2% → **0.2–0.4%**.
-* All 13 hull `lifeSteal` mods scaled (Titan Sina 146 → 29.2, Dread Omega 73 →
-  14.6, Oblivion Spear 9 → 1.8, …).
-* Skill tree 1%/rank → **0.2%/rank**. Pilot tree node roll 0.6–1.4% → **0.12–0.28%**.
-  Vampiric Engine legendary 4% → **0.8%**.
-* Global ceiling **95% → 19%**. PvP ceiling **5% → 1%**, plus no single hit can
-  siphon more than 6% of your hull.
-* One-time save migration scales lifesteal already rolled onto equipped gear, bag
-  items and every escort loadout — no pre-nerf fitting survives.
+Fixed in: `starforge.js`, `ascension.js`, `casino.js`, `casino2.js`,
+`dreadnaught.js`, `galaxy-box.js`, `home-citadel.js`, `server-dreadnaught.js`,
+`shipworks.js` — the boot call now runs at the very end of each file, past the
+CSS literal. Starforge additionally boots its styles from `render()` and retries
+a few frames if its panel markup isn't parsed yet.
 
-### Pilot Ascension — the whole hangar comes with you
-Was: one Legacy Ship survived. Now: **every hull you own stays owned**, event and
-premium hulls included. Each one resets — upgrade levels wiped, fittings cleared,
-cargo gone; per-hull ascension-module stars survive. Step 1 of the flow is now a
-**flagship** pick (which hull you warp out flying), the wing disbands, and escort
-slots re-earn with pilot level.
+**Watch for this shape in new modules:** a `const` at the bottom of the IIFE is
+invisible to anything the module body executes above it.
 
-### Void Zone — unwinnable spires fixed
-Three compounding causes, all addressed:
+### Hollow Armada — no more phantom marks
+The raid showed a Voidmaw-style Mk ladder that only ever existed on the client:
+its damage normalization guaranteed 2.4× the shared pool per run, and a local
+loop minted Mk-2, Mk-3, … So players climbed to Mk-10 in the arena while the
+server stayed on Mk-1, paid no ⬡, and still showed a full HP bar. Three separate
+faults, all fixed:
 
-* Void Warden power scaled with tile tier (×2.8 at Lv 400), which after true-power
-  conversion made deep spires mathematically unwinnable. Now a flat ×1.15 with a
-  1.35 ratio ceiling; all clone fights are capped at ×6.
-* Defending-fleet repair was 5%/s of a 110-second hull — it out-healed everything.
-  Now an absolute HP/s figure, hard-capped at 15% of the attacker's DPS and
-  **suppressed for 2.5s after every hit**, so damage always shows.
-* Attacking a held tile and bailing showed it as NEUTRAL — unclaimed for 24h and
-  stripped of its garrison. The attack shield no longer blanks the tile's holder;
-  only a real capture does.
+* **Stages.** The client no longer advances marks at all. The arena hull **is**
+  the shared pool — its bar mirrors pool-remaining — and the run ends the moment
+  the pool hits 0. One Armada per attack; the mark advances only on server
+  confirm.
+* **No payout.** The pool anchored at `sum(power) × 200` while a single attack
+  was clamped to `power × 25`, so a normal alliance mathematically could not
+  land a kill. Anchor and clamp are now both **×50**, so one full 2:30 run
+  flattens Mk-1 and each mark after is ×1.55 harder.
+* **HP bar never moved.** Every attack rewrote `boss_max` from the live power
+  anchor while `boss_hp` was subtracted from the *old* max, pinning `hp/max`
+  near full. `boss_max` is now re-anchored only on a kill or the weekly reset.
+* Kills pay a flat **⬡ 300** to every member (was `250 + 50·mark`, which never
+  matched the UI copy).
 
-### Alliance boss — no damage limit
-The 25×-power transmit ceiling is gone client-side: damage counts uncapped, the
-"TRANSMIT BUFFER FULL" banner is removed, and a run is worth
-`max(25× power, 2.4× the remaining pool)` — so a hull you can't dent no longer
-exists, and a heavy hitter flattens low marks in a hit or two.
+⚠ **Client and SQL must ship together.** `MAX_XMIT` in `js/alliance-boss.js` and
+the `× 50` in `alliance-boss-onekill.sql` are the same number — changing one
+without the other silently desyncs the ⚔ meter from the payout.
 
-### Simulated pilots — no longer identifiable at a glance
-* Kill counts were the tell (billions, on Level-1 rows). Kills are now a career
-  stat — 900 per level, each ascension star worth a 500-level career — clamped on
-  read *and* enforced server-side by `sim-kills-sanity.sql`.
-* Dropped the "xXpilot"-shaped name pattern.
+### Release hygiene fixed in this folder
+* **The Aeternum had no art in the deploy folder.** `ship-aeternum.png` and
+  `ship-aeternum-c.png` existed only in the working tree — the release's
+  headline Ascension-Class hull would have rendered blank. Both are now in
+  `ships/` and precached.
+* **Offline gaps.** `starforge.js`, `pilot-ascension.js`, `achievements.js`,
+  `analytics.js`, `sim-pilots.js`, `moon-colony.css` and `pilot-ascension.css`
+  were fetched live only and unavailable offline. Added to the SW `CORE` list.
+* Build stamp, all 50 `?v=` cache-busting stamps, `version.json`, the login
+  version badge and the SW cache name are consistent at **407 / V3.0 BETA**.
+  The update gate blocks logins from anything older.
 
-### Galaxy Supply
-Cosmic Cache tops out at **Artifact** again. The crate ceiling read "last rarity in
-the chain", which silently became Paragon once the ascension-exclusive tiers were
-appended. Ascendant / Celestial / Paragon are earned by ascending only.
+---
 
-## Smoke test (2 min)
-1. Hangar ▸ stats: Life Steal reads a decimal (e.g. `0.4%`), not `0%`.
-2. Galaxy Supply ▸ Cosmic Cache chip says **Artifact chance**, and the odds bar's
-   top segment is Artifact red.
-3. Void Zone ▸ any tier: warp in, enemies take and deal damage; no stalemate.
-4. Attack a rival/NPC tile, bail — the tile still shows its holder, shielded 24h.
-5. Command ▸ Pilot Ascension: hero line reads "You keep **every ship**", Step 1 is
-   CHOOSE YOUR FLAGSHIP.
-6. Alliance ▸ raid: the ⚔ meter has no `/ cap` denominator.
+## Pre-push checklist
+
+- [ ] Run the four SQL files above **in order** (2 must follow 1)
+- [ ] Confirm `version.json` reads `{"build":407,"label":"V3.0 BETA"}` — the
+      update gate locks out older clients, so publishing this before the static
+      files are live will bounce everyone
+- [ ] Hard-reload once after deploy and open **Starforge, Ship Ascension,
+      Casino, Dreadnaught, Galaxy Boxes, Home Citadel, Voidmaw, Shipworks** —
+      all nine formerly-blank screens, on a cold cache
+- [ ] Alliance ▸ Raid: burn a mark and confirm the alliance page comes back with
+      the HP bar lower, or Mk+1 and **⬡ 300** in the wallet

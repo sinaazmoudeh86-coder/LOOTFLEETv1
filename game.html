@@ -48,15 +48,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=395">
-<link rel="stylesheet" href="css/theme.css?v=395">
-<link rel="stylesheet" href="css/web-v89.css?v=395">
-<link rel="stylesheet" href="css/fx-cinematic.css?v=395">
-<link rel="stylesheet" href="css/fx-primordial.css?v=395">
-<link rel="stylesheet" href="css/moon-colony.css?v=395">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=395">
-<link rel="stylesheet" href="css/fx-aaa.css?v=395">
-<link rel="stylesheet" href="css/readability.css?v=395">
+<link rel="stylesheet" href="css/style-v2.css?v=407">
+<link rel="stylesheet" href="css/theme.css?v=407">
+<link rel="stylesheet" href="css/web-v89.css?v=407">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=407">
+<link rel="stylesheet" href="css/fx-primordial.css?v=407">
+<link rel="stylesheet" href="css/moon-colony.css?v=407">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=407">
+<link rel="stylesheet" href="css/fx-aaa.css?v=407">
+<link rel="stylesheet" href="css/readability.css?v=407">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -379,8 +379,17 @@
 #hud #pb-ship{ position:static !important; transform:none !important; left:auto !important; top:auto !important; }
 /* text stack */
 #hud .pb-text{ flex:1; min-width:0; display:grid; grid-template-columns:auto auto 1fr; align-items:center; column-gap:7px; row-gap:4px; }
-#hud .pb-label{ grid-column:1; margin:0; font-size:9px; letter-spacing:.18em; color:#f2a93c; font-weight:800; white-space:nowrap; }
-#hud #vip-badge{ grid-column:2/4; justify-self:start; margin-left:0; }
+#hud .pb-label{ grid-column:1; min-width:0; margin:0; font-size:9px; letter-spacing:.18em; color:#f2a93c; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#hud #vip-badge{ grid-column:2; justify-self:start; margin-left:0; }
+/* PILOT ASCENSION rank chip — lives in the 1fr track, so it can only ever clip,
+   never wrap or overlap: a CSS grid row cannot reflow onto a second line. */
+#hud .pb-asc{ grid-column:3; justify-self:start; min-width:0; max-width:100%; overflow:hidden;
+  display:inline-flex; align-items:center; gap:3px; height:15px; box-sizing:border-box; cursor:pointer;
+  font-family:'Orbitron',sans-serif; font-weight:800; font-size:8.5px; letter-spacing:.06em; white-space:nowrap;
+  color:#0a1020; background:linear-gradient(180deg, color-mix(in srgb, var(--ac,#e05bff) 78%, #fff), var(--ac,#e05bff));
+  border-radius:7px; padding:0 6px; box-shadow:0 0 8px -2px var(--ac,#e05bff); }
+#hud .pb-asc b{ font-weight:900; }
+#hud .pb-asc.prism{ background:linear-gradient(115deg,#ff9ae8,#9ae8ff,#c6ff9a); box-shadow:0 0 11px -2px #d8b4ff; }
 #hud .pb-val{ grid-column:1/4; font-size:25px; line-height:1; color:#ffd24d; text-shadow:0 0 16px rgba(255,210,77,.5); letter-spacing:0; }
 /* XP bar — visible track, value pinned INSIDE right */
 #hud .bar-wrap.xpw{ grid-column:1/4; position:relative; height:13px; border-radius:7px; background:#0e1a30; border:1px solid #2c3a52; overflow:hidden; margin:0; }
@@ -404,6 +413,7 @@
   #hud .pb-fleet img.esc{ display:none; }           /* flagship only — calm, minimal */
   #hud .pb-val{ font-size:19px; }
   #hud .pb-label{ font-size:8px; letter-spacing:.14em; }
+  #hud .pb-asc{ font-size:8px; height:14px; padding:0 5px; }
   #hud #vip-badge{ position:static; transform:none; }
   #hud .lvl-badge{ height:36px; width:36px; }
   #hud .lvl-badge .num{ font-size:12.5px; }
@@ -446,6 +456,7 @@
             <div id="pb-fleet" class="pb-fleet"><img id="pb-ship" class="flag" src="ships/ship-frigate.png" alt=""></div>
             <div class="pb-text">
               <div class="pb-label">⚡ SHIP SCORE</div>
+              <span class="pb-asc" id="pb-asc" style="display:none"></span>
               <div class="pb-val" id="hud-power">0</div>
               <div class="bar-wrap xpw"><div class="bar-fill xp" id="xp-fill" style="width:0%"></div><div class="bar-label" id="xp-label">0 / 100 XP</div></div>
             </div>
@@ -853,7 +864,7 @@
               <div class="pa-pill-txt">
                 <div class="pa-pill-k">PRESTIGE · THE ENDLESS LOOP</div>
                 <div class="pa-pill-n">Pilot Ascension<span id="cmd-pasc-badge"></span></div>
-                <div class="pa-pill-s" id="cmd-pasc-sub">Reset to Level 1 for <b>permanent</b> account power. Keep <b>one ship</b>. Unlock loot tiers no un-ascended pilot can ever see.</div>
+                <div class="pa-pill-s" id="cmd-pasc-sub">Reset to Level 1 for <b>permanent</b> account power. Keep <b>every ship</b> — lose every item and Ship Ascension. Unlock loot tiers no un-ascended pilot can ever see.</div>
                 <div class="pa-pill-meta" id="cmd-pasc-meta"></div>
               </div>
               <div class="pa-pill-go">›</div>
@@ -887,7 +898,7 @@
         <div class="lg-wrap">
           <div class="auth-card">
             <div class="lg-logo"><img class="lg-mark" src="logo.png" alt="Loot Fleet"></div>
-            <h1 class="lg-title">Loot Fleet <span class="lg-ver">V1.0 BETA</span> <span class="lg-build" id="lg-build"></span></h1>
+            <h1 class="lg-title">Loot Fleet <span class="lg-ver">V3.0 BETA</span> <span class="lg-build" id="lg-build"></span></h1>
             <div class="lg-update" id="lg-update" hidden>
               <div class="lg-upd-t">⚠ UPDATE REQUIRED</div>
               <div class="lg-upd-s">You're on an outdated build — logging in on old versions can desync your save. Update to continue.</div>
@@ -933,56 +944,56 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=395"></script>
-<script src="js/items.js?v=395"></script>
-<script src="js/entities.js?v=395"></script>
-<script src="js/render.js?v=395"></script>
-<script src="js/galaxy.js?v=395"></script>
-<script src="js/leaderboard.js?v=395"></script>
+<script src="js/config-v2.js?v=407"></script>
+<script src="js/items.js?v=407"></script>
+<script src="js/entities.js?v=407"></script>
+<script src="js/render.js?v=407"></script>
+<script src="js/galaxy.js?v=407"></script>
+<script src="js/leaderboard.js?v=407"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
-<script src="js/analytics.js?v=395"></script>
-<script src="js/cloud.js?v=395"></script>
-<script src="js/account.js?v=395"></script>
-<script src="js/session-lock.js?v=395"></script>
-<script src="js/vip.js?v=395"></script>
-<script src="js/territory.js?v=395"></script>
-<script src="js/payments-v91.js?v=395"></script>
-<script src="js/game-v93.js?v=395"></script>
-<script src="js/ui-v94.js?v=395"></script>
-<script src="js/fx-cinematic.js?v=395"></script>
-<script src="js/fx-primordial.js?v=395"></script>
-<script src="js/fx-aaa.js?v=395"></script>
-<script src="js/moon-scene.js?v=395"></script>
-<script src="js/moon-colony.js?v=395"></script>
-<script src="js/home-citadel.js?v=395"></script>
-<script src="js/missions.js?v=395"></script>
-<script src="js/achievements.js?v=395"></script>
-<script src="js/coach-v89.js?v=395"></script>
-<script src="js/prism-v5.js?v=395"></script>
+<script src="js/analytics.js?v=407"></script>
+<script src="js/cloud.js?v=407"></script>
+<script src="js/account.js?v=407"></script>
+<script src="js/session-lock.js?v=407"></script>
+<script src="js/vip.js?v=407"></script>
+<script src="js/territory.js?v=407"></script>
+<script src="js/payments-v91.js?v=407"></script>
+<script src="js/game-v93.js?v=407"></script>
+<script src="js/ui-v94.js?v=407"></script>
+<script src="js/fx-cinematic.js?v=407"></script>
+<script src="js/fx-primordial.js?v=407"></script>
+<script src="js/fx-aaa.js?v=407"></script>
+<script src="js/moon-scene.js?v=407"></script>
+<script src="js/moon-colony.js?v=407"></script>
+<script src="js/home-citadel.js?v=407"></script>
+<script src="js/missions.js?v=407"></script>
+<script src="js/achievements.js?v=407"></script>
+<script src="js/coach-v89.js?v=407"></script>
+<script src="js/prism-v5.js?v=407"></script>
 <script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js?v=395"></script>
-<script src="js/server-dreadnaught.js?v=395"></script>
+<script src="js/dreadnaught.js?v=407"></script>
+<script src="js/server-dreadnaught.js?v=407"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/shipworks.js?v=395"></script>
-<script src="js/starforge.js?v=395"></script>
-<script src="js/pilot-ascension.js?v=395"></script>
-<script src="js/sim-pilots.js?v=395"></script>
-<script src="js/social.js?v=395"></script>
-<script src="js/mail.js?v=395"></script>
-<script src="js/alliance.js?v=395"></script>
-<script src="js/alliance-boss.js?v=395"></script>
-<script src="js/void-zone.js?v=395"></script>
-<script src="js/ascension.js?v=395"></script>
-<script src="js/casino.js?v=395"></script>
-<script src="js/casino2.js?v=395"></script>
-<script src="js/redeem.js?v=395"></script>
-<script src="js/auth.js?v=395"></script>
+<script src="js/shipworks.js?v=407"></script>
+<script src="js/starforge.js?v=407"></script>
+<script src="js/pilot-ascension.js?v=407"></script>
+<script src="js/sim-pilots.js?v=407"></script>
+<script src="js/social.js?v=407"></script>
+<script src="js/mail.js?v=407"></script>
+<script src="js/alliance.js?v=407"></script>
+<script src="js/alliance-boss.js?v=407"></script>
+<script src="js/void-zone.js?v=407"></script>
+<script src="js/ascension.js?v=407"></script>
+<script src="js/casino.js?v=407"></script>
+<script src="js/casino2.js?v=407"></script>
+<script src="js/redeem.js?v=407"></script>
+<script src="js/auth.js?v=407"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 395;
+  window.LF_BUILD = 407;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1122,13 +1133,13 @@
       try{ if(window.PASCEND){ stars=PASCEND.stars(); pts=PASCEND.points(); pv=PASCEND.preview(); tier=PASCEND.tierDef(Math.max(1,stars)); } }catch(e){}
       if(badge) badge.innerHTML = (stars&&window.PASCEND) ? PASCEND.badge(null,stars) : '';
       if(locked){
-        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset to Level 1 for <b>permanent</b> account power, keep <b>one ship</b>, and unlock loot tiers no un-ascended pilot can ever see.';
+        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset to Level 1 for <b>permanent</b> account power, keep <b>every ship</b> (bare — items and Ship Ascensions are surrendered), and unlock loot tiers no un-ascended pilot can ever see.';
         if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / 100</span>'+
           '<span class="pa-pill-chip">'+(100-L)+' TO GO</span>'+
           '<span class="pa-pill-chip">3 EXCLUSIVE LOOT TIERS</span>'+
           '<div class="pa-pill-bar" style="flex-basis:100%"><i style="width:'+Math.min(100,L).toFixed(1)+'%"></i></div>';
       } else {
-        if(sub) sub.innerHTML='Ready to ascend — you keep <b>one ship</b> with its stars, hull level and fittings. Everything else resets to Level 1 in exchange for permanent perks.';
+        if(sub) sub.innerHTML='Ready to ascend — you keep <b>every ship in your hangar</b>, stripped: <b>all items and every Ship Ascension are lost</b>. Everything else resets to Level 1 in exchange for permanent perks.';
         if(meta) meta.innerHTML=
           '<span class="pa-pill-chip hot">+<b>'+(pv?pv.total:0)+'</b> POINTS NOW</span>'+
           (pts?'<span class="pa-pill-chip hot"><b>'+pts+'</b> UNSPENT</span>':'')+

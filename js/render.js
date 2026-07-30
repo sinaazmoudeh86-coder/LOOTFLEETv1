@@ -941,10 +941,13 @@
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
-    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2 };
+    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, aeternum:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
+  // THE AETERNUM is not a ship at all but an artificial WORLD, so it draws larger
+  // than anything else in the game. It had no entry before, which meant a
+  // planetbreaker rendered at frigate scale.
   const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
-    dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4 };
+    dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4, aeternum:4.8 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';

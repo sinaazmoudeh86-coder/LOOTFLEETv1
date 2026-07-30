@@ -149,9 +149,9 @@
   }
   function acceptSina() {
     // PERMANENT GRANT GUARD — gated on the badge record (which survives every
-    // ascension), NOT on hangar ownership. Pilot Ascension empties the hangar,
-    // so an ownership check let a 1,000-badge pilot re-claim the FINAL-CLASS
-    // hull once per ascension.
+    // ascension), NOT on hangar ownership. Ascension keeps every hull now, but the
+    // record is still the right gate: it can't be lost, sold or reset, so a
+    // 1,000-badge pilot can never re-claim the FINAL-CLASS hull a second time.
     const a = ensure();
     if (a.sinaGranted) return;
     if (S().ownedShips && S().ownedShips.titansina) { a.sinaGranted = true; Gm().save(); return; }

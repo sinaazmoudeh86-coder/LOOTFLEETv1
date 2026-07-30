@@ -383,7 +383,6 @@
     if ($('cs-css')) return;
     const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS; document.head.appendChild(s);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   window.CASINO = { render, reg, guard, syncLock, fmt, CUR, cas, bal, stake, payout, bookend, betOK, resultBanner, freshDeck, cardHTML, handVal, evalBest, cmpHands, handName, glyphOf };
 
@@ -584,4 +583,10 @@
     .cs-wheel.spin,.cs-card,.cs-result,.cs-table.flash-w,.cs-table.flash-l,.flr-wheel,.cs-floor-k,.cs-bet-disp b.pop{ animation:none !important; }
   }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

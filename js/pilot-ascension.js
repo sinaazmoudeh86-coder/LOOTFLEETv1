@@ -8,13 +8,15 @@
        the spine (Lv 100 = 1 pt, 250 = 2, 500 = 4, 1000 = 8, exactly per spec),
        with bonus points for fleet score, deepest zone, territory, badge ranks
        and wing size. The full arithmetic is shown BEFORE you commit.
-     • THE WHOLE HANGAR is carried across — every hull you own, HULLS ONLY. All
-       upgrade levels, fitted equipment and cargo are surrendered; each hull's
-       own ascension-module stars survive. You pick the flagship you fly out in.
+     • THE WHOLE HANGAR is carried across — every hull you own, HULLS ONLY.
+       Upgrade levels, fitted equipment, cargo AND every hull's SHIP ASCENSION
+       (module tiers + stars) are all surrendered: each ship comes back exactly
+       as it left the yard. You pick the flagship you fly out in.
      • ASCENSION STARS (one per ascension) sit next to the pilot name and gate
        the three ASCENSION-EXCLUSIVE loot tiers — Ascendant (★1), Celestial
-       (★3), Paragon (★6). Those tiers cannot drop for an un-ascended pilot at
+       (★20), Paragon (★50). Those tiers cannot drop for an un-ascended pilot at
        any zone, from any boss, out of any crate.
+     • RESET also clears the PILOT TREE (Dread Core nodes) — unspent cores stay.
      • PERKS spend points on eight permanent multipliers that apply to every
        future run.
 
@@ -28,6 +30,11 @@
   const C = () => window.CONFIG;
   const $ = (id) => document.getElementById(id);
   const UNLOCK_LV = 100;
+  // LEVEL CAP — mirrors CONFIG.levelCap(): 150, +50 per star. Read from config
+  // when it's there so the two can never drift.
+  const CAP_BASE = (() => { try { return C().LEVEL_CAP_BASE || 150; } catch (e) { return 150; } })();
+  const CAP_STEP = (() => { try { return C().LEVEL_CAP_PER_STAR || 50; } catch (e) { return 50; } })();
+  const PT_MULT = 10;   // ascension point payout multiplier (see preview())
   const MAX_RANK = 25;
 
   function st() {
@@ -135,6 +142,10 @@
       { label: 'Badge Ranks',   detail: fmt(badges) + ' claimed',           pts: Math.min(5, Math.floor(badges / 200)),                     note: 'every 200 ranks', cap: 5 },
       { label: 'Wing Size',     detail: fmt(wing) + ' hulls flying',        pts: Math.min(2, Math.floor(wing / 4)),                          note: 'every 4 hulls', cap: 2 },
     ];
+    // ×10 PAYOUT PASS (Jul 2026) — every line pays ten times what it used to, so
+    // an ascension funds real perk buying instead of a single rank. Caps scale with
+    // it, and the note text is rewritten from the same multiplier.
+    rows.forEach((r) => { r.pts *= PT_MULT; if (r.cap) r.cap *= PT_MULT; });
     const total = rows.reduce((a, r) => a + r.pts, 0);
     return { rows, total, lvl, score, zone, tiles, badges, wing, eligible: lvl >= UNLOCK_LV };
   }
@@ -167,6 +178,7 @@
   function ascendTab() {
     const S = G().state, p = st(), pv = preview();
     const locked = !pv.eligible;
+    const atCap = (S.level | 0) >= CAP_BASE + CAP_STEP * stars();
     const nt = nextTierAt();
     const calcRows = pv.rows.map((r) =>
       '<div class="pa-calc-row' + (r.pts ? '' : ' zero') + '">' +
@@ -187,12 +199,33 @@
       '</div>' +
 
       // THE CALCULATOR — always visible, always live
+      // THE WALL — the single clearest reason to ascend, stated before the maths
+      '<div class="pa-card">' +
+        '<div class="pa-card-h">▲ YOUR LEVEL CEILING<em>' + (atCap ? 'reached' : 'raised by ascending') + '</em></div>' +
+        '<p class="pa-note">The pilot record has a hard cap. It is <b>' + fmt(CAP_BASE) + '</b> with no stars and rises <b>+' + CAP_STEP + ' per Ascension Star</b> — ' +
+          'this is the wall the prestige loop exists to break. <b>At the cap XP stops accruing entirely</b>: kills still pay gold, resources and loot, but your level will not move again until you ascend.</p>' +
+        '<div class="pa-caps">' +
+          [0, 1, 2, 3].map((k) => {
+            const st = stars() + k, cp = CAP_BASE + CAP_STEP * st;
+            const now = k === 0;
+            return '<div class="pa-cap' + (now ? ' now' : '') + '">' +
+              '<span class="pa-cap-s">' + (st ? '★' + st : 'NO ★') + '</span>' +
+              '<b>Lv ' + fmt(cp) + '</b>' +
+              '<em>' + (now ? (atCap ? 'you are AT this cap' : 'your cap now · Lv ' + fmt(S.level)) : '+' + (CAP_STEP * k)) + '</em>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+        (atCap
+          ? '<div class="pa-hint hot">✦ <b>You are at Level ' + fmt(S.level) + ' — the ceiling for ★' + stars() + '.</b> Ascending now raises it to <b>Lv ' + fmt(CAP_BASE + CAP_STEP * (stars() + 1)) + '</b> and your XP starts counting again.</div>'
+          : '<div class="pa-hint">Ascending once takes your ceiling to <b>Lv ' + fmt(CAP_BASE + CAP_STEP * (stars() + 1)) + '</b>.</div>') +
+      '</div>' +
+
       '<div class="pa-card">' +
         '<div class="pa-card-h">◈ ASCENSION POINT CALCULATOR<em>live</em></div>' +
         '<p class="pa-note">Points are earned from the run you give up. Every line below is counted the moment you ascend — <b>push further before you commit and the payout grows</b>.</p>' +
         '<div class="pa-calc">' + calcRows + '</div>' +
         '<div class="pa-calc-tot"><span>YOU WILL RECEIVE</span><b>' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + ' + 1 ★</em></div>' +
-        (pv.eligible ? '<div class="pa-hint">Every <b>125</b> pilot levels is another point. At Lv ' + fmt((Math.floor(pv.lvl / 125) + 1) * 125) + ' this becomes <b>' + (pv.total + 1) + '</b>.</div>' : '') +
+        (pv.eligible ? '<div class="pa-hint">Every <b>125</b> pilot levels is another <b>' + PT_MULT + '</b> points. At Lv ' + fmt((Math.floor(pv.lvl / 125) + 1) * 125) + ' this becomes <b>' + (pv.total + PT_MULT) + '</b>.</div>' : '') +
       '</div>' +
 
       // WHAT HAPPENS — the warning, itemised
@@ -204,7 +237,10 @@
             '<li>Galaxy progress — every claimed system</li>' +
             '<li>Void Zone progress</li>' +
             '<li>Gold &amp; all Galaxy resources</li>' +
-            '<li>All equipment, bag and Starforge tempers</li>' +
+            '<li><b>Every item you own</b> — equipped, in the bag, and stowed on escorts</li>' +
+            '<li><b>Every Ship Ascension</b> — module tiers &amp; stars, on <b>every</b> hull</li>' +
+            '<li>All Starforge hardpoint tempers &amp; purity</li>' +
+            '<li><b>The whole Pilot Tree</b> — every node unlocked</li>' +
             '<li><b>Every hull upgrade level</b> — on every ship in the hangar</li>' +
             '<li>Home Citadel &amp; defence towers</li>' +
             '<li><b>Every claimed system, citadel &amp; Void spire</b> — they fall to neutral immediately, no cooldown</li>' +
@@ -212,8 +248,10 @@
             '<li>Prism mining rigs &amp; ingots</li>' +
           '</ul></div>' +
           '<div class="pa-led keep"><div class="pa-led-h">✓ CARRIED OVER</div><ul>' +
-            '<li><b>Every hull in your hangar</b> — the hulls only, stripped bare (ascension-module stars stay)</li>' +
+            '<li><b>Every hull in your hangar</b> — the hulls and nothing else: no gear, no upgrade levels, <b>no Ship Ascension</b></li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
+            '<li><b>A higher level ceiling</b> — +' + CAP_STEP + ' max pilot level, every time</li>' +
+            '<li>Your unspent <b>◇ Dread Cores</b> (the tree itself resets)</li>' +
             '<li>Lifetime badges &amp; achievements</li>' +
             '<li>Every badge already claimed — <em>chains never reset</em></li>' +
             '<li>Career totals — kills, hours, loot, missions (badges keep counting)</li>' +
@@ -225,6 +263,7 @@
         '</div>' +
         '<div class="pa-gain">' +
           '<b>+' + pv.total + ' ascension point' + (pv.total === 1 ? '' : 's') + '</b> to spend on permanent account-wide perks' +
+          '<br>Your level ceiling rises <b>Lv ' + fmt(CAP_BASE + CAP_STEP * stars()) + ' → Lv ' + fmt(CAP_BASE + CAP_STEP * (stars() + 1)) + '</b>' +
           '<br>Your rank badge becomes <b style="color:' + tierDef(stars() + 1).color + '">' + tierDef(stars() + 1).name + ' ★' + starOf(stars() + 1) + '</b>' +
           (nt ? '<br><b style="color:' + nt.color + '">' + nt.name.toUpperCase() + '</b> loot tier unlocks at ★' + nt.ascReq +
                 (stars() + 1 >= nt.ascReq ? ' — <b style="color:#7ce0a0">that is this ascension</b>' : ' — ' + (nt.ascReq - stars() - 1) + ' more after this one') : '') +
@@ -366,7 +405,7 @@
     const paint = () => {
       o.innerHTML = '<div class="pa-modal">' +
         '<div class="pa-mh"><b>CHOOSE YOUR FLAGSHIP</b><em>Step 1 of 2</em></div>' +
-        '<p class="pa-mp"><b>Every hull comes with you</b> — but the hulls only. <b>Upgrade levels, fitted equipment and cargo are all surrendered</b>: each ship arrives bare, exactly as it left the yard, and only its ascension-module stars stay. Pick the one you want to be flying when you warp out.</p>' +
+        '<p class="pa-mp"><b>Every hull comes with you</b> — but the hulls only. <b>Upgrade levels, fitted equipment, cargo and each ship\u2019s Ship Ascension (module tiers &amp; stars) are all surrendered</b>: every ship arrives bare, exactly as it left the yard. Pick the one you want to be flying when you warp out.</p>' +
         '<div class="pa-picks">' + cards() + '</div>' +
         '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
         '<button class="pa-btn go" data-next' + (pick ? '' : ' disabled') + '>Continue →</button></div>' +
@@ -393,22 +432,25 @@
           '<li>' + fmt(S.gold || 0) + ' gold + all resources</li>' +
           '<li>' + Object.keys(S.ownedSystems || {}).length + ' claimed systems</li>' +
           '<li>All citadels &amp; Void spires — undefended instantly</li>' +
-          '<li>All gear &amp; tempers</li>' +
+          '<li>Every item — gear, bag, escort loadouts</li>' +
           '<li>Every hull upgrade level</li>' +
-          '<li>Your wing — escorts disband</li></ul>' +
+          '<li><b>Every ship\u2019s Ship Ascension</b></li>' +
+          '<li>Starforge tempers &amp; the Pilot Tree</li>' +
+          '<li>Your wing disbands</li></ul>' +
         '</div>' +
         '<div class="pa-conf-side keep"><span>YOU KEEP</span>' +
           '<b>' + (sh.name || '—') + '</b>' +
           '<img class="pa-conf-img" src="ships/ship-' + key + '.png" alt="">' +
           '<ul><li>+' + pv.total + ' ascension point' + (pv.total === 1 ? '' : 's') + '</li>' +
           '<li>Rank ' + tierDef(stars() + 1).name + ' ★' + starOf(stars() + 1) + '</li>' +
-          '<li>Every hull in your hangar</li>' +
+          '<li>Every hull in your hangar (bare)</li>' +
+          '<li>Level cap → <b>' + (150 + 50 * (stars() + 1)) + '</b></li>' +
           '<li>All perks &amp; badges</li>' +
           '<li>All purchases</li></ul>' +
         '</div>' +
       '</div>' +
       (willUnlock ? '<div class="pa-unlock-pre" style="--tc:' + willUnlock.color + '">✦ This ascension unlocks the <b>' + willUnlock.name.toUpperCase() + '</b> loot tier</div>' : '') +
-      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my account resets to Level 1 and every hull comes back stripped — flying out in the ' + (sh.name || 'chosen hull') + '.</label>' +
+      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my account resets to Level 1, that I keep every hull but <b>lose every item and every Ship Ascension</b>, and that I fly out in the ' + (sh.name || 'chosen hull') + '.</label>' +
       '<div class="pa-mb"><button class="pa-btn ghost" data-x>Go back</button>' +
       '<button class="pa-btn danger" id="pa-do" disabled>✦ ASCEND</button></div>' +
     '</div>';
@@ -462,6 +504,10 @@
       timers.forEach(clearTimeout);
       // the actual reset — idempotent, guarded inside GAME
       const res = G().pilotAscend(key, pv.total);
+      // publish the new star immediately — otherwise the pilot's public row keeps
+      // the old rank (and their badge stays invisible to everyone else) until the
+      // next queued cloud flush
+      try { if (window.ACCOUNT && window.ACCOUNT.flushNow) window.ACCOUNT.flushNow(); } catch (x) {}
       cine.classList.add('arrived');
       lvlEl.textContent = '1';
       cap.textContent = 'ASCENSION COMPLETE';

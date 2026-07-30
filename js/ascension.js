@@ -348,7 +348,6 @@
     if ($('asc-css')) return;
     const s = document.createElement('style'); s.id = 'asc-css'; s.textContent = CSS; document.head.appendChild(s);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   window.ASCEND = { render, combatMods, storm, xpMult, totalScore, shipScore };
 
@@ -500,4 +499,10 @@
     .asc-dash.shake,.asc-mod.charging,.asc-mod.prism,.asc-dash.prism,.asc-v-banner,.asc-cine-rings i,.asc-cine-ship img,.asc-cine-tier,.asc-mod.flash-ok,.asc-mod.flash-no,.asc-flash{ animation:none !important; }
   }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

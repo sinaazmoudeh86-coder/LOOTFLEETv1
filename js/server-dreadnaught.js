@@ -102,9 +102,9 @@
   // ---- THE VOIDMAW — Season 1 grand-prize hull ----------------------------
   const VM_KEY = 'voidmaw', VM_NEED = 150;   // Jul 2026: 100 → 150 — the Voidmaw is the apex hull now (Singularity proc), so the season grind matches
   function vmParts() { try { return (G().state.shipParts && G().state.shipParts[VM_KEY]) | 0; } catch (e) { return 0; } }
-  // PERMANENT GRANT GUARD — Pilot Ascension empties the hangar, so a plain
-  // ownedShips check would re-assemble the Voidmaw for free after every
-  // ascension. The flag lives on the season record, which survives the reset.
+  // PERMANENT GRANT GUARD — the flag lives on the season record, not on hangar
+  // ownership. Ascension keeps every hull now, but a sold or salvaged Voidmaw must
+  // not be re-assembled for free either, so the record stays the gate.
   function vmGranted() { try { const s = sd(); return !!(s && s.vmGranted); } catch (e) { return false; } }
   function vmOwned() { try { return vmGranted() || !!G().state.ownedShips[VM_KEY]; } catch (e) { return false; } }
   function vmAssemble() {
@@ -1082,8 +1082,6 @@
     }, 1000);
     setTimeout(() => { try { updateHud(); } catch (e) {} }, 800);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  setTimeout(boot, 1200);
 
   function injectCSS() {
     if ($('sdread-css')) return;
@@ -1401,4 +1399,11 @@
   .mega-card.cmd-sdread .mc-ic.mc-vm{ padding:3px; }
   .mega-card.cmd-sdread .mc-ic.mc-vm img{ width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 0 7px rgba(176,77,255,.9)); }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 1200);
 })();

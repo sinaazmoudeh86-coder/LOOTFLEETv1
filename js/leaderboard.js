@@ -147,6 +147,17 @@
 
   let _heatCache = {}, _allCache = null;
 
+  // FLOOR — the page must never render as a single row: you, rank 1, alone. That
+  // happens when the cloud board hasn't answered (or its rows failed to publish)
+  // AND no simulated pilot has surfaced yet — a brand-new account sees none for
+  // its first day. Deterministic filler sits strictly BELOW your power, so the
+  // ladder reads like a ladder and no real fleet is ever buried or out-powered.
+  function floorFill(board, me) {
+    if (board.length > 1) return board;
+    board.push(...fillerRoster(24, Math.round((me.power || 100) * 0.9), me.zone));
+    return board;
+  }
+
   function meEntry(GAME) {
     const s = GAME.state, st = GAME.getStats();
     return { name: 'You', isMe: true, zone: s.highestDungeonReached, level: s.level,
@@ -166,6 +177,7 @@
     const real = board.length;
     board.push(meEntry(GAME));
     try { if (window.SIMPILOTS && window.SIMPILOTS.enabled()) board.push(...window.SIMPILOTS.forBoard(board)); } catch (e) {}
+    floorFill(board, board[real]);
     rankBoard(board);
     return { heat, label: weekLabel(heat), board, real };
   }
@@ -176,6 +188,7 @@
     const real = board.length;
     board.push(me);
     try { if (window.SIMPILOTS && window.SIMPILOTS.enabled()) board.push(...window.SIMPILOTS.forBoard(board)); } catch (e) {}
+    floorFill(board, me);
     rankByPower(board);                     // real fleets → true power ranks
     return { board, real };
   }

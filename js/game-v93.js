@@ -148,19 +148,27 @@
   // Called by pilot-ascension.js at the flash of its cinematic.
   function pilotAscend(legacyKey, pts) {
     const keepShip = (state.ownedShips && state.ownedShips[legacyKey]) ? legacyKey : (state.ship || 'frigate');
+    // 0 — SETTLE THE BOARD FIRST. Ascending mid-event used to leave a live run
+    // pointing at a wiped account: a wave could complete and hand a Level 1 pilot
+    // a captured citadel, an alliance raid could keep transmitting damage, and
+    // loot still lying on the ground could be vacuumed up after the reset.
+    rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.alrun = null;
+    rt.beaconSwarm = 0; rt.beaconT = 0; rt.razingClaim = false;
+    rt.enemies = []; rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false;
+    try { sweepLoot(); } catch (e) {}
+    rt.ground = [];
     // 1 — stash everything that survives
     const keep = {};
     ASC_KEEP.forEach((k) => { if (state[k] !== undefined) keep[k] = state[k]; });
-    // EVERY HULL COMES WITH YOU (Jul 2026 — was one Legacy Ship). Ownership of
-    // the whole hangar carries; each ship RESETS — hull upgrade levels, fittings
-    // and cargo are all surrendered, so every hull arrives bare, exactly as it
-    // left the yard. Ascension-module stars survive: that's the hull's own
-    // prestige track, not run progression.
+    // EVERY HULL COMES WITH YOU (Jul 2026 — was one Legacy Ship), but ONLY the
+    // hulls. Upgrade levels, fittings, cargo AND every hull's Ship Ascension
+    // (module tiers and stars) are all surrendered: each ship arrives exactly as
+    // it left the yard. Ship Ascension is run progression bought with gold and
+    // galaxy resources, so it resets with them — the prestige you keep is the
+    // PILOT's, in stars and perks.
     const hangar = Object.keys(state.ownedShips || {}).filter((k) => state.ownedShips[k] && C.SHIP_BY_KEY[k]);
     if (hangar.indexOf(keepShip) === -1) hangar.push(keepShip);
-    const hullAsc = {};
-    hangar.forEach((k) => { hullAsc[k] = JSON.parse(JSON.stringify((state.ascension || {})[k] || {})); });
-    const legacy = { key: keepShip, asc: hullAsc[keepShip] || {} };
+    const legacy = { key: keepShip };
     const entitled = ASC_KEEP_SHIPS.filter((k) => state.ownedShips && state.ownedShips[k]);
     const before = { lvl: state.level | 0, ship: (C.SHIP_BY_KEY[keepShip] || {}).name || keepShip };
 
@@ -206,17 +214,21 @@
     // 3 — restore the permanents
     Object.keys(keep).forEach((k) => { state[k] = keep[k]; });
 
-    // 4 — THE WHOLE HANGAR. Every hull you owned is still yours, including event
-    // and premium hulls — but stripped: no upgrade levels, no fittings, no cargo,
-    // and the wing is disbanded (escort slots re-earn with pilot level). You fly
-    // out in the flagship you picked; the rest wait in the hangar.
+    // 4 — THE WHOLE HANGAR, STRIPPED. Every hull you owned is still yours,
+    // including event and premium hulls — with nothing on or in it: no upgrade
+    // levels, no fittings, no cargo, no Ship Ascension, no Starforge temper, and
+    // the wing disbanded (escort slots re-earn with pilot level). You fly out in
+    // the flagship you picked; the rest wait in the hangar.
     state.ownedShips = {};
     hangar.forEach((k) => { state.ownedShips[k] = true; });
     state.ship = legacy.key;
     state.shipLevels = {};                 // hull upgrades surrendered — every hull back to Lv 1
     state.fittings = {};                   // no saved loadouts
     state.fleet = null; state.drones = 0;   // wing disbanded — re-form it as slots unlock
-    state.ascension = hullAsc;             // per-hull ascension stars survive
+    state.ascension = {};                  // SHIP ASCENSION reset on every hull
+    state.forge = {};                      // Starforge hardpoint tempers reset
+    state.pilot = null;                    // PILOT TREE wiped — every node re-earned
+    state.beaconUntil = 0;
     state.shipKills = {};
     hangar.forEach((k) => { state.shipKills[k] = 0; });
     // the ship arrives BARE — every slot empty, exactly as it left the yard
@@ -244,7 +256,7 @@
     rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null;
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; state.prismRun = null;
-    state.fleet = null; state.drones = 0;   // no wing, no drones — one hull only
+    state.fleet = null; state.drones = 0;   // no wing, no drones — re-form as slots unlock
     // no territory, no fortresses, and no cooldown blocking anyone from taking them
     state.ownedSystems = {}; state.citadels = {}; state.rivalCitadels = {}; state.tileCd = {};
     rt.realTiles = {};
@@ -303,15 +315,26 @@
       attackSpeed: 0, critChance: C.PLAYER_BASE.critChance, critDamage: C.PLAYER_BASE.critDamage,
       moveSpeed: C.PLAYER_BASE.moveSpeed, lifeSteal: 0, multiShot: 0,
     };
+    // STARFORGE is HARDPOINT-based: the temper lives on the slot, so the bonus is
+    // applied here rather than baked into the item. An item's own stats are always
+    // its own numbers (comparisons, sell value, escort loadouts stay honest).
+    const SF = window.STARFORGE;
     Object.keys(state.equipped).forEach((slot) => {
       const it = state.equipped[slot];
       if (!it) return;
-      for (const k in it.stats) s[k] = (s[k] || 0) + it.stats[k];
+      const fm = (SF && SF.slotMult) ? SF.slotMult(slot) : 1;
+      for (const k in it.stats) {
+        const boost = (fm !== 1 && SF.boosts && SF.boosts(k)) ? fm : 1;
+        s[k] = (s[k] || 0) + it.stats[k] * boost;
+      }
     });
-    // STARFORGE — every fitting hammered to +15 grants 1% flash-freeze chance on
-    // hit (cryo tech, earned instead of bought). Bosses stay immune.
+    // Every hardpoint hammered to +15 grants 1% flash-freeze chance on hit (cryo
+    // tech, earned instead of bought) — it needs a fitting docked to fire it.
     { let cryo = 0;
-      Object.keys(state.equipped).forEach((slot) => { const it = state.equipped[slot]; if (it && it.enh && it.enh.lv >= 15) cryo++; });
+      Object.keys(state.equipped).forEach((slot) => {
+        if (!state.equipped[slot] || !SF || !SF.slotTemper) return;
+        if (SF.slotTemper(slot).lv >= (SF.MAX_LV || 15)) cryo++;
+      });
       s.cryoChance = cryo; }
     // FLEET fittings: escorts' stowed gear feeds the fleet at the same share
     // as their hull mods — auto-improved escort loadouts are real power.
@@ -533,9 +556,30 @@
     if (window.PASCEND) amount *= window.PASCEND.mult('xp');   // ASCENSION: Neural Uplink
     if (window.ASCEND && window.ASCEND.xpMult) amount *= window.ASCEND.xpMult();    // ASCENSION: Combat Computer
     state.xp += amount;
+    // LEVEL CAP — Lv 150, +50 per Ascension Star. At the cap XP is not banked at
+    // all (no phantom bar that fills into nothing): the run is over, and the only
+    // way to a higher level is to ascend.
+    const cap = C.levelCap();
+    if (state.level >= cap) {
+      state.xp = 0;
+      if (!state.capNotified || state.capNotified !== cap) {
+        state.capNotified = cap;
+        save();
+        if (window.UI && window.UI.showLevelCap) window.UI.showLevelCap(cap);
+      }
+      return;
+    }
     let gained = 0;
-    while (state.xp >= C.xpToNext(state.level)) { state.xp -= C.xpToNext(state.level); state.level++; gained++; }
-    if (gained) { state.skillPoints += gained * C.SKILLS.pointsPerLevel; onLevelUp(gained); }
+    while (state.level + gained < cap && state.xp >= C.xpToNext(state.level + gained)) { state.xp -= C.xpToNext(state.level + gained); gained++; }
+    if (gained) {
+      state.level += gained;
+      state.skillPoints += gained * C.SKILLS.pointsPerLevel;
+      onLevelUp(gained);
+      if (state.level >= cap) {
+        state.xp = 0; state.capNotified = cap; save();
+        if (window.UI && window.UI.showLevelCap) window.UI.showLevelCap(cap);
+      }
+    }
   }
   function onLevelUp(gained) {
     refreshStats();
@@ -556,7 +600,7 @@
   // Jump the pilot to a level (used by the secret easter eggs). Grants the
   // matching skill points and zone unlocks, then recomputes stats.
   function setLevel(n) {
-    n = Math.max(1, n | 0);
+    n = Math.max(1, Math.min(C.levelCap(), n | 0));   // never past the ascension-gated cap
     if (n <= state.level) return state.level;
     const gained = n - state.level;
     state.level = n; state.xp = 0;
@@ -621,6 +665,21 @@
   // the beacon from an occasional panic button into an ascended pilot's whole
   // farming loop: back in ~35s, running minutes, four times the swarm, and every
   // kill in it worth 3.5×. The floors below are what keep that sane.
+  // COOLDOWN IS WALL-CLOCK, NOT FRAME TIME. It used to live only in rt.beaconT,
+  // which is runtime state — so refreshing the page handed the beacon straight
+  // back off cooldown. state.beaconUntil is an absolute timestamp on the save, so
+  // a reload (or a tow to the hangar, or a device swap) can't skip the recharge.
+  function beaconLeft() {
+    const until = Number(state.beaconUntil) || 0;
+    if (!until) return 0;
+    const left = (until - Date.now()) / 1000;
+    // a clock jumped backwards, or the cooldown was shortened since it started
+    const cap = beaconCd();
+    if (left > cap) { state.beaconUntil = Date.now() + cap * 1000; return cap; }
+    return Math.max(0, left);
+  }
+  let _bcCd = 0;
+  function beaconCd() { return _bcCd || 300; }
   function beaconStats() {
     const r = defenseRanks();
     const pm = (window.PASCEND && window.PASCEND.beaconMods) ? window.PASCEND.beaconMods()
@@ -637,7 +696,8 @@
     // the advertised swarm size must be one the field can actually hold, or the
     // tooltip promises ×320 and delivers the cap
     const mult = Math.min(BEACON.cap, Math.round(BEACON.mult * (1 + Math.min(0.6, r * 0.008)) * pm.size));
-    return { ranks: r, cd, life, mult, loot: pm.loot, cdLeft: Math.max(0, (rt.beaconT || 0)) };
+    _bcCd = cd;
+    return { ranks: r, cd, life, mult, loot: pm.loot, cdLeft: beaconLeft() };
   }
   // Zone Grind means: a plain numbered zone with no special encounter running.
   // VISIBILITY and PERMISSION are separate on purpose. The button used to hide
@@ -661,13 +721,14 @@
     const s = beaconStats();
     return { visible: beaconVisible(), allowed: beaconAllowed(),
              blocked: beaconVisible() && !beaconAllowed(),
-             ready: beaconAllowed() && (rt.beaconT || 0) <= 0,
+             ready: beaconAllowed() && s.cdLeft <= 0,
              cd: s.cd, left: s.cdLeft, mult: s.mult, life: s.life, loot: s.loot, ranks: s.ranks,
              active: (rt.beaconSwarm || 0) > 0, activeLeft: Math.max(0, rt.beaconSwarm || 0) };
   }
   function fireBeacon() {
-    if (!beaconAllowed() || (rt.beaconT || 0) > 0) return { ok: false };
+    if (!beaconAllowed() || beaconLeft() > 0) return { ok: false };
     const s = beaconStats();
+    state.beaconUntil = Date.now() + s.cd * 1000;   // persisted — survives a refresh
     rt.beaconT = s.cd;
     rt.beaconSwarm = s.life;
     rt.beaconLife = s.life;
@@ -697,12 +758,13 @@
     rt.shake = Math.min(5, (rt.shake || 0) + 3);
     burst(a.x, a.y, '#ff8a3d', 70, { speed: 420, life: 1.1, glow: true });
     rt.floats.push(new E.FloatText(a.x, a.y - 34, '◉ BEACON — ' + n + ' INBOUND', { color: '#ff8a3d', size: 28, vy: -30, life: 1.5 }));
+    save();                                    // bank the cooldown immediately
     if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
     return { ok: true, spawned: n, life: s.life };
   }
   // per-frame: burn the cooldown, and clear the swarm when its window closes
   function beaconTick(dt) {
-    if (rt.beaconT > 0) rt.beaconT = Math.max(0, rt.beaconT - dt);
+    rt.beaconT = beaconLeft();      // mirror of the saved clock, for the HUD ring
     if (rt.beaconSwarm > 0) {
       rt.beaconSwarm -= dt;
       // while the beacon RUNS it keeps calling: a trickle of reinforcements, so a
@@ -1140,6 +1202,21 @@
       rt.floats.push(new E.FloatText(e.x, e.y - e.size - 14, rg + ' +' + formatNum(amt), { color: rc, size: 13, vy: -34, life: 0.8 }));
     }
     if (e.isClone) bumpLife('clones', 1);            // FLEETBREAKER badge
+    // ✦ FRACTURE ZONE — anything that dies in the Aeternum's rift drops one EXTRA
+    // fitting, rolled two rarity tiers above the zone's normal quality. The tithe
+    // (gold / xp / salvage) is stamped on the entity itself in lanceTick.
+    if (e.fracT) {
+      e.fracT = 0;
+      try {
+        const zone = e.dungeon || state.currentDungeon;
+        const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 3));
+        const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
+        state.itemsFound++; countRareFind(item);
+        rt.ground.push(new E.GroundItem(e.x + (Math.random() - 0.5) * 30, e.y + (Math.random() - 0.5) * 30, item, false));
+        lootBurst(e.x, e.y, item.rarity);
+        if (window.UI) window.UI.onLoot(item, true);
+      } catch (x) {}
+    }
     if (e.isCitadel) { citadelDown(e); if (window.UI) window.UI.syncStatsTab(); return; }
 
     // PRISM MINING — kills inside a Prism Field refine into Prism Ingots.
@@ -1579,6 +1656,8 @@
     beaconTick(dt);
     // VOIDMAW: black holes drag and grind everything caught inside
     singularityTick(dt);
+    // ✦ AETERNUM: lance cycle, the shot, and every burning fracture lane
+    lanceTick(dt);
     // defending fleets run shield repair while they hold the field
     cloneTick(dt);
 
@@ -1832,6 +1911,8 @@
     if (state.currentSystem) { try { drawVoidArena(ctx); } catch (e) {} }
     // VOIDMAW SINGULARITIES — collapsing wells beneath stunned targets
     if (rt.holes && rt.holes.length) { try { drawSingularities(ctx); } catch (e) {} }
+    // ✦ EVENT HORIZON LANCE — alignment line, the beam, and its fracture lanes
+    try { drawLance(ctx); } catch (e) {}
     // PRISM MINING — ore field + miners, drawn in world space just above the
     // arena floor (enemies & player render on top).
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.render) { try { window.PRISM.render(ctx, rt.time, rt); } catch (e) {} }
@@ -2956,6 +3037,8 @@
     state.prismFleetRun = null;   // ...and a Prism Fleet gauntlet run
     sweepLoot();
     rt.enemies = []; rt.projectiles = []; rt.ground = []; rt.ebolts = []; rt.towT = 0;
+    // ✦ the lance recharges from scratch in a new zone, and no fracture follows you
+    rt.fractures = []; rt.lanceT = 0; rt.lanceAim = null; rt.lanceFlash = 0;
     // CINEMATIC: hyperspace warp-in streaks on every combat deploy
     if (state.currentDungeon >= 1) rt.warpT = 0.85;
     // re-fit world size + zoom for this zone (wider & more zoomed-out deeper in)
@@ -3324,6 +3407,9 @@
     if (tile.home) return { ok: false, reason: 'home' };       // the Home Citadel is neutral
     const owned = isOwned(k);
     if (tile.void && !owned && state.level < tile.vtier) return { ok: false, reason: 'locked' };   // VOID: strict gates, no +10 grace
+    // EMPIRE AT CAPACITY — refuse the trip rather than let a pilot fight a siege
+    // they can't be paid for. Entering a tile you already hold is always fine.
+    if (!owned && atTileCap()) return { ok: false, reason: 'tilecap', cap: tileCap() };
     if (!owned && tile.level > state.level + 10) return { ok: false, reason: 'locked' };
     // contest cooldown blocks EVERY non-owned warp-in (rival, neutral, citadel)
     if (!owned && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
@@ -3617,6 +3703,16 @@
     // stale server protection (the old owner's fortress) hand the tile back.
     const razing = !!rt.razingClaim; rt.razingClaim = false;
     const fromRival = rivalOf(k);
+    // BACKSTOP — warp() gates this, but a VIP level can lapse (or another claim can
+    // land) mid-siege. Never silently exceed the cap: the win stands, the tile just
+    // isn't annexed until room is made.
+    if (!isOwned(k) && atTileCap()) {
+      pushFeed('Empire at capacity (' + tileCap() + ' systems) — ' + (tile.name || k) + ' was not claimed. Abandon a system to make room.', true);
+      rt.razingClaim = false;
+      respawnAt(0);
+      if (window.UI) window.UI.refreshAll();
+      return;
+    }
     accrueResources();   // settle earnings BEFORE ownership changes — new rate applies from now
     state.ownedSystems[k] = true;
     // VOID ZONE — the tile's fixed citadel comes WITH the conquest (no builds, no upgrades)
@@ -3688,9 +3784,22 @@
   // scales hard with depth; cap of 5. Rival citadels are attackable — you fight a
   // CLONE scaled to the owner's fleet score and take the citadel on victory.
   // ===========================================================================
-  const CITADEL_MAX = 50, CITADEL_MULT = 10, CITADEL_LV_MAX = 5;
-  // VIP perk: +5 citadel cap per VIP level (VIP 15 = 125 citadels)
-  function citadelCap() { return CITADEL_MAX + (window.VIP ? window.VIP.level() * 5 : 0); }
+  const CITADEL_MULT = 10, CITADEL_LV_MAX = 5;
+  // ---- THE TILE CAP ---------------------------------------------------------
+  // ONE ceiling on empire size: how many systems you may HOLD at once — citadels
+  // or not, galaxy or Void. This used to be a CITADEL cap, which limited what you
+  // could BUILD while leaving the number of tiles you could take unbounded; the
+  // intent was always a limit on territory. Citadels are now free to raise on any
+  // tile you hold, because holding the tile is itself the scarce thing.
+  const TILE_MAX = 50;
+  function tileCap() { return TILE_MAX + (window.VIP ? window.VIP.level() * 5 : 0); }
+  function tileCount() {
+    return Object.keys(state.ownedSystems || {}).filter((k) => { const t = sysAt(k); return !(t && t.home); }).length;
+  }
+  function tilesLeft() { return Math.max(0, tileCap() - tileCount()); }
+  function atTileCap() { return tileCount() >= tileCap(); }
+  // legacy alias — older screens still read citadelCap()
+  function citadelCap() { return tileCap(); }
   // ABANDON — walk away from a tile you own: ownership, its citadel and its
   // production all release; the tile goes neutral (server claim released too).
   function abandonTile(id) {
@@ -3730,7 +3839,8 @@
   }
   function canBuildCitadel(id) {
     const t = sysAt(id);
-    return !!(t && !t.home && !t.void && !t.citadel && isOwned(id) && !hasMyCitadel(id) && citadelCount() < citadelCap());
+    // no separate citadel ceiling — the tile cap is the only limit on the empire
+    return !!(t && !t.home && !t.void && !t.citadel && isOwned(id) && !hasMyCitadel(id));
   }
   // RANK-UP cost: upgrading rank L → L+1 costs the tile's build cost × L,
   // so each rank is a real investment (1×, 2×, 3×, 4× the build price).
@@ -3764,7 +3874,6 @@
   function buildCitadel(id) {
     if (!isOwned(id)) return { ok: false, reason: 'owned' };
     if (hasMyCitadel(id)) return { ok: false, reason: 'exists' };
-    if (citadelCount() >= citadelCap()) return { ok: false, reason: 'max' };
     const cost = citadelBuildCost(id);
     if (!canAfford(cost)) return { ok: false, reason: 'resources' };
     accrueResources();   // settle at the old rate — the 10× starts NOW, not retroactively
@@ -4106,6 +4215,165 @@
         { vx: -Math.cos(a) * sp, vy: -Math.sin(a) * sp, life: 0.5 + Math.random() * 0.3, size: 1.6 + Math.random() * 2.4, color: i % 2 ? '#c07bff' : '#e9d6ff', glow: true, drag: 0.92 }));
     }
     rt.shake = Math.min(3.2, (rt.shake || 0) + 1.6);
+  }
+  // ===========================================================================
+  // ✦ THE EVENT HORIZON LANCE — the Aeternum's reason to exist
+  // ---------------------------------------------------------------------------
+  // A 60-second cycle, automatic and unstoppable:
+  //   0–45s   dormant, the reactor recovers
+  //   45–60s  ALIGNMENT — 15 seconds of visible charge. The lane's ANGLE is locked
+  //           at the start of the charge and drawn across the whole zone, so the
+  //           shot is fully telegraphed: walk a target out of it, or walk your
+  //           fleet into it.
+  //   at 60s  FIRE. The beam does NOT stop at whatever it was aimed at — it runs
+  //           from the hull to the far edge of the world and hits EVERY hostile in
+  //           the lane, then leaves a FRACTURE ZONE burning along it.
+  // Damage is written in DPS-seconds so it stays meaningful at any zone depth:
+  // ~55× your effective DPS to a normal hull, 22× to a boss (still the single
+  // largest hit in the game), and the fracture keeps bleeding 5×/s.
+  // Everything that dies inside a live fracture pays a 4× tithe and drops one
+  // extra fitting rolled at boosted rarity — the aftermath IS the reward.
+  // ===========================================================================
+  const LANCE = { cycle: 60, charge: 15, width: 130, hit: 55, bossHit: 22, fracDps: 5, fracLife: 14, tithe: 4 };
+  function hasLance() { const sh = C.SHIP_BY_KEY[state.ship]; return !!(sh && sh.lance); }
+  function lanceState() {
+    if (!hasLance()) return null;
+    const t = rt.lanceT || 0;
+    const charging = t >= LANCE.cycle - LANCE.charge;
+    return { t, charging, left: Math.max(0, LANCE.cycle - t),
+             chargeFrac: charging ? (t - (LANCE.cycle - LANCE.charge)) / LANCE.charge : 0,
+             fractures: (rt.fractures || []).length };
+  }
+  // the lane: a ray from the hull, extended past the far corner of the world
+  function laneEnd(x, y, ang) {
+    const reach = Math.hypot(rt.worldW, rt.worldH) * 1.2;
+    return { x: x + Math.cos(ang) * reach, y: y + Math.sin(ang) * reach };
+  }
+  function inLane(o, L) {
+    const dx = o.x - L.x, dy = o.y - L.y;
+    const along = dx * Math.cos(L.ang) + dy * Math.sin(L.ang);
+    if (along < -20) return false;                       // behind the muzzle
+    const perp = Math.abs(-dx * Math.sin(L.ang) + dy * Math.cos(L.ang));
+    return perp <= L.w * 0.5 + (o.size || 20) * 0.4;
+  }
+  function lanceTick(dt) {
+    if (!hasLance()) { rt.lanceT = 0; rt.lanceAim = null; }
+    else if (!rt.archer.dead && state.currentDungeon >= 1) {
+      rt.lanceT = (rt.lanceT || 0) + dt;
+      const chargeStart = LANCE.cycle - LANCE.charge;
+      if (rt.lanceT >= chargeStart && !rt.lanceAim) {
+        const tgt = nearestEnemy(), a0 = rt.archer;
+        const ang = tgt ? Math.atan2(tgt.y - a0.y, tgt.x - a0.x) : (a0.aim || 0);
+        rt.lanceAim = { ang, x: a0.x, y: a0.y, w: LANCE.width };
+        if (window.UI && window.UI.unlockToast) window.UI.unlockToast('✦ EVENT HORIZON LANCE — ALIGNING');
+      }
+      // the muzzle follows the hull while charging; the ANGLE stays locked
+      if (rt.lanceAim) { rt.lanceAim.x = rt.archer.x; rt.lanceAim.y = rt.archer.y; }
+      if (rt.lanceT >= LANCE.cycle) { fireLance(); rt.lanceT = 0; rt.lanceAim = null; }
+    }
+    // FRACTURE ZONES burn on regardless of which hull is flying now
+    const fr = rt.fractures;
+    if (fr && fr.length) {
+      for (let i = fr.length - 1; i >= 0; i--) {
+        const f = fr[i];
+        f.t -= dt;
+        if (f.t <= 0) { fr.splice(i, 1); continue; }
+        f.tick = (f.tick || 0) + dt;
+        const pulse = f.tick >= 0.25; if (pulse) f.tick = 0;
+        const dps = effectiveDps() * LANCE.fracDps;
+        for (const o of rt.enemies) {
+          if (o.dead || o.dying || !inLane(o, f)) continue;
+          o.tithe = Math.max(o.tithe || 1, LANCE.tithe);   // rich ground: gold, xp, salvage
+          o.fracT = 1;                                     // onKill adds the bonus fitting
+          if (pulse && dps >= 1) {
+            const dmg = dps * 0.25;
+            const k = o.takeDamage(dmg);
+            rt.dmgWindow.push({ t: rt.time, dmg });
+            if (k) onKill(o);
+          }
+        }
+        if (Math.random() < dt * 26) {
+          const along = Math.random() * Math.hypot(rt.worldW, rt.worldH);
+          const off = (Math.random() - 0.5) * f.w;
+          const px = f.x + Math.cos(f.ang) * along - Math.sin(f.ang) * off;
+          const py = f.y + Math.sin(f.ang) * along + Math.cos(f.ang) * off;
+          rt.particles.push(new E.Particle(px, py, { vx: 0, vy: -40 - Math.random() * 60, life: 0.6, size: 1.4 + Math.random() * 2.2, color: Math.random() < 0.5 ? '#a6ff5b' : '#e9ffd0', glow: true, drag: 0.94 }));
+        }
+      }
+    }
+    if (rt.lanceFlash > 0) rt.lanceFlash = Math.max(0, rt.lanceFlash - dt);
+  }
+  function fireLance() {
+    const a = rt.archer, aim = rt.lanceAim; if (!aim) return;
+    const L = { x: a.x, y: a.y, ang: aim.ang, w: LANCE.width };
+    const dps = effectiveDps();
+    let hits = 0;
+    for (const o of rt.enemies) {
+      if (o.dead || o.dying || !inLane(o, L)) continue;
+      const dmg = dps * (o.isBoss ? LANCE.bossHit : LANCE.hit) * (window.DREAD && window.DREAD.dmgVs ? window.DREAD.dmgVs(o) : 1);
+      const k = o.takeDamage(dmg);
+      rt.dmgWindow.push({ t: rt.time, dmg });
+      hits++;
+      burst(o.x, o.y, '#a6ff5b', 26, { speed: 320, life: 0.7, glow: true });
+      if (k) onKill(o);
+    }
+    if (!rt.fractures) rt.fractures = [];
+    rt.fractures.push({ x: a.x, y: a.y, ang: L.ang, w: LANCE.width * 0.8, t: LANCE.fracLife, life: LANCE.fracLife });
+    if (rt.fractures.length > 4) rt.fractures.shift();
+    rt.lanceFlash = 0.55;
+    rt.shake = Math.min(10, (rt.shake || 0) + 8);
+    rt.novaT = Math.max(rt.novaT || 0, 0.35);
+    burst(a.x, a.y, '#e9ffd0', 90, { speed: 520, life: 0.9, glow: true });
+    rt.floats.push(new E.FloatText(a.x, a.y - 40, '✦ EVENT HORIZON' + (hits ? ' — ' + hits + ' VAPORISED' : ''), { color: '#a6ff5b', size: 30, vy: -26, life: 1.8 }));
+  }
+  // canvas: charge glow, the beam, and the lingering rift — all in world space
+  function drawLance(ctx) {
+    const aim = rt.lanceAim, flash = rt.lanceFlash || 0, fr = rt.fractures || [];
+    if (!aim && !flash && !fr.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'butt';
+    for (const f of fr) {
+      const k = Math.max(0, Math.min(1, f.t / f.life));
+      const e = laneEnd(f.x, f.y, f.ang);
+      const g = ctx.createLinearGradient(f.x, f.y, e.x, e.y);
+      g.addColorStop(0, 'rgba(166,255,91,' + (0.30 * k).toFixed(3) + ')');
+      g.addColorStop(0.5, 'rgba(120,220,70,' + (0.20 * k).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(60,140,40,0)');
+      ctx.strokeStyle = g; ctx.lineWidth = f.w * (0.7 + 0.3 * k);
+      ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(233,255,208,' + (0.5 * k).toFixed(3) + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+    }
+    if (aim) {
+      const cs = LANCE.cycle - LANCE.charge;
+      const p = Math.max(0, Math.min(1, ((rt.lanceT || 0) - cs) / LANCE.charge));
+      const e = laneEnd(aim.x, aim.y, aim.ang);
+      const puls = 0.55 + 0.45 * Math.sin(rt.time * (6 + p * 22));
+      ctx.strokeStyle = 'rgba(166,255,91,' + (0.10 + 0.28 * p).toFixed(3) + ')';
+      ctx.lineWidth = 3 + p * (LANCE.width - 3);
+      ctx.beginPath(); ctx.moveTo(aim.x, aim.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(233,255,208,' + (0.35 + 0.6 * p * puls).toFixed(3) + ')';
+      ctx.lineWidth = 1.5 + p * 4;
+      ctx.beginPath(); ctx.moveTo(aim.x, aim.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+      const r = 10 + p * 42 * puls;
+      const cg = ctx.createRadialGradient(aim.x, aim.y, 0, aim.x, aim.y, r);
+      cg.addColorStop(0, 'rgba(255,255,255,' + (0.5 + 0.5 * p).toFixed(3) + ')');
+      cg.addColorStop(0.4, 'rgba(166,255,91,' + (0.5 * p + 0.15).toFixed(3) + ')');
+      cg.addColorStop(1, 'rgba(60,140,40,0)');
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(aim.x, aim.y, r, 0, 7); ctx.fill();
+    }
+    if (flash > 0 && fr.length) {
+      const f = flash / 0.55, use = fr[fr.length - 1];
+      const e = laneEnd(use.x, use.y, use.ang);
+      ctx.strokeStyle = 'rgba(166,255,91,' + (0.55 * f).toFixed(3) + ')';
+      ctx.lineWidth = LANCE.width * (1.1 + (1 - f) * 0.6);
+      ctx.beginPath(); ctx.moveTo(use.x, use.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.9 * f).toFixed(3) + ')';
+      ctx.lineWidth = 10 + 26 * f;
+      ctx.beginPath(); ctx.moveTo(use.x, use.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+    }
+    ctx.restore();
   }
   // per-frame: drag everything inward and bleed hull inside every hole
   function singularityTick(dt) {
@@ -4508,12 +4776,17 @@
   function buildShipInfo(key) {
     const ship = C.SHIP_BY_KEY[key]; const b = ship && ship.build; if (!b) return null;
     const owned = !!(state.ownedShips && state.ownedShips[key]);
-    const hasBp = !!(state.blueprints && state.blueprints[key]);
+    // Some hulls aren't unlocked by a blueprint at all — the Aeternum's gate is
+    // ASCENSION RANK, which no drop or purchase can substitute for.
+    const hasBp = b.noBlueprint ? true : !!(state.blueprints && state.blueprints[key]);
+    const reqAsc = b.reqAsc || 0;
+    const ascHave = ascStars();
+    const ascMet = ascHave >= reqAsc;
     const reqShip = b.reqShip, reqKills = b.reqShipKills || 0;
     const killsHave = state.totalKills || 0;         // ANY ship — no specific-hull grind
     const killsMet = killsHave >= reqKills;
     const cost = b.cost || {};
-    const have = { fuel: (state.resources && state.resources.fuel) || 0, iron: (state.resources && state.resources.iron) || 0, plasma: (state.resources && state.resources.plasma) || 0, prism: prismIngots() };
+    const have = { gold: state.gold || 0, fuel: (state.resources && state.resources.fuel) || 0, iron: (state.resources && state.resources.iron) || 0, plasma: (state.resources && state.resources.plasma) || 0, prism: prismIngots() };
     let affordable = true; for (const k in cost) { if ((have[k] || 0) < cost[k]) affordable = false; }
     const con = state.construction;
     const building = !!(con && con.ship === key);
@@ -4521,11 +4794,12 @@
     let status;
     if (owned) status = 'owned';
     else if (building) status = (Date.now() >= con.arrivesAt) ? 'ready' : 'building';
+    else if (!ascMet) status = 'needasc';
     else if (!hasBp) status = 'noblueprint';
     else if (!killsMet) status = 'needkills';
     else if (otherBuilding) status = 'busy';
     else status = affordable ? 'buildable' : 'needres';
-    return { key, ship, build: b, owned, hasBp, reqShip, reqKills, killsHave, killsMet, cost, have, affordable, building, otherBuilding, status,
+    return { key, ship, build: b, owned, hasBp, reqShip, reqKills, killsHave, killsMet, reqAsc, ascHave, ascMet, cost, have, affordable, building, otherBuilding, status,
              arrivesAt: building ? con.arrivesAt : 0, startedAt: building ? con.startedAt : 0, days: b.days };
   }
   function startBuildShip(key) {
@@ -4533,11 +4807,13 @@
     if (inf.owned) return { ok: false, reason: 'owned' };
     if (inf.building) return { ok: false, reason: 'building' };
     if (state.construction) return { ok: false, reason: 'busy' };
+    if (!inf.ascMet) return { ok: false, reason: 'ascension' };
     if (!inf.hasBp) return { ok: false, reason: 'blueprint' };
     if (!inf.killsMet) return { ok: false, reason: 'kills' };
     if (!inf.affordable) return { ok: false, reason: 'resources' };
     const cost = inf.cost;
     if (!state.resources) state.resources = { fuel: 0, iron: 0, plasma: 0 };
+    if (cost.gold) state.gold = Math.max(0, (state.gold || 0) - cost.gold);
     state.resources.fuel -= cost.fuel || 0; state.resources.iron -= cost.iron || 0; state.resources.plasma -= cost.plasma || 0;
     if (cost.prism && state.prism) state.prism.ingots = Math.max(0, (state.prism.ingots || 0) - cost.prism);
     const ms = (inf.days || 14) * 86400000;
@@ -4582,6 +4858,8 @@
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, grantPro, respawnAt,
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
+    lanceState,
+    levelCap: () => C.levelCap(), atLevelCap: () => state.level >= C.levelCap(),
     startHomeDefense, spawnHomeRaider, endHomeDefense,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
     isCitadelZone, citadelCooldownLeft, isSwarmZone, zoneReqLevel,
@@ -4598,7 +4876,7 @@
     pilotAscend, ascStars,
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
-    buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
+    buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     getGalaxyFeed: () => state.galaxyFeed || [],

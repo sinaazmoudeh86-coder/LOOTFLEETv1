@@ -159,7 +159,15 @@
   // p_asc (Pilot Ascension stars) is sent optimistically — servers that haven't
   // run supabase/pilot-ascension.sql yet reject the extra arg, so we retry
   // without it rather than losing the whole row.
-  let _lbNoAsc = false;
+  //
+  // JUL 2026 — why this got careful: a SINGLE failed p_asc call used to latch the
+  // fallback on for the rest of the session. And while both lb_upsert overloads
+  // existed server-side (6-arg from leaderboard.sql, 7-arg from
+  // pilot-ascension.sql), the 6-arg call is AMBIGUOUS — PostgREST can't choose a
+  // candidate and rejects it — so a latched client stopped publishing its row at
+  // all: no stars for anyone else to see, and a board that looked empty.
+  // See supabase/lb-upsert-canonical.sql for the server half.
+  let _lbNoAsc = false, _lbAscRetryAt = 0;
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
@@ -168,12 +176,20 @@
         p_level: p.level || 1, p_zone: p.zone || 1, p_kills: Math.round(p.kills || 0),
         p_fleet: p.fleet || [],
       };
+      if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
       if (!_lbNoAsc) {
         const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc: (p.asc | 0) }, base));
         if (!error) return;
-        _lbNoAsc = true;   // legacy signature — stop trying
+        // Only a genuinely missing function means "legacy server". Ambiguity,
+        // network blips and RLS errors must NOT disable stars.
+        const msg = ((error.message || '') + ' ' + (error.code || '') + ' ' + (error.hint || '')).toLowerCase();
+        const legacy = msg.indexOf('pgrst202') !== -1 || msg.indexOf('42883') !== -1 ||
+                       msg.indexOf('does not exist') !== -1 || msg.indexOf('could not find') !== -1;
+        if (!legacy) return;                                  // keep p_asc; retry next save
+        _lbNoAsc = true; _lbAscRetryAt = Date.now() + 6 * 3600 * 1000;
       }
-      await client.rpc('lb_upsert', base);
+      const { error: e2 } = await client.rpc('lb_upsert', base);
+      if (e2) { _lbNoAsc = false; _lbAscRetryAt = 0; }         // 6-arg failed too — go back to p_asc
     } catch (e) {}
   }
   async function lbTop(n) {

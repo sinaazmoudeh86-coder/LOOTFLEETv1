@@ -1251,8 +1251,6 @@
     injectCSS();
     setInterval(() => { try { updateHud(); } catch (e) {} }, 1000);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  setTimeout(boot, 1200);
   window.HOMECIT = { render, updateHud, openHowTo, engineTick, engineRender, onDeath };
 
   function injectCSS() {
@@ -1452,4 +1450,11 @@
   #cmd-homecit-badge{ position:absolute; top:6px; right:8px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:${ACCENT}; color:#2a1206;
     font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; line-height:16px; text-align:center; box-shadow:0 0 8px ${ACCENT}; z-index:2; }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 1200);
 })();

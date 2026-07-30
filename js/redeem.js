@@ -18,8 +18,18 @@
     '5783c02670fb4fca70cffa0eb9715832ac4f12e440bff0aff315afbd6ececd17': 'lvl500',
   };
   const REWARDS = {
-    allships: { name: 'FULL FLEET — every hull unlocked', apply(g) {
-      ((window.CONFIG && window.CONFIG.SHIPS) || []).forEach((s) => { try { g.grantShip(s.key); } catch (e) {} });
+    // REPEATABLE — the fleet grows, so this code is a fleet SYNC rather than a
+    // one-shot grant: redeeming it again unlocks any hull added since the last
+    // time it was used, and says how many were new.
+    allships: { name: 'FULL FLEET — every hull unlocked', repeatable: true, apply(g) {
+      const st = g.state; st.ownedShips = st.ownedShips || {};
+      let added = 0;
+      ((window.CONFIG && window.CONFIG.SHIPS) || []).forEach((s) => {
+        if (st.ownedShips[s.key]) return;
+        try { g.grantShip(s.key); } catch (e) {}
+        if (st.ownedShips[s.key]) added++;
+      });
+      return added ? added + ' new hull' + (added > 1 ? 's' : '') + ' unlocked' : 'Fleet already complete — nothing new to add';
     } },
     cur100b: { name: '100B of every currency', apply(g) {
       const st = g.state;
@@ -46,13 +56,17 @@
     try { h = await sha256(code); } catch (e) { return cb(false, 'Redeem needs a secure connection'); }
     const id = HASH[h];
     if (!id || !REWARDS[id]) return cb(false, 'Invalid code');
+    const R = REWARDS[id];
     g.state.redeemedCodes = g.state.redeemedCodes || {};
-    if (g.state.redeemedCodes[h]) return cb(false, 'Code already redeemed on this account');
-    try { REWARDS[id].apply(g); } catch (e) { return cb(false, 'Redeem failed — try again'); }
+    const again = !!g.state.redeemedCodes[h];
+    // repeatable codes may be re-entered forever; everything else is once only
+    if (again && !R.repeatable) return cb(false, 'Code already redeemed on this account');
+    let extra = '';
+    try { extra = R.apply(g) || ''; } catch (e) { return cb(false, 'Redeem failed — try again'); }
     g.state.redeemedCodes[h] = Date.now();
     try { g.save(); } catch (e) {}
     if (window.UI) { try { window.UI.refreshAll(); } catch (e) {} }
-    cb(true, REWARDS[id].name);
+    cb(true, R.name + (extra ? ' — ' + extra : ''));
   }
   // ⚙ Settings button (battle screen dock, beside Loot/Ship) → Account sheet
   function boot() {

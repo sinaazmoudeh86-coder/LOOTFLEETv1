@@ -173,10 +173,20 @@
     if (!_inited) return;
     const s = G.state;
     el['hud-level'].textContent = s.level;
-    const need = C.xpToNext(s.level);
-    const xpPct = Math.max(0, Math.min(100, s.xp / need * 100));
-    el['xp-fill'].style.width = xpPct + '%';
-    el['xp-label'].textContent = (xpPct >= 99.5 && xpPct < 100 ? 99.9 : Math.round(xpPct * 10) / 10) + '% XP';
+    // LEVEL CAP — at the ceiling the XP bar stops being a progress bar and says
+    // what the wall is, because XP genuinely stops accruing there.
+    const lvCap = C.levelCap ? C.levelCap() : Infinity;
+    if (s.level >= lvCap) {
+      el['xp-fill'].style.width = '100%';
+      el['xp-label'].textContent = '✦ LEVEL CAP ' + lvCap + ' — ASCEND TO RAISE';
+      el['xp-label'].style.color = '#f2d4ff';
+    } else {
+      const need = C.xpToNext(s.level);
+      const xpPct = Math.max(0, Math.min(100, s.xp / need * 100));
+      el['xp-fill'].style.width = xpPct + '%';
+      el['xp-label'].textContent = (xpPct >= 99.5 && xpPct < 100 ? 99.9 : Math.round(xpPct * 10) / 10) + '% XP';
+      el['xp-label'].style.color = '';
+    }
     const hp = G.getHp();
     el['hp-fill'].style.width = (hp.max > 0 ? Math.max(0, hp.cur / hp.max * 100) : 0) + '%';
     el['hp-label'].textContent = hp.dead ? 'DOWN' : `${G.formatNum(hp.cur)} / ${G.formatNum(hp.max)}`;
@@ -248,6 +258,33 @@
       if (pbl) {
         const want = (G.fleetShips && G.fleetShips().length > 0) ? '⚡ FLEET SCORE' : '⚡ SHIP SCORE';
         if (pbl.textContent !== want) pbl.textContent = want;
+      }
+    }
+    // PILOT ASCENSION rank, beside the score. Compact by design (✦ + star count):
+    // the full five-star badge is too wide for a phone HUD, and this sits in the
+    // grid's flexible track so it can never push or overlap the label / VIP chip.
+    {
+      const ab = document.getElementById('pb-asc');
+      if (ab) {
+        let n = 0, t = null;
+        try { if (window.PASCEND) { n = window.PASCEND.stars() | 0; if (n) t = window.PASCEND.tierDef(n); } } catch (e) {}
+        if (!n) { if (ab.style.display !== 'none') { ab.style.display = 'none'; ab.dataset.sig = ''; } }
+        else {
+          const star = window.PASCEND.starOf(n);
+          const sig = n + '|' + (t && t.name);
+          if (!ab.dataset.bound) {
+            ab.dataset.bound = '1';
+            ab.addEventListener('click', (e) => { e.stopPropagation(); try { showScreen('pasc'); if (window.PASCEND) window.PASCEND.render(); } catch (x) {} });
+          }
+          if (ab.dataset.sig !== sig) {
+            ab.dataset.sig = sig;
+            ab.style.display = '';
+            ab.style.setProperty('--ac', (t && t.color) || '#e05bff');
+            ab.classList.toggle('prism', !!(t && t.prismatic));
+            ab.innerHTML = '✦<b>' + n + '</b>';
+            ab.title = 'Pilot Ascension ' + n + ' · ' + ((t && t.name) || '') + ' ★' + star;
+          }
+        }
       }
     }
     el['hud-kills'].textContent = G.formatNum(s.totalKills) + ' kills';
@@ -1357,7 +1394,7 @@
       </div>
       <div class="gx-hud" id="gx-ringlab"></div>
     </div>`;
-    html += `<div class="gx-legend"><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)}/${(G.citadelCap ? G.citadelCap() : 5)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl">⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
+    html += `<div class="gx-legend"><span class="gxl gxl-cit" style="color:#8fc4ff;font-weight:800">◈ ${(G.tileCount ? G.tileCount() : 0)}/${(G.tileCap ? G.tileCap() : 50)} Systems</span><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl">⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
     bindGalaxyMap();
     drawGalaxyMap();
@@ -1735,14 +1772,13 @@
         '<div style="font-size:11px;color:#9fb0c4;margin-top:5px">Its ×' + GM.CITADEL_RATE_MULT + ' output is built into the fortress — nothing to build or rank up here.</div>' +
       '</div>';
     } else if (t.owned && G.citadelBuildCost) {
-      const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0, cap = G.citadelCap ? G.citadelCap() : 50;
+      const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0;
       const af = bc && GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (bc[k2] || 0));
       const can = G.canBuildCitadel && G.canBuildCitadel(id);
       const chips = GM.RES_KEYS.filter((k2) => bc && bc[k2]).map((k2) => '<span style="color:' + ((myRes[k2] || 0) >= bc[k2] ? GM.RES[k2].color : 'var(--bad)') + '">' + GM.RES[k2].glyph + ' ' + G.formatNum(bc[k2]) + '</span>').join(' &nbsp; ');
       citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
-        '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;gap:8px">⛓ Build Citadel <span style="color:#9fb0c4;font-weight:600">10× output · ' + cn + '/' + cap + ' owned</span></div>' +
+        '<div style="font-size:12px;font-weight:700;color:#ffd24d;display:flex;justify-content:space-between;gap:8px">⛓ Build Citadel <span style="color:#9fb0c4;font-weight:600">10× output · ' + cn + ' built</span></div>' +
         '<div style="font-size:12.5px;font-variant-numeric:tabular-nums;margin:7px 0;font-weight:700">' + chips + '</div>' +
-        (cn >= cap ? '<div style="font-size:10.5px;color:#ffcf7a;margin-bottom:6px">Citadel limit reached (' + cap + ') — abandon one, or raise your VIP level (+5 cap each).</div>' : '') +
         '<button class="btn gold" data-build-cit="' + id + '" ' + (can && af ? '' : 'disabled') + ' style="width:100%">Build Citadel</button>' +
       '</div>';
     }
@@ -1775,7 +1811,7 @@
     sheet.querySelectorAll('[data-build-cit]').forEach((b) => b.addEventListener('click', () => {
       const r = G.buildCitadel(b.dataset.buildCit);
       if (r.ok) { toast('⛓ Citadel raised — this tile now pays 10×!', '#ffd24d'); renderGalaxy(); openTileAction(b.dataset.buildCit); }
-      else toast(r.reason === 'max' ? 'Citadel limit reached (' + (G.citadelCap ? G.citadelCap() : 50) + ') — VIP levels raise it' : r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot build here', '#e23b4e');
+      else toast(r.reason === 'resources' ? 'Not enough Galaxy Resources' : 'Cannot build here', '#e23b4e');
     }));
     sheet.querySelectorAll('[data-upg-cit]').forEach((b) => b.addEventListener('click', () => {
       const r = G.upgradeCitadel(b.dataset.upgCit);
@@ -1786,7 +1822,7 @@
     if (ok) ok.addEventListener('click', () => {
       const r = G.warp(id);
       if (r.ok) { closeSheet(); toast((t.rival ? 'Attacking ' : t.owned ? 'Deploying to ' : 'Claiming ') + t.name, '#5b9cff'); showScreen('battle'); }
-      else toast(r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
+      else toast(r.reason === 'tilecap' ? '◈ Empire at capacity (' + (r.cap || (G.tileCap ? G.tileCap() : 50)) + ' systems) — abandon one, or raise VIP (+5 each)' : r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
     });
   }
 
@@ -1974,7 +2010,7 @@
     if (h > 0) return h + 'h ' + m + 'm';
     return Math.max(1, m) + 'm';
   }
-  const BUILD_RES = [['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◈','#ff3a3a']];
+  const BUILD_RES = [['gold','●','#f2b24b'],['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◈','#ff3a3a']];
   function buildCostChips(cost, have) {
     return BUILD_RES.filter(([k]) => cost[k]).map(([k, g, c]) => {
       const ok = (have[k] || 0) >= cost[k];
@@ -2054,17 +2090,27 @@
     const active = stateCls === 'active';
     const lvl = (owned && G.shipUpInfo) ? G.shipUpInfo(key).level : 0;
     const badge = tileBadge(key, ship);
-    // TITAN SINA — full-row showcase tile in the ships grid
-    if (key === 'titansina') {
-      return `<button class="ship-tile st-sina ${stateCls}" data-ship-tile="${key}">
+    // FULL-ROW SHOWCASE TILES — the two apex hulls get the whole grid width.
+    // The Aeternum sits ABOVE the Titan Sina (its config entry precedes it) and
+    // wears the same pill with a lance-green identity instead of rainbow.
+    if (key === 'titansina' || key === 'aeternum') {
+      const aet = key === 'aeternum';
+      const beams = aet
+        ? '<i class="aet-lance"></i><i class="aet-ring"></i><i class="aet-ring r2"></i>'
+        : '<i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>';
+      const chip = aet ? '<span class="apex-chip aet">ASCENSION CLASS</span>' : '<span class="apex-chip sina">FINAL CLASS</span>';
+      const callout = aet
+        ? 'AN ARTIFICIAL WORLD · THE LANCE ALIGNS · THE LANE IS ERASED'
+        : '2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS';
+      return `<button class="ship-tile st-sina ${aet ? 'st-aet ' : ''}${stateCls}" data-ship-tile="${key}">
         <div class="sts-art">
-          <i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>
+          ${beams}
           <img src="ships/ship-${key}.png" alt="" decoding="async">
           ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}
         </div>
         <div class="sts-meta">
-          <div class="st-name">${ship.name} <span class="apex-chip sina">FINAL CLASS</span></div>
-          <div class="sts-callout">2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS</div>
+          <div class="st-name">${ship.name} ${chip}</div>
+          <div class="sts-callout">${callout}</div>
           <div class="st-stats"><span>⚔${ship.weapons}</span><span>⊕${ship.ammo}</span><span>⛨${ship.hull}</span><span class="dr">◎${ship.drones}</span></div>
           ${owned ? '' : `<div class="st-badge">${badge}</div>`}
         </div>
@@ -2134,6 +2180,9 @@
       } else if (inf.status === 'ready') {
         action = `<span class="ship-badge active">✦ ARRIVED</span>`;
         lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Construction complete — boarding…</span></div>`;
+      } else if (inf.status === 'needasc') {
+        action = `<span class="ship-badge locked">🔒</span>`;
+        lock = `<div class="ship-lock"><span class="lk-ic">✦</span><span>Requires <b>Ascension ★${inf.reqAsc}</b> — you are at <b>★${inf.ascHave | 0}</b>. No currency substitutes for prestige.</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
       } else if (inf.status === 'noblueprint') {
         const bd = ship.bpDrop || {}; const pctTxt = ((bd.chance || 0) * 100).toFixed((bd.chance || 0) < 0.01 ? 1 : 0);
         action = `<span class="ship-badge locked">🔒</span>`;
@@ -2565,7 +2614,7 @@
     if (ok) ok.addEventListener('click', () => {
       const r = G.startBuildShip(key); closeSheet();
       if (r.ok) { toast('⚒ ' + ship.name + ' — construction begun', '#c9a0ff'); renderStore(); }
-      else { toast(r.reason === 'resources' ? 'Not enough resources' : r.reason === 'busy' ? 'Another hull is already building' : 'Cannot build yet', '#e23b4e'); }
+      else { toast(r.reason === 'resources' ? 'Not enough resources' : r.reason === 'ascension' ? '✦ Requires a higher Ascension rank' : r.reason === 'busy' ? 'Another hull is already building' : 'Cannot build yet', '#e23b4e'); }
     });
   }
   function openCredits() {
@@ -3062,6 +3111,22 @@
       <div class="sheet-actions" style="margin-top:14px"><button class="btn primary" data-x>Understood</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
   }
+  // The moment a pilot hits the ceiling — explains the wall and the way through it.
+  function showLevelCap(cap) {
+    const stars = (() => { try { return window.PASCEND ? window.PASCEND.stars() | 0 : 0; } catch (e) { return 0; } })();
+    const next = cap + 50;
+    const sheet = showSheet(`<div id="wreck-pop">
+      <div class="wreck-skull" style="color:#e05bff">✦</div>
+      <div class="wreck-title" style="color:#e05bff">LEVEL ${cap} · CAP REACHED</div>
+      <div class="wreck-by">This is as far as this life goes, Operator.</div>
+      <div class="wreck-loss" style="margin-top:10px;color:#f2d4ff;background:rgba(224,91,255,.08);border:1px solid rgba(224,91,255,.32);border-radius:10px;padding:11px 13px;line-height:1.5">
+        <b>XP no longer accrues.</b> Every kill still pays gold, resources and loot — but your pilot record is full at <b>Level ${cap}</b>, and nothing will move it.
+        <div style="margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.55">The cap is <b style="color:#f2d4ff">150</b> for an un-ascended pilot and rises <b style="color:#f2d4ff">+50 per Ascension Star</b> — ★1 is 200, ★2 is 250, and it keeps climbing. You are at <b style="color:#f2d4ff">★${stars}</b>, so <b style="color:#f2d4ff">ascending once takes you to Level ${next}</b> along with permanent perks and a higher loot ceiling.</div></div>
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Later</button><button class="btn primary" data-asc>✦ Open Pilot Ascension</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const go = sheet.querySelector('[data-asc]');
+    if (go) go.addEventListener('click', () => { closeSheet(); try { showScreen('pasc'); if (window.PASCEND) window.PASCEND.render(); } catch (e) {} });
+  }
   function showOffline(sum) {
     const sheet = showSheet(`<div class="sheet-head">Welcome Back, Operator</div><div class="sheet-body">
       <p>Your operator held the line for <b style="color:var(--gold)">${G.formatTime(sum.elapsed)}</b> while you were away.</p>
@@ -3105,5 +3170,5 @@
     }
   }
 
-  window.UI = { openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
+  window.UI = { openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
 })();

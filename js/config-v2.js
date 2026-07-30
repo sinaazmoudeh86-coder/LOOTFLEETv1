@@ -128,6 +128,17 @@
   // percent stats (speed/crit) stay modest so they never explode.
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // PILOT LEVEL CAP — the wall that makes ascension mandatory rather than
+  // optional. Lv 150 with no stars, +50 per Ascension Star: ★1 → 200, ★2 → 250,
+  // ★3 → 300, and onward forever. At the cap XP stops accruing entirely, so the
+  // only route to a higher level is to ascend. That IS the prestige loop.
+  // ---------------------------------------------------------------------------
+  const LEVEL_CAP_BASE = 150, LEVEL_CAP_PER_STAR = 50;
+  function levelCap(stars) {
+    const s = stars == null ? ascStars() : Math.max(0, stars | 0);
+    return LEVEL_CAP_BASE + LEVEL_CAP_PER_STAR * s;
+  }
   // XP required to advance FROM `level` to level+1.
   // Hybrid linear*exponential: L1->2 = 100, L2->3 ≈ 165, scales forever.
   // BAND WALLS (Jul 2026 pass — much steeper): every 100 levels the whole curve
@@ -500,6 +511,24 @@
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
       megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:900000, dreadCores:60 } },
+    // ---- THE AETERNUM · ASCENSION-CLASS PLANETBREAKER -----------------------
+    // Not a ship. An artificial world, forged by an extinct civilisation to erase
+    // star systems, and the single hardest thing in LOOTFLEET to obtain:
+    //   • ASCENSION ★5 — no amount of currency substitutes for prestige
+    //   • 5 TRILLION of all four primaries (gold, fuel, iron, plasma)
+    //   • a 3-DAY forge you cannot rush
+    // It is NOT a stat upgrade: every hull line sits at 80% of the Titan Sina. You
+    // fly it for the LANCE, not the sheet.
+    // Its EVENT HORIZON LANCE aligns for 15 seconds, then fires a beam that does
+    // not stop at its target: it crosses the ENTIRE zone, hits everything in the
+    // lane, and leaves a FRACTURE ZONE behind that turns the wreckage into the
+    // richest ground on the map. One shot a minute, forever.
+    { key:'aeternum', name:'The Aeternum', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:102,
+      mods:{ hpPct:4224, dmgPct:2376, multiShot:634, critChance:528, critDamage:1848, moveSpeed:397, atkSpeedPct:792, rangePct:3200, lifeSteal:23.4 },
+      tag:'ASCENSION CLASS · PLANETBREAKER', lance:true, sinaTracers:true,
+      desc:'The first Ascension-Class Planetbreaker — an artificial world built to erase star systems. The Event Horizon Lance charges for 15 seconds in full view of the galaxy, then carves a beam clean across the zone: every hull in the lane is vaporised, and the rift it leaves behind pays out on everything that dies in it. Requires Ascension ★5, five trillion of every primary resource, and three days in the forge.',
+      build:{ reqAsc:5, noBlueprint:true, days:3,
+              cost:{ gold:5e12, fuel:5e12, iron:5e12, plasma:5e12 } } },
     // TITAN SINA — the FINAL-CLASS hero ship. Double the Dread Omega in every
     // stat, with weapon range that effectively covers the entire battle zone.
     // Its fire renders as full-spectrum gatling tracers — lasers of all colors.
@@ -682,6 +711,7 @@
     SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, dungeonScale, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
+    levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,
     ascRarityCap, ascTopBoost, TOP_TIER,
   };
 })();

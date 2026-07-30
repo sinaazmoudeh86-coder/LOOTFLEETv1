@@ -38,7 +38,7 @@
   ];
   // cumulative perks per level (each row = what THIS level adds)
   const PERKS = {
-    1:  ['+2% gold from your empire (AFK, waves, events)', '+5 Galaxy citadel cap (every VIP level adds +5)'],
+    1:  ['+2% gold from your empire (AFK, waves, events)', '+5 Galaxy system cap — hold more tiles (every VIP level adds +5)'],
     2:  ['+2% XP from kills'],
     3:  ['+3% gold', '+5% AFK production (Moon + Home Citadel)'],
     4:  ['+3% XP', '+5% AFK production'],
@@ -73,7 +73,7 @@
     const after = level();
     if (after > before) setTimeout(() => { try { window.UI.unlockToast('⚜ VIP LEVEL ' + after + ' REACHED — new perks active'); } catch (e) {} }, 900);
     ensureBadge();
-    try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}   // live-update cap readouts (citadel cap etc.)
+    try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}   // live-update cap readouts (system/tile cap etc.)
     return after - before;
   }
   function track() {}   // (legacy hook — points are granted explicitly now)

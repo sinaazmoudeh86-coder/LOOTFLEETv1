@@ -167,76 +167,86 @@
   // ===========================================================================
   let sel = null, busy = false;
   function baseSlot(k) { return k.replace(/\d+$/, ''); }
+  function slotName(k) {
+    const sl = C().SLOTS[baseSlot(k)] || {};
+    return (sl.name || k) + (/\d$/.test(k) ? ' II' : '');
+  }
   function fmtStat(k, v) { const def = C().STATS[k] || {}; return def.fmt === 'flat' ? fmt(v) : (Math.round(v * 10) / 10) + '%'; }
 
   const UNLOCK_LV = 100;
+  let _retry = 0;
   function render() {
     _cCache = {};   // reprice once per paint; the click then charges exactly what was shown
-    const body = $('forge-body'); if (!body) return;
+    boot();         // styles may not be in yet if the tab is opened before boot fired
+    const body = $('forge-body');
+    // the screen can be asked for before its markup is parsed (deep link, restored
+    // tab, slow shell) — retry a few frames instead of leaving an empty panel
+    if (!body) { if (_retry++ < 20) requestAnimationFrame(render); return; }
+    _retry = 0;
     const st = G().state;
     // gated at Lv 100 — the lock veil (game.html #lock-forge) explains the system
     // while you climb, so leave the body empty rather than teasing a live panel
     if ((st.level | 0) < UNLOCK_LV) { body.innerHTML = ''; const s0 = $('forge-sub'); if (s0) s0.textContent = 'Lv ' + UNLOCK_LV; return; }
-    const slots = Object.keys(st.equipped || {}).filter((k) => st.equipped[k]);
-    const sub = $('forge-sub'); if (sub) sub.textContent = slots.length ? slots.length + ' fittings docked' : '';
-    if (!slots.length) { body.innerHTML = '<div class="fg-empty">Nothing to temper — the forge works on <b>equipped</b> fittings. Deploy, loot, equip, then bring your keepers here.</div>'; return; }
-    if (!sel || !st.equipped[sel]) sel = slots[0];
+    const keys = slotKeys();
+    if (!keys.length) { body.innerHTML = '<div class="fg-empty">No hardpoints found on this hull.</div>'; return; }
+    const tempered = keys.filter((k) => fs(k).lv > 0).length;
+    const sub = $('forge-sub'); if (sub) sub.textContent = tempered ? tempered + '/' + keys.length + ' hardpoints tempered' : keys.length + ' hardpoints';
+    if (!sel || keys.indexOf(sel) === -1) sel = keys.find((k) => st.equipped[k]) || keys[0];
     body.innerHTML =
-      '<div class="fg-intro">Hammer <b>+6% combat stats</b> into a fitting per temper level — odds fall as the temper climbs. Failures build <b>Forge Heat</b> (+3% next strike). Past <b>+10</b> a miss can <b>slip a level</b>. Reroll <b>Purity</b> (60–130%) with plasma to multiply the whole temper. Costs are <b>fixed</b> — set by your <b>pilot level</b>, the fitting’s <b>rarity</b> and its <b>item level</b> — <i>ILVL 300+ pays a steep endgame tariff</i>. The work lives on the item — lose the item, lose the work. Every fitting at <b>+15</b> adds <b style="color:#aee6ff">❄ 1% flash-freeze</b> on hit (bosses immune) — they stack across slots.</div>' +
-      '<div class="fg-strip">' + slots.map(chip).join('') + '</div>' +
+      '<div class="fg-intro">The forge works on <b>hardpoints, not fittings</b> — temper a slot once and <b>every fitting you ever dock in it</b> inherits the work. Each temper level adds <b>+6% combat stats</b> to whatever sits in the slot; odds fall as the temper climbs. Failures build <b>Forge Heat</b> (+3% next strike). Past <b>+10</b> a miss can <b>slip a level</b>. Reroll <b>Purity</b> (60–130%) with plasma to multiply the whole temper. Costs are <b>fixed</b> — set by your <b>pilot level</b> and <b>deepest zone</b>, never by the fitting docked. Every hardpoint at <b>+15</b> adds <b style="color:#aee6ff">❄ 1% flash-freeze</b> on hit (bosses immune) — they stack.</div>' +
+      '<div class="fg-strip">' + keys.map(chip).join('') + '</div>' +
       dash(sel);
     wire(body);
   }
 
   function chip(k) {
-    const it = G().state.equipped[k], r = C().RARITY[it.rarity] || C().RARITY[0];
-    const e = it.enh || { lv: 0 };
-    const sl = C().SLOTS[baseSlot(k)] || {};
-    return '<button class="fg-chip' + (k === sel ? ' on' : '') + '" data-sel="' + k + '" style="--rc:' + r.color + '">' +
-      '<span class="fg-chip-ic">' + (it.icon || '') + '</span>' +
-      '<span class="fg-chip-n">' + it.name + '</span>' +
-      '<span class="fg-chip-s">' + (sl.name || k) + (e.lv ? ' · <b>+' + e.lv + '</b>' : '') + '</span>' +
+    const it = G().state.equipped[k];
+    const r = it ? (C().RARITY[it.rarity] || C().RARITY[0]) : { color: '#42566d' };
+    const e = fs(k);
+    return '<button class="fg-chip' + (k === sel ? ' on' : '') + (it ? '' : ' bare') + '" data-sel="' + k + '" style="--rc:' + r.color + '">' +
+      '<span class="fg-chip-ic">' + (it ? (it.icon || '') : '⬡') + '</span>' +
+      '<span class="fg-chip-n">' + slotName(k) + '</span>' +
+      '<span class="fg-chip-s">' + (e.lv ? '<b>+' + e.lv + '</b>' : 'BASE') + (it ? '' : ' · EMPTY') + '</span>' +
     '</button>';
   }
 
   function dash(k) {
-    const st = G().state, it = st.equipped[k], e = ensure(it);
-    const r = C().RARITY[it.rarity] || C().RARITY[0];
-    const noBase = !Object.keys(e.base).length;
-    const statRows = Object.keys(e.base).map((sk) => {
+    const st = G().state, it = st.equipped[k], e = fs(k);
+    const r = it ? (C().RARITY[it.rarity] || C().RARITY[0]) : { color: '#42566d', name: 'empty' };
+    const m = mult(e);
+    const statRows = it ? BOOST.filter((sk) => it.stats && it.stats[sk] != null).map((sk) => {
       const def = C().STATS[sk] || { name: sk };
-      const bonus = (it.stats[sk] || 0) - e.base[sk];
-      return '<div class="fg-stat"><span>' + def.name + '</span><b>' + fmtStat(sk, e.base[sk]) + (bonus > 0.01 ? ' <i>+' + fmtStat(sk, bonus) + '</i>' : '') + '</b></div>';
-    }).join('');
+      const bonus = it.stats[sk] * (m - 1);
+      return '<div class="fg-stat"><span>' + def.name + '</span><b>' + fmtStat(sk, it.stats[sk]) + (bonus > 0.01 ? ' <i>+' + fmtStat(sk, bonus) + '</i>' : '') + '</b></div>';
+    }).join('') : '';
     return '<div class="fg-dash" id="fg-dash" style="--rc:' + r.color + '" data-comment-anchor="fg-dash">' +
       '<div class="fg-hero">' +
-        '<span class="fg-hero-ic">' + (it.icon || '') + '</span>' +
+        '<span class="fg-hero-ic">' + (it ? (it.icon || '') : '⬡') + '</span>' +
         '<div class="fg-hero-t">' +
-          '<div class="fg-hero-n">' + it.name + '</div>' +
+          '<div class="fg-hero-n">' + slotName(k) + (e.lv ? ' <b style="color:#ffab4a">+' + e.lv + '</b>' : '') + '</div>' +
+          '<div class="fg-hero-sub">' + (it ? 'docked · <b>' + it.name + '</b>' : 'no fitting docked — the temper waits here') + '</div>' +
           '<div class="fg-hero-badges">' +
-            '<span class="fg-rar">' + (r.name || '').toUpperCase() + '</span>' +
+            (it ? '<span class="fg-rar">' + (r.name || '').toUpperCase() + '</span>' : '') +
             '<span class="fg-b">TEMPER <b>+' + e.lv + '</b><i>/' + MAX_LV + '</i></span>' +
             (e.lv >= MAX_LV ? '<span class="fg-b cryo">❄ FREEZE <b>1%</b></span>' : '') +
-            '<span class="fg-b">ILVL <b>' + (it.ilvl | 0) + '</b></span>' +
-            (it.rarity ? '<span class="fg-b">RARITY COST <b>×' + (rarMult(it) < 10 ? rarMult(it).toFixed(1) : Math.round(rarMult(it))) + '</b></span>' : '') +
-            (tariff(it) ? '<span class="fg-b tar">FORGE TARIFF <b>×' + (1 + tariff(it)).toFixed(2) + '</b></span>' : '') +
+            (it ? '<span class="fg-b">ILVL <b>' + (it.ilvl | 0) + '</b></span>' : '') +
             '<span class="fg-b' + (e.pur >= PRISTINE ? ' pris' : '') + '">PURITY <b>' + e.pur + '%</b></span>' +
+            '<span class="fg-b">TOTAL <b>+' + Math.round((m - 1) * 100) + '%</b></span>' +
           '</div>' +
         '</div>' +
       '</div>' +
       (statRows ? '<div class="fg-stats">' + statRows + '</div>' : '') +
-      '<div class="fg-grid">' + temperPanel(k, it, e, noBase) + purityPanel(k, it, e, noBase) + '</div>' +
+      '<div class="fg-grid">' + temperPanel(k, e) + purityPanel(k, e) + '</div>' +
     '</div>';
   }
 
-  function temperPanel(k, it, e, noBase) {
-    const maxed = e.lv >= MAX_LV, ch = chance(e), c = costT(it);
+  function temperPanel(k, e) {
+    const maxed = e.lv >= MAX_LV, ch = chance(e), c = costT(k);
     const afford = bank('gold') >= c.gold && bank('iron') >= c.iron;
     const chCls = ch >= 75 ? 'hi' : ch >= 40 ? 'mid' : 'lo';
     const pips = Array.from({ length: MAX_LV }, (_, i) => '<i class="' + (i < e.lv ? 'on' : '') + (i >= SLIP_FLOOR ? ' risk' : '') + '"></i>').join('');
     let inner;
-    if (noBase) inner = '<div class="fg-nobase">This fitting has no temperable stats — the forge boosts damage, hull, fire rate, crit damage &amp; thrust lines.</div>';
-    else if (maxed) inner = '<div class="fg-maxed">✦ +15 — TEMPERED TO THE LIMIT<span class="fg-cryo">❄ +1% FLASH-FREEZE ON HIT</span></div>';
+    if (maxed) inner = '<div class="fg-maxed">✦ +15 — HARDPOINT TEMPERED TO THE LIMIT<span class="fg-cryo">❄ +1% FLASH-FREEZE ON HIT</span></div>';
     else inner =
       '<div class="fg-chance ' + chCls + '"><span>SUCCESS</span><b>' + ch + '%</b>' +
         (e.heat ? '<em class="fg-heat">🔥 HEAT +' + e.heat + '%</em>' : '') +
@@ -247,18 +257,16 @@
         (c.iron > 0 ? '<span style="color:#d0a060' + (bank('iron') < c.iron ? ';opacity:.45' : '') + '">◆ ' + fmt(c.iron) + '</span>' : '') +
       '</div>' +
       '<button class="fg-btn" data-temper="' + k + '"' + (afford ? '' : ' disabled') + '>⚒ STRIKE</button>' +
-      (afford ? '' : shortfall(it, c)) +
-      '<div class="fg-note">' + (e.lv >= SLIP_FLOOR ? 'Above +10 a miss has a 40% chance to slip one level (never below +10)' : 'Fail costs only the materials — heat carries to your next strike') + (tariff(it) ? ' · ILVL ' + (it.ilvl | 0) + ' pays the ×' + (1 + tariff(it)).toFixed(2) + ' endgame tariff' : '') + '</div>';
+      (afford ? '' : shortfall(c)) +
+      '<div class="fg-note">' + (e.lv >= SLIP_FLOOR ? 'Above +10 a miss has a 40% chance to slip one level (never below +10)' : 'Fail costs only the materials — heat carries to your next strike') + ' · the work stays on the hardpoint through every gear swap</div>';
     return '<div class="fg-panel" id="fg-temper"><div class="fg-panel-h">⚒ TEMPER</div><div class="fg-pips">' + pips + '</div>' + inner + '</div>';
   }
 
-  function purityPanel(k, it, e, noBase) {
-    const c = costR(it), afford = bank('plasma') >= c.plasma;
+  function purityPanel(k, e) {
+    const c = costR(k), afford = bank('plasma') >= c.plasma;
     const fl = purFloor(e);
     const pos = clamp((e.pur - 60) / (130 - 60) * 100, 0, 100);
-    let inner;
-    if (noBase) inner = '<div class="fg-nobase">Purity multiplies the temper — nothing to multiply on this fitting.</div>';
-    else inner =
+    const inner =
       '<div class="fg-pur' + (e.pur >= PRISTINE ? ' pris' : '') + '"><b>' + e.pur + '%</b><span>' + (e.pur >= PRISTINE ? '✦ PRISTINE' : 'forge purity') + '</span></div>' +
       '<div class="fg-purbar"><i class="fg-pfloor" style="left:' + clamp((fl - 60) / 70 * 100, 0, 100) + '%"></i><i class="fg-ppris"></i><b style="left:' + pos + '%"></b></div>' +
       '<div class="fg-next">effective <b>+' + (PCT_PER_LV * e.pur / 100).toFixed(1) + '%</b> per temper level</div>' +
@@ -280,10 +288,9 @@
   // ===========================================================================
   function attempt(k) {
     if (busy) return;
-    const st = G().state, it = st.equipped[k]; if (!it) return;
-    const e = ensure(it);
-    if (e.lv >= MAX_LV || !Object.keys(e.base).length) return;
-    const c = costT(it);
+    const st = G().state, e = fs(k);
+    if (e.lv >= MAX_LV) return;
+    const c = costT(k);
     if (bank('gold') < c.gold || bank('iron') < c.iron) return;
     busy = true;
     st.gold -= c.gold;
@@ -296,20 +303,17 @@
       e.heat = Math.min(45, e.heat + 3);
       if (e.lv > SLIP_FLOOR && Math.random() < 0.4) { e.lv--; slipped = true; }
     }
-    recompute(it);
     finish('fg-temper', () => {
       flashText('fg-temper', ok, ok ? (e.lv >= MAX_LV ? '★ MAX TEMPER +' + e.lv : 'SUCCESS · +' + e.lv) : slipped ? 'MISS · SLIPPED TO +' + e.lv : 'MISS · 🔥 HEAT +' + e.heat + '%');
       if (ok && e.lv >= MAX_LV) { try { G().bumpLife('temper15', 1); G().save(); } catch (x) {} }   // MASTER ARMOURER badge
-      if (ok && e.lv >= MAX_LV) showCine(it, '⚒ +15 TEMPER', 'CRYO-HARDENED · +1% FLASH-FREEZE', '#ffab4a');
+      if (ok && e.lv >= MAX_LV) showCine(k, '⚒ +15 TEMPER', 'CRYO-HARDENED · +1% FLASH-FREEZE', '#ffab4a');
     });
   }
 
   function reroll(k) {
     if (busy) return;
-    const st = G().state, it = st.equipped[k]; if (!it) return;
-    const e = ensure(it);
-    if (!Object.keys(e.base).length) return;
-    const c = costR(it);
+    const st = G().state, e = fs(k);
+    const c = costR(k);
     if (bank('plasma') < c.plasma) return;
     busy = true;
     st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
@@ -318,12 +322,11 @@
     e.rr++;
     const fl = purFloor(e);
     e.pur = Math.round(fl + Math.random() * (130 - fl));
-    recompute(it);
     finish('fg-purity', () => {
       const up = e.pur >= old;
       flashText('fg-purity', up, old + '% → ' + e.pur + '%' + (e.pur >= PRISTINE ? ' ✦ PRISTINE' : ''));
       if (e.pur >= PRISTINE) { try { G().bumpLife('pristine', 1); G().save(); } catch (x) {} }      // PRISTINE FORGE badge
-      if (e.pur >= PRISTINE) showCine(it, '✦ ' + e.pur + '% PURITY', 'PRISTINE FORGE', '#7df3ff');
+      if (e.pur >= PRISTINE) showCine(k, '✦ ' + e.pur + '% PURITY', 'PRISTINE FORGE', '#7df3ff');
     });
   }
 
@@ -345,25 +348,29 @@
     setTimeout(() => { tag.remove(); p.classList.remove('flash-ok', 'flash-no'); }, 1300);
   }
 
-  function showCine(it, big, kicker, color) {
+  function showCine(k, big, kicker, color) {
+    const it = G().state.equipped[k];
     let o = $('fg-overlay');
     if (!o) { o = document.createElement('div'); o.id = 'fg-overlay'; ($('screen-forge') || document.body).appendChild(o); }
     o.className = 'show';
     o.innerHTML = '<div class="fg-cine" style="--tc:' + color + '">' +
       '<div class="fg-cine-rings"><i></i><i></i><i></i></div>' +
-      '<span class="fg-cine-ic">' + (it.icon || '') + '</span>' +
+      '<span class="fg-cine-ic">' + (it ? (it.icon || '') : '⬡') + '</span>' +
       '<div class="fg-cine-k">' + kicker + '</div>' +
       '<div class="fg-cine-big">' + big + '</div>' +
-      '<div class="fg-cine-n">' + it.name + '</div>' +
+      '<div class="fg-cine-n">' + slotName(k) + (it ? ' · ' + it.name : '') + '</div>' +
       '<button class="fg-cine-btn">GLORIOUS</button></div>';
     o.querySelector('.fg-cine-btn').onclick = () => { o.classList.remove('show'); o.innerHTML = ''; render(); };
   }
 
   // ---- BOOT ------------------------------------------------------------------
+  // CSS is a `const` declared at the BOTTOM of this file, so boot() must never run
+  // during the module body — it would hit the temporal dead zone, throw, and abort
+  // the script before window.STARFORGE is assigned (forge tab then paints nothing).
+  // The boot call therefore lives at the very end of the file, past the CSS literal.
   function boot() { if (!$('fg-css')) { const s = document.createElement('style'); s.id = 'fg-css'; s.textContent = CSS; document.head.appendChild(s); } }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
-  window.STARFORGE = { render };
+  window.STARFORGE = { render, slotMult, slotTemper, boosts, MAX_LV };
 
   const CSS = `
   .mega-grid .mega-card.cmd-forge{ background:linear-gradient(180deg,#26130a,#140b08); }
@@ -399,6 +406,10 @@
   .fg-hero-ic svg{ width:38px; height:38px; filter:drop-shadow(0 0 8px color-mix(in srgb,var(--rc) 60%,transparent)); }
   .fg-hero-t{ flex:1; min-width:0; }
   .fg-hero-n{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:13.5px; color:#f2f7ff; letter-spacing:.03em; }
+  .fg-hero-sub{ font-size:11px; color:#9fb1c4; margin-top:3px; }
+  .fg-hero-sub b{ color:#dbe8f5; }
+  .fg-chip.bare{ opacity:.72; }
+  .fg-chip.bare .fg-chip-ic{ font-size:18px; color:#42566d; }
   .fg-hero-badges{ display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
   .fg-rar{ font-family:'Orbitron',sans-serif; font-size:8.5px; font-weight:800; letter-spacing:.12em; color:#08131c;
     background:linear-gradient(180deg, color-mix(in srgb,var(--rc) 80%,#fff), var(--rc)); border-radius:7px; padding:3px 8px; }
@@ -489,4 +500,7 @@
     .fg-dash.shake,.fg-panel.charging,.fg-flash,.fg-cine-rings i,.fg-cine-ic svg,.fg-cine-big{ animation:none !important; }
   }
   `;
+
+  // ---- BOOT (must stay last — see note by boot()) -----------------------------
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

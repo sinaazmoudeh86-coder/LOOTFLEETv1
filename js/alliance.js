@@ -6,7 +6,7 @@
      kick elders, promote/demote member↔elder, event signup. Leader: all.
    • DAILY LOOP: one donation (gold or LootCoins → Alliance XP + ⬡ Coins) and
      2 boss attacks (3 with VIP) against the shared, forever-scaling
-     VOIDSPAWN LEVIATHAN — kills pay ⬡ 300 to EVERY member.
+     HOLLOW ARMADA — ONE mark at a time; each kill pays ⬡ 300 to EVERY member.
    • WEEKLY OPS: 3 seeded missions per member; points stack into one alliance
      score on the server-wide weekly board. Completions also pay personal ◈.
    • FEED: chat + system events (joins, kicks, boss kills, major donations).
@@ -256,7 +256,7 @@
       // BOSS — live raid
       '<div class="al-boss"><div class="al-b-top"><span class="al-b-t">☠ THE HOLLOW ARMADA · Mk-' + a.boss_n + '</span><span class="al-b-hp">' + fmt(a.boss_hp) + ' HP</span></div>' +
         '<div class="al-b-bar"><i style="width:' + bossPct + '%"></i></div>' +
-        '<div class="al-b-row"><span class="al-b-s"><b>LIVE RAID</b> — fly your REAL flagship in the arena — dodge the collapse zones; every weapon hit transmits to the shared hull. Each level burned to 0 resets FULL at the next mark — exponentially harder. Every kill pays EVERY member <b>⬡ 300</b>, +50 more per mark. Resets Sundays.</span>' +
+        '<div class="al-b-row"><span class="al-b-s"><b>LIVE RAID</b> — fly your REAL flagship in the arena — dodge the collapse zones; the hull bar you burn down <b>is</b> this shared pool. One Armada at a time: burn it to 0 and <b>every member is paid ⬡ 300</b>, then it rebuilds at the next mark, ×1.55 harder. Resets Sundays.</span>' +
         '<button class="sc-btn heart" id="al-attack" ' + (atk.left ? '' : 'disabled') + '>⚔ Raid · ' + atk.left + '/' + atk.max + '</button></div></div>' +
       // DONATE
       '<div class="sc-sec">DAILY DONATION ' + (donatedToday(mine) ? '<b style="color:#7ce0a0">✓ done today</b>' : '') + '</div>' +
@@ -334,13 +334,16 @@
       try { window.ALBOSS.start({
         bossN: a2.boss_n | 0, bossHp: Number(a2.boss_hp), bossMax: Number(a2.boss_max),
         onDone: async (res) => {
-          // REAL damage from the arena run (Monolith bonus already applied; server clamps 25× power)
+          // REAL damage from the arena run (Monolith bonus already applied; the server
+          // clamps at power × 50 — the same rate ALBOSS normalizes to, so the ⚔ meter
+          // the player watched fill is what lands). The SERVER owns the mark and the
+          // kill; the client never advances Mk on its own.
           const dmg = Math.max(1, Math.round(res.dmg || 1));
           try {
             const r = await S().rpc('alliance_attack', { p_dmg: dmg, p_vip: !!(window.VIP && VIP.level && VIP.level() >= 1), p_pow: Math.max(0, Math.round((G().score && G().score()) || 0)) });
             // pocket reward scales with raid performance
             G().state.gold = (G().state.gold || 0) + Math.round(res.frac * 2e6 * Math.pow(window.CONFIG.dungeonScale(Math.max(1, G().state.highestUnlocked || 1)), 0.7)); G().save();
-            S().toast(r && (r.kills | 0) > 0 ? '☠ ' + r.kills + ' ARMADA LEVEL' + (r.kills > 1 ? 'S' : '') + ' DOWN — ⬡ paid to every member · now Mk-' + (r.boss_n || '?')
+            S().toast(r && (r.kills | 0) > 0 ? '☠ ARMADA DOWN — ⬡ ' + ((r.coins | 0) || 300) + ' paid to every member · now Mk-' + (r.boss_n || '?')
               : res.died ? '✝ Fleet lost — partial damage logged: ' + fmt((r && r.dmg) || dmg)
               : '⚔ Damage transmitted: ' + fmt((r && r.dmg) || dmg),
               r && (r.kills | 0) > 0 ? '#ffd24d' : res.died ? '#ff8a96' : '#7ce0a0');

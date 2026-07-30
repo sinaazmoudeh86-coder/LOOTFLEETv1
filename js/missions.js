@@ -276,6 +276,8 @@
       (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rwMult(tier)) + '</b> this tier · targets up steeply</div>'
                 : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>') +
       '</div><div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
+    const readyN = b.list.filter((m) => m.done >= m.n && !m.claimed).length;
+    if (readyN > 0) html += '<button class="msn-claimall" data-claimall="1">✓ CLAIM ALL COMPLETED <i>' + readyN + '</i></button>';
     if (cfg.id === 'd') html += veridianBanner(); // ⌘ VERIDIAN — 1,000-lifetime-missions reward hull
     b.list.forEach((mi, i) => {
       const def = POOL.find((p) => p.id === mi.id); if (!def) return;
@@ -336,6 +338,31 @@
     }));
     const vb = body.querySelector('[data-veridian-accept]');
     if (vb) vb.addEventListener('click', acceptVeridian);
+    const ca = body.querySelector('[data-claimall]');
+    if (ca) ca.addEventListener('click', () => {
+      // one payout for the whole sweep — rewards are summed so a ten-mission claim
+      // doesn't fire ten separate toasts
+      const total = {};
+      let n = 0;
+      b.list.forEach((mi) => {
+        if (mi.claimed || mi.done < mi.n) return;
+        const def = POOL.find((p) => p.id === mi.id); if (!def) return;
+        mi.claimed = true; n++;
+        G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
+        const rw = scaleRw(def.rw(lvl, z), tier, cfg);
+        for (const k in rw) total[k] = (total[k] || 0) + rw[k];
+      });
+      if (!n) return;
+      payout(total);
+      const tl = $('toast-layer');
+      if (tl) {
+        const t = document.createElement('div');
+        t.className = 'msn-toast';
+        t.innerHTML = '<span class="mt-ic">✓</span><span><b>' + n + ' MISSION' + (n > 1 ? 'S' : '') + ' CLAIMED</b><br>' + cfg.label + ' board · rewards banked</span>';
+        tl.appendChild(t); setTimeout(() => t.remove(), 3400);
+      }
+      render(); syncBadge();
+    });
     const bb = body.querySelector('[data-bonus]');
     if (bb) bb.addEventListener('click', () => {
       const doneN = b.list.filter((m) => m.done >= m.n).length;
@@ -468,6 +495,11 @@
     color:#04140a; background:linear-gradient(180deg,#7ce0a0,#3fae6c); border:none; border-radius:9px; padding:9px 13px; cursor:pointer;
     box-shadow:0 0 12px -2px rgba(89,217,140,.7); animation:msnClaimPulse 1.6s ease-in-out infinite; }
   .msn-claim.gold{ color:#231302; background:linear-gradient(180deg,#ffd24d,#e09a2d); box-shadow:0 0 14px -2px rgba(255,210,77,.8); }
+  .msn-claimall{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin:0 0 9px; cursor:pointer;
+    font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.1em; color:#04140a; border:none; border-radius:11px; padding:12px;
+    background:linear-gradient(180deg,#9df0bb,#3fae6c); box-shadow:0 0 16px -4px rgba(89,217,140,.8); animation:msnClaimPulse 1.6s ease-in-out infinite; }
+  .msn-claimall i{ font-style:normal; font-size:10px; padding:2px 7px; border-radius:99px; background:rgba(4,20,10,.28); }
+  .msn-claimall:active{ transform:scale(.98); }
   .msn-claim:active{ transform:scale(.94); }
   @keyframes msnClaimPulse{ 0%,100%{ filter:brightness(1);} 50%{ filter:brightness(1.18);} }
   .msn-done{ flex:none; width:26px; height:26px; border-radius:50%; display:grid; place-items:center;

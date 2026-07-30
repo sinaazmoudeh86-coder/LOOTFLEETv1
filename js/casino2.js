@@ -265,7 +265,6 @@
     if ($('cs2-css')) return;
     const s = document.createElement('style'); s.id = 'cs2-css'; s.textContent = CSS2; document.head.appendChild(s);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   const CSS2 = `
   /* craps table — long rails, printed field & lines */
@@ -333,4 +332,10 @@
     .cs-dice.roll span,.cs-reel.spin,.cs-jack,.slT-marquee{ animation:none !important; }
   }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

@@ -790,8 +790,6 @@
     setTimeout(() => { try { if (window.GAME && window.GAME.refreshStats && Object.keys(nodes()).length) { window.GAME.refreshStats(); if (window.UI) window.UI.refreshAll(); } } catch (e) {} }, 700);
     setTimeout(updateHud, 600);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  setTimeout(boot, 1200);
 
   // shade helper (hex → lighter/darker)
   function rgba(hex, a) {
@@ -975,4 +973,11 @@
   .drm-vsub{ font-size:11.5px; color:#a8b2c2; line-height:1.45; margin-bottom:14px; } .drm-vsub b{ color:#ffd0d4; }
   .drm-vbtns{ display:flex; flex-direction:column; gap:0; }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 1200);
 })();

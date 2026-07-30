@@ -381,8 +381,6 @@
     if ($('gb-css')) return;
     const s = document.createElement('style'); s.id = 'gb-css'; s.textContent = CSS; document.head.appendChild(s);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  setTimeout(boot, 1000);
 
   window.GBOX = { render, UNLOCK };
 
@@ -505,4 +503,11 @@
   .gb-accept:active{ transform:scale(.97); }
   @media (prefers-reduced-motion: reduce){ .gb-open-crate,.gb-open-glow,.gb-open-rays,.gb-item,.gb-hero::before{ animation:none !important; opacity:1 !important; transform:none !important; } }
   `;
+
+  // ---- BOOT (must stay LAST) ------------------------------------------------
+  // boot() reads the CSS const declared above it; calling it from the module body
+  // hit the temporal dead zone and aborted the script before window exports ran,
+  // so the screen silently painted nothing on a late parse. Keep this at the end.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 1000);
 })();

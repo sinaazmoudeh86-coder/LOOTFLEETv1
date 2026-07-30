@@ -176,14 +176,22 @@
     publishLb(s, data);
   }
   // public leaderboard row (non-sensitive fields)
+  // ASCENSION STARS (fixed Jul 2026): this publisher never sent `asc`, so every
+  // row in the leaderboard table was written with p_asc = 0. Your own badge came
+  // from local state, which is why only YOUR stars ever showed on the Ranks page
+  // \u2014 every other pilot, ascended or not, published a zero. Read it from the save
+  // blob, with the live module as a fallback.
   function publishLb(s, data) {
     try {
       if (window.CLOUD.lbUpsert) {
         const G = window.GAME;
+        let asc = (data && data.pasc && data.pasc.stars) | 0;
+        if (!asc) { try { asc = window.PASCEND ? (window.PASCEND.stars() | 0) : 0; } catch (e) {} }
         window.CLOUD.lbUpsert({
           name: s.name,
           power: (G && G.score) ? G.score() : (data.level || 1),
           level: data.level || 1, zone: data.highestDungeonReached || 1, kills: data.totalKills || 0,
+          asc,
           fleet: [data.ship].concat((G && G.fleetShips) ? G.fleetShips().map((x) => x.key) : []).filter(Boolean),
         });
       }

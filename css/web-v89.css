@@ -978,6 +978,50 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 .ship-tile.st-sina::before,.ship-tile.st-sina::after{ z-index:0; }
 .ship-tile.st-sina .sts-art,.ship-tile.st-sina .st-name,.ship-tile.st-sina .st-cls,.ship-tile.st-sina .st-stats,.ship-tile.st-sina .st-badge{ position:relative; z-index:1; }
 
+/* ---- APEX PILL FIXES -------------------------------------------------------
+   The tracer streaks were sitting BEHIND the hull art (both at z-index 0/1 with
+   an opaque art background), so the signature effect was invisible; and the
+   animated border ring was pushed to z-index 0 by the bolt-down block above, so
+   the art panel painted over it. Ring on top, beams in front of the hull. */
+.ship-tile.st-sina::before{ z-index:4 !important; }
+.sts-art .sina-beam{ z-index:3; }
+
+/* ===== THE AETERNUM — same pill, lance-green identity ===================== */
+.ship-tile.st-aet{ background:linear-gradient(180deg,#131f14,#080d09) !important; }
+.ship-tile.st-aet::before{ background:linear-gradient(120deg,#a6ff5b,#5fd47a,#e9ffd0,#3f8f3a,#a6ff5b); background-size:400% 400%; opacity:.95; }
+.ship-tile.st-aet::after{ background:conic-gradient(from 0deg, transparent 0 40deg, rgba(166,255,91,.12) 55deg, transparent 70deg, transparent 200deg, rgba(233,255,208,.10) 215deg, transparent 230deg); }
+.ship-tile.st-aet .sts-art{ background:
+  radial-gradient(1.4px 1.4px at 24% 26%, rgba(210,255,190,.5), transparent 60%),
+  radial-gradient(1.2px 1.2px at 72% 62%, rgba(210,255,190,.4), transparent 60%),
+  radial-gradient(90% 110% at 50% 30%, #16281a, #080d09 80%); }
+.ship-tile.st-aet .sts-art img{ filter:drop-shadow(0 14px 26px rgba(0,0,0,.65)) drop-shadow(0 0 34px rgba(166,255,91,.55)) drop-shadow(0 0 70px rgba(95,212,122,.3)); }
+/* The Aeternum plate is LANDSCAPE, so width-based sizing (the Sina rule) pushed
+   it past the panel and clipped the sphere. Size it by HEIGHT with a width guard
+   so the whole world always fits, whatever the source aspect ratio is, and keep
+   the idle drift to ±1% so it can never drift out of frame. */
+.ship-tile.st-aet .sts-art img{ width:auto; height:96%; max-width:100%; max-height:96%;
+  left:50%; top:50%; transform:translate(-50%,-50%); animation:aetFloat 5s ease-in-out infinite; }
+@keyframes aetFloat{ 0%,100%{ transform:translate(-50%,-51%) rotate(-.6deg); } 50%{ transform:translate(-50%,-49%) rotate(.6deg); } }
+/* the `background` shorthand below resets background-clip, so the text clip has
+   to be restated or the gradient paints as a solid bar over invisible letters */
+.ship-tile.st-aet .st-name{ background:linear-gradient(90deg,#e9ffd0,#a6ff5b,#5fd47a,#e9ffd0); background-size:250% 100%;
+  -webkit-background-clip:text; background-clip:text; color:transparent; }
+.ship-tile.st-aet .sts-callout{ color:#bff59a; text-shadow:0 0 8px rgba(166,255,91,.55); }
+.apex-chip.aet{ color:#08140a; background:linear-gradient(180deg,#d6ffb0,#7ede4f); box-shadow:0 0 12px -2px rgba(166,255,91,.9); }
+/* the lance: a charge ring at the muzzle, then a beam across the panel */
+.aet-lance{ position:absolute; left:26%; top:50%; width:0; height:4px; z-index:3; border-radius:3px; transform:translateY(-50%);
+  background:linear-gradient(90deg,#fff,#e9ffd0 30%,#a6ff5b 70%,transparent);
+  box-shadow:0 0 14px rgba(166,255,91,.9); animation:aetLance 4.2s ease-in infinite; }
+@keyframes aetLance{ 0%,45%{ width:0; opacity:0; } 55%{ width:6%; opacity:1; } 72%{ width:78%; opacity:1; } 100%{ width:78%; opacity:0; } }
+.aet-ring{ position:absolute; left:26%; top:50%; width:16px; height:16px; margin:-8px 0 0 -8px; z-index:2; border-radius:50%;
+  border:2px solid rgba(166,255,91,.9); opacity:0; animation:aetRing 4.2s ease-out infinite; }
+.aet-ring.r2{ animation-delay:.5s; }
+@keyframes aetRing{ 0%{ transform:scale(.3); opacity:0; } 30%{ opacity:.9; } 55%{ transform:scale(3.4); opacity:0; } 100%{ opacity:0; } }
+@media (prefers-reduced-motion:reduce){
+  .aet-lance,.aet-ring,.ship-tile.st-aet::before,.ship-tile.st-aet::after,.ship-tile.st-aet .st-name{ animation:none !important; }
+  .aet-lance{ width:70%; opacity:.7; }
+}
+
 /* bolt-down: predictable touch behavior across the app */
 #app, #app button, #app .nav-btn, #app .res-chip, #app .lc-cta{ touch-action:manipulation; }
 /* landscape phones: keep the app usable (short viewports) */

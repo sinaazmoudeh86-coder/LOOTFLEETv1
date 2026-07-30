@@ -4,13 +4,15 @@
    Exactly the Voidmaw treatment: GAME.startAllianceRaid() drops one huge boss
    into a clean arena; you fly your REAL flagship (manual flight, auto-pilot
    off, 1× speed), your real weapons chip its hull, and the HP delta is the
-   damage that transmits to the shared alliance pool (server clamps 25× power).
-   2:30 window — burn the level's HP to 0 and the Armada RESETS FULL at the
-   next mark (×1.55 HP, exponentially harder); every level killed pays the
-   whole alliance more ⬡ (250 + 50·mark, server-side). Ladder resets to Mk-1
-   every Sunday 12AM CST. VOID COLLAPSE zones telegraph, blink faster, then
-   drop 5s black holes that burn 75% max hull/sec. Monolith hulls add their
-   siegeBonus to every transmitted point. Final 20s ENRAGE.
+   damage that transmits to the shared alliance pool.
+   ONE BOSS PER RUN (Jul 2026). The arena hull IS the shared pool: its bar
+   mirrors pool-remaining, so what you watch drain is exactly what the server
+   subtracts. There is NO client-side mark ladder — burn the pool to 0 and the
+   run ENDS as a kill; the mark only advances when the SERVER confirms it, and
+   every confirmed kill pays ⬡ 300 to every member. Ladder resets to Mk-1
+   every Sunday 12AM CST. 2:30 window. VOID COLLAPSE zones telegraph, blink
+   faster, then drop 5s black holes that burn 75% max hull/sec. Monolith hulls
+   add their siegeBonus to every transmitted point. Final 20s ENRAGE.
    window.ALBOSS.start({bossN, bossHp, bossMax, onDone(res)}) — res =
    { dmg, frac 0..1, bonus, died, killed, kills }.
    ============================================================================= */
@@ -20,6 +22,7 @@
   const fmt = (n) => { try { return G().formatNum(Math.floor(n)); } catch (e) { return String(Math.floor(n)); } };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const T = 150;
+  const MAX_XMIT = 50;   // one full run transmits at most power × 50 — MUST match the SQL clamp
   let run = null;
 
   function banner(t, s) {
@@ -50,25 +53,22 @@
     const sh = (C().SHIP_BY_KEY || {})[(G().state || {}).ship] || {};
     const bonus = sh.siegeBonus || 0;
     // UNIT NORMALIZATION — arena hits are raw combat damage (grows geometrically
-    // with zones); the alliance pool + server clamp run on POWER units (25×
-    // leaderboard power). Convert at a rate where a full 2:30 of your
-    // theoretical DPS ≈ your server max attack — so the ⚔ meter fills across
-    // the whole run and "what you watched accumulate" is what transmits.
+    // with zones); the alliance pool runs on POWER units. Convert at the rate
+    // the SERVER clamps at: a full 2:30 of your theoretical DPS = your maximum
+    // transmit (power × 50). No pool-relative fudge — if the shared hull is
+    // bigger than one pilot can transmit, the bar honestly stops short and the
+    // alliance finishes it together.
     const theory = Math.max(1, (G().rt && G().rt.stats && G().rt.stats.theoryDps) || 1);
     const pool = Math.max(1, Number(opts.bossHp) || 1);
-    // A full run is worth 25× your power — or, when the remaining pool is bigger
-    // than that, enough to flatten the current mark 2.4× over. Nobody ever
-    // shoots a hull they mathematically cannot dent; whales still burn marks in
-    // a hit or two because 25× their power dwarfs the pool.
-    const norm = Math.max(power * 25, pool * 2.4) / (theory * T);
-    run = { left: T, dealt: 0, burned: 0, kills: 0, boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false,
+    const norm = (power * MAX_XMIT) / (theory * T);
+    run = { left: T, dealt: 0, kills: 0, boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false,
             n, bonus, norm, poolHp: pool, died: false, submitted: false,
             prevAuto, prevSpeed, onDone: opts.onDone };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     warbar();
     banner('⬡ HOLLOW ARMADA Mk-' + n + ' ENGAGED',
-      'MANUAL FLIGHT — dodge the collapse zones · 2:30 · burn each level to 0 and it resets HARDER — every kill pays the whole alliance' + (bonus ? ' · ⬡ MONOLITH +' + Math.round(bonus * 100) + '%' : ''));
+      'MANUAL FLIGHT — dodge the collapse zones · 2:30 · the hull bar IS the alliance pool — burn it to 0 and every member is paid ⬡ 300' + (bonus ? ' · ⬡ MONOLITH +' + Math.round(bonus * 100) + '%' : ''));
   }
 
   // driven by the engine's update() every frame while rt.alrun is active
@@ -82,21 +82,20 @@
     // Monolith siegeBonus multiplies what transmits
     const delta = Math.max(0, run.lastHp - b.hp);
     if (delta > 0) run.dealt += delta * (1 + run.bonus) * run.norm;   // raw combat → power units
-    if (b.hp < b.maxHp * 0.5) b.hp = b.maxHp * 0.96;       // pool lives on the server — never dies locally
-    if (b.hp <= 0 || b.dying) { b.hp = b.maxHp * 0.96; b.dying = false; }
+    // THE ARENA HULL IS THE SHARED POOL. Drive its bar straight off pool-remaining
+    // so the number you watch drain is the number the server subtracts — the
+    // alliance page can never disagree with what you just saw.
+    const leftFrac = clamp(1 - run.dealt / run.poolHp, 0, 1);
+    b.hp = Math.max(1, b.maxHp * leftFrac);   // pool lives on the server — never dies locally
+    b.dying = false;
     run.lastHp = b.hp;
-    // LEVEL BURN — pool to 0 → the Armada resets FULL at the next mark,
-    // exponentially harder (×1.55, mirrors the server), and you KEEP FIGHTING.
-    // NO TRANSMIT CEILING (Jul 2026): damage used to stop counting past 25× your
-    // power, which made low marks unkillable no matter how hard you hit.
-    while (run.dealt - run.burned >= run.poolHp) {
-      run.burned += run.poolHp;
-      run.kills += 1; run.n += 1;
-      run.poolHp = Math.max(1, Math.round(run.poolHp * 1.55));
-      b.name = 'HOLLOW ARMADA · Mk-' + run.n;
-      b.fireCd = Math.max(0.55, (b.fireCd || 1.4) * 0.94);
-      rt.shake = Math.min(8, (rt.shake || 0) + 4);
-      banner('☠ Mk-' + (run.n - 1) + ' DESTROYED', 'The Armada rebuilds at Mk-' + run.n + ' — full hull, ×1.55 harder · more ⬡ for every member');
+    // ONE BOSS AT A TIME — pool to 0 ends the run as a KILL. No local mark ladder:
+    // the server advances the mark and pays ⬡ 300 to every member on confirm.
+    if (leftFrac <= 0) {
+      run.kills = 1;
+      rt.shake = Math.min(8, (rt.shake || 0) + 5);
+      banner('☠ HOLLOW ARMADA Mk-' + run.n + ' DESTROYED', 'Pool burned to zero — ⬡ 300 paid to every member · the Armada rebuilds at Mk-' + (run.n + 1) + ', ×1.55 harder');
+      return end('killed');
     }
     run.left -= dt;
     // ENRAGE — final 20s: faster zones + faster boss fire
@@ -227,7 +226,7 @@
     let foreign = false;
     try { const grt = G().rt; foreign = !!(grt && ((grt.sdrun && grt.sdrun.active) || (grt.hcrun && grt.hcrun.active))); } catch (e) {}
     if (!foreign) { try { if (G().goSafeHangar) G().goSafeHangar(); } catch (e) {} }
-    banner(killed ? '☠ ' + r.kills + ' ARMADA LEVEL' + (r.kills > 1 ? 'S' : '') + ' DESTROYED' : r.died ? '✝ FLEET LOST — partial damage logged' : '⌛ RAID WINDOW CLOSED',
+    banner(killed ? '☠ ARMADA Mk-' + r.n + ' DESTROYED' : r.died ? '✝ FLEET LOST — partial damage logged' : '⌛ RAID WINDOW CLOSED',
       '⚔ ' + fmt(dmg) + ' damage transmitting to the alliance' + (r.bonus ? ' · ⬡ +' + Math.round(r.bonus * 100) + '% Monolith siege bonus' : ''));
     if (r.onDone && !r.submitted) { r.submitted = true; setTimeout(() => { try { r.onDone({ dmg, frac, bonus: r.bonus, died: r.died, killed, kills: r.kills }); } catch (e) {} }, 600); }
   }
@@ -256,10 +255,10 @@
   function syncWarbar() {
     if (!run) return;
     const t = Math.max(0, run.left), m = Math.floor(t / 60), s = Math.floor(t % 60);
-    const tg = $('awb-tag'); if (tg) tg.textContent = '⬡ Mk-' + run.n + (run.kills ? ' · ☠' + run.kills : '');
+    const tg = $('awb-tag'); if (tg) tg.textContent = '⬡ Mk-' + run.n;
     const tm = $('awb-timer'); if (tm) { tm.textContent = m + ':' + String(s).padStart(2, '0'); tm.classList.toggle('enr', run.enraged); }
     const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(run.dealt) + '</b>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
-    const f = $('awb-fill'); if (f) f.style.width = clamp((1 - (run.dealt - run.burned) / run.poolHp) * 100, 0, 100) + '%';
+    const f = $('awb-fill'); if (f) f.style.width = clamp((1 - run.dealt / run.poolHp) * 100, 0, 100) + '%';
   }
 
   const CSS = `

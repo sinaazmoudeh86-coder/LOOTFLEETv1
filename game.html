@@ -48,15 +48,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=407">
-<link rel="stylesheet" href="css/theme.css?v=407">
-<link rel="stylesheet" href="css/web-v89.css?v=407">
-<link rel="stylesheet" href="css/fx-cinematic.css?v=407">
-<link rel="stylesheet" href="css/fx-primordial.css?v=407">
-<link rel="stylesheet" href="css/moon-colony.css?v=407">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=407">
-<link rel="stylesheet" href="css/fx-aaa.css?v=407">
-<link rel="stylesheet" href="css/readability.css?v=407">
+<link rel="stylesheet" href="css/style-v2.css?v=408">
+<link rel="stylesheet" href="css/theme.css?v=408">
+<link rel="stylesheet" href="css/web-v89.css?v=408">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=408">
+<link rel="stylesheet" href="css/fx-primordial.css?v=408">
+<link rel="stylesheet" href="css/moon-colony.css?v=408">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=408">
+<link rel="stylesheet" href="css/fx-aaa.css?v=408">
+<link rel="stylesheet" href="css/readability.css?v=408">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; }
@@ -323,6 +323,23 @@
 .mega-card.cmd-prism::before{opacity:.7;animation-duration:3.6s;animation-name:prismShift,prismPulse;}
 .mega-card.cmd-prism .mc-ic{color:#c9a0ff;border-color:rgba(201,160,255,.5);background:radial-gradient(120% 120% at 50% 0%,#2a2046,#140e24);box-shadow:0 0 16px -2px rgba(201,160,255,.7);}
 .mega-card.cmd-prism .mc-n{background:linear-gradient(90deg,#d9c2ff,#ff9ec4,#ffe6a0,#8be0c0,#d9c2ff);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:prismShift 5s linear infinite;}
+/* close button — the sheet no longer relies on tapping the backdrop */
+.mega-x{position:absolute;top:9px;right:11px;z-index:4;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#1e2839,#131a27);border:1px solid #35455f;color:#cfe0f5;font-size:14px;line-height:1;cursor:pointer;padding:0;transition:transform .12s,border-color .18s,color .18s,box-shadow .18s;}
+.mega-x:hover{border-color:#5fd1ff;color:#fff;box-shadow:0 0 14px -3px rgba(95,209,255,.8);}
+.mega-x:active{transform:scale(.9);}
+.mega-title{padding-right:42px;}
+/* item sheet — one button per hardpoint (3rd/4th mounts were unreachable) */
+.ip-hps{margin-top:12px;}
+.ip-hps-t{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#93a2ba;margin-bottom:7px;}
+.ip-hps-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}
+.ip-hpb{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;text-align:left;padding:9px 11px;border-radius:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;cursor:pointer;transition:transform .12s,border-color .18s;}
+.ip-hpb:hover{border-color:#5fd1ff;}
+.ip-hpb:active{transform:scale(.97);}
+.ip-hpb.free{border-color:#3d6b52;background:linear-gradient(180deg,#16281e,#101a15);}
+.ip-hpn{font-family:'Orbitron',sans-serif;font-weight:700;font-size:11.5px;color:#eaf0fa;letter-spacing:.02em;}
+.ip-hpc{font-size:10.5px;color:#8d9cb2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ip-hpb.free .ip-hpc{color:#7fd2a0;}
+@media (max-width:380px){.ip-hps-g{grid-template-columns:1fr;}}
 </style>
 <style id="cmd-palette">
 /* COMMAND PALETTE — one distinct hue per feature (overrides script-injected card styles) */
@@ -796,6 +813,7 @@
       <div class="mega" id="mega">
         <div class="mega-back"></div>
         <div class="mega-sheet">
+          <button class="mega-x" id="mega-x" type="button" aria-label="Close Command">✕</button>
           <div class="mega-grab"></div>
           <div class="mega-title">⬡ Command</div>
           <div class="mega-grid">
@@ -944,56 +962,56 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=407"></script>
-<script src="js/items.js?v=407"></script>
-<script src="js/entities.js?v=407"></script>
-<script src="js/render.js?v=407"></script>
-<script src="js/galaxy.js?v=407"></script>
-<script src="js/leaderboard.js?v=407"></script>
+<script src="js/config-v2.js?v=408"></script>
+<script src="js/items.js?v=408"></script>
+<script src="js/entities.js?v=408"></script>
+<script src="js/render.js?v=408"></script>
+<script src="js/galaxy.js?v=408"></script>
+<script src="js/leaderboard.js?v=408"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
-<script src="js/analytics.js?v=407"></script>
-<script src="js/cloud.js?v=407"></script>
-<script src="js/account.js?v=407"></script>
-<script src="js/session-lock.js?v=407"></script>
-<script src="js/vip.js?v=407"></script>
-<script src="js/territory.js?v=407"></script>
-<script src="js/payments-v91.js?v=407"></script>
-<script src="js/game-v93.js?v=407"></script>
-<script src="js/ui-v94.js?v=407"></script>
-<script src="js/fx-cinematic.js?v=407"></script>
-<script src="js/fx-primordial.js?v=407"></script>
-<script src="js/fx-aaa.js?v=407"></script>
-<script src="js/moon-scene.js?v=407"></script>
-<script src="js/moon-colony.js?v=407"></script>
-<script src="js/home-citadel.js?v=407"></script>
-<script src="js/missions.js?v=407"></script>
-<script src="js/achievements.js?v=407"></script>
-<script src="js/coach-v89.js?v=407"></script>
-<script src="js/prism-v5.js?v=407"></script>
+<script src="js/analytics.js?v=408"></script>
+<script src="js/cloud.js?v=408"></script>
+<script src="js/account.js?v=408"></script>
+<script src="js/session-lock.js?v=408"></script>
+<script src="js/vip.js?v=408"></script>
+<script src="js/territory.js?v=408"></script>
+<script src="js/payments-v91.js?v=408"></script>
+<script src="js/game-v93.js?v=408"></script>
+<script src="js/ui-v94.js?v=408"></script>
+<script src="js/fx-cinematic.js?v=408"></script>
+<script src="js/fx-primordial.js?v=408"></script>
+<script src="js/fx-aaa.js?v=408"></script>
+<script src="js/moon-scene.js?v=408"></script>
+<script src="js/moon-colony.js?v=408"></script>
+<script src="js/home-citadel.js?v=408"></script>
+<script src="js/missions.js?v=408"></script>
+<script src="js/achievements.js?v=408"></script>
+<script src="js/coach-v89.js?v=408"></script>
+<script src="js/prism-v5.js?v=408"></script>
 <script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js?v=407"></script>
-<script src="js/server-dreadnaught.js?v=407"></script>
+<script src="js/dreadnaught.js?v=408"></script>
+<script src="js/server-dreadnaught.js?v=408"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/shipworks.js?v=407"></script>
-<script src="js/starforge.js?v=407"></script>
-<script src="js/pilot-ascension.js?v=407"></script>
-<script src="js/sim-pilots.js?v=407"></script>
-<script src="js/social.js?v=407"></script>
-<script src="js/mail.js?v=407"></script>
-<script src="js/alliance.js?v=407"></script>
-<script src="js/alliance-boss.js?v=407"></script>
-<script src="js/void-zone.js?v=407"></script>
-<script src="js/ascension.js?v=407"></script>
-<script src="js/casino.js?v=407"></script>
-<script src="js/casino2.js?v=407"></script>
-<script src="js/redeem.js?v=407"></script>
-<script src="js/auth.js?v=407"></script>
+<script src="js/shipworks.js?v=408"></script>
+<script src="js/starforge.js?v=408"></script>
+<script src="js/pilot-ascension.js?v=408"></script>
+<script src="js/sim-pilots.js?v=408"></script>
+<script src="js/social.js?v=408"></script>
+<script src="js/mail.js?v=408"></script>
+<script src="js/alliance.js?v=408"></script>
+<script src="js/alliance-boss.js?v=408"></script>
+<script src="js/void-zone.js?v=408"></script>
+<script src="js/ascension.js?v=408"></script>
+<script src="js/casino.js?v=408"></script>
+<script src="js/casino2.js?v=408"></script>
+<script src="js/redeem.js?v=408"></script>
+<script src="js/auth.js?v=408"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 407;
+  window.LF_BUILD = 408;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1133,13 +1151,13 @@
       try{ if(window.PASCEND){ stars=PASCEND.stars(); pts=PASCEND.points(); pv=PASCEND.preview(); tier=PASCEND.tierDef(Math.max(1,stars)); } }catch(e){}
       if(badge) badge.innerHTML = (stars&&window.PASCEND) ? PASCEND.badge(null,stars) : '';
       if(locked){
-        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset to Level 1 for <b>permanent</b> account power, keep <b>every ship</b> (bare — items and Ship Ascensions are surrendered), and unlock loot tiers no un-ascended pilot can ever see.';
+        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset the pilot for permanent power — <b>your whole fleet comes with you</b>: hulls, upgrade levels and Ship Ascensions.';
         if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / 100</span>'+
           '<span class="pa-pill-chip">'+(100-L)+' TO GO</span>'+
           '<span class="pa-pill-chip">3 EXCLUSIVE LOOT TIERS</span>'+
           '<div class="pa-pill-bar" style="flex-basis:100%"><i style="width:'+Math.min(100,L).toFixed(1)+'%"></i></div>';
       } else {
-        if(sub) sub.innerHTML='Ready to ascend — you keep <b>every ship in your hangar</b>, stripped: <b>all items and every Ship Ascension are lost</b>. Everything else resets to Level 1 in exchange for permanent perks.';
+        if(sub) sub.innerHTML='Ready to ascend — <b>your whole fleet comes with you</b>: hulls, upgrade levels and Ship Ascensions. Only items, gold and territory reset.';
         if(meta) meta.innerHTML=
           '<span class="pa-pill-chip hot">+<b>'+(pv?pv.total:0)+'</b> POINTS NOW</span>'+
           (pts?'<span class="pa-pill-chip hot"><b>'+pts+'</b> UNSPENT</span>':'')+
@@ -1151,6 +1169,8 @@
     function close(){ mega.classList.remove('open'); }
     cmd.addEventListener('click',()=>{ mega.classList.contains('open')?close():open(); });
     mega.querySelector('.mega-back').addEventListener('click',close);
+    { const x=document.getElementById('mega-x'); if(x) x.addEventListener('click',(e)=>{ e.stopPropagation(); close(); }); }
+    document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&mega.classList.contains('open')) close(); });
     mega.querySelectorAll('[data-go]').forEach(c=>c.addEventListener('click',()=>{
       const btn=document.querySelector('.nav-btn[data-screen="'+c.dataset.go+'"]');
       close(); if(btn) btn.click(); cmd.classList.add('active');

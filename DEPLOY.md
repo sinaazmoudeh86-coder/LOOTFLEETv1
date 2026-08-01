@@ -1,95 +1,135 @@
-# LOOT FLEET V3.0 BETA — Deploy v203 (build 407 · SW cache `lootfleet-v407`)
+# LOOT FLEET V3.0 BETA — Deploy v204 (build 408 · SW cache `lootfleet-v408`)
 
-Push this folder to GitHub → Vercel. **Stability + Hollow Armada release.**
-Built fresh from the working tree — v202's folder was still a build-396 shell
-with 406-era code mixed into it, so deploy this folder, not that one.
+Push this folder to GitHub → Vercel. **Save-integrity + Ranks release.**
+Client-only: **no SQL to run.** Every change is in `js/` + `game.html`.
 
-## Database — run in this order
+## Database
 
-| # | File | Gives you |
-|---|---|---|
-| 1 | `supabase/social.sql` | **RESTORED to the folder** — the entire alliance / friends / wallet schema (`alliance_state`, `alliance_join`, `social_wallet`, `friend_*`, …). It had fallen out of the deploy folder after v168; already live on the server, so this is a no-op re-run there, but a fresh environment cannot build without it |
-| 2 | `supabase/alliance-boss-onekill.sql` | **NEW · REQUIRED** — must run **after** `social.sql`, which it supersedes: one kill per attack, anchor + clamp both ×50, `boss_max` only re-anchored on a kill, flat **⬡ 300** per kill to every member |
-| 3 | `supabase/lb-upsert-canonical.sql` | From v202 — collapses the two `lb_upsert` overloads (ambiguous 6-arg calls published no leaderboard row at all) |
-| 4 | `supabase/sim-kills-sanity.sql` | From v202 — caps simulated kill counts at a plausible career total |
+**Nothing to run.** No schema, function or policy changed in this release.
+v203's list (`social.sql`, `alliance-boss-onekill.sql`, `lb-upsert-canonical.sql`,
+`sim-kills-sanity.sql`, `lb-asc-sync.sql`) still applies to a *fresh* environment
+and is already live in production — the `supabase/` folder is carried unchanged
+so a new environment can still be built from this folder alone.
 
-Everything else (`pilot-ascension.sql`, `simulated-pilots*.sql`,
-`sim-board-bignum-fix.sql`, `notifications.sql`, `territory*.sql`) is unchanged
-and already run. All files are idempotent — safe to re-run.
+## Files changed since v203
 
-`alliance-boss-balance.sql` from v200 is **dead** — do not run it; #2 replaces it.
+| File | Why |
+|---|---|
+| `js/game-v93.js` | Retired the destructive rescale migration + added the gear/gold repair pass |
+| `js/ui-v94.js` | Item sheet: one Equip button per hardpoint |
+| `js/sim-pilots.js` | Fixed cohort clock + board injection |
+| `js/leaderboard.js` | Removed dead roster generators |
+| `js/pilot-ascension.js` | CTA moved to top; ascension keeps hull levels + Ship Ascensions |
+| `css/pilot-ascension.css` | Styles for the new CTA block |
+| `game.html` | Command-menu close button, hardpoint styles, ascension copy, build 408 |
 
 ---
 
 ## What shipped in this release
 
-### The blank-screen bug — nine screens, one cause
-Players reported the Starforge "sometimes loads nothing." The cause was a
-temporal-dead-zone crash, and an audit found the identical pattern in **eight
-more modules**: each called `boot()` from its module body while the `CSS` const
-that `boot()` reads is declared at the *bottom* of the file. Whenever the script
-finished parsing after `DOMContentLoaded` — cache miss, slow shell, restored tab,
-a cold service-worker fetch — `boot()` threw a `ReferenceError` that aborted the
-rest of the file, **including the `window.X = {…}` export at the end**. The
-screen's tab then had nothing to call and painted an empty panel. Intermittent by
-nature: on a warm cache the same code paths were fine.
+### ⚠ SAVE CORRUPTION — gear and gold wiped on every login
+The headline fix. Players at deep zones reported dropping from **billions of
+power to thousands** on login, with every item showing `+1 Damage / +1 Health`,
+and their **gold reset to 0** — while percentage stats (crit, fire rate, move
+speed) were untouched. Unequipping and re-equipping did nothing, because the
+item data itself had been destroyed.
 
-Fixed in: `starforge.js`, `ascension.js`, `casino.js`, `casino2.js`,
-`dreadnaught.js`, `galaxy-box.js`, `home-citadel.js`, `server-dreadnaught.js`,
-`shipworks.js` — the boot call now runs at the very end of each file, past the
-CSS literal. Starforge additionally boots its styles from `render()` and retries
-a few frames if its panel markup isn't parsed yet.
+**Cause.** The one-time `scaleVer` migration that rebased saves from the old
+1.55 power curve onto the 1.18 curve was still in the boot path, and it was
+running **on every login instead of once**:
 
-**Watch for this shape in new modules:** a `const` at the bottom of the IIFE is
-invisible to anything the module body executes above it.
+* It multiplied every flat stat, and all gold, by `ratio^(zone-1)` where
+  `ratio = 1.18/1.55`. At zone 109 that factor is ~`1.5e-13`. A billion-point
+  stat floored straight through `Math.max(1, …)` to **1**, and gold floored to
+  **0**. It also zeroed `state.xp`.
+* Only zone-scaled flat stats ride that curve, so percent stats were left alone
+  — exactly the signature players described.
+* It re-ran because the crushed save was often refused by the cloud clobber
+  guard, so the server kept handing back the un-stamped copy, which was then
+  crushed again on the next login. An endless loop.
 
-### Hollow Armada — no more phantom marks
-The raid showed a Voidmaw-style Mk ladder that only ever existed on the client:
-its damage normalization guaranteed 2.4× the shared pool per run, and a local
-loop minted Mk-2, Mk-3, … So players climbed to Mk-10 in the arena while the
-server stayed on Mk-1, paid no ⬡, and still showed a full HP bar. Three separate
-faults, all fixed:
+**Fix.** The migration is deleted, not gated. Saves are stamped `scaleVer = 3`
+and left untouched. Two repair passes run once on load:
 
-* **Stages.** The client no longer advances marks at all. The arena hull **is**
-  the shared pool — its bar mirrors pool-remaining — and the run ends the moment
-  the pool hits 0. One Armada per attack; the mark advances only on server
-  confirm.
-* **No payout.** The pool anchored at `sum(power) × 200` while a single attack
-  was clamped to `power × 25`, so a normal alliance mathematically could not
-  land a kill. Anchor and clamp are now both **×50**, so one full 2:30 run
-  flattens Mk-1 and each mark after is ×1.55 harder.
-* **HP bar never moved.** Every attack rewrote `boss_max` from the live power
-  anchor while `boss_hp` was subtracted from the *old* max, pinning `hp/max`
-  near full. `boss_max` is now re-anchored only on a kill or the weekly reset.
-* Kills pay a flat **⬡ 300** to every member (was `250 + 50·mark`, which never
-  matched the UI copy).
+* **Gear** — any flat stat below **2%** of what the item's own zone + rarity can
+  physically roll (the generator floor is 0.82× base) is rebuilt from that
+  formula at 0.9× base. Idempotent, and healthy gear can never trip it.
+* **Gold** — restored from the strongest surviving local snapshot
+  (`lf-best::` / `lf-backup::`), whichever is higher than the current balance.
 
-⚠ **Client and SQL must ship together.** `MAX_XMIT` in `js/alliance-boss.js` and
-the `× 50` in `alliance-boss-onekill.sql` are the same number — changing one
-without the other silently desyncs the ⚔ meter from the payout.
+A toast reports what was recovered. Damage that already reached the cloud is
+rebuilt from the item's zone/rarity, so restored rolls are close but not
+byte-identical to the original.
 
-### Release hygiene fixed in this folder
-* **The Aeternum had no art in the deploy folder.** `ship-aeternum.png` and
-  `ship-aeternum-c.png` existed only in the working tree — the release's
-  headline Ascension-Class hull would have rendered blank. Both are now in
-  `ships/` and precached.
-* **Offline gaps.** `starforge.js`, `pilot-ascension.js`, `achievements.js`,
-  `analytics.js`, `sim-pilots.js`, `moon-colony.css` and `pilot-ascension.css`
-  were fetched live only and unavailable offline. Added to the SW `CORE` list.
-* Build stamp, all 50 `?v=` cache-busting stamps, `version.json`, the login
-  version badge and the SW cache name are consistent at **407 / V3.0 BETA**.
-  The update gate blocks logins from anything older.
+### Ranks showed a different number of players on every device
+One browser showed **15** pilots, another **28**, and clearing site data shrank
+the board again. Two independent faults:
+
+* **The roster clock was per-device.** Simulated pilots "join" at ~1.5/hour
+  measured from a `lf-sim-epoch` timestamp written to `localStorage` on first
+  run — so the roster's age, and therefore its size, was a property of *that
+  browser's install date*. Now anchored to a fixed launch date
+  (`COHORT_EPOCH`), so every device and account sees the same roster.
+* **The top-10 seat cap ate the board.** Under a pure power sort, skipping a
+  sim leaves its rank open — so the next sim lands on the *same* rank and is
+  skipped too, cascading down the entire roster. With one human and a strong
+  roster it admitted exactly **2** rows. The cap is removed client-side;
+  `sim_board()` already applies `max_top10` / `allow_rank1` server-side before
+  rows reach the client.
+* Also fixed: `forBoard()` returned **live references** into the cached roster,
+  so the Heat and All-Time boards stamped `rank` onto the same objects and
+  corrupted each other's ordering. It now returns copies.
+
+`forBoard()` went from ~40 lines of O(n²) rank recomputation to 4 lines. The
+board now renders a full **60 rows**, identically everywhere.
+
+### Could not equip into the 3rd, 4th … hardpoint
+The item sheet only ever offered **Equip** and **Equip 2nd**, so on hulls with
+3–7 mounts of a type (Dreadnought, Titan, Mothership, Oblivion, Voidmaw, every
+Dread-class) the extra slots were unreachable from the UI — only auto-equip
+could fill them. The sheet now renders **one button per hardpoint**, labelled
+(`1st Cannon`, `2nd Cannon`, …) and showing what is currently mounted, with
+empty mounts highlighted.
+
+### Pilot Ascension — hull investment now survives
+**Rule change.** Hull **upgrade levels** and each hull's **Ship Ascension**
+(module tiers + stars) now carry across an ascension. They are shipyard work
+done to the *ships*, not the pilot's run. What still resets: pilot level, all
+items, gold and resources, Starforge tempers, the Pilot Tree, territory,
+citadels and the wing.
+
+Every surface was rewritten to match — the ascend CTA (now at the **top** of the
+screen, directly under the hero, with a keep/lose summary), the itemised ledger,
+the flagship picker, the two-step confirm, the acknowledgement checkbox, the
+outro, and the Command-menu pill.
+
+### Command menu
+Added a close **✕** button to the sheet (top-right) and Escape-to-close. It
+previously relied on tapping the backdrop, which is easy to miss on phones.
 
 ---
 
-## Pre-push checklist
+## Deploy steps
 
-- [ ] Run the four SQL files above **in order** (2 must follow 1)
-- [ ] Confirm `version.json` reads `{"build":407,"label":"V3.0 BETA"}` — the
-      update gate locks out older clients, so publishing this before the static
-      files are live will bounce everyone
-- [ ] Hard-reload once after deploy and open **Starforge, Ship Ascension,
-      Casino, Dreadnaught, Galaxy Boxes, Home Citadel, Voidmaw, Shipworks** —
-      all nine formerly-blank screens, on a cold cache
-- [ ] Alliance ▸ Raid: burn a mark and confirm the alliance page comes back with
-      the HP bar lower, or Mk+1 and **⬡ 300** in the wallet
+1. **No SQL.** Skip straight to the static push.
+2. Push this folder to the repo root that Vercel serves.
+3. Confirm `version.json` reads `{"build":408,"label":"V3.0 BETA"}`.
+   The update gate locks out older clients, so publish the static files
+   **before** (or with) this file — never ahead of them.
+4. Hard-reload once so the `lootfleet-v408` service worker takes over.
+
+## Post-deploy checklist
+
+- [ ] Log in on a deep-zone account, then log out and back in **twice** — power
+      and gold must be identical each time. This is the regression that matters.
+- [ ] Open a high-zone item: Damage/Health read real numbers, not `+1`
+- [ ] Ranks: **60 rows**, and the same count on two different devices/browsers
+- [ ] Ranks: rank column reads 1…60 with no gaps or repeats after switching
+      between the Heat and All-Time boards
+- [ ] Equip a cannon into the **3rd** and **4th** hardpoint on a Dreadnought or
+      better, from the item sheet
+- [ ] Command menu: ✕ closes it; Escape closes it
+- [ ] Pilot Ascension: BEGIN ASCENSION is visible without scrolling; ledger says
+      hull levels and Ship Ascensions are **kept**
+- [ ] Ascend a test account — hull upgrade levels and Ship Ascension stars are
+      still on every hull afterwards

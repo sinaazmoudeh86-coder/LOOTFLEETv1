@@ -170,6 +170,18 @@
     if (hangar.indexOf(keepShip) === -1) hangar.push(keepShip);
     const legacy = { key: keepShip };
     const entitled = ASC_KEEP_SHIPS.filter((k) => state.ownedShips && state.ownedShips[k]);
+    // HULL INVESTMENT NOW SURVIVES (Aug 2026). Upgrade levels and each hull's
+    // Ship Ascension (module tiers + stars) are the yard work you put into the
+    // SHIPS, not the pilot's run — they ride across every ascension. Only gear,
+    // cargo and the pilot's own progress reset.
+    const keepLevels = {}, keepAsc = {};
+    try {
+      const sl0 = state.shipLevels || {}, as0 = state.ascension || {};
+      hangar.forEach((k) => {
+        if (sl0[k] != null) keepLevels[k] = sl0[k];
+        if (as0[k] != null) keepAsc[k] = JSON.parse(JSON.stringify(as0[k]));
+      });
+    } catch (e) {}
     const before = { lvl: state.level | 0, ship: (C.SHIP_BY_KEY[keepShip] || {}).name || keepShip };
 
     // 1b — LIFETIME BADGE COUNTERS: badges are a career record, so their
@@ -214,24 +226,26 @@
     // 3 — restore the permanents
     Object.keys(keep).forEach((k) => { state[k] = keep[k]; });
 
-    // 4 — THE WHOLE HANGAR, STRIPPED. Every hull you owned is still yours,
-    // including event and premium hulls — with nothing on or in it: no upgrade
-    // levels, no fittings, no cargo, no Ship Ascension, no Starforge temper, and
-    // the wing disbanded (escort slots re-earn with pilot level). You fly out in
-    // the flagship you picked; the rest wait in the hangar.
+    // 4 — THE WHOLE HANGAR, FULLY UPGRADED. Every hull you owned is still yours,
+    // including event and premium hulls, and it keeps everything the SHIPYARD
+    // built into it: hull upgrade levels and its Ship Ascension (module tiers +
+    // stars). What it does NOT keep is anything the pilot was carrying — fitted
+    // gear, cargo and Starforge tempers are surrendered, and the wing disbands
+    // (escort slots re-earn with pilot level). You fly out in the flagship you
+    // picked; the rest wait in the hangar at full strength.
     state.ownedShips = {};
     hangar.forEach((k) => { state.ownedShips[k] = true; });
     state.ship = legacy.key;
-    state.shipLevels = {};                 // hull upgrades surrendered — every hull back to Lv 1
-    state.fittings = {};                   // no saved loadouts
+    state.shipLevels = keepLevels;         // hull upgrades KEPT — every level you bought stands
+    state.fittings = {};                   // no saved loadouts (there is no gear to load)
     state.fleet = null; state.drones = 0;   // wing disbanded — re-form it as slots unlock
-    state.ascension = {};                  // SHIP ASCENSION reset on every hull
+    state.ascension = keepAsc;             // SHIP ASCENSION KEPT — module tiers & stars ride across
     state.forge = {};                      // Starforge hardpoint tempers reset
     state.pilot = null;                    // PILOT TREE wiped — every node re-earned
     state.beaconUntil = 0;
     state.shipKills = {};
     hangar.forEach((k) => { state.shipKills[k] = 0; });
-    // the ship arrives BARE — every slot empty, exactly as it left the yard
+    // the ship arrives with its yard upgrades intact but every gear slot EMPTY
     state.equipped = { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null, bow2: null, arrows2: null };
     state.inventory = [];
 
@@ -4607,27 +4621,58 @@
     // Compress stored gear/gold so an existing save lines up with the new,
     // slower number curve. Only the zone-scaled FLAT stats (damage/health) ride
     // the curve, so only those are rescaled; percent stats are left alone.
+    // RETIRED (Aug 2026) — it divided every flat stat AND all gold by
+    // ratio^(zone-1). At zone 100+ that factor is ~1e-13, so billion-power gear
+    // collapsed to "+1 Damage / +1 Health", gold floored to 0 and xp was zeroed.
+    // And it re-ran on EVERY login: the crushed save couldn't always reach the
+    // cloud, so the un-stamped copy came back and got crushed again. Never again
+    // — saves are stamped and left exactly as they are.
+    state.scaleVer = 3;
+
+    // ---- REPAIR: rebuild gear the retired rescale crushed --------------------
+    // Only fires on values that are physically impossible for the item's OWN
+    // zone + rarity (generation floor is 0.82× the base roll, so anything under
+    // 2% of it was destroyed, not rolled). Idempotent: healthy gear never moves.
     if (loaded) {
-      if (state.scaleVer !== 2) {
-        const ratio = C.SCALE_BASE / C.OLD_SCALE_BASE;
-        const fStat = (d) => Math.pow(ratio, Math.max(0, (d || 1) - 1));
-        const migItem = (it) => {
-          if (!it || !it.stats) return;
-          const f = fStat(it.dungeon);
-          if (it.stats.attackDamage) it.stats.attackDamage = Math.max(1, Math.round(it.stats.attackDamage * f));
-          if (it.stats.health) it.stats.health = Math.max(1, Math.round(it.stats.health * f));
-        };
-        Object.keys(state.equipped || {}).forEach((k) => migItem(state.equipped[k]));
-        (state.inventory || []).forEach(migItem);
-        Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => migItem(fit[k])); });
-        const rep = Math.max(1, state.highestDungeonReached || 1);
-        state.gold = Math.floor((state.gold || 0) * Math.pow(ratio, 0.7 * (rep - 1)));
-        state.xp = 0;
-        state.scaleVer = 2;
-        save();
+      let fixedItems = 0;
+      const FLAT_KEYS = ['attackDamage', 'health'];
+      const repairItem = (it) => {
+        if (!it || !it.stats || (it.dungeon || 1) < 5) return;
+        const rar = C.RARITY[it.rarity || 0]; if (!rar) return;
+        const zs = C.dungeonScale(it.dungeon);
+        FLAT_KEYS.forEach((k) => {
+          const cur = it.stats[k]; if (cur == null) return;
+          const def = C.STATS[k]; if (!def) return;
+          const expect = def.base * zs * rar.mult;
+          if (cur < expect * 0.02) { it.stats[k] = Math.max(1, Math.round(expect * 0.9)); fixedItems++; }
+        });
+      };
+      Object.keys(state.equipped || {}).forEach((k) => repairItem(state.equipped[k]));
+      (state.inventory || []).forEach(repairItem);
+      Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => repairItem(fit[k])); });
+      // GOLD — unrecoverable by formula (it was floored to 0), but the local
+      // rescue snapshots still hold the pre-crush balance. Take the best.
+      let goldBack = 0;
+      if (state.goldRepairVer !== 1) {
+        try {
+          const u = window.ACCOUNT && window.ACCOUNT.uid ? window.ACCOUNT.uid() : null;
+          if (u) ['lf-best::', 'lf-backup::'].forEach((p) => {
+            const raw = localStorage.getItem(p + u); if (!raw) return;
+            const g = ((JSON.parse(raw) || {}).gold) || 0;
+            if (g > goldBack) goldBack = g;
+          });
+        } catch (e) {}
+        if (goldBack > (state.gold || 0)) { const d = goldBack - (state.gold || 0); state.gold = goldBack; goldBack = d; } else goldBack = 0;
+        state.goldRepairVer = 1;
       }
-    } else {
-      state.scaleVer = 2; // fresh account, already on the new curve
+      if (fixedItems || goldBack) {
+        refreshStats(); save();
+        setTimeout(() => { try {
+          window.UI && window.UI.unlockToast && window.UI.unlockToast(
+            '✔ Loadout restored — ' + (fixedItems ? fixedItems + ' crushed stat' + (fixedItems > 1 ? 's' : '') + ' rebuilt' : '') +
+            (fixedItems && goldBack ? ' · ' : '') + (goldBack ? formatNum(goldBack) + ' gold recovered' : ''));
+        } catch (e) {} }, 1800);
+      }
     }
     // ---- ONE-TIME crit nerf migration: compress item crit onto the new ladder ----
     if (state.critVer !== 4) {

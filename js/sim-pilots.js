@@ -117,13 +117,6 @@
     'reach','lance','shade','bloom','gate','helm','vault','drake','shard','tide','watch','maw','wing','helix'];
   const NAME_S = ['Vanta','Kestrel','Halo','Juno','Rook','Cinder','Pyx','Lux','Wren','Onyx','Sable','Bex','Nix','Tor','Vex','Kade'];
   const NAME_TAG = ['ARC','VOID','9TH','SOL','RVN','OBS','KRN','HEX','ZNT','APEX','NULL','VLT'];
-  const HULLS = [
-    ['frigate','interceptor'],
-    ['interceptor','cruiser','heavycruiser'],
-    ['heavycruiser','destroyer','battleship','dreadnought'],
-    ['battleship','dreadnought','carrier','aegis','supercarrier'],
-    ['supercarrier','titan','mothership','carrier','aegis'],
-  ];
   // xorshift — stable across sessions, so the roster never reshuffles
   function rng(seed) {
     let s = seed >>> 0 || 1;
@@ -143,21 +136,28 @@
     }
   }
   // ---------------------------------------------------------------------------
-  // A LIVING COHORT
-  // Pilots do not all exist at once. Each has a JOIN TIME (~1-2 an hour) and,
-  // from that moment, its own career: it levels on its own curve, its power
-  // follows from its level the way a real account's does, and its HULL EVOLVES as
-  // it climbs — frigate to interceptor to cruiser and on up. Everything is a pure
-  // function of (seed, hours since join), so the roster is deterministic, needs
-  // no storage, and every reload shows the cohort exactly where it should be.
+  // A LIVING COHORT — ON ONE SHARED CLOCK
+  // Each pilot has a JOIN TIME (~1-2 an hour from launch) and, from that moment,
+  // its own career: it levels on its own curve, its power follows from its level
+  // the way a real account's does, and its HULL EVOLVES as it climbs. Everything
+  // is a pure function of (seed, hours since launch), so the roster is
+  // deterministic and needs no storage.
   //
-  // The variance is the point: a Grinder hits Lv 300 in a fortnight, a Casual is
-  // still in the 40s a month later, and a few plateau and effectively stop. That
-  // spread is what makes a board read as people rather than a curve.
+  // THE CLOCK IS A FIXED CALENDAR DATE — not a per-device stamp. (Aug 2026: it
+  // used to be a localStorage epoch written on first run, so the roster's AGE —
+  // and therefore how many pilots had "joined" — was different in every browser:
+  // one device showed 15 rows and another 28, and clearing site data shrank the
+  // board back down. A shared ladder gets a shared clock.)
+  //
+  // The variance between pilots is the point: a Grinder hits Lv 300 in a
+  // fortnight, a Casual is still in the 40s a month later, and a few plateau and
+  // effectively stop. That spread is what makes a board read as people.
   // ---------------------------------------------------------------------------
+  const COHORT_EPOCH = Date.UTC(2026, 0, 15);   // launch — the one clock everyone reads
   const JOIN_PER_HOUR = 1.5;         // ~1-2 new pilots an hour
   const ROSTER_MAX = 400;            // ceiling on the simulated population
   const LVL_CAP = 500;               // ascend and restart, exactly like a human
+  const ageHours = () => Math.max(0, (Date.now() - COHORT_EPOCH) / 36e5);
 
   // HULL EVOLUTION — the ladder a pilot actually walks as it levels. Index = the
   // flagship at that level band; escorts are drawn from strictly lower bands, so
@@ -262,7 +262,6 @@
     return out.sort((a, b) => b.power - a.power);
   }
   let _cohort = null, _cohortAt = 0;
-  const LOCAL = { get length() { return SEEDS.length; } };
   function localRoster() {
     // recompute at most once a minute — levels only move on the scale of hours
     if (!_cohort || Date.now() - _cohortAt > 60000) { _cohort = cohort(); _cohortAt = Date.now(); }
@@ -270,73 +269,28 @@
   }
   function roster() { return (_rows && _rows.length) ? _rows : localRoster(); }
 
-  // ---- THE CLIMB -------------------------------------------------------------
-  // Nothing shows for the first day — a brand-new cohort has nothing to display.
-  // After that the only global rule left is a CEILING: no simulated pilot may
-  // out-power the strongest human. Their individual progression does the rest.
-  // Nothing shows for the first couple of hours — a cohort that materialises the
-  // instant someone installs the game is the one thing that gives it away. Two
-  // hours reads as arrivals rather than a seeded list, without leaving a fresh
-  // install staring at an empty board all day.
-  const HIDE_HOURS = 2;
-  function epoch() {
-    try {
-      let e = parseInt(localStorage.getItem('lf-sim-epoch') || '', 10);
-      if (!e || !isFinite(e)) { e = Date.now(); localStorage.setItem('lf-sim-epoch', String(e)); }
-      return e;
-    } catch (err) { return Date.now(); }
-  }
-  const ageHours = () => (Date.now() - epoch()) / 36e5;
-  function surfaced() { return ageHours() >= HIDE_HOURS; }
   function capLevel(lv) { const n = Math.max(1, Math.round(lv || 1)); return n > LVL_CAP ? ((n - 1) % LVL_CAP) + 1 : n; }
+
   // ---- BOARD INJECTION -------------------------------------------------------
   // Given the real board (humans + you), return the sims that may appear on it.
+  // ONE RULE: humans are never displaced — sims fill the seats humans aren't
+  // using, and the page always comes out the same size on every device.
   //
-  // HUMANS ARE NEVER DISPLACED. The ranks screen renders a fixed number of rows,
-  // so as the roster grows sims would quietly push real players off the page —
-  // the exact opposite of the goal. Sims only ever fill the slots humans are not
-  // using, on top of the top-10 and top-100 seat caps.
-  const VISIBLE_ROWS = 60;
+  // (Aug 2026 — this used to run a "max 2 sims in the top 10" gate. Under a pure
+  // power sort that gate eats the board: a skipped sim leaves its rank open, so
+  // the NEXT sim lands on the same rank and is skipped too, and so on down the
+  // roster. With one human and a strong sim roster it admitted exactly 2 rows.
+  // Combined with the old per-device roster clock, that's why one browser showed
+  // 15 players and another 28. Seat caps are the server's job — sim_board()
+  // already applies max_top10 / allow_rank1 before the rows ever reach us.)
+  const BOARD_ROWS = 60;             // rows the Ranks page renders
   function forBoard(realBoard) {
     const pool = roster();
-    if (!pool.length) return [];
-    // DAY ONE: the roster is not on the board at all. Brand-new accounts have
-    // nothing to show, and an empty first day is more convincing than a crowd.
-    if (!(_rows && _rows.length) && !surfaced()) return [];
-    const cfg = _cfg || {};
-    const maxTop10 = cfg.max_top10 == null ? 2 : cfg.max_top10;
-    const maxTop100 = cfg.max_top100 == null ? 25 : cfg.max_top100;
-    const humans = (realBoard || []).slice().sort((a, b) => (b.power || 0) - (a.power || 0));
-    const topHuman = humans.length ? (humans[0].power || 0) : 0;
-    // every human keeps their row; sims take what's left of the visible page
-    const room = Math.max(0, VISIBLE_ROWS - humans.length);
-    const budget = Math.min(maxTop100, room);
-    if (budget <= 0) return [];
-
-    // THE ONLY GLOBAL RULE LEFT: no simulated pilot may out-power the strongest
-    // human. Each pilot's level, power, hull and kills already come from its own
-    // career (see cohort()), so nothing else needs flattening — the board reads as
-    // people at different points in their own progression, which is the point.
-    let list = pool;
-    if (!(_rows && _rows.length) && topHuman > 50000) {
-      list = pool.map((p) => (p.power >= topHuman
-        ? Object.assign({}, p, { power: Math.max(1, topHuman - 1) })
-        : p)).sort((a, b) => b.power - a.power);
-    }
-
-    const out = [];
-    let inTop10 = 0;
-    for (const s of list) {
-      if (out.length >= budget) break;
-      const above = humans.filter((h) => (h.power || 0) > s.power).length;
-      const pos = above + out.filter((o) => o.power > s.power).length + 1;
-      if (pos <= 10) {
-        if (inTop10 >= maxTop10) continue;   // top-10 seat cap
-        inTop10++;
-      }
-      out.push(s);
-    }
-    return out;
+    const seats = BOARD_ROWS - ((realBoard || []).length);
+    // COPIES, not references. The Heat and All-Time boards each stamp `rank`
+    // (and cache `_fleet`) onto the rows they're given; handing both the same
+    // objects let one board's ranking overwrite the other's.
+    return seats > 0 ? pool.slice(0, seats).map((p) => Object.assign({}, p)) : [];
   }
 
   // ---- TILE DEFENDERS --------------------------------------------------------
@@ -370,7 +324,8 @@
     const c = localRoster();
     return { enabled: enabled(), config: _cfg, server: _rows.length,
              cohort: c.length, seats: SEEDS.length, fetchedAt: _at,
-             ageHours: ageHours().toFixed(1), surfaced: surfaced(),
+             epoch: new Date(COHORT_EPOCH).toISOString().slice(0, 10),
+             ageHours: ageHours().toFixed(1),
              joinPerHour: JOIN_PER_HOUR,
              topLevel: c.length ? c[0].level : 0,
              newest: c.length ? Math.min.apply(null, c.map((p) => p._joinedH)).toFixed(1) + 'h ago' : '—' };

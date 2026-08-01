@@ -131,6 +131,20 @@
   font-family:'Orbitron',sans-serif;font-weight:900;font-size:14px;letter-spacing:.18em;color:#1a0b2e;
   background:linear-gradient(180deg,#e0c4ff,#b07bff);box-shadow:0 10px 30px -10px rgba(176,123,255,.95);transition:transform .08s;}
 .pa-go:active{transform:scale(.98);}
+.pa-go.alt{background:linear-gradient(180deg,#2b1f47,#1d1533);color:#e6d6ff;border:1px solid #513c7d;box-shadow:none;}
+/* PRIMARY CTA — sits directly under the hero so the decision is the first thing you meet */
+.pa-cta{border:1px solid #5a3f96;border-radius:16px;padding:14px;background:linear-gradient(180deg,#241a3e,#170f28);box-shadow:0 14px 40px -18px rgba(176,123,255,.7);display:flex;flex-direction:column;gap:12px;}
+.pa-cta-row{display:flex;align-items:stretch;gap:13px;}
+.pa-cta-n{flex:none;min-width:92px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 8px;border-radius:12px;background:radial-gradient(120% 120% at 50% 0%,#3a2a63,#1b1330);border:1px solid #543e86;}
+.pa-cta-n b{font-family:'Orbitron',sans-serif;font-size:26px;font-weight:900;line-height:1;color:#e9d8ff;text-shadow:0 0 18px rgba(192,123,255,.85);}
+.pa-cta-n em{font-style:normal;font-family:'Rajdhani',sans-serif;font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a795c8;text-align:center;line-height:1.35;}
+.pa-cta-sum{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:7px;}
+.pa-cta-k,.pa-cta-l{font-size:11.5px;line-height:1.5;color:#b7a6d6;}
+.pa-cta-k{color:#9fe6bd;}.pa-cta-k b{color:#d6ffe8;}
+.pa-cta-l{color:#e0a3ad;}.pa-cta-l b{color:#ffd9de;}
+.pa-cta .pa-go{margin-top:0;}
+.pa-cta .pa-go-note{margin-top:0;}
+@media (max-width:420px){.pa-cta-row{flex-direction:column;}.pa-cta-n{flex-direction:row;gap:9px;min-width:0;}.pa-cta-n em{text-align:left;}}
 .pa-go-note{text-align:center;font-size:10px;color:#7f7396;margin-top:7px;letter-spacing:.03em;}
 .pa-locked{text-align:center;font-size:12px;color:#9184ad;line-height:1.6;border:1px dashed #33284f;border-radius:12px;padding:16px;}
 .pa-locked b{color:#c9a8ff;}

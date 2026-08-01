@@ -8,10 +8,11 @@
        the spine (Lv 100 = 1 pt, 250 = 2, 500 = 4, 1000 = 8, exactly per spec),
        with bonus points for fleet score, deepest zone, territory, badge ranks
        and wing size. The full arithmetic is shown BEFORE you commit.
-     • THE WHOLE HANGAR is carried across — every hull you own, HULLS ONLY.
-       Upgrade levels, fitted equipment, cargo AND every hull's SHIP ASCENSION
-       (module tiers + stars) are all surrendered: each ship comes back exactly
-       as it left the yard. You pick the flagship you fly out in.
+     • THE WHOLE FLEET is carried across — every hull you own, and everything the
+       SHIPYARD built into it: upgrade levels AND each hull's SHIP ASCENSION
+       (module tiers + stars). What the pilot was CARRYING — fitted equipment,
+       cargo, Starforge tempers — is surrendered. You pick the flagship you fly
+       out in.
      • ASCENSION STARS (one per ascension) sit next to the pilot name and gate
        the three ASCENSION-EXCLUSIVE loot tiers — Ascendant (★1), Celestial
        (★20), Paragon (★50). Those tiers cannot drop for an un-ascended pilot at
@@ -187,6 +188,20 @@
         '<span class="pa-calc-h">' + r.note + (r.cap ? ' · max ' + r.cap : '') + '</span>' +
       '</div>').join('');
 
+    const ctaTop = locked
+      ? '<div class="pa-locked">Ascension opens at <b>Level ' + UNLOCK_LV + '</b>. There is no rush — every level past ' + UNLOCK_LV + ' makes the payout bigger.</div>'
+      : '<div class="pa-cta">' +
+          '<div class="pa-cta-row">' +
+            '<div class="pa-cta-n"><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '<br>+ 1 ★</em></div>' +
+            '<div class="pa-cta-sum">' +
+              '<div class="pa-cta-k">✓ <b>Your whole fleet comes with you</b> — every hull, every hull upgrade level, and every Ship Ascension</div>' +
+              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level, items, gold, territory and the Pilot Tree</div>' +
+            '</div>' +
+          '</div>' +
+          '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button>' +
+          '<div class="pa-go-note">You pick the hull you fly out in and confirm before anything is reset. Full breakdown below.</div>' +
+        '</div>';
+
     return '<div class="pa-hero' + (locked ? ' locked' : '') + '" style="--tc:' + tierDef(Math.max(1, p.stars)).color + '">' +
         '<div class="pa-hero-rings"><i></i><i></i><i></i></div>' +
         '<div class="pa-hero-star">✦</div>' +
@@ -194,9 +209,11 @@
         '<div class="pa-hero-t">PILOT ASCENSION</div>' +
         '<div class="pa-hero-s">' + (locked
           ? 'Reach <b>Level ' + UNLOCK_LV + '</b> to unlock — you are Level ' + fmt(S.level)
-          : 'Trade this run for permanent power. You keep <b>every ship</b>.') + '</div>' +
+          : 'Trade the <b>pilot’s</b> run for permanent power. Your <b>fleet keeps everything the shipyard built</b>.') + '</div>' +
         (locked ? '<div class="pa-lvbar"><i style="width:' + Math.min(100, S.level / UNLOCK_LV * 100).toFixed(1) + '%"></i></div>' : '') +
       '</div>' +
+
+      ctaTop +
 
       // THE CALCULATOR — always visible, always live
       // THE WALL — the single clearest reason to ascend, stated before the maths
@@ -231,24 +248,25 @@
       // WHAT HAPPENS — the warning, itemised
       '<div class="pa-card warn">' +
         '<div class="pa-card-h">⚠ WHAT ASCENDING DOES<em>permanent</em></div>' +
+        '<p class="pa-note">The line is simple: <b>the ships keep what the shipyard gave them, the pilot gives up everything they were carrying.</b></p>' +
         '<div class="pa-ledger">' +
           '<div class="pa-led lose"><div class="pa-led-h">✕ RESET TO ZERO</div><ul>' +
             '<li>Pilot Level → <b>1</b> (and all skill points)</li>' +
-            '<li>Galaxy progress — every claimed system</li>' +
-            '<li>Void Zone progress</li>' +
-            '<li>Gold &amp; all Galaxy resources</li>' +
             '<li><b>Every item you own</b> — equipped, in the bag, and stowed on escorts</li>' +
-            '<li><b>Every Ship Ascension</b> — module tiers &amp; stars, on <b>every</b> hull</li>' +
+            '<li>Gold &amp; all Galaxy resources</li>' +
             '<li>All Starforge hardpoint tempers &amp; purity</li>' +
             '<li><b>The whole Pilot Tree</b> — every node unlocked</li>' +
-            '<li><b>Every hull upgrade level</b> — on every ship in the hangar</li>' +
+            '<li>Galaxy progress — every claimed system</li>' +
+            '<li>Void Zone progress</li>' +
             '<li>Home Citadel &amp; defence towers</li>' +
             '<li><b>Every claimed system, citadel &amp; Void spire</b> — they fall to neutral immediately, no cooldown</li>' +
-            '<li>Your wing — escorts disband (the hulls stay in the hangar)</li>' +
+            '<li>Your wing — escorts disband (the hulls stay in the hangar, fully upgraded)</li>' +
             '<li>Prism mining rigs &amp; ingots</li>' +
           '</ul></div>' +
           '<div class="pa-led keep"><div class="pa-led-h">✓ CARRIED OVER</div><ul>' +
-            '<li><b>Every hull in your hangar</b> — the hulls and nothing else: no gear, no upgrade levels, <b>no Ship Ascension</b></li>' +
+            '<li><b>Every hull in your hangar</b> — nothing is taken from the fleet</li>' +
+            '<li><b>Every hull upgrade level</b> — your ships stay exactly as strong as you built them</li>' +
+            '<li><b>Every Ship Ascension</b> — module tiers &amp; stars, on <b>every</b> hull</li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
             '<li><b>A higher level ceiling</b> — +' + CAP_STEP + ' max pilot level, every time</li>' +
             '<li>Your unspent <b>◇ Dread Cores</b> (the tree itself resets)</li>' +
@@ -271,9 +289,8 @@
         '</div>' +
       '</div>' +
 
-      (locked
-        ? '<div class="pa-locked">Ascension opens at <b>Level ' + UNLOCK_LV + '</b>. There is no rush — every level past 100 makes the payout bigger.</div>'
-        : '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button><div class="pa-go-note">You will choose the hull you fly out in and confirm before anything is reset.</div>') +
+      (locked ? ''
+        : '<button class="pa-go alt" id="pa-begin2">✦ BEGIN ASCENSION</button><div class="pa-go-note">Nothing is reset until you confirm on the next screen.</div>') +
 
       (p.hist.length ? '<div class="pa-card"><div class="pa-card-h">PREVIOUS ASCENSIONS</div>' +
         p.hist.slice(-6).reverse().map((h, i) => '<div class="pa-hist"><span>★ ' + (p.hist.length - i) + '</span><b>Lv ' + fmt(h.lvl) + '</b><em>+' + h.pts + ' pts · ' + (h.ship || '—') + '</em></div>').join('') +
@@ -349,6 +366,7 @@
     body.querySelectorAll('[data-patab]').forEach((b) => b.onclick = () => { tab = b.dataset.patab; render(); });
     body.querySelectorAll('[data-perk]').forEach((b) => b.onclick = () => buyPerk(b.dataset.perk));
     const go = $('pa-begin'); if (go) go.onclick = ascendFlow;
+    const go2 = $('pa-begin2'); if (go2) go2.onclick = ascendFlow;
   }
 
   function buyPerk(k) {
@@ -405,7 +423,7 @@
     const paint = () => {
       o.innerHTML = '<div class="pa-modal">' +
         '<div class="pa-mh"><b>CHOOSE YOUR FLAGSHIP</b><em>Step 1 of 2</em></div>' +
-        '<p class="pa-mp"><b>Every hull comes with you</b> — but the hulls only. <b>Upgrade levels, fitted equipment, cargo and each ship\u2019s Ship Ascension (module tiers &amp; stars) are all surrendered</b>: every ship arrives bare, exactly as it left the yard. Pick the one you want to be flying when you warp out.</p>' +
+        '<p class="pa-mp"><b>Your whole fleet comes with you — fully upgraded.</b> Every hull keeps its <b>upgrade levels</b> and its <b>Ship Ascension (module tiers &amp; stars)</b>. Only what the pilot was carrying is surrendered: <b>fitted equipment, cargo and Starforge tempers</b>. Pick the hull you want to be flying when you warp out.</p>' +
         '<div class="pa-picks">' + cards() + '</div>' +
         '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
         '<button class="pa-btn go" data-next' + (pick ? '' : ' disabled') + '>Continue →</button></div>' +
@@ -433,8 +451,6 @@
           '<li>' + Object.keys(S.ownedSystems || {}).length + ' claimed systems</li>' +
           '<li>All citadels &amp; Void spires — undefended instantly</li>' +
           '<li>Every item — gear, bag, escort loadouts</li>' +
-          '<li>Every hull upgrade level</li>' +
-          '<li><b>Every ship\u2019s Ship Ascension</b></li>' +
           '<li>Starforge tempers &amp; the Pilot Tree</li>' +
           '<li>Your wing disbands</li></ul>' +
         '</div>' +
@@ -443,14 +459,15 @@
           '<img class="pa-conf-img" src="ships/ship-' + key + '.png" alt="">' +
           '<ul><li>+' + pv.total + ' ascension point' + (pv.total === 1 ? '' : 's') + '</li>' +
           '<li>Rank ' + tierDef(stars() + 1).name + ' ★' + starOf(stars() + 1) + '</li>' +
-          '<li>Every hull in your hangar (bare)</li>' +
+          '<li><b>Every hull — upgrade levels intact</b></li>' +
+          '<li><b>Every Ship Ascension</b></li>' +
           '<li>Level cap → <b>' + (150 + 50 * (stars() + 1)) + '</b></li>' +
           '<li>All perks &amp; badges</li>' +
           '<li>All purchases</li></ul>' +
         '</div>' +
       '</div>' +
       (willUnlock ? '<div class="pa-unlock-pre" style="--tc:' + willUnlock.color + '">✦ This ascension unlocks the <b>' + willUnlock.name.toUpperCase() + '</b> loot tier</div>' : '') +
-      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my account resets to Level 1, that I keep every hull but <b>lose every item and every Ship Ascension</b>, and that I fly out in the ' + (sh.name || 'chosen hull') + '.</label>' +
+      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my pilot resets to Level 1 and I <b>lose every item</b>, but I keep <b>every hull with its upgrade levels and Ship Ascension</b>, and I fly out in the ' + (sh.name || 'chosen hull') + '.</label>' +
       '<div class="pa-mb"><button class="pa-btn ghost" data-x>Go back</button>' +
       '<button class="pa-btn danger" id="pa-do" disabled>✦ ASCEND</button></div>' +
     '</div>';
@@ -518,7 +535,7 @@
         '<div class="pa-out-rows">' +
           '<div><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '</em></div>' +
           '<div><b>Lv 1</b><em>a clean record</em></div>' +
-          '<div><b>' + (sh.name || '—') + '</b><em>flagship · hangar intact</em></div>' +
+          '<div><b>' + (sh.name || '—') + '</b><em>flagship · fleet fully upgraded</em></div>' +
         '</div>' +
         (unlocked ? '<div class="pa-out-unlock" style="--tc:' + unlocked.color + '">' +
           '<span>NEW LOOT TIER UNLOCKED</span><b>' + unlocked.name.toUpperCase() + '</b>' +

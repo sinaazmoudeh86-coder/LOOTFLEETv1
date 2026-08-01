@@ -2756,11 +2756,19 @@
     let cmpNote = '';
     if (cmp && equipped) { const better = G.itemPower(item) > G.itemPower(equipped); cmpNote = `<div class="ip-cmp">vs equipped: <span style="color:${better?'var(--good)':'var(--bad)'}">${better?'Upgrade ▲':'Not an upgrade ▼'}</span></div>`; }
     let actions = '';
-    const canSecond = (item.slot === 'bow' || item.slot === 'arrows') && G.secondUnlocked(item.slot);
+    // EVERY hardpoint this hull exposes for the item's type gets its own button —
+    // hulls with 3 or 4 mounts of a kind were previously stuck at "Equip 2nd".
+    const hardpoints = (G.equipLayout ? G.equipLayout() : []).filter((s) => s.base === item.slot);
     if (mode === 'inventory') {
-      actions = `<div class="sheet-actions"><button class="btn primary" data-eq>Equip</button>` +
-        (canSecond ? `<button class="btn gold" data-eq2>Equip 2nd</button>` : '') +
-        `<button class="btn" data-sell>Sell <span class="coin">$</span> ${G.formatNum(C.sellValue(item))}</button></div>` +
+      const eqBlock = hardpoints.length > 1
+        ? `<div class="ip-hps"><div class="ip-hps-t">Mount to hardpoint</div><div class="ip-hps-g">` +
+            hardpoints.map((s, i) => `<button class="ip-hpb ${s.item ? '' : 'free'}" data-eqs="${s.key}">` +
+              `<span class="ip-hpn">${s.label}</span>` +
+              `<span class="ip-hpc ${s.item ? rc(s.item.rarity) : ''}">${s.item ? s.item.name : '— empty —'}</span></button>`).join('') +
+          `</div></div>`
+        : `<div class="sheet-actions"><button class="btn primary" data-eq>Equip</button></div>`;
+      actions = eqBlock +
+        `<div class="sheet-actions"><button class="btn" data-sell>Sell <span class="coin">$</span> ${G.formatNum(C.sellValue(item))}</button></div>` +
         `<div class="ip-salvage">Scrapping may salvage <span style="color:${GM.RES.fuel.color}">${GM.RES.fuel.glyph}</span> <span style="color:${GM.RES.iron.color}">${GM.RES.iron.glyph}</span> <span style="color:${GM.RES.plasma.color}">${GM.RES.plasma.glyph}</span> for My Galaxy</div>`;
     } else if (mode === 'equipped') actions = `<div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-uneq>⬆ Unequip</button></div>`;
     const sheet = showSheet(`<div id="item-pop"><div class="sheet-body">
@@ -2776,7 +2784,7 @@
         return `<div class="ip-wclass" style="color:${wc.color}"><span class="wcx">${wclassIcon(wc)}</span> ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`; })()}
       ${statHTML}${cmpNote}${actions||'<div class="sheet-actions"><button class="btn" data-x>Close</button></div>'}</div></div>`);
     const eq = sheet.querySelector('[data-eq]'); if (eq) eq.addEventListener('click', () => { G.equip(item, 'primary'); closeSheet(); });
-    const eq2 = sheet.querySelector('[data-eq2]'); if (eq2) eq2.addEventListener('click', () => { G.equip(item, 'secondary'); closeSheet(); });
+    sheet.querySelectorAll('[data-eqs]').forEach((b) => b.addEventListener('click', () => { G.equip(item, b.dataset.eqs); closeSheet(); }));
     const sl = sheet.querySelector('[data-sell]'); if (sl) sl.addEventListener('click', () => {
       const r = G.sell(item); closeSheet();
       if (r) { const sv = salvageStr(r.salvage);

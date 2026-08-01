@@ -68,20 +68,6 @@
     return ((Math.random()*3)|0);
   }
 
-  // Build a roster. `strength` scales how deep/high-level the cohort is.
-  function buildRoster(seed, count, strength) {
-    const r = rng(seed);
-    const list = [];
-    for (let i = 0; i < count; i++) {
-      const zone = Math.max(1, Math.round(strength * (0.4 + r() * 1.1)));
-      const level = Math.max(1, Math.round(zone * (1.6 + r()) + r() * 8));
-      const power = Math.round(C.dungeonScale(zone) * (40 + r() * 80) + level * 6);
-      const kills = Math.round(power * (3 + r() * 9));
-      list.push({ name: nameFor(r), zone, level, power, kills, _loadout: null });
-    }
-    return list;
-  }
-
   // Deterministic rival FLEET — higher-ranked pilots field bigger, fancier
   // fleets (1–5 unique hulls, flagship first). Seeded by name; stable per heat.
   const FLEET_POOL = ['frigate', 'interceptor', 'cruiser', 'heavycruiser', 'destroyer', 'battleship', 'dreadnought', 'carrier', 'aegis', 'supercarrier', 'titan', 'mothership'];
@@ -145,13 +131,10 @@
     return list;
   }
 
-  let _heatCache = {}, _allCache = null;
-
-  // FLOOR — the page must never render as a single row: you, rank 1, alone. That
-  // happens when the cloud board hasn't answered (or its rows failed to publish)
-  // AND no simulated pilot has surfaced yet — a brand-new account sees none for
-  // its first day. Deterministic filler sits strictly BELOW your power, so the
-  // ladder reads like a ladder and no real fleet is ever buried or out-powered.
+  // FLOOR — last resort. The page must never render as a single row: you, rank
+  // 1, alone. That only happens if the cloud board hasn't answered AND the
+  // simulated roster failed to load. Deterministic filler sits strictly BELOW
+  // your power, so no real fleet is ever buried or out-powered.
   function floorFill(board, me) {
     if (board.length > 1) return board;
     board.push(...fillerRoster(24, Math.round((me.power || 100) * 0.9), me.zone));

@@ -1,68 +1,120 @@
-# deploy-v210 — build 414
+# deploy-v211 — build 415
 
-**Supersedes v208 and v209.** If you haven't pushed those, push this instead —
-it contains everything they had.
+**Supersedes v208, v209 and v210.** Push this one; it contains everything they had.
 
-## Order
+---
 
-1. Run `supabase/war-events.sql` in the SQL Editor
-2. Push the folder contents to the repo root Vercel serves, hard-reload once
-3. Redeploy `supabase/functions/discord-feed/index.ts` in the Edge Function editor
+## The three steps
 
-Steps 1 and 3 are both required for defence announcements. The feed runs fine
-without either — it just won't post them.
+### 1 · Run the SQL
 
-## Changed from v209
+Supabase → **SQL Editor** → **New query** → paste `supabase/war-events.sql` → **Run**.
 
-`js/game-v93.js`, `js/territory.js`, plus the Edge Function and one new SQL file.
-Stamps bumped in all 50 cache-bust params, `LF_BUILD`, `sw.js`, `version.json`
-and `index.html`.
+Creates the `war_events` table and the `log_repelled()` RPC. Without it,
+successful defences can't be announced (everything else still works). Safe to
+re-run.
 
-## Successful defences now post to Discord
+### 2 · Push the site
 
-🛡️ **DEFENCE HELD** — *"Falcor held Korar ε-9 · realsina1 couldn't finish it
-inside 60 seconds. The Rank 3 Citadel never fell."*
-Void tiles get 🛡️ **VOID SPIRE HELD**.
+Push the contents of this folder to the repo root Vercel serves. Then open the
+game and **hard-reload once** so the `lootfleet-v415` service worker takes over.
 
-### Why this needed a table
+### 3 · Redeploy the Discord function
 
-Every other event in the feed is found by diffing `territory`, `leaderboard` and
-`alliances` — that catches anything where state changes hands. A successful
-defence is the one thing that changes nothing: the clock runs out, the defender
-keeps the tile, and the row is byte-for-byte identical to a minute ago. There is
-no diff to find.
+Supabase → **Edge Functions** → **discord-feed** → **Code** → select all, delete,
+paste `supabase/functions/discord-feed/index.ts` → **Deploy**.
 
-So the attacker's client reports it through `log_repelled()`, and the feed drains
-the log on an id high-water mark. The RPC is deliberately narrow:
+Secrets, the Verify JWT setting and the cron job are untouched — you're only
+swapping code.
 
-- the **attacker** is `auth.uid()`, never taken from the client
-- the **defender** is read from `territory` server-side, never taken either
-- one row per attacker, per tile, per minute
+**Confirm all three:**
 
-A forged call can only credit *somebody else* with a successful defence, which
-nobody gains from faking. Rows older than 30 days are cleared on each run of the
-SQL.
+```sql
+select id, status_code, content, created
+  from net._http_response order by created desc limit 3;
+```
+
+`200` with `{"ok":true,...}` means the new function is live. If `content`
+mentions `war_events`, step 1 didn't run.
+
+---
+
+## What's in it
+
+### Discord — battles read as fight cards
+
+Small line names the arena, big line names the fight and the winner:
+
+```
+⚔️  BATTLE FOR KORAR ε-9
+🏆 REALSINA1  ⚔  FROSTSKULL — REALSINA1 TAKES IT
+
+🛡️  BATTLE FOR VELAR DRIFT
+🛡️ FALCOR  ⚔  REALSINA1 — FALCOR HOLDS
+```
+
+Winner always leads, so the result reads without parsing a sentence. Defences put
+the defender first — they won. Names uppercase, capped at 18 chars so long ones
+can't break the card.
+
+**Every tile taken off another pilot gets its own card**, fortress or not. Only
+quiet bulk activity collapses into a summary line — first claims on empty space,
+and releases. Battles never do.
+
+Detail line per outcome: 💥 Citadel razed · 🏰 Rank 3 Citadel taken intact ·
+🛰️ No fortress here, open ground · ⏱️ ran the clock out, 60 seconds, no breach.
+
+### Discord — successful defences
+
+🛡️ **DEFENCE HELD** (🛡️ **VOID SPIRE HELD** in the Void Zone).
+
+A successful defence is the one event that changes nothing in the database — the
+clock expires, the defender keeps the tile, the row is byte-for-byte identical.
+There's no diff to find, so the attacker's client reports it through
+`log_repelled()`. The RPC trusts almost nothing from it: attacker is
+`auth.uid()`, defender is read from `territory` server-side, one row per
+attacker per tile per minute.
+
+### Discord — Void Zone
+
+The seven spires post as their own message under a full-width header, never
+collapsed, never sharing a batch with routine traffic. VZ7 gets gold and its own
+`👑 THE CROWN HAS MOVED`.
+
+### Game — timeout means the defender won
+
+Nothing is deleted. Their fleet survived, so it stays on the field holding the
+tile. The **attacker** leaves: spawns stop, 6s invulnerability so the clock
+running out can never become a shipwreck, then a 3s tow back to My Galaxy or the
+Void Zone. Tile shielded against them for 15 minutes.
+
+### Game — territory survives ascension
+
+Tiles, Void spires and Citadels ride across (`ownedSystems`, `citadels`,
+`rivalCitadels`, `tileCd` in `ASC_KEEP`). `territory` rows are keyed by
+`owner_id`, so they were always held against the account, not the fleet — the old
+wipe released nothing server-side, it just desynced the client and gave away
+holds nobody lost in a fight.
+
+The cost is still real: your next republish writes the new, much lower fleet
+score onto every tile you hold.
+
+---
 
 ## Post-deploy checks
 
-1. Attack a rival-held tile and let the clock expire. Within two minutes Discord
-   should show 🛡️ DEFENCE HELD naming both pilots.
-2. Immediately retry the same tile — the 15-minute shield should block you, and
-   no second Discord post should appear.
-3. `select * from war_events order by id desc limit 5;` — one row per repel.
-4. Time out on a Void tile — the embed should read VOID SPIRE HELD.
+1. Attack a rival-held **ordinary** tile — countdown appears the moment ENEMY
+   CLONE FLEET spawns.
+2. Let it expire — **their fleet is still on screen**, you're towed out, tile
+   shows a 15-minute shield.
+3. Within two minutes Discord posts 🛡️ DEFENCE HELD naming both pilots.
+4. Retry the same tile immediately — shield blocks you, no duplicate post.
+5. Take a tile off someone — 🏆 fight card names both pilots and the system.
+6. Ascend while holding tiles — still yours, Citadels at the same ranks.
+7. Log out, in, and back in twice on a deep-zone account — power and gold
+   identical each time.
 
-## Also in this build (from v209, unpushed)
-
-- **Timeout = the defender won.** Their fleet stays on the field; the attacker is
-  towed out under invulnerability. Nothing is deleted.
-- **Territory survives ascension.** Tiles, Void spires and Citadels ride across;
-  the next republish writes your new lower fleet score onto them.
-
-## Discord (from v208, unpushed)
-
-Void spires post as their own message with a full-width header — 🌌 VOID SPIRE
-SEIZED, and 👑 THE CROWN HAS CHANGED HANDS for VZ7.
+---
 
 ## Known, unchanged
 

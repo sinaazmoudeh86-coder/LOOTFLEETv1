@@ -159,7 +159,12 @@ function tileName(id: string): string {
   return out;
 }
 
-type Ev = { kind: string; embed: Record<string, unknown>; line: string };
+type Ev = { kind: string; embed: Record<string, unknown>; line: string; sys?: string };
+
+// Fight-card typography: names read as combatants, not as sentence subjects.
+const up = (s: string) => (s || '').toUpperCase().slice(0, 18);
+const card = (a: string, b: string, verdict: string) =>
+  `${up(a)}  ⚔  ${up(b)}\u2003— ${verdict}`;
 
 Deno.serve(async (req) => {
   if (FEED_KEY && req.headers.get('x-feed-key') !== FEED_KEY) {
@@ -460,15 +465,22 @@ Deno.serve(async (req) => {
     if (was.owner && cur.owner && was.owner !== cur.owner) {
       if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'taken', held, was.name); continue; }
       const razed = was.lv > 0 && cur.lv === 0;
+      const foe = was.name || 'THE HOLDER';
       tileEvents.push({
-        kind: 'steal', actor: held,
-        line: `**${held}** took ${sys}`,
+        kind: 'steal', actor: held, sys,
+        line: `**${held}** took ${sys} from **${foe}**`,
         embed: {
           color: COLOR.steal,
-          author: { name: '⚔  SYSTEM TAKEN' },
-          title: `${held} captured ${sys}`,
-          description: `Wrested from **${was.name || 'the previous holder'}**.` +
-            (razed ? '\n> Their Citadel is rubble.' : cur.lv > 0 ? `\n> The Rank ${cur.lv} Citadel still stands — under a new flag.` : ''),
+          author: { name: `\u2694\uFE0F  BATTLE FOR ${sys.toUpperCase()}` },
+          title: `\u{1F3C6} ${card(held, foe, up(held) + ' TAKES IT')}`,
+          description:
+            `\u{1F525} **${held}** broke the hold and planted their flag.\n\n` +
+            (razed
+              ? '> \u{1F4A5} **Citadel razed** — nothing left standing.\n'
+              : cur.lv > 0
+                ? `> \u{1F3F0} **Rank ${cur.lv} Citadel** taken intact — under a new flag.\n`
+                : `> \u{1F6F0}\uFE0F No fortress here — open ground, and it changed hands.\n`) +
+            '-# \u{1F6E1}\uFE0F 24h shield now up.',
         },
       });
     } else if (!was.owner && cur.owner) {
@@ -489,9 +501,9 @@ Deno.serve(async (req) => {
         line: `${sys} went neutral`,
         embed: {
           color: COLOR.lost,
-          author: { name: '○  SYSTEM ABANDONED' },
-          title: `${sys} is unclaimed`,
-          description: `-# ${was.name || 'Its holder'} let it go — free to take`,
+          author: { name: '\u25CB  HOLD RELEASED' },
+          title: `\u25CB ${sys.toUpperCase()} IS OPEN`,
+          description: `**${was.name || 'Its holder'}** let it go.\n-# \u{1F3F3}\uFE0F Unowned, undefended, free to take.`,
         },
       });
     }
@@ -505,8 +517,8 @@ Deno.serve(async (req) => {
           color: COLOR.citadel,
           author: { name: was.lv === 0 ? '▲  CITADEL RAISED' : '▲  CITADEL UPGRADED' },
           title: was.lv === 0
-            ? `${held} raised a Citadel on ${sys}`
-            : `${held} took ${sys} to Rank ${cur.lv}`,
+            ? `\u{1F3F0} ${up(held)} FORTIFIES ${sys.toUpperCase()}`
+            : `\u{1F3F0} ${sys.toUpperCase()} → RANK ${cur.lv}`,
           description: was.lv === 0
             ? '-# 1000× output · 24h siege shield'
             : `-# Rank ${was.lv} → ${cur.lv} · ${cur.lv * 10}× output · +${25 * (cur.lv - 1)}% defence`,
@@ -531,8 +543,8 @@ Deno.serve(async (req) => {
       embed: {
         color: COLOR.lost,
         author: { name: '○  SYSTEM ABANDONED' },
-        title: `${sys} is unclaimed`,
-        description: `-# ${was.name || 'Its holder'} released it — free to take`,
+        title: `\u25CB ${sys.toUpperCase()} IS OPEN`,
+        description: `**${was.name || 'Its holder'}** released it.\n-# \u{1F3F3}\uFE0F Unowned, undefended, free to take.`,
       },
     });
   }
@@ -545,18 +557,21 @@ Deno.serve(async (req) => {
   }
   for (const [actor, group] of byActor) {
     if (group.length <= BURST) { events.push(...group); continue; }
-    const cits = group.filter((e) => e.kind === 'citadel');
-    events.push(...cits);                       // fortresses are never collapsed
-    const rest = group.filter((e) => e.kind !== 'citadel');
+    // A capture off another pilot is a BATTLE and always gets its own card,
+    // citadel or not. Only quiet bulk activity — first claims on empty space and
+    // releases — ever collapses into a summary line.
+    const loud = group.filter((e) => e.kind === 'steal' || e.kind === 'citadel');
+    events.push(...loud);
+    const rest = group.filter((e) => e.kind !== 'steal' && e.kind !== 'citadel');
     if (!rest.length) continue;
     events.push({
       kind: 'steal',
       line: `**${actor}** moved on ${rest.length} systems`,
       embed: {
         color: COLOR.steal,
-        author: { name: '⚔  OFFENSIVE' },
-        title: `${actor} swept ${rest.length} systems`,
-        description: '-# ' + rest.slice(0, 5).map((e) => tileNameOf(e)).join(' · ') +
+        author: { name: '\u2691  LAND GRAB' },
+        title: `${up(actor)} SWEPT ${rest.length} SYSTEMS`,
+        description: '-# ' + rest.slice(0, 5).map((e) => e.sys || '').filter(Boolean).join(' · ') +
           (rest.length > 5 ? ` · +${rest.length - 5} more` : ''),
       },
     });
@@ -576,17 +591,22 @@ Deno.serve(async (req) => {
       const sys = tileName(w.tile_id || '');
       const lv = Number((w.meta || {}).citadel_lv) || 0;
       const isVoid = !!VOID[w.tile_id || ''];
+      const def = String(w.target_name || 'THE HOLDER');
+      const atk = String(w.actor_name || 'AN ATTACKER');
       events.push({
-        kind: 'repel',
-        line: `**${w.target_name}** repelled **${w.actor_name}**`,
+        kind: 'repel', sys,
+        line: `**${def}** repelled **${atk}**`,
         embed: {
           color: COLOR.repel,
-          author: { name: isVoid ? '\u{1F6E1}\uFE0F  VOID SPIRE HELD' : '\u{1F6E1}\uFE0F  DEFENCE HELD' },
-          title: `${w.target_name} held ${sys}`,
+          author: { name: `\u{1F6E1}\uFE0F  ${isVoid ? 'SIEGE OF' : 'BATTLE FOR'} ${sys.toUpperCase()}` },
+          title: `\u{1F6E1}\uFE0F ${card(def, atk, up(def) + ' HOLDS')}`,
           description:
-            `**${w.actor_name}** couldn't finish it inside 60 seconds.\n\n` +
-            (lv > 0 ? `> \u{1F3F0} The Rank ${lv} Citadel never fell.\n` : '> \u2694\uFE0F The garrison outlasted them.\n') +
-            `-# \u{1F6E1}\uFE0F Shielded against them for 15 minutes.`,
+            `\u23F1\uFE0F **${atk}** ran the clock out — 60 seconds, no breach.\n\n` +
+            (lv > 0
+              ? `> \u{1F3F0} The **Rank ${lv} Citadel** never fell.\n`
+              : '> \u2694\uFE0F The garrison outlasted them.\n') +
+            (isVoid ? '> \u{1F300} An apex spire stays where it is.\n' : '') +
+            '-# \u{1F6E1}\uFE0F Shielded against them for 15 minutes.',
         },
       });
     }
@@ -660,9 +680,3 @@ function json(o: unknown) {
   return new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
 }
 
-// The system name out of an event's headline, for the collapsed burst line.
-function tileNameOf(e: { embed: Record<string, unknown> }): string {
-  const t = String((e.embed as any).title ?? '');
-  const m = /(?:captured|claimed) (.+)$/.exec(t);
-  return m ? m[1] : t.replace(/ is unclaimed$/, '');
-}

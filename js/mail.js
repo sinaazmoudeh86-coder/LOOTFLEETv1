@@ -37,6 +37,60 @@
   }
   const unread = () => { try { return box().list.filter((m) => !m.read).length; } catch (e) { return 0; } };
 
+  // ---- COLLECT ALL -------------------------------------------------------------
+  // "Mark all read" used to leave prize mail sitting unclaimed — you had to open
+  // and tap every single one. It now banks every unclaimed prize in the inbox and
+  // reports the whole haul in one receipt instead of a stack of toasts.
+  const CUR = [
+    { k: 'coins', g: '✦', c: '#5fd1ff', n: 'Event Coins' },
+    { k: 'lc',    g: '◈', c: '#f2a93c', n: 'LootCoins' },
+    { k: 'gold',  g: '$', c: '#e6b566', n: 'Gold' },
+    { k: 'cores', g: '◇', c: '#ff5a6a', n: 'Dread Cores' },
+  ];
+  const fmtN = (v) => { try { return G().formatNum(v); } catch (e) { return Number(v).toLocaleString(); } };
+  const claimable = () => { try { return box().list.filter((m) => m.meta && m.meta.kind === 'prize' && m.meta.prize && !m.meta.claimed); } catch (e) { return []; } };
+
+  function collectAll() {
+    const b = box(), prizes = claimable(), got = {};
+    let claimed = 0, failed = 0;
+    prizes.forEach((m) => {
+      let txt = null;
+      try { txt = (window.SDREAD && window.SDREAD.payPrize) ? window.SDREAD.payPrize(m.meta.prize) : null; } catch (e) {}
+      if (txt == null) { failed++; return; }               // payout refused — leave it claimable
+      m.meta.claimed = true; claimed++;
+      CUR.forEach((c) => { const v = m.meta.prize[c.k]; if (v) got[c.k] = (got[c.k] || 0) + v; });
+    });
+    const readNow = b.list.filter((m) => !m.read).length;
+    b.list.forEach((m) => { m.read = true; });
+    try { G().save(); } catch (e) {}
+    badge(); render();
+    if (window.UI) { try { window.UI.refreshAll(); } catch (e) {} }
+    if (claimed) haul(got, claimed, readNow, failed);
+    else if (failed && window.SOCIAL) SOCIAL.toast('Claim failed — refresh the game', '#e23b4e');
+  }
+
+  // the receipt — one screen, everything you just banked
+  function haul(got, claimed, readNow, failed) {
+    const rows = CUR.filter((c) => got[c.k]).map((c) =>
+      '<div class="mlh-row"><span class="mlh-g" style="color:' + c.c + '">' + c.g + '</span>' +
+      '<span class="mlh-n">' + c.n + '</span>' +
+      '<b class="mlh-v" style="color:' + c.c + '">+' + fmtN(got[c.k]) + '</b></div>').join('');
+    const o = document.createElement('div');
+    o.className = 'mlh-back';
+    o.innerHTML = '<div class="mlh-card">' +
+      '<div class="mlh-ic">🏆</div>' +
+      '<div class="mlh-h">REWARDS COLLECTED</div>' +
+      '<div class="mlh-sub">' + claimed + ' prize' + (claimed === 1 ? '' : 's') + ' banked' +
+        (readNow ? ' · ' + readNow + ' message' + (readNow === 1 ? '' : 's') + ' read' : '') + '</div>' +
+      '<div class="mlh-rows">' + (rows || '<div class="mlh-row"><span class="mlh-n">Collected</span></div>') + '</div>' +
+      (failed ? '<div class="mlh-err">' + failed + ' could not be claimed — try again in a moment.</div>' : '') +
+      '<button class="mlh-ok" type="button">Nice</button></div>';
+    document.body.appendChild(o);
+    const close = () => { try { o.remove(); } catch (e) {} };
+    o.querySelector('.mlh-ok').addEventListener('click', close);
+    o.addEventListener('click', (e) => { if (e.target === o) close(); });
+  }
+
   // ---- galaxy war reports ------------------------------------------------------
   function tileLost(tileName, info, opts) {
     info = info || {}; opts = opts || {};
@@ -101,8 +155,10 @@
     const b = box(), n = unread();
     const sub = $('mail-sub'); if (sub) sub.textContent = b.list.length ? (n ? n + ' unread' : 'All read') : '';
     let html = '';
+    const cn = claimable().length;
     html += '<div class="ml-bar"><span class="ml-count">' + b.list.length + ' message' + (b.list.length === 1 ? '' : 's') + '</span>' +
-      '<button class="sc-btn sm ghost ml-act" id="ml-readall" ' + (n ? '' : 'disabled') + '>✓ Mark all read</button>' +
+      '<button class="sc-btn sm ghost ml-act' + (cn ? ' ml-hot' : '') + '" id="ml-readall" ' + ((n || cn) ? '' : 'disabled') + '>' +
+        (cn ? '🏆 Collect all · ' + cn : '✓ Mark all read') + '</button>' +
       '<button class="sc-btn sm ghost ml-act" id="ml-clear" ' + (b.list.length ? '' : 'disabled') + '>✕ Clear read</button></div>';
     if (!b.list.length) {
       html += '<div class="sc-empty">No transmissions yet. War reports from My Galaxy land here — captures, losses, and who hit you (with their fleet intel).</div>';
@@ -141,7 +197,7 @@
       const scr = b.dataset.ctaScreen;
       if (window.UI && UI.showScreen) UI.showScreen(scr);
     }));
-    const ra = $('ml-readall'); if (ra) ra.addEventListener('click', () => { box().list.forEach((m) => m.read = true); G().save(); badge(); render(); });
+    const ra = $('ml-readall'); if (ra) ra.addEventListener('click', collectAll);
     const cl = $('ml-clear'); if (cl) cl.addEventListener('click', () => { const bb = box(); bb.list = bb.list.filter((m) => !m.read); _openId = null; G().save(); badge(); render(); });
   }
 
@@ -203,6 +259,32 @@
   .ml-claim:active{ transform:scale(.97); }
   .ml-claimed{ margin-top:9px; text-align:center; font-family:'Orbitron',sans-serif; font-weight:800; font-size:10px; letter-spacing:.08em;
     color:#7ce0a0; border:1px solid rgba(89,217,140,.5); border-radius:10px; padding:9px; }
+  /* Collect all — the button glows while prizes are waiting */
+  .ml-act.ml-hot{ color:#231302 !important; border-color:transparent !important;
+    background:linear-gradient(180deg,#ffd24d,#e09a2d) !important; box-shadow:0 0 14px -2px rgba(255,210,77,.85); }
+  /* the haul receipt: 'safe center' + scroll, so a tall card on a short or
+     landscape viewport can never push its CTA past the fold (the #login bug) */
+  .mlh-back{ position:fixed; inset:0; z-index:120; display:grid; align-content:safe center; justify-items:center; overflow-y:auto; padding:22px;
+    background:rgba(5,8,14,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); animation:mlhIn .18s ease; }
+  @keyframes mlhIn{ from{ opacity:0 } to{ opacity:1 } }
+  .mlh-card{ width:100%; max-width:330px; border-radius:18px; padding:20px 18px 16px; text-align:center;
+    background:linear-gradient(180deg,#1a2333,#111827); border:1px solid #3d4d68;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.85); animation:mlhUp .26s cubic-bezier(.22,1,.36,1); }
+  @keyframes mlhUp{ from{ transform:translateY(14px) scale(.97); opacity:0 } to{ transform:none; opacity:1 } }
+  .mlh-ic{ font-size:34px; line-height:1; filter:drop-shadow(0 0 14px rgba(255,210,77,.7)); }
+  .mlh-h{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:13px; letter-spacing:.14em; color:#ffd9a0; margin-top:8px; }
+  .mlh-sub{ font-size:11px; color:#8d9cb2; margin-top:5px; }
+  .mlh-rows{ display:flex; flex-direction:column; gap:7px; margin:15px 0 4px; }
+  .mlh-row{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:11px;
+    background:rgba(255,255,255,.04); border:1px solid #2a3650; }
+  .mlh-g{ flex:none; width:20px; font-size:15px; font-weight:800; text-align:center; }
+  .mlh-n{ flex:1; min-width:0; text-align:left; font-size:12px; color:#c3cfdd; }
+  .mlh-v{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; }
+  .mlh-err{ margin-top:9px; font-size:11px; color:#ff8a98; }
+  .mlh-ok{ width:100%; margin-top:13px; border:0; border-radius:12px; padding:14px; cursor:pointer;
+    font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.12em; color:#231302;
+    background:linear-gradient(180deg,#ffd24d,#e09a2d); box-shadow:0 8px 22px -8px rgba(255,210,77,.9); }
+  .mlh-ok:active{ transform:scale(.98); }
 `;
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
 })();

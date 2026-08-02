@@ -3,8 +3,8 @@
    ---------------------------------------------------------------------------
    Exactly the Voidmaw treatment: GAME.startAllianceRaid() drops one huge boss
    into a clean arena; you fly your REAL flagship (manual flight, auto-pilot
-   off, 1× speed), your real weapons chip its hull, and the HP delta is the
-   damage that transmits to the shared alliance pool.
+   off, 1× speed), and your real weapons chip its hull. The boss hull IS the
+   mark's remaining HP — raw combat damage, no cap, no conversion.
    ONE BOSS PER RUN (Jul 2026). The arena hull IS the shared pool: its bar
    mirrors pool-remaining, so what you watch drain is exactly what the server
    subtracts. There is NO client-side mark ladder — burn the pool to 0 and the
@@ -22,7 +22,17 @@
   const fmt = (n) => { try { return G().formatNum(Math.floor(n)); } catch (e) { return String(Math.floor(n)); } };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const T = 150;
-  const MAX_XMIT = 50;   // one full run transmits at most power × 50 — MUST match the SQL clamp
+  // NO PER-RUN DAMAGE CAP (Aug 2026). The Armada has a FIXED hull per mark:
+  //   hull(mark) = 1e6 × 4 ^ (mark - 1)
+  // Mk-1 is small enough for one pilot to one-shot; every mark is ×4 harder, so
+  // the ladder outgrows any single fleet within ~20 marks and the rest of the
+  // week belongs to the whole alliance. Your RAW combat damage is the damage —
+  // no normalization, no power-unit conversion, no ceiling. The ×4 step is
+  // deliberately steep: real burst output spans ~20 orders of magnitude across
+  // the playerbase (theoryDps badly understates it — multishot, drones, escorts,
+  // chain lightning and singularity all land damage it never counted), so a
+  // gentler ladder is one-shot spam for a deep pilot at every mark.
+  // See supabase/alliance-boss-setladder.sql for the server half.
   let run = null;
 
   function banner(t, s) {
@@ -39,12 +49,17 @@
     if (!G() || !G().startAllianceRaid) { if (window.SOCIAL) SOCIAL.toast('Combat systems offline — update required', '#e23b4e'); return; }
     // one event at a time — don't stomp a live Voidmaw run or fort defense
     try { const grt = G().rt; if (grt && ((grt.sdrun && grt.sdrun.active) || (grt.hcrun && grt.hcrun.active))) { if (window.SOCIAL) SOCIAL.toast('Finish your current event first', '#e23b4e'); return; } } catch (e) {}
-    const power = Math.max(1, (G().score ? G().score() : 1e6));
     let prevSpeed = 1; try { prevSpeed = G().state.gameSpeed || 1; G().setGameSpeed(1); } catch (e) {}
     let prevAuto = false; try { prevAuto = !!G().getAuto(); G().setAuto(false); } catch (e) {}
     const n = Math.max(1, opts.bossN | 0);
+    const pool = Math.max(1, Number(opts.bossHp) || 1);   // the mark's remaining hull, from the server
+    // NAVIGATE FIRST. Switching to the battle screen resets the zone, which used
+    // to wipe the Armada we had just spawned — and because the boss hull is now
+    // the damage source, the next tick read the vanished hull as 0 and scored an
+    // instant full-pool kill. Build the arena only once we are already there.
+    const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     let b = null;
-    try { b = G().startAllianceRaid(n); } catch (e) {}
+    try { b = G().startAllianceRaid(n, pool); } catch (e) {}
     if (!b) {
       try { G().setAuto(prevAuto); G().setGameSpeed(prevSpeed); } catch (e) {}
       if (window.SOCIAL) SOCIAL.toast('Deploy failed — try again', '#e23b4e');
@@ -52,23 +67,13 @@
     }
     const sh = (C().SHIP_BY_KEY || {})[(G().state || {}).ship] || {};
     const bonus = sh.siegeBonus || 0;
-    // UNIT NORMALIZATION — arena hits are raw combat damage (grows geometrically
-    // with zones); the alliance pool runs on POWER units. Convert at the rate
-    // the SERVER clamps at: a full 2:30 of your theoretical DPS = your maximum
-    // transmit (power × 50). No pool-relative fudge — if the shared hull is
-    // bigger than one pilot can transmit, the bar honestly stops short and the
-    // alliance finishes it together.
-    const theory = Math.max(1, (G().rt && G().rt.stats && G().rt.stats.theoryDps) || 1);
-    const pool = Math.max(1, Number(opts.bossHp) || 1);
-    const norm = (power * MAX_XMIT) / (theory * T);
-    run = { left: T, dealt: 0, kills: 0, boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false,
-            n, bonus, norm, poolHp: pool, died: false, submitted: false,
+    run = { left: T, dealt: 0, kills: 0, boss: b, lastHp: 0, uiT: 0, zones: [], zoneT: 4.5, warned: false, enraged: false,
+            n, bonus, poolHp: pool, died: false, submitted: false,
             prevAuto, prevSpeed, onDone: opts.onDone };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
-    const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     warbar();
     banner('⬡ HOLLOW ARMADA Mk-' + n + ' ENGAGED',
-      'MANUAL FLIGHT — dodge the collapse zones · 2:30 · the hull bar IS the alliance pool — burn it to 0 and every member is paid ⬡ 300' + (bonus ? ' · ⬡ MONOLITH +' + Math.round(bonus * 100) + '%' : ''));
+      'MANUAL FLIGHT — dodge the collapse zones · 2:30 · ' + fmt(pool) + ' hull left — burn it to 0 and every member is paid ⬡ 300' + (bonus ? ' · ⬡ MONOLITH +' + Math.round(bonus * 100) + '%' : ''));
   }
 
   // driven by the engine's update() every frame while rt.alrun is active
@@ -78,23 +83,23 @@
     if (!b) return end('time');
     // another event took the arena (Voidmaw / fort defense) — settle as abandoned
     if ((rt.sdrun && rt.sdrun.active) || (rt.hcrun && rt.hcrun.active) || (rt.boss && rt.boss !== b)) return end('abandoned', true);
-    // damage dealt = boss HP delta (the engine resolved the real hits);
-    // Monolith siegeBonus multiplies what transmits
-    const delta = Math.max(0, run.lastHp - b.hp);
-    if (delta > 0) run.dealt += delta * (1 + run.bonus) * run.norm;   // raw combat → power units
-    // THE ARENA HULL IS THE SHARED POOL. Drive its bar straight off pool-remaining
-    // so the number you watch drain is the number the server subtracts — the
-    // alliance page can never disagree with what you just saw.
-    const leftFrac = clamp(1 - run.dealt / run.poolHp, 0, 1);
-    b.hp = Math.max(1, b.maxHp * leftFrac);   // pool lives on the server — never dies locally
+    // the arena was torn down under us (zone reset / screen change). The hull IS
+    // the damage source now, so a vanished boss must NEVER read as a full kill.
+    if (rt.enemies.indexOf(b) === -1) return end('abandoned', true);
+    // The engine resolved the real hits and the boss hull IS the mark's hull,
+    // so damage dealt is simply how much of it is gone. Monolith siegeBonus
+    // multiplies what transmits, and it eats hull at the same rate.
+    const eaten = Math.max(0, run.poolHp - b.hp) * (1 + run.bonus);
+    run.dealt = Math.max(run.dealt, eaten);
+    if (run.bonus && b.hp > 1) b.hp = Math.max(1, run.poolHp - eaten);   // the bonus visibly burns extra hull
     b.dying = false;
-    run.lastHp = b.hp;
-    // ONE BOSS AT A TIME — pool to 0 ends the run as a KILL. No local mark ladder:
-    // the server advances the mark and pays ⬡ 300 to every member on confirm.
-    if (leftFrac <= 0) {
+    // ONE BOSS AT A TIME — hull to 0 ends the run NOW as a kill. No local mark
+    // ladder: the server advances the mark and pays ⬡ 300 on confirm.
+    if (run.dealt >= run.poolHp) {
+      run.dealt = run.poolHp;
       run.kills = 1;
       rt.shake = Math.min(8, (rt.shake || 0) + 5);
-      banner('☠ HOLLOW ARMADA Mk-' + run.n + ' DESTROYED', 'Pool burned to zero — ⬡ 300 paid to every member · the Armada rebuilds at Mk-' + (run.n + 1) + ', ×1.55 harder');
+      banner('☠ HOLLOW ARMADA Mk-' + run.n + ' DESTROYED', 'Hull burned to zero — ⬡ 300 paid to every member · the Armada rebuilds at Mk-' + (run.n + 1) + ', ×4 harder');
       return end('killed');
     }
     run.left -= dt;
@@ -207,7 +212,9 @@
     const r = run; run = null;
     const killed = r.kills > 0;
     const dmg = Math.max(1, Math.floor(r.dealt));
-    const frac = clamp((T - Math.max(0, r.left)) / T, 0, 1);
+    // a KILL is a full-credit run for the pocket reward no matter how fast it
+    // landed — one-shotting an early mark must not pay zero
+    const frac = killed ? 1 : clamp((T - Math.max(0, r.left)) / T, 0, 1);
     const app = $('app'); if (app) app.classList.remove('sd-noauto');
     try { G().setAuto(!!r.prevAuto); } catch (e) {}
     try { if (r.prevSpeed && r.prevSpeed !== 1) G().setGameSpeed(r.prevSpeed); } catch (e) {}
@@ -227,7 +234,9 @@
     try { const grt = G().rt; foreign = !!(grt && ((grt.sdrun && grt.sdrun.active) || (grt.hcrun && grt.hcrun.active))); } catch (e) {}
     if (!foreign) { try { if (G().goSafeHangar) G().goSafeHangar(); } catch (e) {} }
     banner(killed ? '☠ ARMADA Mk-' + r.n + ' DESTROYED' : r.died ? '✝ FLEET LOST — partial damage logged' : '⌛ RAID WINDOW CLOSED',
-      '⚔ ' + fmt(dmg) + ' damage transmitting to the alliance' + (r.bonus ? ' · ⬡ +' + Math.round(r.bonus * 100) + '% Monolith siege bonus' : ''));
+      '⚔ ' + fmt(dmg) + ' damage transmitting to the alliance' +
+      (killed ? ' — <b>Mk-' + r.n + ' is down</b>. Next mark is ×4 harder.' : ' · ' + fmt(Math.max(0, r.poolHp - r.dealt)) + ' hull still standing') +
+      (r.bonus ? ' · ⬡ +' + Math.round(r.bonus * 100) + '% Monolith siege bonus' : ''));
     if (r.onDone && !r.submitted) { r.submitted = true; setTimeout(() => { try { r.onDone({ dmg, frac, bonus: r.bonus, died: r.died, killed, kills: r.kills }); } catch (e) {} }, 600); }
   }
 
@@ -257,7 +266,7 @@
     const t = Math.max(0, run.left), m = Math.floor(t / 60), s = Math.floor(t % 60);
     const tg = $('awb-tag'); if (tg) tg.textContent = '⬡ Mk-' + run.n;
     const tm = $('awb-timer'); if (tm) { tm.textContent = m + ':' + String(s).padStart(2, '0'); tm.classList.toggle('enr', run.enraged); }
-    const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(run.dealt) + '</b>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
+    const d = $('awb-dmg'); if (d) d.innerHTML = '⚔ <b>' + fmt(run.dealt) + '</b><i>/' + fmt(run.poolHp) + '</i>' + (run.bonus ? ' <em>+' + Math.round(run.bonus * 100) + '%</em>' : '');
     const f = $('awb-fill'); if (f) f.style.width = clamp((1 - run.dealt / run.poolHp) * 100, 0, 100) + '%';
   }
 
@@ -271,6 +280,7 @@
   #al-warbar .awb-dmg{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:11px; color:#8fc4ba; white-space:nowrap; }
   #al-warbar .awb-dmg b{ color:#d8fff6; font-variant-numeric:tabular-nums; }
   #al-warbar .awb-dmg em{ font-style:normal; color:#7ff2e0; }
+  #al-warbar .awb-dmg i{ font-style:normal; color:#6d9a92; font-variant-numeric:tabular-nums; }
   #al-warbar .awb-bar{ flex:1; height:6px; border-radius:4px; background:#0e211e; overflow:hidden; min-width:40px; }
   #al-warbar .awb-bar i{ display:block; height:100%; background:linear-gradient(90deg,#ff5a68,#b02040); box-shadow:0 0 8px #ff5a68; transition:width .2s linear; }
   #al-warbar #awb-flee{ pointer-events:auto; background:none; border:1px solid #2a4a44; color:#8fc4ba; border-radius:7px; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:11px; padding:2px 8px; cursor:pointer; }

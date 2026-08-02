@@ -128,7 +128,7 @@
     // `proUntil` carries the LootFleet Pro subscription window, so the Pro badge,
     // its 5× speed and 2× XP all survive an ascension untouched.
     'purchases', 'credits', 'proUntil', 'vipPts', 'iap', 'payments', 'redeemedCodes',
-    'cosmetics', 'shipAura', 'dreadCores',
+    'cosmetics', 'shipAura',
     'achieve', 'achv', 'achClaimed', 'badgeRanks', 'lifeStats',   // lifetime badges (achievements.js keys off state.achieve)
     // CAREER COUNTERS — the metrics lifetime badge chains measure. These record
     // what the pilot has DONE, not power they hold, so they carry across every
@@ -139,6 +139,14 @@
     'sdread', 'season', 'shipParts',                           // event progress & entitlements
     'startWeek', 'name', 'sellTier', 'keepUpgrades', 'autoEquipAlways', 'auto', 'gameSpeed',
     'deathExplained', 'joystick', 'fs',
+    // ONBOARDING IS A CAREER FACT, NOT RUN PROGRESS. An ascended pilot has
+    // already been taught the game; wiping these replayed the whole tutorial
+    // (and the "name your commander" gate) from scratch on every ascension.
+    'coach', 'nameSet',
+    // MISSION BOARDS run on their own daily / weekly / monthly clocks, not on
+    // the pilot's run. Wiping them mid-cycle threw away a half-finished weekly
+    // (and its tier) for anyone who ascended on, say, a Thursday.
+    'missions', 'missionsW', 'missionsM',
   ];
   // Event / premium hulls are entitlements, not progress — never taken.
   const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
@@ -242,6 +250,8 @@
     state.ascension = keepAsc;             // SHIP ASCENSION KEPT — module tiers & stars ride across
     state.forge = {};                      // Starforge hardpoint tempers reset
     state.pilot = null;                    // PILOT TREE wiped — every node re-earned
+    state.dreadCores = 0;                  // ◇ CORES are run currency, not an entitlement: they
+                                           // buy the Pilot Tree, so they reset with it
     state.beaconUntil = 0;
     state.shipKills = {};
     hangar.forEach((k) => { state.shipKills[k] = 0; });
@@ -258,6 +268,23 @@
     state.pasc.pts = (state.pasc.pts | 0) + Math.max(0, pts | 0);
     state.pasc.legacy = legacy.key;
     state.pasc.hist = (state.pasc.hist || []).concat([{ lvl: before.lvl, pts: Math.max(0, pts | 0), ship: before.ship, at: Date.now() }]).slice(-40);
+    // TUTORIALS OFF FOR GOOD. `coach` rides across in ASC_KEEP, but a pilot who
+    // ascended before finishing it would still be coached on the way back up —
+    // and every gated moment re-fires as the new run re-crosses its level gate.
+    // One ascension is proof enough: silence the lot.
+    try {
+      state.coach = state.coach || { seen: {} };
+      state.coach.seen = state.coach.seen || {};
+      state.coach.v3 = true;
+      if (window.COACH && window.COACH.keys) window.COACH.keys().forEach((k) => { state.coach.seen[k] = true; });
+      state.coach.allSeen = true;   // COACH honours this even for moments added later
+    } catch (e) {}
+    state.nameSet = true;
+    // Mission BOARDS carry across (ASC_KEEP) but their delta BASELINE must not:
+    // it snapshots gold / tiles / hull levels, and those just cratered. Dropping
+    // it makes the next tick reseed from the post-ascension state, so the reset
+    // itself scores no mission progress either way.
+    state.msnBase = null;
 
     state.lastSave = Date.now();
     refreshStats();
@@ -936,7 +963,7 @@
         if (state.shipAura && state.shipAura[state.ship] && b.src && !b.src.dead && !b.src.dying && Math.random() < 0.01) {
           const refl = Math.max(b.dmg * 3, (rt.stats.attackDamage || 0) * 4);
           const kk = b.src.takeDamage(refl);
-          rt.floats.push(new E.FloatText(b.src.x, b.src.y - b.src.size, '⟲ ' + formatNum(refl), { color: '#c9a0ff', size: 26, crit: true }));
+          rt.floats.push(new E.FloatText(b.src.x, b.src.y - b.src.size, '⟲ ' + formatNum(refl * (rt.dmgShow || 1)), { color: '#c9a0ff', size: 26, crit: true }));
           for (let i = 0; i < 10; i++) { const aa = Math.random() * Math.PI * 2, sp = 120 + Math.random() * 120; rt.particles.push(new E.Particle(b.src.x, b.src.y, { vx: Math.cos(aa) * sp, vy: Math.sin(aa) * sp, life: 0.4, size: 2 + Math.random() * 2, color: '#c9a0ff', glow: true, drag: 0.9 })); }
           if (kk) onKill(b.src);
         }
@@ -1028,7 +1055,7 @@
       const k = cur.takeDamage(dmg);
       rt.dmgWindow.push({ t: rt.time, dmg });
       // ⚡ numbers hang on screen much longer than gunfire floats
-      rt.floats.push(new E.FloatText(cur.x, cur.y - cur.size, '⚡' + formatNum(dmg), { color: '#8fe0ff', size: 50, crit: true, life: 2.6, vy: -16 }));
+      rt.floats.push(new E.FloatText(cur.x, cur.y - cur.size, '⚡' + formatNum(dmg * (rt.dmgShow || 1)), { color: '#8fe0ff', size: 50, crit: true, life: 2.6, vy: -16 }));
       if (k) onKill(cur);
       fx = cur.x; fy = cur.y;
       let nxt = null, bd = Infinity;   // arcs bounce to the nearest un-struck ship ANYWHERE on the map
@@ -1119,7 +1146,11 @@
     e._fbSum = (e._fbSum || 0) + _dmg;
     if (p.crit) e._fbCrit = true;
     if ((killed || rt.time - (e._fbT || 0) >= 0.25) && rt.floats.length < 22) {
-      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(e._fbSum), { color: e._fbCrit ? '#e07c12' : '#f4f8ff', size: e._fbCrit ? 44 : 30, crit: !!e._fbCrit }));
+      // rt.dmgShow lets an event render hits in ITS units. The alliance raid
+      // transmits in POWER units, not raw combat damage — without this the
+      // player watches 300T crits fly off and is then told the whole run
+      // transmitted 1.7T, because those are two different currencies.
+      rt.floats.push(new E.FloatText(e.x, e.y - e.size, formatNum(e._fbSum * (rt.dmgShow || 1)), { color: e._fbCrit ? '#e07c12' : '#f4f8ff', size: e._fbCrit ? 44 : 30, crit: !!e._fbCrit }));
       e._fbT = rt.time; e._fbSum = 0; e._fbCrit = false;
     }
     // IMPACT: class-specific hit effects — each weapon lands differently
@@ -1708,7 +1739,7 @@
           const k = en.takeDamage(dmg);
           rt.dmgWindow.push({ t: rt.time, dmg });
           if (rt.vaFloatT <= 0 && rt.floats.length < 24) {
-            rt.floats.push(new E.FloatText(en.x, en.y - en.size, formatNum(aps) + '/s', { color: '#7dff9e', size: 22 }));
+            rt.floats.push(new E.FloatText(en.x, en.y - en.size, formatNum(aps * (rt.dmgShow || 1)) + '/s', { color: '#7dff9e', size: 22 }));
             rt.vaFloatT = 0.7;
           }
           if (k) onKill(en);
@@ -2955,7 +2986,7 @@
   // (window.ALBOSS) owns timer/zones/damage-transmit.
   let _armImg = null;
   function armadaImg() { if (!_armImg) { _armImg = new Image(); _armImg.src = 'ships/ship-monolith4.png'; } return _armImg; }
-  function startAllianceRaid(markN) {
+  function startAllianceRaid(markN, poolHp) {
     const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, state.level));
     state.currentDungeon = zone;
     state.currentSystem = null;
@@ -2973,10 +3004,13 @@
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
     const b = new E.Enemy(pool[pool.length - 1], state.currentDungeon, cx, cy);
     b.isBoss = true; b.isSuper = true; b.isAlArmada = true;
-    // effectively unlimited HP — the alliance pool lives on the server; ALBOSS
-    // records the delta and tops the bar back up (same trick as the Voidmaw).
+    // THE ARENA HULL *IS* THE SHARED POOL (Aug 2026). It used to be "an hour of
+    // your DPS" with the real pool tracked separately and the bar topped back
+    // up — so what you shot at had no relationship to what you were killing.
+    // Now the boss carries the mark's REAL remaining HP: your raw hits are the
+    // damage, dropping it to 0 kills the mark, and the run ends there.
     const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
-    b.maxHp = b.hp = Math.max(1e9, Math.round(dps * 3600));
+    b.maxHp = b.hp = Math.max(1, Math.round(Number(poolHp) || Math.max(1e9, dps * 3600)));
     b.speed *= 0.4; b.size = 132;
     b.ranged = true; b.range = 600; b.fireCd = Math.max(0.8, 1.5 - 0.03 * (markN | 0)); b.fireT = 1.6;
     b.tint = '#2ee6c9';
@@ -3047,6 +3081,7 @@
     if (window.UI) window.UI.refreshAll(); save();
   }
   function resetZone() {
+    rt.dmgShow = 1;   // never let an event's display scale survive into normal play
     state.prismRun = null;   // any (re)deploy ends a Prism Field run
     state.prismFleetRun = null;   // ...and a Prism Fleet gauntlet run
     sweepLoot();

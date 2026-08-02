@@ -255,7 +255,7 @@
             '<li><b>Every item you own</b> — equipped, in the bag, and stowed on escorts</li>' +
             '<li>Gold &amp; all Galaxy resources</li>' +
             '<li>All Starforge hardpoint tempers &amp; purity</li>' +
-            '<li><b>The whole Pilot Tree</b> — every node unlocked</li>' +
+            '<li><b>The whole Pilot Tree</b> — every node unlocked, and every ◇ Dread Core you were holding</li>' +
             '<li>Galaxy progress — every claimed system</li>' +
             '<li>Void Zone progress</li>' +
             '<li>Home Citadel &amp; defence towers</li>' +
@@ -269,7 +269,7 @@
             '<li><b>Every Ship Ascension</b> — module tiers &amp; stars, on <b>every</b> hull</li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
             '<li><b>A higher level ceiling</b> — +' + CAP_STEP + ' max pilot level, every time</li>' +
-            '<li>Your unspent <b>◇ Dread Cores</b> (the tree itself resets)</li>' +
+            '<li>Your <b>mission boards</b> — daily, weekly and monthly carry on mid-cycle</li>' +
             '<li>Lifetime badges &amp; achievements</li>' +
             '<li>Every badge already claimed — <em>chains never reset</em></li>' +
             '<li>Career totals — kills, hours, loot, missions (badges keep counting)</li>' +
@@ -451,7 +451,7 @@
           '<li>' + Object.keys(S.ownedSystems || {}).length + ' claimed systems</li>' +
           '<li>All citadels &amp; Void spires — undefended instantly</li>' +
           '<li>Every item — gear, bag, escort loadouts</li>' +
-          '<li>Starforge tempers &amp; the Pilot Tree</li>' +
+          '<li>Starforge tempers, the Pilot Tree &amp; every ◇ Dread Core</li>' +
           '<li>Your wing disbands</li></ul>' +
         '</div>' +
         '<div class="pa-conf-side keep"><span>YOU KEEP</span>' +
@@ -467,7 +467,9 @@
         '</div>' +
       '</div>' +
       (willUnlock ? '<div class="pa-unlock-pre" style="--tc:' + willUnlock.color + '">✦ This ascension unlocks the <b>' + willUnlock.name.toUpperCase() + '</b> loot tier</div>' : '') +
-      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>I understand my pilot resets to Level 1 and I <b>lose every item</b>, but I keep <b>every hull with its upgrade levels and Ship Ascension</b>, and I fly out in the ' + (sh.name || 'chosen hull') + '.</label>' +
+      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>' +
+        'I understand. My pilot goes back to <b>Level 1</b> and I lose every <b>item, gold and claimed system</b>. ' +
+        'My fleet comes with me — <b>hulls, upgrade levels and Ship Ascensions</b>.</label>' +
       '<div class="pa-mb"><button class="pa-btn ghost" data-x>Go back</button>' +
       '<button class="pa-btn danger" id="pa-do" disabled>✦ ASCEND</button></div>' +
     '</div>';

@@ -175,6 +175,34 @@
     await window.CLOUD.push(s.id, data);
     publishLb(s, data);
   }
+  // ---- LEADERBOARD HEARTBEAT --------------------------------------------------
+  // The public row used to be published ONLY from a successful save write, so
+  // any guard that blocked the save pipeline also made the player invisible on
+  // the Ranks board — permanently, and silently. All of these do it:
+  //   • !_pullOk (one failed pull at login blocks cloud writes for the session)
+  //   • the CLOBBER GUARD — weight < 20% of the cloud copy. An ascension craters
+  //     weight (level→1, gold→0, zone→1), so ascending could mute a pilot.
+  //   • SESSIONLOCK.canWrite() false, or an unresolved CAS conflict
+  // Alliance membership and territory claims go through their own RPCs and need
+  // no leaderboard row, so a player could be fully active — in an alliance,
+  // holding tiles — and still absent from the board. (Reported: "Falcor is in
+  // the game but not on the leaderboard.")
+  //
+  // The row is a PUBLIC SUMMARY: no merge semantics, no clobber risk, and the
+  // upsert is idempotent. It has no business riding on the save pipeline, so it
+  // now publishes on its own heartbeat as well.
+  function publishNow() {
+    try {
+      if (!cloudOn() || window.__sessionKicked) return false;
+      const s = session(); if (!s || !s.id) return false;
+      const g = window.GAME; if (!g || !g.state || !g.state.level) return false;
+      publishLb(s, g.state);
+      return true;
+    } catch (e) { return false; }
+  }
+  setTimeout(publishNow, 6000);            // visible within seconds of arriving
+  setInterval(publishNow, 90000);          // and kept current regardless of saves
+
   // public leaderboard row (non-sensitive fields)
   // ASCENSION STARS (fixed Jul 2026): this publisher never sent `asc`, so every
   // row in the leaderboard table was written with p_asc = 0. Your own badge came
@@ -354,5 +382,5 @@
     refreshBar();
     return true;
   }
-  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, casOn: () => _casOn };
+  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, publishNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, casOn: () => _casOn };
 })();

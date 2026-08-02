@@ -201,6 +201,9 @@
     if (active || !G || !G.state) return;
     const s = G.state;
     if (!s.coach) s.coach = { seen: {} };        // guard: cloud pull replaced state
+    // ASCENDED PILOTS ARE DONE BEING TAUGHT. Set once at ascension and honoured
+    // for moments added in later builds too, so the tutorial never comes back.
+    if (s.coach.allSeen || ((s.pasc && s.pasc.stars) | 0) > 0) return;
     if (G.getHp && G.getHp().dead) return;          // never over a death
     if (document.hidden) return;
     // grace delay: condition met → arm; fire 2.5s later if still met
@@ -222,7 +225,8 @@
   }
   // external nudge (e.g. lootScrapped fires the bagfull moment immediately)
   function notify(key) {
-    if (!G || active || !MOMENTS[key] || G.state.coach.seen[key]) return;
+    if (!G || active || !MOMENTS[key] || !G.state.coach || G.state.coach.seen[key]) return;
+    if (G.state.coach.allSeen || ((G.state.pasc && G.state.pasc.stars) | 0) > 0) return;
     if (!pendingKey) { pendingKey = key; pendingAt = Date.now() + 1500; }
   }
 
@@ -355,5 +359,5 @@
     window.addEventListener('resize', position);
   }
 
-  window.COACH = { init, notify };
+  window.COACH = { init, notify, keys: () => ORDER.slice() };
 })();

@@ -59,6 +59,9 @@
     try { if (window.SESSIONLOCK) window.SESSIONLOCK.claim(); } catch (e) {}
     if (window.__sessionKicked) return;   // lost the account mid-restore → kick screen is up
     boot(); reveal(true);
+    // publish the public Ranks row IMMEDIATELY — it must not wait on the save
+    // pipeline (see the heartbeat note in account.js)
+    setTimeout(() => { try { window.ACCOUNT && window.ACCOUNT.publishNow && window.ACCOUNT.publishNow(); } catch (e) {} }, 2500);
     setTimeout(maybePromptName, 600);   // NEW accounts: pick a commander name first
   }
 
@@ -118,9 +121,33 @@
     } catch (e) {}
   }
 
-  // OAuth failures— social sign-in was removed from the login screen (no
-  // provider is configured), so nothing calls this. Kept out deliberately:
-  // see OAUTH-SETUP.md if it ever comes back.
+  // OAuth (Google / Apple). CLOUD.oauth() flags the redirect as a FRESH login
+  // and hands off to the provider; the browser comes back to this same page and
+  // restoreCloud() below picks the session up. Only reachable when Supabase is
+  // configured — the buttons stay hidden on the local/offline path.
+  function ssoStatus(msg, isErr) {
+    const el = $('lg-sso-status'); if (!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('err', !!isErr);
+  }
+  async function oauth(provider, label) {
+    if (!cloudOn() || !window.CLOUD.oauth) return;
+    err(''); ssoStatus('Opening ' + label + '…');
+    ['lg-google', 'lg-apple'].forEach((id) => { const b = $(id); if (b) b.disabled = true; });
+    try {
+      await window.CLOUD.oauth(provider);           // navigates away on success
+    } catch (ex) {
+      ['lg-google', 'lg-apple'].forEach((id) => { const b = $(id); if (b) b.disabled = false; });
+      ssoStatus(prettySSOError(ex, label), true);
+    }
+  }
+  function prettySSOError(ex, label) {
+    const m = ((ex && ex.message) || '') + '';
+    if (/provider is not enabled|unsupported provider/i.test(m)) return label + ' sign-in isn’t switched on yet.';
+    if (/redirect|url/i.test(m)) return label + ' rejected the return address — check the redirect URL.';
+    return m || ('Could not reach ' + label + '.');
+  }
+
   function prettyAuthError(ex) {
     const m = (ex && ex.message) || 'Something went wrong.';
     if (/invalid login/i.test(m)) return 'Incorrect email or password.';
@@ -169,6 +196,11 @@
 
   function setMode(m) {
     mode = m;
+    // social buttons speak the same language as the tab you're on
+    { const t = m === 'register' ? 'Sign up with ' : 'Continue with ';
+      const g = $('lg-google-t'), a = $('lg-apple-t');
+      if (g) g.textContent = t + 'Google';
+      if (a) a.textContent = t + 'Apple'; }
     $('lg-submit').textContent = m === 'register' ? 'Create Account' : 'Log In';
     $('lg-switch-txt').textContent = m === 'register' ? 'Already enlisted?' : 'New here?';
     $('lg-toggle').textContent = m === 'register' ? 'Log in' : 'Create account';
@@ -180,6 +212,23 @@
     if (u) { u.placeholder = 'Email'; u.type = 'email'; u.setAttribute('autocomplete', 'email'); }
     const note = document.querySelector('.lg-note');
     if (note) note.textContent = 'Real accounts — your fleet syncs across every device you sign in on.';
+    showProviders();
+  }
+  // Only offer a social button the project has actually switched on. A visible
+  // button for a disabled provider is worse than no button — it looks broken.
+  // Falls back to showing both if the settings probe fails (better a button
+  // that reports a clear error than a login screen missing its main entry).
+  async function showProviders() {
+    const sso = $('auth-sso'), div = $('auth-or-email');
+    let p = null;
+    try { p = window.CLOUD.providers ? await window.CLOUD.providers() : null; } catch (e) {}
+    const on = (k) => !p || p[k] !== false;
+    const g = $('lg-google'), a = $('lg-apple');
+    if (g) g.hidden = !on('google');
+    if (a) a.hidden = !on('apple');
+    const any = (g && !g.hidden) || (a && !a.hidden);
+    if (sso) sso.hidden = !any;
+    if (div) div.hidden = !any;
   }
 
   // returning cloud session (incl. OAuth redirect callback) → auto-login
@@ -205,6 +254,8 @@
     $('lg-form').addEventListener('submit', (e) => (cloudOn() ? submitFormCloud(e) : submitFormLocal(e)));
     $('lg-toggle').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
     $('lg-guest').addEventListener('click', () => signInLocal('Guest', 'Guest Operator'));
+    { const g = $('lg-google'); if (g) g.addEventListener('click', () => oauth('google', 'Google')); }
+    { const a = $('lg-apple'); if (a) a.addEventListener('click', () => oauth('apple', 'Apple')); }
     setMode('login');
 
     if (cloudOn()) { applyCloudCopy(); restoreCloud(); }

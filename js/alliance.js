@@ -20,6 +20,11 @@
   const S = () => window.SOCIAL;
   const fmt = (n) => { try { return G().formatNum(Math.floor(Number(n))); } catch (e) { return String(n); } };
   const UNLOCK_LEVEL = 40, CREATE_GOLD = 1e9;
+  // ASCENDED PILOTS SKIP THE GATE. An ascension drops you to Level 1, and an
+  // alliance is a social commitment — locking a veteran out of their own
+  // alliance for 40 levels every prestige is the wrong side of the trade.
+  const ascended = () => { try { return ((G().state.pasc && G().state.pasc.stars) | 0) > 0; } catch (e) { return false; } };
+  const allianceOpen = () => ascended() || (G().state.level | 0) >= UNLOCK_LEVEL;
   const esc = (s) => S().esc(s);
 
   // ---- alliance level math (mirror of the SQL) --------------------------------
@@ -104,7 +109,7 @@
   async function renderInto(host) {
     if (!host) return;
     const lvl = (G().state.level | 0);
-    if (lvl < UNLOCK_LEVEL) {
+    if (!allianceOpen()) {
       host.innerHTML = '<div class="sc-veil"><div class="sc-veil-ic">⬡</div><h3>Alliances</h3>' +
         '<p>Found or join an alliance: one shared boss, daily donations, weekly ops against every other alliance on the server.</p>' +
         '<div class="al-lock">Unlocks at <b>Level ' + UNLOCK_LEVEL + '</b> · you\u2019re Level ' + lvl + '</div></div>';

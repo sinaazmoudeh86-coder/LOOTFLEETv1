@@ -45,6 +45,21 @@
     if (error) throw error;
   }
   async function signOut() { try { await client.auth.signOut(); } catch (e) {} }
+  // WHICH PROVIDERS ARE ACTUALLY ON. /auth/v1/settings is public and lists every
+  // external provider the project has enabled. Without this the login screen
+  // offers buttons that dead-end in "that provider isn't switched on yet" — the
+  // player can't tell a misconfigured button from a broken one.
+  let _prov = null, _provAt = 0;
+  async function providers() {
+    if (_prov && Date.now() - _provAt < 300000) return _prov;
+    try {
+      const r = await fetch(cfg.supabaseUrl + '/auth/v1/settings', { headers: { apikey: cfg.supabaseAnonKey } });
+      if (!r.ok) return null;
+      const j = await r.json();
+      _prov = (j && j.external) || null; _provAt = Date.now();
+      return _prov;
+    } catch (e) { return null; }
+  }
   // ---- account deletion (App Review 5.1.1(v)) --------------------------------
   // Removes every row keyed to the user, then asks the delete-account Edge
   // Function (service-role) to erase the auth user itself. Each step is
@@ -167,7 +182,17 @@
   // candidate and rejects it — so a latched client stopped publishing its row at
   // all: no stars for anyone else to see, and a board that looked empty.
   // See supabase/lb-upsert-canonical.sql for the server half.
-  let _lbNoAsc = false, _lbAscRetryAt = 0;
+  let _lbNoAsc = false, _lbAscRetryAt = 0, _lbFails = 0, _lbWarned = false;
+  function lbFail(where, err) {
+    _lbFails++;
+    // A row that never publishes makes the player INVISIBLE on Ranks while they
+    // play normally — alliances and territory work fine without one, so nothing
+    // else complains. That went unnoticed for a long time; say it out loud.
+    if (_lbFails >= 3 && !_lbWarned) {
+      _lbWarned = true;
+      try { console.warn('[LOOTFLEET] leaderboard row is not publishing (' + _lbFails + ' failures). You will not appear on Ranks.', where, err); } catch (e) {}
+    }
+  }
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
@@ -179,18 +204,19 @@
       if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
       if (!_lbNoAsc) {
         const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc: (p.asc | 0) }, base));
-        if (!error) return;
+        if (!error) { _lbFails = 0; return; }
         // Only a genuinely missing function means "legacy server". Ambiguity,
         // network blips and RLS errors must NOT disable stars.
         const msg = ((error.message || '') + ' ' + (error.code || '') + ' ' + (error.hint || '')).toLowerCase();
         const legacy = msg.indexOf('pgrst202') !== -1 || msg.indexOf('42883') !== -1 ||
                        msg.indexOf('does not exist') !== -1 || msg.indexOf('could not find') !== -1;
-        if (!legacy) return;                                  // keep p_asc; retry next save
+        if (!legacy) { lbFail('p_asc', error); return; }         // keep p_asc; retry next save
         _lbNoAsc = true; _lbAscRetryAt = Date.now() + 6 * 3600 * 1000;
       }
       const { error: e2 } = await client.rpc('lb_upsert', base);
-      if (e2) { _lbNoAsc = false; _lbAscRetryAt = 0; }         // 6-arg failed too — go back to p_asc
-    } catch (e) {}
+      if (e2) { _lbNoAsc = false; _lbAscRetryAt = 0; lbFail('6-arg', e2); }   // 6-arg failed too — go back to p_asc
+      else _lbFails = 0;
+    } catch (e) { lbFail('throw', e); }
   }
   async function lbTop(n) {
     try {
@@ -239,7 +265,7 @@
     } catch (e) { return null; }
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, deleteAccountData, getUser, pull, pullMeta, push,
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, providers, deleteAccountData, getUser, pull, pullMeta, push,
     pullSave, pushSave, saveConflict, claimSession, touchSession, onSessionRow,
     lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
 })();

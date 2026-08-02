@@ -37,6 +37,7 @@ const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MAX_EMBEDS = 10;
 
 const COLOR = {
+  repel:    0x4db4ff,
   void:     0x9b4dff,
   crown:    0xffd24d,
   steal:    0xff5a4d,
@@ -55,7 +56,7 @@ const COLOR = {
 };
 
 // Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
-const PRIORITY = ['void', 'throne', 'ascend', 'armada', 'citadel', 'steal', 'dread', 'top10',
+const PRIORITY = ['void', 'throne', 'ascend', 'repel', 'armada', 'citadel', 'steal', 'dread', 'top10',
                   'zone', 'level', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
@@ -175,6 +176,11 @@ Deno.serve(async (req) => {
     db.from('alliances').select('id,name,tag,boss_n,boss_hp,boss_max,xp'),
     db.from('feed_seen').select('kind,ref,data'),
   ]);
+
+  // war_events arrives with war-events.sql; the feed runs fine without it.
+  let war = await db.from('war_events').select('id,kind,tile_id,actor_name,target_name,meta')
+                    .order('id', { ascending: true }).limit(200);
+  if (war.error) war = { data: [], error: null } as typeof war;
 
   // citadel_lv arrives with territory-citadel-lv.sql; fall back until it is run.
   let terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,citadel_lv');
@@ -554,6 +560,37 @@ Deno.serve(async (req) => {
           (rest.length > 5 ? ` · +${rest.length - 5} more` : ''),
       },
     });
+  }
+
+  // ---- war log ---------------------------------------------------------------
+  // A successful defence leaves no diff to find: the tile does not change hands,
+  // so the attacker's client reports it through log_repelled() and we drain the
+  // tail here. The cursor is an id high-water mark, so nothing repeats.
+  {
+    const seenId = Number((seen.get('_meta:war') || {}).id) || 0;
+    let maxId = seenId;
+    for (const w of war.data ?? []) {
+      const id = Number(w.id) || 0;
+      if (id > maxId) maxId = id;
+      if (bootstrap || id <= seenId || w.kind !== 'repelled') continue;
+      const sys = tileName(w.tile_id || '');
+      const lv = Number((w.meta || {}).citadel_lv) || 0;
+      const isVoid = !!VOID[w.tile_id || ''];
+      events.push({
+        kind: 'repel',
+        line: `**${w.target_name}** repelled **${w.actor_name}**`,
+        embed: {
+          color: COLOR.repel,
+          author: { name: isVoid ? '\u{1F6E1}\uFE0F  VOID SPIRE HELD' : '\u{1F6E1}\uFE0F  DEFENCE HELD' },
+          title: `${w.target_name} held ${sys}`,
+          description:
+            `**${w.actor_name}** couldn't finish it inside 60 seconds.\n\n` +
+            (lv > 0 ? `> \u{1F3F0} The Rank ${lv} Citadel never fell.\n` : '> \u2694\uFE0F The garrison outlasted them.\n') +
+            `-# \u{1F6E1}\uFE0F Shielded against them for 15 minutes.`,
+        },
+      });
+    }
+    if (maxId !== seenId) snap.push({ kind: '_meta', ref: 'war', data: { id: maxId }, updated_at: now });
   }
 
   // ---- publish ---------------------------------------------------------------

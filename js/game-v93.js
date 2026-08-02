@@ -147,6 +147,13 @@
     // the pilot's run. Wiping them mid-cycle threw away a half-finished weekly
     // (and its tier) for anyone who ascended on, say, a Thursday.
     'missions', 'missionsW', 'missionsM',
+    // TERRITORY SURVIVES ASCENSION (Aug 2026). Galaxy tiles, Void spires and the
+    // Citadels on them are held on the SERVER against the ACCOUNT — `territory`
+    // rows keyed by owner_id, not by fleet. Wiping them locally didn't release
+    // anything server-side, it just desynced the client until the next
+    // republish, and it gave away holds the pilot never lost in a fight.
+    // The fleet resets. The map you conquered does not.
+    'ownedSystems', 'citadels', 'rivalCitadels', 'tileCd',
   ];
   // Event / premium hulls are entitlements, not progress — never taken.
   const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
@@ -298,9 +305,10 @@
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; state.prismRun = null;
     state.fleet = null; state.drones = 0;   // no wing, no drones — re-form as slots unlock
-    // no territory, no fortresses, and no cooldown blocking anyone from taking them
-    state.ownedSystems = {}; state.citadels = {}; state.rivalCitadels = {}; state.tileCd = {};
-    rt.realTiles = {};
+    // Territory is NOT cleared — it rides across in ASC_KEEP. rt.realTiles is the
+    // live server mirror and stays as-is so the galaxy map doesn't blank out; the
+    // next republish rewrites every held tile with the new (much lower) fleet
+    // score, which is the real cost of ascending while holding ground.
     rt.hangarHits = [];                      // drop cached parked-hull hit regions
     rt.drones = [];
     try { resetZone(); } catch (e) {}
@@ -3767,17 +3775,23 @@
     }
   }
 
-  // The clock ran out with the fortress still standing: the defence holds, the
-  // attack is over, and the tile is shut to this player for 15 minutes so a
-  // failed siege can't be retried on a loop.
+  // TIME UP — the DEFENDER WINS. Their fleet survived the window, so it stays on
+  // the field holding the tile; nothing is deleted. The attacker is the one who
+  // leaves: spawns stop, the gauntlet ends, and they're towed out under
+  // invulnerability so running out the clock can never become a shipwreck.
   function failTimedSiege(s) {
-    const k = s.claimTile || state.currentSystem;
+    const k = s.claimTile || state.currentSystem, tile = sysAt(k);
     s.active = false; rt.waves = null;
-    rt.enemies = []; rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false;
+    rt.nodes = [];                                   // stop further escort spawns
+    if (rt.archer) rt.archer.invuln = 6;             // the defender may still be firing
     if (k) { if (!state.tileCd) state.tileCd = {}; state.tileCd[k] = Date.now() + 15 * 60 * 1000; }
-    pushFeed('The defence held — your siege ran out of time');
-    respawnAt(0);
-    if (window.UI) window.UI.siegeEvent('timeout', { tile: k });
+    rt._towVoid = !!(tile && tile.void);             // tow back to the right screen
+    rt.towT = 3.0;
+    burst(rt.archer.x, rt.archer.y, '#8fb7d9', 30, { speed: 200, life: 0.9 });
+    pushFeed('The defence held on ' + ((tile || {}).name || 'the tile') + ' — you were pushed out');
+    // tell the world the defender won — nothing else can see this happen
+    try { if (window.TERRITORY && window.TERRITORY.logRepelled) window.TERRITORY.logRepelled(k); } catch (e) {}
+    if (window.UI) window.UI.siegeEvent('timeout', { tile: k, sys: tile });
     save();
   }
 

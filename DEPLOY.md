@@ -1,64 +1,68 @@
-# deploy-v208 — build 412
+# deploy-v210 — build 414
 
-Push the folder contents to the repo root Vercel serves, then hard-reload once so
-the `lootfleet-v412` service worker takes over.
+**Supersedes v208 and v209.** If you haven't pushed those, push this instead —
+it contains everything they had.
 
-**No SQL this release.** `territory-citadel-lv.sql` from v207 is already run.
+## Order
 
-## Changed from v207
+1. Run `supabase/war-events.sql` in the SQL Editor
+2. Push the folder contents to the repo root Vercel serves, hard-reload once
+3. Redeploy `supabase/functions/discord-feed/index.ts` in the Edge Function editor
 
-`js/game-v93.js` only — the siege clock arming rules. Stamps bumped in all 50
-cache-bust params, `LF_BUILD`, `sw.js`, `version.json` and `index.html`.
+Steps 1 and 3 are both required for defence announcements. The feed runs fine
+without either — it just won't post them.
 
-## The fix
+## Changed from v209
 
-v207 armed the clock on `playerCit || tile.void`, and only on the FINAL target.
-Both were wrong:
+`js/game-v93.js`, `js/territory.js`, plus the Edge Function and one new SQL file.
+Stamps bumped in all 50 cache-bust params, `LF_BUILD`, `sw.js`, `version.json`
+and `index.html`.
 
-- A **rival-held ordinary tile** (`plainTake`) is the most common PvP fight in
-  the game and matched neither condition, so it was never timed. That is the
-  "ENEMY CLONE FLEET with no countdown" case.
-- Gating to the final target meant the clone-fleet phase of a two-phase citadel
-  siege ran untimed.
+## Successful defences now post to Discord
 
-Now: **every player-vs-player phase of a defended tile is timed.** The clock
-arms when the encounter has a real defender — `playerCit`, any Void tile, or a
-clone fleet whose `cloneDef.real` is true — and runs whenever that target is on
-the field. A two-phase citadel siege gets a fresh 60s for the fortress after
-their fleet goes down.
+🛡️ **DEFENCE HELD** — *"Falcor held Korar ε-9 · realsina1 couldn't finish it
+inside 60 seconds. The Rank 3 Citadel never fell."*
+Void tiles get 🛡️ **VOID SPIRE HELD**.
 
-Still untimed, deliberately: escort waves before the PvP target spawns,
-sparring your own garrison on an owned Boss Tile (`bossTile`), NPC citadel
-siege zones, and neutral captures.
+### Why this needed a table
 
-`SIEGE_CLOCK` at the top of `game-v93.js` tunes the 60.
+Every other event in the feed is found by diffing `territory`, `leaderboard` and
+`alliances` — that catches anything where state changes hands. A successful
+defence is the one thing that changes nothing: the clock runs out, the defender
+keeps the tile, and the row is byte-for-byte identical to a minute ago. There is
+no diff to find.
 
-## Discord — Void Zone
+So the attacker's client reports it through `log_repelled()`, and the feed drains
+the log on an id high-water mark. The RPC is deliberately narrow:
 
-Not part of the web deploy. **Redeploy `supabase/functions/discord-feed/index.ts`**
-to pick this up.
+- the **attacker** is `auth.uid()`, never taken from the client
+- the **defender** is read from `territory` server-side, never taken either
+- one row per attacker, per tile, per minute
 
-The seven Void spires now post as their own message with a full-width header,
-separate from routine traffic, and never collapse into a burst line:
-
-- 🌌 **VOID SPIRE SEIZED** — under a `# 🌌 THE VOID STIRS` header
-- 👑 **THE CROWN HAS CHANGED HANDS** — VZ7, The Singularity, gets a gold embed
-  and its own `# 👑 THE CROWN HAS MOVED` header
-- ⚫ **VOID SPIRE RELEASED** when one goes neutral
-
-Each carries the tile's real name and level gate (Umbral Gate 25 → The
-Singularity 500), what it pays, and the 24h shield state.
+A forged call can only credit *somebody else* with a successful defence, which
+nobody gains from faking. Rows older than 30 days are cleared on each run of the
+SQL.
 
 ## Post-deploy checks
 
-1. Attack a **rival-held ordinary tile** — countdown appears the moment
-   ENEMY CLONE FLEET spawns. This is the case v207 missed.
-2. Attack a **player citadel** — countdown on their fleet, then a fresh 60s on
-   the fortress.
-3. Attack a **Void tile** — countdown on the Warden.
-4. Attack an **NPC citadel zone** — no countdown.
-5. Warp into **your own Boss Tile** — no countdown.
-6. Let one expire — towed home, toast fires, 15-minute lockout on the tile.
+1. Attack a rival-held tile and let the clock expire. Within two minutes Discord
+   should show 🛡️ DEFENCE HELD naming both pilots.
+2. Immediately retry the same tile — the 15-minute shield should block you, and
+   no second Discord post should appear.
+3. `select * from war_events order by id desc limit 5;` — one row per repel.
+4. Time out on a Void tile — the embed should read VOID SPIRE HELD.
+
+## Also in this build (from v209, unpushed)
+
+- **Timeout = the defender won.** Their fleet stays on the field; the attacker is
+  towed out under invulnerability. Nothing is deleted.
+- **Territory survives ascension.** Tiles, Void spires and Citadels ride across;
+  the next republish writes your new lower fleet score onto them.
+
+## Discord (from v208, unpushed)
+
+Void spires post as their own message with a full-width header — 🌌 VOID SPIRE
+SEIZED, and 👑 THE CROWN HAS CHANGED HANDS for VZ7.
 
 ## Known, unchanged
 

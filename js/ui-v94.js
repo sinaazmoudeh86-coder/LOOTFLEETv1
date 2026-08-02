@@ -3065,7 +3065,7 @@
 
   function siegeEvent(kind, s) {
     if (!_inited) return;
-    if (kind === 'timeout') { toast('⏱ The defence held — 60s expired. Tile shut for 15 min.', '#ff4d5e'); return; }
+    if (kind === 'timeout') { toast('🛡 DEFENCE HELD — their fleet survived 60s. Towing you out · tile shielded 15 min.', '#8fb7d9'); return; }
     if (kind === 'start') { toast('⚔ Siege begun — clear 10 waves', '#5b9cff'); }
     else if (kind === 'wavezone') { toast('★ Wave Zone cleared — the gauntlet resets', '#5bc06b'); }
     else if (kind === 'citadel') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff9a50'; t.style.fontSize = '22px'; t.innerHTML = '⛴ THE VOID CITADEL<br><span style="font-size:12px;color:#ffd9c4">Burn it down — 75% · 50% · 25% · boom</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2400); }

@@ -24,6 +24,14 @@
   // a real account (guests have no stable cross-device id to fight under).
   function enabled() { return !!(client() && myId()); }
 
+  // A SUCCESSFUL DEFENCE changes no row, so the Discord feed can never diff it
+  // out. The attacker's client reports it; the RPC reads the defender from the
+  // server and rate-limits, so nothing here is trusted beyond "I lost".
+  async function logRepelled(tileId) {
+    const cl = client(); if (!cl || !myId() || !tileId) return;
+    try { await cl.rpc('log_repelled', { p_tile_id: tileId }); } catch (e) {}
+  }
+
   // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil, citadel, fleetScore, defense } }
   async function loadAll() {
     const cl = client(); if (!cl) return {};
@@ -113,5 +121,5 @@
       return { ok: !e2 };
     } catch (e) { return { ok: false }; }
   }
-  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe };
+  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe, logRepelled };
 })();

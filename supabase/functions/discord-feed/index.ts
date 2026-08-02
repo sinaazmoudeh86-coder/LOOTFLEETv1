@@ -37,6 +37,8 @@ const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MAX_EMBEDS = 10;
 
 const COLOR = {
+  void:     0x9b4dff,
+  crown:    0xffd24d,
   steal:    0xff5a4d,
   citadel:  0xffcf4d,
   claim:    0x8fb7d9,
@@ -53,8 +55,8 @@ const COLOR = {
 };
 
 // Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
-const PRIORITY = ['throne', 'ascend', 'armada', 'citadel', 'steal', 'dread', 'top10', 'zone',
-                  'level', 'claim', 'alliance', 'lost', 'pilot'];
+const PRIORITY = ['void', 'throne', 'ascend', 'armada', 'citadel', 'steal', 'dread', 'top10',
+                  'zone', 'level', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
 // loop, not a conquest. Owner-unchanged rewrites produce no event at all, but
@@ -113,12 +115,25 @@ function genName(rnd: () => number): string {
     : `${a}${b} ${GREEK[(rnd() * GREEK.length) | 0]}-${1 + ((rnd() * 9) | 0)}`;
 }
 
+// THE VOID ZONE — seven fixed apex tiles beyond the rim. Names and level gates
+// mirror VOID_TILES in game-v93.js. VZ7 is the crown.
+const VOID: Record<string, { name: string; tier: number }> = {
+  VZ1: { name: 'Umbral Gate',     tier: 25 },
+  VZ2: { name: 'Null Bastion',    tier: 50 },
+  VZ3: { name: 'Hollow Throne',   tier: 100 },
+  VZ4: { name: 'Wraith Spire',    tier: 200 },
+  VZ5: { name: 'Abyss Crown',     tier: 300 },
+  VZ6: { name: 'Night Forge',     tier: 400 },
+  VZ7: { name: 'The Singularity', tier: 500 },
+};
+
 const nameCache = new Map<string, string>();
 function tileName(id: string): string {
   const hit = nameCache.get(id);
   if (hit) return hit;
+  if (VOID[id]) return VOID[id].name;
   const m = /^(-?\d+),(-?\d+)$/.exec(id);
-  if (!m) return id;                              // Void Zone tiles use their own ids
+  if (!m) return id;
   const q = +m[1], r = +m[2];
   const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
   let out: string;
@@ -359,6 +374,50 @@ Deno.serve(async (req) => {
   const tiles = terr.data ?? [];
   const live = new Set<string>();
   const tileEvents: (Ev & { actor: string })[] = [];
+  const voidEvents: Ev[] = [];
+
+  // A Void spire changing hands is the loudest thing that happens in this game:
+  // seven tiles exist, they pay all four currencies hourly, and the citadel comes
+  // with the tile. These never collapse into a burst line and never share a
+  // message with routine traffic.
+  function voidEvent(id: string, kind: 'taken' | 'claimed' | 'lost', held: string, from?: string) {
+    const v = VOID[id];
+    const crown = id === 'VZ7';
+    const NAME = v.name.toUpperCase();
+    if (kind === 'lost') {
+      voidEvents.push({
+        kind: 'void',
+        line: `${v.name} went neutral`,
+        embed: {
+          color: COLOR.void,
+          author: { name: '🌌  VOID SPIRE RELEASED' },
+          title: `⚫  ${NAME} STANDS EMPTY`,
+          description: `**${from || 'Its holder'}** let the spire go.\n\n> Lv ${v.tier} · unclaimed, undefended, and paying nobody.\n-# First fleet to break the siege takes it — citadel included.`,
+        },
+      });
+      return;
+    }
+    const took = kind === 'taken';
+    voidEvents.push({
+      kind: 'void',
+      line: `**${held}** ${took ? 'seized' : 'claimed'} ${v.name}`,
+      embed: {
+        color: crown ? COLOR.crown : COLOR.void,
+        author: { name: crown ? '👑  THE CROWN HAS CHANGED HANDS' : '🌌  VOID SPIRE SEIZED' },
+        title: `${crown ? '👑' : '⚔️'}  ${NAME} ${took ? 'HAS FALLEN' : 'IS TAKEN'}`,
+        description:
+          (took
+            ? `**${held}** tore the spire from **${from || 'its holder'}**.`
+            : `**${held}** broke the siege and planted a flag on virgin void.`) +
+          `\n\n> 🌀 **Lv ${v.tier}**  ⚡ ${crown ? 'The apex hold beyond the rim' : 'Apex territory'}\n` +
+          `> 💰 Pays **all four currencies**, every hour\n` +
+          `> 🏰 Citadel included — no builds, no upgrades\n\n` +
+          (crown
+            ? '-# 🔥 Seven spires exist. This is the one that matters. — 24h shield now up.'
+            : '-# 🛡️ 24h attack shield is up. Then it is open again.'),
+      },
+    });
+  }
 
   for (const t of tiles) {
     live.add(t.tile_id);
@@ -366,12 +425,34 @@ Deno.serve(async (req) => {
     const lv = hasLv ? (Number(t.citadel_lv) || 0) : (t.citadel ? 1 : 0);
     const cur = { owner: t.owner_id ?? '', name: t.owner_name ?? '', lv, gone: 0 };
     snap.push({ kind: 'tile', ref: t.tile_id, data: cur, updated_at: now });
-    if (bootstrap || !was) continue;
+    if (bootstrap) continue;
 
     const sys = tileName(t.tile_id);
     const held = t.owner_name || 'Someone';
 
+    // A tile_id only exists once someone has claimed it, so a row appearing for
+    // the first time IS a capture of virgin space — the most common event in the
+    // game. Only the bootstrap pass may skip it.
+    if (!was) {
+      if (!t.owner_id) continue;
+      if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'claimed', held); continue; }
+      tileEvents.push({
+        kind: 'claim', actor: held,
+        line: `**${held}** claimed ${sys}`,
+        embed: {
+          color: COLOR.claim,
+          author: { name: '\u2691  SYSTEM CLAIMED' },
+          title: `${held} claimed ${sys}`,
+          description: lv > 0
+            ? `-# first flag planted \u00b7 Rank ${lv} Citadel raised`
+            : '-# unclaimed space, now producing',
+        },
+      });
+      continue;
+    }
+
     if (was.owner && cur.owner && was.owner !== cur.owner) {
+      if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'taken', held, was.name); continue; }
       const razed = was.lv > 0 && cur.lv === 0;
       tileEvents.push({
         kind: 'steal', actor: held,
@@ -396,6 +477,7 @@ Deno.serve(async (req) => {
         },
       });
     } else if (was.owner && !cur.owner) {
+      if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'lost', held, was.name); continue; }
       tileEvents.push({
         kind: 'lost', actor: was.name || 'someone',
         line: `${sys} went neutral`,
@@ -484,9 +566,30 @@ Deno.serve(async (req) => {
     return json({ ok: true, bootstrap: true, tracked: snap.length });
   }
 
-  if (!events.length) {
+  if (!events.length && !voidEvents.length) {
     await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
     return json({ ok: true, events: 0 });
+  }
+
+  // Void spires get their own message with a full-width header, so they can
+  // never be buried under routine tile traffic in the same batch.
+  if (voidEvents.length) {
+    const crown = voidEvents.some((e) =>
+      String(((e.embed as any).author || {}).name || '').includes('CROWN'));
+    await post({
+      content: crown
+        ? '# 👑 THE CROWN HAS MOVED\n-# The Void Zone has a new master.'
+        : '# 🌌 THE VOID STIRS\n-# One of seven apex spires has changed hands.',
+      embeds: voidEvents.slice(0, MAX_EMBEDS).map((e) => ({
+        ...e.embed, timestamp: now, footer: { text: 'THE VOID ZONE · LootFleet' },
+      })),
+      allowed_mentions: { parse: [] },
+    });
+  }
+
+  if (!events.length) {
+    await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
+    return json({ ok: true, events: voidEvents.length, void: voidEvents.length });
   }
 
   events.sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
@@ -502,7 +605,7 @@ Deno.serve(async (req) => {
   await post({ content, embeds: stamped, allowed_mentions: { parse: [] } });
   await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
 
-  return json({ ok: true, events: events.length, posted: shown.length });
+  return json({ ok: true, events: events.length + voidEvents.length, posted: shown.length, void: voidEvents.length });
 });
 
 async function post(body: Record<string, unknown>) {

@@ -1,83 +1,64 @@
-# deploy-v207 — build 411
+# deploy-v208 — build 412
 
-Push the contents of this folder to the repo root Vercel serves, then hard-reload
-once so the `lootfleet-v411` service worker takes over.
+Push the folder contents to the repo root Vercel serves, then hard-reload once so
+the `lootfleet-v412` service worker takes over.
 
-## Run this SQL first
+**No SQL this release.** `territory-citadel-lv.sql` from v207 is already run.
 
-`supabase/territory-citadel-lv.sql` **must run before the build goes up.**
-It adds `territory.citadel_lv` and rebuilds `claim_tile` with the rank
-parameter. The new parameter is last and defaults to null, so build 410 clients
-keep working while the deploy propagates — and a legacy call leaves an existing
-rank alone instead of resetting a rank-5 fortress to 0.
+## Changed from v207
 
-Already run this cycle, listed for the record:
+`js/game-v93.js` only — the siege clock arming rules. Stamps bumped in all 50
+cache-bust params, `LF_BUILD`, `sw.js`, `version.json` and `index.html`.
 
-- `lb-seed-missing.sql` — seeds a board row for anyone with territory or Voidmaw
-  activity but no leaderboard entry (the Falcor bug)
-- `lb-repair-seeded.sql` — fills level/zone/kills/stars on seeded rows from the
-  save blob, so a 154B pilot no longer reads "Zone 1 · Lv 1 · 0 kills"
+## The fix
 
-## Changed from v206
+v207 armed the clock on `playerCit || tile.void`, and only on the FINAL target.
+Both were wrong:
 
-| File | Change |
-|---|---|
-| `js/game-v93.js` | 60s siege clock; citadel rank published on every claim |
-| `js/ui-v94.js` | countdown in the siege bar; timeout toast |
-| `js/territory.js` | passes `p_citadel_lv` through `claim_tile` |
+- A **rival-held ordinary tile** (`plainTake`) is the most common PvP fight in
+  the game and matched neither condition, so it was never timed. That is the
+  "ENEMY CLONE FLEET with no countdown" case.
+- Gating to the final target meant the clone-fleet phase of a two-phase citadel
+  siege ran untimed.
 
-Build stamps bumped in all 50 cache-bust params, `LF_BUILD`, `sw.js` cache name,
-`version.json`, and `index.html`.
+Now: **every player-vs-player phase of a defended tile is timed.** The clock
+arms when the encounter has a real defender — `playerCit`, any Void tile, or a
+clone fleet whose `cloneDef.real` is true — and runs whenever that target is on
+the field. A two-phase citadel siege gets a fresh 60s for the fortress after
+their fleet goes down.
 
-## 1 · Siege clock (60s)
+Still untimed, deliberately: escort waves before the PvP target spawns,
+sparring your own garrison on an owned Boss Tile (`bossTile`), NPC citadel
+siege zones, and neutral captures.
 
-Attacking a **live player's Citadel** or **any Void tile** now puts the attacker
-on a 60-second clock. `SIEGE_CLOCK` at the top of `game-v93.js` tunes it.
+`SIEGE_CLOCK` at the top of `game-v93.js` tunes the 60.
 
-- The clock arms only on the **final** defender. Escort waves are untimed, and a
-  player-citadel siege runs their clone fleet first — clearing it doesn't burn
-  time, and the clock resets when the fortress powers up.
-- NPC citadel siege zones and neutral captures are **not** timed.
-- Runs out → the defence holds. Attacker is towed home and the tile is shut to
-  them for 15 minutes, so a failed siege can't be retried on a loop.
-- HUD shows `⚔ RAZE THE CITADEL · 43s`; the bar turns red under 10s.
+## Discord — Void Zone
 
-The tick runs before the "enemies still alive" early-return in `updateWaveZone`,
-which is the state where the citadel is up and shooting back.
+Not part of the web deploy. **Redeploy `supabase/functions/discord-feed/index.ts`**
+to pick this up.
 
-## 2 · Citadel rank is now server-visible
+The seven Void spires now post as their own message with a full-width header,
+separate from routine traffic, and never collapse into a burst line:
 
-`territory.citadel` was a boolean, so rank 1–5 lived only in local saves and
-upgrades were invisible to anything server-side. Every claim path now sends the
-rank: build, upgrade, seize, warp-claim, and the republish loop.
+- 🌌 **VOID SPIRE SEIZED** — under a `# 🌌 THE VOID STIRS` header
+- 👑 **THE CROWN HAS CHANGED HANDS** — VZ7, The Singularity, gets a gold embed
+  and its own `# 👑 THE CROWN HAS MOVED` header
+- ⚫ **VOID SPIRE RELEASED** when one goes neutral
 
-## 3 · Discord dispatch
-
-Not part of the web deploy — it runs as a Supabase Edge Function. If you have
-already deployed it, **redeploy `supabase/functions/discord-feed/index.ts`** to
-pick up territory events. Setup and troubleshooting: `DISCORD_FEED_SETUP.md`.
-
-New events: ⚔ SYSTEM TAKEN · ⚑ SYSTEM CLAIMED · ○ SYSTEM ABANDONED ·
-▲ CITADEL RAISED / UPGRADED. Tile names are reproduced from the coordinate with
-the same seeded generator `galaxy.js` uses, so the feed says "Velor Spire"
-rather than "3,-7".
-
-Noise control, since `republishOwnedTiles()` rewrites up to 40 held tiles at a
-time: only ownership and rank **changes** are announced (a republish changes
-neither), more than 4 tile events from one actor collapse to a single "swept 7
-systems" line, and a vanished row needs two consecutive misses before it reads
-as abandoned.
+Each carries the tile's real name and level gate (Umbral Gate 25 → The
+Singularity 500), what it pays, and the 24h shield state.
 
 ## Post-deploy checks
 
-1. Attack a player-held citadel — countdown appears only after their fleet dies.
-2. Let it expire — towed home, toast fires, tile shows a 15-minute cooldown.
-3. Attack a Void tile — countdown appears on the Warden.
-4. Attack an NPC citadel zone — **no** countdown.
-5. Build or upgrade a citadel, then check `select tile_id, citadel, citadel_lv
-   from territory where citadel` — rank should match what the game shows.
-6. Log out, in, and back in twice on a deep-zone account — power and gold
-   identical each time. Still the regression that caused the wipes.
+1. Attack a **rival-held ordinary tile** — countdown appears the moment
+   ENEMY CLONE FLEET spawns. This is the case v207 missed.
+2. Attack a **player citadel** — countdown on their fleet, then a fresh 60s on
+   the fortress.
+3. Attack a **Void tile** — countdown on the Warden.
+4. Attack an **NPC citadel zone** — no countdown.
+5. Warp into **your own Boss Tile** — no countdown.
+6. Let one expire — towed home, toast fires, 15-minute lockout on the tile.
 
 ## Known, unchanged
 

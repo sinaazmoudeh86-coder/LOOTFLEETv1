@@ -3546,10 +3546,16 @@
       if (rt.waves && rt.waves.active) rt.waves.total = vw;
       if (rt.siege && rt.siege.active) rt.siege.total = vw;
     }
-    // A real player's fortress and every Void tile defend themselves on a timer.
-    // NPC citadel zones and neutral captures stay untimed.
-    if (rt.waves && rt.waves.active && (rt.waves.playerCit || tile.void)) {
-      rt.waves.timed = SIEGE_CLOCK; rt.waves.limitT = null;
+    // Every PLAYER-vs-PLAYER phase of a defended tile is timed: a real pilot's
+    // clone fleet, their Citadel, and every Void tile. Sparring against your own
+    // garrison on an owned Boss Tile, NPC citadel zones and neutral captures are
+    // not defences, so they stay untimed.
+    {
+      const w = rt.waves;
+      if (w && w.active && !w.bossTile &&
+          (w.playerCit || tile.void || (w.clone && w.cloneDef && w.cloneDef.real))) {
+        w.timed = SIEGE_CLOCK; w.limitT = null;
+      }
     }
     rt.awaitingRespawn = false;
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; rt.archer.hp = (rt.stats ? rt.stats.maxHp : 100); rt.archer.invuln = 3; }
@@ -3701,9 +3707,10 @@
   // the normal onKill path (Super Boss = premium loot table + resource bounty).
   function updateWaveZone(dt) {
     const s = rt.waves; if (!s || !s.active) return;
-    // SIEGE CLOCK — armed only on the final defender (!thenCitadel means there
-    // is no phase after this one), so clearing their fleet doesn't burn time.
-    if (s.timed && s.bossSpawned && !s.thenCitadel) {
+    // SIEGE CLOCK — runs whenever the PvP target is on the field. Escort waves
+    // are untimed (bossSpawned is false), and a two-phase citadel siege gets a
+    // fresh 60s for the fortress after their fleet goes down.
+    if (s.timed && s.bossSpawned) {
       s.limitT = (s.limitT == null) ? s.timed : s.limitT - dt;
       if (s.limitT <= 0) { failTimedSiege(s); return; }
     }

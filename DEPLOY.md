@@ -1,134 +1,87 @@
-# Loot Fleet — deploy v206 · build 410
+# deploy-v207 — build 411
 
-Push the **contents of this folder** to the repo root Vercel serves, then hard-reload
-once so the `lootfleet-v410` service worker takes over.
+Push the contents of this folder to the repo root Vercel serves, then hard-reload
+once so the `lootfleet-v411` service worker takes over.
 
----
+## Run this SQL first
 
-## ⚠ ONE BLOCKER BEFORE YOU GO LIVE — read this first
+`supabase/territory-citadel-lv.sql` **must run before the build goes up.**
+It adds `territory.citadel_lv` and rebuilds `claim_tile` with the rank
+parameter. The new parameter is last and defaults to null, so build 410 clients
+keep working while the deploy propagates — and a legacy call leaves an existing
+rank alone instead of resetting a rank-5 fortress to 0.
 
-**`js/admin.js` line 17 ships your admin password in plaintext.**
+Already run this cycle, listed for the record:
 
-```js
-var ADMIN_PW = '20042004';   // panel unlock — also enforced in SQL
-```
+- `lb-seed-missing.sql` — seeds a board row for anyone with territory or Voidmaw
+  activity but no leaderboard entry (the Falcor bug)
+- `lb-repair-seeded.sql` — fills level/zone/kills/stars on seeded rows from the
+  save blob, so a 154B pilot no longer reads "Zone 1 · Lv 1 · 0 kills"
 
-`index.html` loads `js/admin.js` on the **public landing page**. Anyone can open
-view-source, read that string, and visit `lootfleet.com/#admin`. That panel shows
-**every user's email address, all purchase records, and your revenue totals.**
-
-The in-file comment says the password is re-checked server-side in `admin.sql` —
-that is true, and it is not enough. The password *is* the credential. Re-checking a
-credential that you also published to every visitor does not protect anything.
-
-**This has not been changed in this build** — fixing it properly means altering how
-the `admin_*` RPCs authenticate, which is a SQL change and your call to make.
-
-Three options, cheapest to best:
-
-1. **Stopgap (5 min, today):** change the password to a long random string and
-   delete `<script src="js/admin.js">` from `index.html`. Keep it only in a page
-   you don't link publicly. Still security-by-obscurity — buys time, not safety.
-2. **Proper (recommended):** drop `p_pw` from every `admin_*` RPC and gate on
-   `auth.uid()` against a hardcoded allowlist of your own user id. Then the panel
-   requires being *logged in as you*, and there is no shared secret to leak.
-3. **Belt and braces:** option 2, plus move the panel to its own route that isn't
-   referenced from any public HTML.
-
-Say the word and I'll write the SQL and rewire the panel for option 2.
-
----
-
-## SQL — one file, still required
-
-**`supabase/alliance-boss-setladder.sql`** — run it in the Supabase SQL Editor
-**with this push, not after.** Run once, safe to re-run.
-
-The client now sets the arena boss hull equal to `boss_hp` and transmits **raw**
-combat damage. Against the old SQL, a new client is clamped to nothing. Deploy both
-or neither.
-
-Verify after running:
-
-```sql
-select n, public._al_boss_hp(null, n) as hull from generate_series(1,12) n;
--- expect 1e6, 4e6, 1.6e7, 6.4e7, ...
-```
-
----
-
-## What changed since v205
-
-v205 was **build 409**. This is a stamp-consistency release — the only file whose
-behaviour changes is the landing page.
+## Changed from v206
 
 | File | Change |
 |---|---|
-| `index.html` | **Fixed:** was still requesting `showcase.js`, `config.live.js`, `analytics.js`, `admin.js` at `?v=391` — 18 builds stale. Now `?v=410` like everything else. |
-| `game.html` | 50 cache-bust params + `LF_BUILD` → 410 |
-| `version.json` | `build: 410` |
-| `sw.js` | cache name → `lootfleet-v410` |
+| `js/game-v93.js` | 60s siege clock; citadel rank published on every claim |
+| `js/ui-v94.js` | countdown in the siege bar; timeout toast |
+| `js/territory.js` | passes `p_citadel_lv` through `claim_tile` |
 
-Everything else is byte-identical to v205. If you already pushed v205, this push
-supersedes it cleanly; if you didn't, this is the only one you need.
+Build stamps bumped in all 50 cache-bust params, `LF_BUILD`, `sw.js` cache name,
+`version.json`, and `index.html`.
 
-### Why index.html mattered
+## 1 · Siege clock (60s)
 
-The service worker is network-first for `js`/`css`/`html`, so the stale stamp was
-never serving genuinely old code — but it defeated HTTP cache-busting on the four
-files the landing page loads, including `config.live.js`, which carries your
-Supabase keys and live Stripe links. A returning visitor's browser could serve a
-months-old copy from its own HTTP cache. Now every asset on both pages shares one
-stamp.
+Attacking a **live player's Citadel** or **any Void tile** now puts the attacker
+on a 60-second clock. `SIEGE_CLOCK` at the top of `game-v93.js` tunes it.
 
----
+- The clock arms only on the **final** defender. Escort waves are untimed, and a
+  player-citadel siege runs their clone fleet first — clearing it doesn't burn
+  time, and the clock resets when the fortress powers up.
+- NPC citadel siege zones and neutral captures are **not** timed.
+- Runs out → the defence holds. Attacker is towed home and the tile is shut to
+  them for 15 minutes, so a failed siege can't be retried on a loop.
+- HUD shows `⚔ RAZE THE CITADEL · 43s`; the bar turns red under 10s.
 
-## Sign-in — both providers are live
+The tick runs before the "enemies still alive" early-return in `updateWaveZone`,
+which is the state where the citadel is up and shooting back.
 
-Google **and** Apple are now enabled on the Supabase project. `/auth/v1/settings`
-reports `apple: true, google: true`, and the login card renders both buttons
-(the code unhides them off that signal — no toggle to flip in this build).
+## 2 · Citadel rank is now server-visible
 
-Two things that only fail at the moment someone taps the button:
+`territory.citadel` was a boolean, so rank 1–5 lived only in local saves and
+upgrades were invisible to anything server-side. Every claim path now sends the
+rank: build, upgrade, seize, warp-claim, and the republish loop.
 
-- **Return URL.** OAuth returns to `location.origin + location.pathname`, so
-  `https://lootfleet.com/game.html` must be listed under Supabase →
-  Authentication → URL Configuration → Redirect URLs. Missing it = signs in, then
-  bounces straight back to the login screen.
-- **Apple's domain check.** In the Services ID: *Domains* = `lootfleet.com`,
-  *Return URL* = `https://emldvvlaanyivpmxyylr.supabase.co/auth/v1/callback`
-  (the Supabase callback, **not** your site). A mismatch gives `invalid_client`
-  on Apple's own page before the redirect happens.
+## 3 · Discord dispatch
 
-Test on a real device — Apple blocks its sign-in flow inside embedded frames.
+Not part of the web deploy — it runs as a Supabase Edge Function. If you have
+already deployed it, **redeploy `supabase/functions/discord-feed/index.ts`** to
+pick up territory events. Setup and troubleshooting: `DISCORD_FEED_SETUP.md`.
 
-📅 **Diary it:** Apple's client secret expires every **6 months**. Supabase
-regenerates it from your `.p8` key automatically, so keep that file. Lose it and
-you must create a new key and re-paste it.
+New events: ⚔ SYSTEM TAKEN · ⚑ SYSTEM CLAIMED · ○ SYSTEM ABANDONED ·
+▲ CITADEL RAISED / UPGRADED. Tile names are reproduced from the coordinate with
+the same seeded generator `galaxy.js` uses, so the feed says "Velor Spire"
+rather than "3,-7".
 
----
+Noise control, since `republishOwnedTiles()` rewrites up to 40 held tiles at a
+time: only ownership and rank **changes** are announced (a republish changes
+neither), more than 4 tile events from one actor collapse to a single "swept 7
+systems" line, and a vanished row needs two consecutive misses before it reads
+as abandoned.
 
 ## Post-deploy checks
 
-1. **Log in, out, and back in twice on a deep-zone account.** Power and gold must
-   read identically each time. This is the regression that caused the wipes —
-   verified stable across two full save→load cycles in this build (all four
-   migration stamps held: `scaleVer 3`, `critVer 4`, `goldRepairVer 1`, `lsVer 1`).
-2. Continue with Google → lands in the game.
-3. Continue with Apple → lands in the game (real device).
-4. Open the Alliance raid → hull bar matches the pool, a kill advances the Mk.
-5. Landing page loads with no 404s in the console (the v391 → v410 change).
+1. Attack a player-held citadel — countdown appears only after their fleet dies.
+2. Let it expire — towed home, toast fires, tile shows a 15-minute cooldown.
+3. Attack a Void tile — countdown appears on the Warden.
+4. Attack an NPC citadel zone — **no** countdown.
+5. Build or upgrade a citadel, then check `select tile_id, citadel, citadel_lv
+   from territory where citadel` — rank should match what the game shows.
+6. Log out, in, and back in twice on a deep-zone account — power and gold
+   identical each time. Still the regression that caused the wipes.
 
----
+## Known, unchanged
 
-## Known, not fixed, not blocking
-
-- **New accounts stay invisible on the leaderboard until their first cloud save
-  flushes** (8-second debounce). Someone who signs up and closes the tab
-  immediately never gets a row. Falcor is the live example — he has Voidmaw
-  progress and territory rows but no leaderboard entry. The fix is to seed the row
-  on first sign-in; you haven't asked for it yet, so it isn't in this build.
-- **`territory` data is not server-authoritative.** All 125 tiles currently trace
-  to one pilot via `republishOwnedTiles()` replaying a local save at ~3 claims/sec.
-  Don't build anything that reads the table as a record of conquest until claims
-  are validated server-side.
+- `stripe-webhook` is not deployed. Payment links are live and take money with
+  nothing recording or fulfilling it. Check the Stripe Dashboard directly.
+- `admin_users` fails with `column reference "user_id" is ambiguous`, so the
+  admin panel's Users tab is blank.

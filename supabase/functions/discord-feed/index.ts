@@ -1,0 +1,528 @@
+// =============================================================================
+//  discord-feed — LootFleet live event feed → one Discord channel
+// -----------------------------------------------------------------------------
+//  Runs on a pg_cron schedule (every 2 min). Diffs the server-authoritative
+//  tables against a snapshot in `feed_seen`, and posts anything new as Discord
+//  embeds via an Incoming Webhook.
+//
+//  WHY SERVER-SIDE: the game client is authoritative for saves and territory,
+//  so any client-reported "achievement" can be forged from devtools. Everything
+//  announced here is a real change to a real row. It also keeps the webhook URL
+//  out of public JS — a leaked webhook lets anyone post as the bot forever.
+//
+//  SOURCES
+//    leaderboard     → ascensions, rank #1 changes, zone/level milestones,
+//                      new pilots, top-10 entries
+//    sdread_scores   → Season Dread stage records
+//    alliances       → Armada mark clears, new alliances
+//
+//  Simulated rivals live in `sim_pilots` and are NEVER read here, so the feed
+//  only ever announces humans.
+//
+//  SECRETS (supabase secrets set ...)
+//    DISCORD_WEBHOOK_URL   the Incoming Webhook for the feed channel
+//    FEED_KEY              shared secret; cron must send it as x-feed-key
+//  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected by the platform.
+// =============================================================================
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+
+const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
+const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
+const SB_URL = Deno.env.get('SUPABASE_URL')!;
+const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// Discord allows 10 embeds per message. Anything past this in one tick is
+// rolled into a single summary line rather than spamming the channel.
+const MAX_EMBEDS = 10;
+
+const COLOR = {
+  steal:    0xff5a4d,
+  citadel:  0xffcf4d,
+  claim:    0x8fb7d9,
+  lost:     0x5a6472,
+  throne:   0xb57bff,
+  ascend:   0xf5c542,
+  armada:   0xff8a3d,
+  dread:    0xff4d6d,
+  zone:     0x5bc8ff,
+  level:    0x4da3ff,
+  top10:    0x3dd68c,
+  alliance: 0x3dd68c,
+  pilot:    0x6e7a8a,
+};
+
+// Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
+const PRIORITY = ['throne', 'ascend', 'armada', 'citadel', 'steal', 'dread', 'top10', 'zone',
+                  'level', 'claim', 'alliance', 'lost', 'pilot'];
+
+// One player rewriting many tiles at once is the republishOwnedTiles() repair
+// loop, not a conquest. Owner-unchanged rewrites produce no event at all, but
+// this collapses any remaining burst into a single line.
+const BURST = 4;
+
+const ZONE_MARKS  = [10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500];
+const LEVEL_MARKS = [25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
+
+// Matches the in-game ladder in game-v93.js so Discord and the HUD agree.
+const UNITS = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc',
+               'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc', 'Vg'];
+
+function fmt(n: number): string {
+  n = Number(n) || 0;
+  if (!isFinite(n)) return '∞';
+  if (n < 1000) return String(Math.floor(n));
+  let i = 0, v = n;
+  while (v >= 1000 && i < UNITS.length - 1) { v /= 1000; i++; }
+  return (v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : Math.floor(v).toString()) + UNITS[i];
+}
+
+// Highest milestone crossed between two values, or null.
+function crossed(prev: number, now: number, marks: number[]): number | null {
+  let hit: number | null = null;
+  for (const m of marks) if (prev < m && now >= m) hit = m;
+  return hit;
+}
+
+const stars = (n: number) => '★'.repeat(Math.min(n, 10)) + (n > 10 ? `+${n - 10}` : '');
+
+// ---- tile names -------------------------------------------------------------
+// territory only stores tile_id ("q,r"). Names are generated deterministically
+// from the coordinate in galaxy.js, so the same seeded RNG, consumed in the
+// same order, reproduces the exact name the player sees in game.
+const PRE = ['Vel','Kor','Zar','Tyr','Aql','Nyx','Pyr','Sol','Dra','Cir','Vex','Hal','Oss','Rho','Vyn','Tau','Mor','Cyg','Lyr','Ark'];
+const MID = ['a','e','i','o','an','or','en','is','ux','ar'];
+const SUF = ['Prime','Reach','Expanse','Gate','Verge','Drift','Hollow','Spire','Nexus','Crown','Deep','Rift','Vault','Forge','Cradle','Sprawl'];
+const GREEK = ['α','β','γ','δ','ε','ζ','η','θ','ι','κ','λ','μ'];
+const RINGS = 25, DEEP_RING = 18;
+
+function rngFor(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function genName(rnd: () => number): string {
+  const a = PRE[(rnd() * PRE.length) | 0], b = MID[(rnd() * MID.length) | 0];
+  return rnd() < 0.5
+    ? `${a}${b} ${SUF[(rnd() * SUF.length) | 0]}`
+    : `${a}${b} ${GREEK[(rnd() * GREEK.length) | 0]}-${1 + ((rnd() * 9) | 0)}`;
+}
+
+const nameCache = new Map<string, string>();
+function tileName(id: string): string {
+  const hit = nameCache.get(id);
+  if (hit) return hit;
+  const m = /^(-?\d+),(-?\d+)$/.exec(id);
+  if (!m) return id;                              // Void Zone tiles use their own ids
+  const q = +m[1], r = +m[2];
+  const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
+  let out: string;
+  if (ring === 0) out = 'Home Citadel';
+  else if (ring > RINGS) out = id;
+  else {
+    const rnd = rngFor((q * 73856093) ^ (r * 19349663) ^ 0x5bd1);
+    const roll = rnd();
+    const cit = ring >= 2 && roll < 0.03;
+    const boss = !cit && roll < 0.11;
+    if (!cit && !boss) rnd();                     // tile type
+    rnd();                                        // rarity
+    let pool = 1;                                 // resource pool length
+    if (ring >= 2) pool += 1;
+    if (ring >= 5) pool += 2;
+    if (ring >= DEEP_RING) pool += 2;
+    rnd();                                        // resource pick
+    out = cit ? 'Citadel ' + genName(rnd) : genName(rnd);
+    void pool;
+  }
+  nameCache.set(id, out);
+  return out;
+}
+
+type Ev = { kind: string; embed: Record<string, unknown>; line: string };
+
+Deno.serve(async (req) => {
+  if (FEED_KEY && req.headers.get('x-feed-key') !== FEED_KEY) {
+    return new Response('forbidden', { status: 403 });
+  }
+  if (!WEBHOOK) return new Response('DISCORD_WEBHOOK_URL not set', { status: 500 });
+
+  const db = createClient(SB_URL, SB_KEY, { auth: { persistSession: false } });
+  const now = new Date().toISOString();
+
+  const [lb, sd, al, seenRows] = await Promise.all([
+    db.from('leaderboard').select('user_id,name,power,level,zone,kills,asc_stars'),
+    db.from('sdread_scores').select('user_id,name,season,stage,total'),
+    db.from('alliances').select('id,name,tag,boss_n,boss_hp,boss_max,xp'),
+    db.from('feed_seen').select('kind,ref,data'),
+  ]);
+
+  // citadel_lv arrives with territory-citadel-lv.sql; fall back until it is run.
+  let terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,citadel_lv');
+  let hasLv = !terr.error;
+  if (terr.error) {
+    terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel');
+    hasLv = false;
+  }
+
+  for (const r of [lb, sd, al, seenRows, terr]) {
+    if (r.error) return new Response('db error: ' + r.error.message, { status: 500 });
+  }
+
+  const seen = new Map<string, Record<string, any>>();
+  for (const r of seenRows.data!) seen.set(`${r.kind}:${r.ref}`, r.data ?? {});
+
+  // First run: snapshot everything silently. Without this the channel gets
+  // 28 users' worth of history dumped into it at once.
+  const bootstrap = !seen.has('_meta:bootstrap');
+
+  const events: Ev[] = [];
+  const snap: { kind: string; ref: string; data: Record<string, any>; updated_at: string }[] = [];
+
+  // ---- leaderboard -----------------------------------------------------------
+  const pilots = (lb.data ?? []).slice().sort((a, b) => (b.power ?? 0) - (a.power ?? 0));
+  const top10 = new Set(pilots.slice(0, 10).map((p) => p.user_id));
+  const leader = pilots[0];
+
+  for (let i = 0; i < pilots.length; i++) {
+    const p = pilots[i];
+    const key = `pilot:${p.user_id}`;
+    const was = seen.get(key);
+    const cur = {
+      power: Number(p.power) || 0,
+      level: Number(p.level) || 0,
+      zone: Number(p.zone) || 0,
+      asc: Number(p.asc_stars) || 0,
+      top10: top10.has(p.user_id) ? 1 : 0,
+    };
+    snap.push({ kind: 'pilot', ref: p.user_id, data: cur, updated_at: now });
+    if (bootstrap) continue;
+
+    if (!was) {
+      events.push({
+        kind: 'pilot',
+        line: `**${p.name}** joined`,
+        embed: {
+          color: COLOR.pilot,
+          author: { name: '▸  NEW PILOT' },
+          title: `${p.name} joined the fleet`,
+          description: `-# rank #${i + 1} of ${pilots.length} · <t:${Math.floor(Date.now() / 1000)}:R>`,
+        },
+      });
+      continue;
+    }
+
+    if (cur.asc > was.asc) {
+      events.push({
+        kind: 'ascend',
+        line: `**${p.name}** ascended to ${stars(cur.asc)}`,
+        embed: {
+          color: COLOR.ascend,
+          author: { name: '✦  ASCENSION' },
+          title: `${p.name} reached ${stars(cur.asc)}`,
+          description: `> Fleet wiped. Rebuilt harder.\n\n**power** \`${fmt(cur.power)}\`  ·  **zone** \`${cur.zone}\`  ·  **level** \`${cur.level}\``,
+        },
+      });
+    }
+
+    if (!was.top10 && cur.top10) {
+      events.push({
+        kind: 'top10',
+        line: `**${p.name}** entered the top 10`,
+        embed: {
+          color: COLOR.top10,
+          author: { name: '▲  TOP TEN' },
+          title: `${p.name} broke into rank #${i + 1}`,
+          description: `-# ${fmt(cur.power)} power`,
+        },
+      });
+    }
+
+    const z = crossed(was.zone, cur.zone, ZONE_MARKS);
+    if (z) {
+      events.push({
+        kind: 'zone',
+        line: `**${p.name}** cleared Zone ${z}`,
+        embed: {
+          color: COLOR.zone,
+          author: { name: '◈  DEEP ZONE' },
+          title: `${p.name} pushed past Zone ${z}`,
+          description: `-# now at zone ${cur.zone} · ${fmt(cur.power)} power`,
+        },
+      });
+    }
+
+    const lv = crossed(was.level, cur.level, LEVEL_MARKS);
+    if (lv) {
+      events.push({
+        kind: 'level',
+        line: `**${p.name}** hit level ${lv}`,
+        embed: {
+          color: COLOR.level,
+          author: { name: '⬡  MILESTONE' },
+          title: `${p.name} reached Level ${lv}`,
+          description: `-# ${fmt(cur.power)} power · zone ${cur.zone}`,
+        },
+      });
+    }
+  }
+
+  // Rank #1 is tracked globally, not per pilot — one row holds the current holder.
+  if (leader) {
+    const was = seen.get('_meta:throne');
+    snap.push({
+      kind: '_meta',
+      ref: 'throne',
+      data: { name: leader.name, power: Number(leader.power) || 0 },
+      updated_at: now,
+    });
+    if (!bootstrap && was?.name && was.name !== leader.name) {
+      events.push({
+        kind: 'throne',
+        line: `**${leader.name}** took rank #1`,
+        embed: {
+          color: COLOR.throne,
+          author: { name: '♛  THE THRONE' },
+          title: `${leader.name} is now rank #1`,
+          description: `Passed **${was.name}**.\n\n**power** \`${fmt(Number(leader.power))}\`  ·  **zone** \`${leader.zone}\``,
+        },
+      });
+    }
+  }
+
+  // ---- season dread ----------------------------------------------------------
+  for (const s of sd.data ?? []) {
+    const key = `dread:${s.user_id}`;
+    const was = seen.get(key);
+    const cur = { stage: Number(s.stage) || 0, season: Number(s.season) || 0 };
+    snap.push({ kind: 'dread', ref: s.user_id, data: cur, updated_at: now });
+    if (bootstrap || !was) continue;
+    if (cur.stage > was.stage) {
+      events.push({
+        kind: 'dread',
+        line: `**${s.name}** cleared Dread stage ${cur.stage}`,
+        embed: {
+          color: COLOR.dread,
+          author: { name: '☠  SEASON DREAD' },
+          title: `${s.name} cleared Stage ${cur.stage}`,
+          description: `-# season ${cur.season} · personal best, up from stage ${was.stage}`,
+        },
+      });
+    }
+  }
+
+  // ---- alliances -------------------------------------------------------------
+  for (const a of al.data ?? []) {
+    const key = `alliance:${a.id}`;
+    const was = seen.get(key);
+    const cur = { boss_n: Number(a.boss_n) || 0, xp: Number(a.xp) || 0 };
+    snap.push({ kind: 'alliance', ref: a.id, data: cur, updated_at: now });
+    if (bootstrap) continue;
+
+    if (!was) {
+      events.push({
+        kind: 'alliance',
+        line: `**${a.name}** formed`,
+        embed: {
+          color: COLOR.alliance,
+          author: { name: '⬢  ALLIANCE FORMED' },
+          title: `${a.name}  [${a.tag}]`,
+          description: '-# recruiting now',
+        },
+      });
+      continue;
+    }
+
+    if (cur.boss_n > was.boss_n) {
+      const nextHull = 1_000_000 * Math.pow(4, cur.boss_n - 1);
+      events.push({
+        kind: 'armada',
+        line: `**[${a.tag}]** destroyed Armada Mk-${was.boss_n}`,
+        embed: {
+          color: COLOR.armada,
+          author: { name: '⚔  ALLIANCE ARMADA' },
+          title: `[${a.tag}] destroyed Mk-${was.boss_n}`,
+          description: `**Mk-${cur.boss_n}** has spawned — \`${fmt(nextHull)}\` hull.\n-# ${a.name} · ${fmt(cur.xp)} alliance XP`,
+        },
+      });
+    }
+  }
+
+  // ---- territory -------------------------------------------------------------
+  // Only OWNERSHIP CHANGES are announced. republishOwnedTiles() rewrites up to
+  // 40 tiles the player already holds, which leaves owner and rank untouched and
+  // therefore produces nothing here — the repair loop stays silent by design.
+  const tiles = terr.data ?? [];
+  const live = new Set<string>();
+  const tileEvents: (Ev & { actor: string })[] = [];
+
+  for (const t of tiles) {
+    live.add(t.tile_id);
+    const was = seen.get(`tile:${t.tile_id}`);
+    const lv = hasLv ? (Number(t.citadel_lv) || 0) : (t.citadel ? 1 : 0);
+    const cur = { owner: t.owner_id ?? '', name: t.owner_name ?? '', lv, gone: 0 };
+    snap.push({ kind: 'tile', ref: t.tile_id, data: cur, updated_at: now });
+    if (bootstrap || !was) continue;
+
+    const sys = tileName(t.tile_id);
+    const held = t.owner_name || 'Someone';
+
+    if (was.owner && cur.owner && was.owner !== cur.owner) {
+      const razed = was.lv > 0 && cur.lv === 0;
+      tileEvents.push({
+        kind: 'steal', actor: held,
+        line: `**${held}** took ${sys}`,
+        embed: {
+          color: COLOR.steal,
+          author: { name: '⚔  SYSTEM TAKEN' },
+          title: `${held} captured ${sys}`,
+          description: `Wrested from **${was.name || 'the previous holder'}**.` +
+            (razed ? '\n> Their Citadel is rubble.' : cur.lv > 0 ? `\n> The Rank ${cur.lv} Citadel still stands — under a new flag.` : ''),
+        },
+      });
+    } else if (!was.owner && cur.owner) {
+      tileEvents.push({
+        kind: 'claim', actor: held,
+        line: `**${held}** claimed ${sys}`,
+        embed: {
+          color: COLOR.claim,
+          author: { name: '⚑  SYSTEM CLAIMED' },
+          title: `${held} claimed ${sys}`,
+          description: '-# unowned space, now producing',
+        },
+      });
+    } else if (was.owner && !cur.owner) {
+      tileEvents.push({
+        kind: 'lost', actor: was.name || 'someone',
+        line: `${sys} went neutral`,
+        embed: {
+          color: COLOR.lost,
+          author: { name: '○  SYSTEM ABANDONED' },
+          title: `${sys} is unclaimed`,
+          description: `-# ${was.name || 'Its holder'} let it go — free to take`,
+        },
+      });
+    }
+
+    // Rank changes on a tile that did NOT change hands.
+    if (was.owner === cur.owner && cur.lv > was.lv) {
+      tileEvents.push({
+        kind: 'citadel', actor: held,
+        line: was.lv === 0 ? `**${held}** raised a Citadel on ${sys}` : `**${held}** upgraded ${sys} to Rank ${cur.lv}`,
+        embed: {
+          color: COLOR.citadel,
+          author: { name: was.lv === 0 ? '▲  CITADEL RAISED' : '▲  CITADEL UPGRADED' },
+          title: was.lv === 0
+            ? `${held} raised a Citadel on ${sys}`
+            : `${held} took ${sys} to Rank ${cur.lv}`,
+          description: was.lv === 0
+            ? '-# 1000× output · 24h siege shield'
+            : `-# Rank ${was.lv} → ${cur.lv} · ${cur.lv * 10}× output · +${25 * (cur.lv - 1)}% defence`,
+        },
+      });
+    }
+  }
+
+  // A row that vanished is only called abandoned after two consecutive misses —
+  // a delete-then-reinsert during a republish would otherwise read as a loss.
+  for (const [key, was] of seen) {
+    if (!key.startsWith('tile:')) continue;
+    const id = key.slice(5);
+    if (live.has(id)) continue;
+    const misses = (Number(was.gone) || 0) + 1;
+    snap.push({ kind: 'tile', ref: id, data: { ...was, gone: misses }, updated_at: now });
+    if (bootstrap || misses !== 2 || !was.owner) continue;
+    const sys = tileName(id);
+    tileEvents.push({
+      kind: 'lost', actor: was.name || 'someone',
+      line: `${sys} was released`,
+      embed: {
+        color: COLOR.lost,
+        author: { name: '○  SYSTEM ABANDONED' },
+        title: `${sys} is unclaimed`,
+        description: `-# ${was.name || 'Its holder'} released it — free to take`,
+      },
+    });
+  }
+
+  // Collapse per-actor bursts so one player's sweep is a line, not a wall.
+  const byActor = new Map<string, (Ev & { actor: string })[]>();
+  for (const e of tileEvents) {
+    const g = byActor.get(e.actor) ?? [];
+    g.push(e); byActor.set(e.actor, g);
+  }
+  for (const [actor, group] of byActor) {
+    if (group.length <= BURST) { events.push(...group); continue; }
+    const cits = group.filter((e) => e.kind === 'citadel');
+    events.push(...cits);                       // fortresses are never collapsed
+    const rest = group.filter((e) => e.kind !== 'citadel');
+    if (!rest.length) continue;
+    events.push({
+      kind: 'steal',
+      line: `**${actor}** moved on ${rest.length} systems`,
+      embed: {
+        color: COLOR.steal,
+        author: { name: '⚔  OFFENSIVE' },
+        title: `${actor} swept ${rest.length} systems`,
+        description: '-# ' + rest.slice(0, 5).map((e) => tileNameOf(e)).join(' · ') +
+          (rest.length > 5 ? ` · +${rest.length - 5} more` : ''),
+      },
+    });
+  }
+
+  // ---- publish ---------------------------------------------------------------
+  if (bootstrap) {
+    snap.push({ kind: '_meta', ref: 'bootstrap', data: { at: Date.now() }, updated_at: now });
+    await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
+    await post({
+      content: '## ⚡  FLEET DISPATCH IS LIVE\n-# Ascensions, rank changes, deep-zone breaks, Season Dread records and Armada kills will appear here as they happen.',
+    });
+    return json({ ok: true, bootstrap: true, tracked: snap.length });
+  }
+
+  if (!events.length) {
+    await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
+    return json({ ok: true, events: 0 });
+  }
+
+  events.sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
+  const shown = events.slice(0, MAX_EMBEDS);
+  const rest = events.slice(MAX_EMBEDS);
+
+  const stamped = shown.map((e) => ({ ...e.embed, timestamp: now, footer: { text: 'LootFleet' } }));
+  let content: string | undefined;
+  if (rest.length) {
+    content = `-# …and ${rest.length} more: ` + rest.slice(0, 6).map((e) => e.line).join(' · ');
+  }
+
+  await post({ content, embeds: stamped, allowed_mentions: { parse: [] } });
+  await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
+
+  return json({ ok: true, events: events.length, posted: shown.length });
+});
+
+async function post(body: Record<string, unknown>) {
+  const res = await fetch(WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  // 429 = webhook rate limit; the next cron tick re-sends because the cursor
+  // is only advanced after a successful post path.
+  if (!res.ok) throw new Error(`discord ${res.status}: ${await res.text()}`);
+}
+
+function json(o: unknown) {
+  return new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
+}
+
+// The system name out of an event's headline, for the collapsed burst line.
+function tileNameOf(e: { embed: Record<string, unknown> }): string {
+  const t = String((e.embed as any).title ?? '');
+  const m = /(?:captured|claimed) (.+)$/.exec(t);
+  return m ? m[1] : t.replace(/ is unclaimed$/, '');
+}

@@ -330,7 +330,10 @@
       const citE = cit && wz.bossSpawned && G.getCitadel ? G.getCitadel() : null;
       const wv = wz.bossSpawned ? (wz.clone ? '⚔ ENEMY CLONE FLEET' : isSuper ? 'SUPER BOSS' : cit ? '⛴ RAZE THE CITADEL' : 'BOSS') : (cit ? 'ASSAULT ' : 'WAVE ') + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
       el['sg-fill'].style.width = (citE ? Math.max(0, citE.hp / citE.maxHp * 100) : Math.min(100, ((wz.bossSpawned ? wz.total : wz.wave - 1) / wz.total) * 100)) + '%';
-      el['sg-label'].textContent = '⚔ ' + wv;
+      // SIEGE CLOCK — only shown once the final defender is up and the clock runs
+      const clk = (wz.timed && wz.bossSpawned && wz.limitT != null) ? Math.max(0, Math.ceil(wz.limitT)) : null;
+      el['sg-label'].textContent = '⚔ ' + wv + (clk != null ? '  ·  ' + clk + 's' : '');
+      el['sg-fill'].style.background = (clk != null && clk <= 10) ? '#ff4d5e' : '';
       bb.classList.remove('show', 'active');
     } else {
       sgb.classList.remove('show');
@@ -3062,6 +3065,7 @@
 
   function siegeEvent(kind, s) {
     if (!_inited) return;
+    if (kind === 'timeout') { toast('⏱ The defence held — 60s expired. Tile shut for 15 min.', '#ff4d5e'); return; }
     if (kind === 'start') { toast('⚔ Siege begun — clear 10 waves', '#5b9cff'); }
     else if (kind === 'wavezone') { toast('★ Wave Zone cleared — the gauntlet resets', '#5bc06b'); }
     else if (kind === 'citadel') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff9a50'; t.style.fontSize = '22px'; t.innerHTML = '⛴ THE VOID CITADEL<br><span style="font-size:12px;color:#ffd9c4">Burn it down — 75% · 50% · 25% · boom</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2400); }

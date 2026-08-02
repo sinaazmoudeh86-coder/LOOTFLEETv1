@@ -549,6 +549,10 @@
   const REGEN_SHARE = 0.15, REGEN_SUPPRESS = 2.5;
   // PvP-shaped encounter? (clone garrisons, citadels, void wardens, sparring)
   const PVP_LIFESTEAL = 1;
+  // SIEGE CLOCK — seconds an attacker gets on the FINAL defender of a defended
+  // tile (a live player's Citadel, and every Void tile). Escort waves are
+  // untimed; the clock only starts when the last target is on the field.
+  const SIEGE_CLOCK = 60;
   function pvpFight() {
     const w = rt.waves;
     return !!(w && w.active && (w.clone || w.citadel || w.thenCitadel || w.playerCit));
@@ -3430,7 +3434,7 @@
     const mine = Object.keys(state.ownedSystems || {}).filter((id) => !(map && map[id]));
     mine.slice(0, 40).forEach((id, i) => {
       setTimeout(() => {
-        try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: !!hasMyCitadel(id), fleetScore: Math.round(score()), defense: defenseSnapshot() }); } catch (e) {}
+        try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: !!hasMyCitadel(id), citadelLv: citadelLevel(id), fleetScore: Math.round(score()), defense: defenseSnapshot() }); } catch (e) {}
       }, 800 + i * 400);
     });
   }
@@ -3541,6 +3545,11 @@
       const vw = Math.max(6, Math.ceil(tile.vtier / 2));
       if (rt.waves && rt.waves.active) rt.waves.total = vw;
       if (rt.siege && rt.siege.active) rt.siege.total = vw;
+    }
+    // A real player's fortress and every Void tile defend themselves on a timer.
+    // NPC citadel zones and neutral captures stay untimed.
+    if (rt.waves && rt.waves.active && (rt.waves.playerCit || tile.void)) {
+      rt.waves.timed = SIEGE_CLOCK; rt.waves.limitT = null;
     }
     rt.awaitingRespawn = false;
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; rt.archer.hp = (rt.stats ? rt.stats.maxHp : 100); rt.archer.invuln = 3; }
@@ -3692,6 +3701,12 @@
   // the normal onKill path (Super Boss = premium loot table + resource bounty).
   function updateWaveZone(dt) {
     const s = rt.waves; if (!s || !s.active) return;
+    // SIEGE CLOCK — armed only on the final defender (!thenCitadel means there
+    // is no phase after this one), so clearing their fleet doesn't burn time.
+    if (s.timed && s.bossSpawned && !s.thenCitadel) {
+      s.limitT = (s.limitT == null) ? s.timed : s.limitT - dt;
+      if (s.limitT <= 0) { failTimedSiege(s); return; }
+    }
     if (s.spawnT > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
@@ -3714,8 +3729,8 @@
         if (s.thenCitadel) {
           // CLONE FLEET DOWN — the citadel behind it powers up. Phase 2 begins.
           s.clone = false; s.thenCitadel = false; s.citadel = true;
-          s.bossSpawned = false; s.pendingBoss = true; s.spawnT = 2.4; s.graceT = null;
-          if (window.UI) { window.UI.siegeEvent('citadel', s); window.UI.unlockToast('⚔ Their fleet is down — now RAZE THE CITADEL'); }
+          s.bossSpawned = false; s.pendingBoss = true; s.spawnT = 2.4; s.graceT = null; s.limitT = null;
+          if (window.UI) { window.UI.siegeEvent('citadel', s); window.UI.unlockToast(s.timed ? '⚔ Their fleet is down — RAZE THE CITADEL in ' + s.timed + 's' : '⚔ Their fleet is down — now RAZE THE CITADEL'); }
           return;
         }
         // ENEMY CLONE FLEET DOWN — the zone flips to you.
@@ -3743,6 +3758,20 @@
       s.pendingBoss = true; s.spawnT = 1.6;
       if (window.UI) window.UI.siegeEvent(s.citadel ? 'citadel' : 'boss', s);
     }
+  }
+
+  // The clock ran out with the fortress still standing: the defence holds, the
+  // attack is over, and the tile is shut to this player for 15 minutes so a
+  // failed siege can't be retried on a loop.
+  function failTimedSiege(s) {
+    const k = s.claimTile || state.currentSystem;
+    s.active = false; rt.waves = null;
+    rt.enemies = []; rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false;
+    if (k) { if (!state.tileCd) state.tileCd = {}; state.tileCd[k] = Date.now() + 15 * 60 * 1000; }
+    pushFeed('The defence held — your siege ran out of time');
+    respawnAt(0);
+    if (window.UI) window.UI.siegeEvent('timeout', { tile: k });
+    save();
   }
 
   function captureSystem() {
@@ -3776,7 +3805,7 @@
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, (tile.void || tile.citadel) ? { citadel: true, fleetScore: Math.round(score()), force: razing, defense: defenseSnapshot() } : razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, (tile.void || tile.citadel) ? { citadel: true, citadelLv: citadelLevel(k) || 1, fleetScore: Math.round(score()), force: razing, defense: defenseSnapshot() } : razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
           rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0, defense: res.row.defense || null };
@@ -3915,7 +3944,7 @@
     c.lv = lv + 1;
     // harder to take over: republish a rank-boosted defending fleet score
     c.score = Math.round(score() * citadelDefenseMult(c.lv));
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: c.score, defense: defenseSnapshot() }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, citadelLv: c.lv, fleetScore: c.score, defense: defenseSnapshot() }); } catch (e) {} }
     pushFeed('Your Citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' reached Rank ' + c.lv);
     save(); if (window.UI) window.UI.refreshAll();
     return { ok: true, lv: c.lv };
@@ -3929,7 +3958,7 @@
     state.resources.fuel -= cost.fuel; state.resources.iron -= cost.iron; state.resources.plasma -= cost.plasma;
     state.citadels[id] = { score: Math.round(score()), builtAt: Date.now(), lv: 1 };
     bumpLife('cits', 1);                              // FORTRESS DYNASTY badge
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: state.citadels[id].score, defense: defenseSnapshot() }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, citadelLv: 1, fleetScore: state.citadels[id].score, defense: defenseSnapshot() }); } catch (e) {} }
     pushFeed('You raised a Citadel on ' + ((sysAt(id) || {}).name || 'a system'));
     save(); if (window.UI) window.UI.refreshAll();
     return { ok: true };
@@ -4108,7 +4137,7 @@
     bumpLife('cits', 1);                              // FORTRESS DYNASTY badge
     pushFeed('You seized the citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' — now Rank ' + prevLv + ' under your flag');
     // publish: the fortress still stands — under YOUR flag now
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, fleetScore: Math.round(score() * citadelDefenseMult(prevLv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, citadelLv: prevLv, fleetScore: Math.round(score() * citadelDefenseMult(prevLv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
     save();
   }
   // Permanently demote a NATURAL citadel siege tile to a plain, buildable tile

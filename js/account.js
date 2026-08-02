@@ -191,9 +191,19 @@
   // The row is a PUBLIC SUMMARY: no merge semantics, no clobber risk, and the
   // upsert is idempotent. It has no business riding on the save pipeline, so it
   // now publishes on its own heartbeat as well.
+  // KICKED TABS STILL PUBLISH (Aug 2026 — "Falcor is in the game taking tiles and
+  // still isn't on the board"). The session lock exists to stop a stale tab
+  // CLOBBERING a save. The public row is not a save: no merge semantics, no
+  // clobber risk, idempotent, and the live session overwrites it within 90s.
+  // Meanwhile TERRITORY.claim() has never had a lock guard, so a kicked or
+  // never-claimed tab could conquer the map all day and stay invisible on Ranks
+  // — exactly the asymmetry reported. A kicked tab now publishes ONCE (enough to
+  // seed a missing row) and then stops, so it can never flap the board.
+  let _kickedPub = false;
   function publishNow() {
     try {
-      if (!cloudOn() || window.__sessionKicked) return false;
+      if (!cloudOn()) return false;
+      if (window.__sessionKicked) { if (_kickedPub) return false; _kickedPub = true; }
       const s = session(); if (!s || !s.id) return false;
       const g = window.GAME; if (!g || !g.state || !g.state.level) return false;
       publishLb(s, g.state);

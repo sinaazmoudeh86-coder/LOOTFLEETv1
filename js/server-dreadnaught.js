@@ -717,7 +717,7 @@
       '<div class="sd-bosswrap" id="sd-bosswrap"><div class="sd-aura"></div><img class="sd-boss-img" id="sd-boss-img" src="' + bossSprite(stage) + '" alt="Voidmaw">' +
         '<div class="sd-weakpoints" id="sd-weakpoints"></div></div>' +
       (idle && !run
-        ? '<div class="sd-arena-foot"><span>EVERY RUN STARTS AT STAGE 1 · ' + fmt(threshold(1)) + ' dmg clears it</span><span class="sub">' + (s.bestStage ? 'your record: stage ' + s.bestStage : 'set your first record') + '</span></div>'
+        ? '<div class="sd-arena-foot"><span>EVERY RUN STARTS AT STAGE 1 · ' + fmt(threshold(1)) + ' TO CLEAR</span><span class="sub">' + (s.bestStage ? 'best: stage ' + s.bestStage : 'no record yet') + '</span></div>'
         : (rinfo ? '<div class="sd-arena-foot"><span>NEXT STAGE · ' + fmt(rinfo.need) + '</span><div class="sd-prog"><i style="width:' + clamp(rinfo.into / rinfo.span * 100, 0, 100) + '%"></i></div><span class="sub">' + fmt(Math.max(0, rinfo.need - run.dealt)) + ' to go</span></div>' : '')) +
       '</div>';
   }
@@ -730,7 +730,7 @@
     const fightBtn = over
       ? '<button class="sd-fight" disabled>SEASON ENDED</button>'
       : att > 0
-        ? '<button class="sd-fight has-ship" id="sd-fight"><img class="sd-fight-ship" src="ships/ship-voidmaw.png" alt=""><span class="sd-fight-txt"><b>⚔ FIGHT VOIDMAW</b><span>' + att + ' attempt' + (att > 1 ? 's' : '') + ' left · 2:30 run</span></span></button>'
+        ? '<button class="sd-fight has-ship" id="sd-fight"><img class="sd-fight-ship" src="ships/ship-voidmaw.png" alt=""><span class="sd-fight-txt"><b>⚔ FIGHT VOIDMAW</b><span>2:30 auto-run</span></span></button>'
         : '<button class="sd-fight" disabled>NO ATTEMPTS LEFT <span>resets in <b data-sdreset>' + fmtDur(msToDailyReset()) + '</b></span></button>';
     const claims = (s.claims && s.claims.length)
       ? '<button class="sd-claims" id="sd-claims">🎁 COLLECT REWARDS<span>' + s.claims.length + ' prize' + (s.claims.length > 1 ? 's' : '') + ' waiting — daily rank' + (s.claims.some((c) => c.t === 's') ? ' + season finals' : '') + '</span></button>'
@@ -743,9 +743,9 @@
         (over ? '' : '<button class="sd-buyatt" id="sd-buyatt" title="Price triples with each purchase · resets daily">⚡ +1 attempt · <b>◈ ' + fmt(attCost()) + '</b></button>') +
       '</div>' +
       '<div class="sd-stats three">' +
-        statCard('Season Damage', fmt(s.total), 'cumulative') +
-        statCard('Best Run Today', s.bestDay ? fmt(s.bestDay) : '—', 'sets daily rank') +
-        statCard('Best Run Ever', s.bestEver ? fmt(s.bestEver) : '—', 'season ' + SEASON.num) +
+        statCard('Season Damage', fmt(s.total), 'all runs added up') +
+        statCard('Best Run Today', s.bestDay ? fmt(s.bestDay) : '—', 'sets your daily rank') +
+        statCard('Best Run Ever', s.bestEver ? fmt(s.bestEver) : '—', 'your record') +
       '</div>' +
       vmStrip() +
       '<div class="sd-btnrow">' +
@@ -762,8 +762,9 @@
     const parts = vmParts(), owned = vmOwned();
     return '<div class="sd-vm" id="sd-vmstrip">' +
       '<img src="ships/ship-voidmaw.png" alt="">' +
-      '<div class="sd-vm-t"><b>THE VOIDMAW — SEASON 1 GRAND PRIZE</b>' +
-        '<span>The apex hull — cannons that stun and collapse <b>black holes</b>. Collect <b>' + VM_NEED + ' parts</b> to fly it. Stages 5+ · first fight daily · ✦ Event Store. Gone after ' + SEASON.endsTxt + '.</span>' +
+      '<div class="sd-vm-t"><b>GRAND PRIZE — THE VOIDMAW</b>' +
+        '<span>Collect <b>' + VM_NEED + ' parts</b> to fly the boss yourself. Its cannons stun and open black holes.</span>' +
+        '<em>Parts drop from stage 5+, your first fight each day, and the ✦ Event Store.</em>' +
         (owned
           ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
           : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / VM_NEED * 100) + '%"></i><span>❖ ' + parts + ' / ' + VM_NEED + ' parts</span></div>') +
@@ -786,7 +787,7 @@
     return seasonBar() +
       '<div class="sd-lock"><div class="sd-lock-ic">🔒</div>' +
       '<h3>Server Dreadnaught</h3>' +
-      '<p><b>' + SEASON.label + '</b> — a global world boss. Every commander on the server fights the same Voidmaw, pushing endless damage stages for loot — and the grand prize: assembling the <b>Voidmaw itself</b>, a Season-1-only Mothership-class hull.</p>' +
+      '<p><b>' + SEASON.label + '</b> — one world boss for the whole server. Everyone fights the same Voidmaw and pushes it through damage stages for loot. Collect enough parts and you fly the <b>Voidmaw itself</b> — a hull you can only get this season.</p>' +
       '<div class="sd-lock-lv">Minimum level to join: <b>' + UNLOCK + '</b> · you are Level <b>' + L + '</b></div>' +
       '<div class="sd-prog big"><i style="width:' + clamp(L / UNLOCK * 100, 0, 100) + '%"></i></div>' +
       '<div class="sd-lock-coach"><div class="sd-coach-h">💡 Get to Level 50 faster</div><ul>' +
@@ -1371,8 +1372,10 @@
   .sd-vm{ display:flex; gap:12px; align-items:center; background:linear-gradient(90deg,#1c1030,#140b22); border:1px solid #4a2f78; border-radius:14px; padding:11px 12px; box-shadow:0 0 20px -8px ${ACCENT}; }
   .sd-vm img{ width:84px; height:60px; object-fit:contain; flex:none; filter:drop-shadow(0 0 12px ${ACCENT}); animation:sdBossFloat 4.5s ease-in-out infinite; }
   .sd-vm-t{ flex:1; min-width:0; }
-  .sd-vm-t b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:.08em; color:#f0dcff; }
+  .sd-vm-t>b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:13px; letter-spacing:.08em; color:#f0dcff; }
   .sd-vm-t span{ display:block; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px; color:#c4b2de; line-height:1.45; margin-top:4px; }
+  .sd-vm-t span b{ display:inline; font-family:inherit; font-size:inherit; letter-spacing:0; color:#ffd24d; }
+  .sd-vm-t em{ display:block; font-style:normal; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:11px; color:#8d7aab; margin-top:3px; }
   .vm-partbar{ position:relative; height:17px; border-radius:9px; background:#241733; border:1px solid #3c2560; overflow:hidden; margin-top:7px; }
   .vm-partbar i{ display:block; height:100%; background:linear-gradient(90deg,#b04dff,#ff4adf); box-shadow:0 0 10px ${ACCENT}; }
   .vm-partbar.done i{ background:linear-gradient(90deg,#2f9e4f,#46d27a); box-shadow:0 0 10px #46d27a; }

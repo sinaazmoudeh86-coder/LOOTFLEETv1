@@ -46,7 +46,7 @@
     const cl = client(); if (!cl || !myId()) return { ok: false, reason: 'offline' };
     meta = meta || {};
     try {
-      let res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0), p_defense: meta.defense || null });
+      let res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_citadel_lv: (meta.citadelLv | 0) || null, p_fleet_score: Math.round(meta.fleetScore || 0), p_defense: meta.defense || null });
       if (res.error && /p_defense|function|argument|column|candidate|does not exist/i.test(res.error.message || '')) {
         res = await cl.rpc('claim_tile', { p_tile_id: tileId, p_owner_name: ownerName || myName(), p_protect_minutes: protectMinutes || 15, p_citadel: !!meta.citadel, p_fleet_score: Math.round(meta.fleetScore || 0) });
       }
@@ -67,6 +67,10 @@
         } catch (e) {}
         return { ok: false, reason: res.error.message || 'error' };
       }
+      // A claim landed, so this session can definitely reach the server. Publish
+      // the Ranks row off the same beat — claiming tiles while absent from the
+      // leaderboard was the single most-reported "I'm not on the board" case.
+      try { if (window.ACCOUNT && window.ACCOUNT.publishNow) window.ACCOUNT.publishNow(); } catch (e) {}
       return { ok: true, row: res.data };
     } catch (e) { return { ok: false, reason: 'error' }; }
   }

@@ -1,7 +1,7 @@
-# Loot Fleet — deploy v214 · build 420
+# Loot Fleet — deploy v214 · build 421
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v213. Service worker cache is `lootfleet-v420`.
+Supersedes v213. Service worker cache is `lootfleet-v421`.
 
 ---
 
@@ -58,6 +58,24 @@ is evicted on first load.
 ---
 
 ## What changed
+
+### Four Ranks ladders never worked — and not for the reason the UI claimed
+
+Territory, Hangar, Missions and Badges showed *"waiting on a database
+migration."* The migration had run; all six columns exist on `leaderboard`.
+
+`mapReal()` in `leaderboard.js` rebuilds every row from a whitelist that stopped
+at `asc`, discarding `tiles`, `citadels`, `tile_rev`, `ships`, `missions` and
+`badges` — even though `cloud.js` selects all six. `ranks-boards.js` decides a
+migration has run by asking whether any human row carries those properties, so
+dropping them pinned four boards to a notice no migration could clear.
+
+The notice also named `ranks-ladders.sql`, which must never be run — it would
+install a second `lb_upsert` and break the board for everyone. Now names
+`lb-onefunction.sql`.
+
+Those boards will read low at first. The columns are real but every row is 0
+until each player logs in and publishes.
 
 ### Ranks — the real reason players were missing
 

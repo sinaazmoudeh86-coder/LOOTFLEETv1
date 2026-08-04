@@ -283,14 +283,48 @@
   // Combined with the old per-device roster clock, that's why one browser showed
   // 15 players and another 28. Seat caps are the server's job — sim_board()
   // already applies max_top10 / allow_rank1 before the rows ever reach us.)
-  const BOARD_ROWS = 60;             // rows the Ranks page renders
+  // BOARD POOL — how many pilots are available to rank, not how many render.
+  // The Ranks page paginates at 60 a page, so this is the size of the roster you
+  // can page through. Was 60, which made the page look like a hard ceiling
+  // ("stuck at 60 users") no matter how far the population actually grew.
+  const BOARD_ROWS = 400;            // pilots available to the board, all pages
   function forBoard(realBoard) {
     const pool = roster();
     const seats = BOARD_ROWS - ((realBoard || []).length);
     // COPIES, not references. The Heat and All-Time boards each stamp `rank`
     // (and cache `_fleet`) onto the rows they're given; handing both the same
     // objects let one board's ranking overwrite the other's.
-    return seats > 0 ? pool.slice(0, seats).map((p) => Object.assign({}, p)) : [];
+    return seats > 0 ? deTie(pool.slice(0, seats).map((p) => Object.assign({}, p))) : [];
+  }
+
+  // DE-TIE — with allow_rank1 off, the server clamps every sim that would out-power
+  // the strongest human down to (top human − 1). Five pilots then share one exact
+  // value (929,617,906,223 five times over), which is the single most obvious tell
+  // that a board is padded: no two real accounts ever land on the same digit.
+  // Runs of identical power are fanned downward by a deterministic per-name
+  // fraction — order is preserved exactly, the clamp still holds, and the numbers
+  // stop looking stamped.
+  function deTie(rows) {
+    let i = 0;
+    while (i < rows.length) {
+      let j = i;
+      while (j + 1 < rows.length && rows[j + 1].power === rows[i].power) j++;
+      const n = j - i;
+      if (n > 0) {
+        const base = rows[i].power;
+        for (let k = i; k <= j; k++) {
+          // 0 for the first, then up to ~4% below it, jittered by name so the
+          // same pilot always lands on the same figure across devices.
+          const seed = String(rows[k].name || k);
+          let h = 0; for (let c = 0; c < seed.length; c++) h = (h * 31 + seed.charCodeAt(c)) >>> 0;
+          const step = (k - i) / (n + 1);                     // keeps the order
+          const jitter = ((h % 1000) / 1000) * 0.008;
+          rows[k].power = Math.max(1, Math.round(base * (1 - step * 0.04 - jitter)));
+        }
+      }
+      i = j + 1;
+    }
+    return rows;
   }
 
   // ---- TILE DEFENDERS --------------------------------------------------------

@@ -183,6 +183,9 @@
   // all: no stars for anyone else to see, and a board that looked empty.
   // See supabase/lb-upsert-canonical.sql for the server half.
   let _lbNoAsc = false, _lbAscRetryAt = 0, _lbFails = 0, _lbWarned = false;
+  // Ladder columns degrade on their own flag so a server with stars but without
+  // ranks-ladders.sql keeps publishing stars.
+  let _lbNoLadder = false, _lbLadderRetryAt = 0;
   function lbFail(where, err) {
     _lbFails++;
     // A row that never publishes makes the player INVISIBLE on Ranks while they
@@ -193,6 +196,14 @@
       try { console.warn('[LOOTFLEET] leaderboard row is not publishing (' + _lbFails + ' failures). You will not appear on Ranks.', where, err); } catch (e) {}
     }
   }
+  // A genuinely MISSING function/signature means the server predates a
+  // migration. Ambiguity, network blips and RLS errors must not be mistaken for
+  // it — those are transient and should retry, not permanently downgrade.
+  function isLegacy(error) {
+    const msg = ((error.message || '') + ' ' + (error.code || '') + ' ' + (error.hint || '')).toLowerCase();
+    return msg.indexOf('pgrst202') !== -1 || msg.indexOf('42883') !== -1 ||
+           msg.indexOf('does not exist') !== -1 || msg.indexOf('could not find') !== -1;
+  }
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
@@ -202,15 +213,31 @@
         p_fleet: p.fleet || [],
       };
       if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
+      if (_lbNoLadder && Date.now() > _lbLadderRetryAt) _lbNoLadder = false;
+
+      // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
+      // p_asc. Folding them into the p_asc attempt would mean a server with
+      // stars but without ranks-ladders.sql reads as "legacy" and silently stops
+      // publishing ascension stars — the exact bug the p_asc cascade was written
+      // to prevent.
+      const ladder = (p.tiles !== undefined || p.missions !== undefined) ? {
+        p_tiles: p.tiles | 0, p_citadels: p.citadels | 0,
+        p_tile_rev: Math.round(p.tile_rev || 0),
+        p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
+      } : null;
+      if (ladder && !_lbNoLadder) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0) }, base, ladder));
+        if (!error) { _lbFails = 0; return; }
+        if (!isLegacy(error)) { lbFail('ladder', error); return; }
+        _lbNoLadder = true; _lbLadderRetryAt = Date.now() + 6 * 3600 * 1000;
+      }
       if (!_lbNoAsc) {
         const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc: (p.asc | 0) }, base));
         if (!error) { _lbFails = 0; return; }
         // Only a genuinely missing function means "legacy server". Ambiguity,
         // network blips and RLS errors must NOT disable stars.
-        const msg = ((error.message || '') + ' ' + (error.code || '') + ' ' + (error.hint || '')).toLowerCase();
-        const legacy = msg.indexOf('pgrst202') !== -1 || msg.indexOf('42883') !== -1 ||
-                       msg.indexOf('does not exist') !== -1 || msg.indexOf('could not find') !== -1;
-        if (!legacy) { lbFail('p_asc', error); return; }         // keep p_asc; retry next save
+        if (!isLegacy(error)) { lbFail('p_asc', error); return; }  // keep p_asc; retry next save
         _lbNoAsc = true; _lbAscRetryAt = Date.now() + 6 * 3600 * 1000;
       }
       const { error: e2 } = await client.rpc('lb_upsert', base);
@@ -222,8 +249,14 @@
     try {
       if (!enabled) return null;
       let { data, error } = await client.from('leaderboard')
-        .select('user_id,name,power,level,zone,kills,fleet,asc_stars')
+        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges')
         .order('power', { ascending: false }).limit(n || 100);
+      if (error) {   // ranks-ladders.sql not run yet
+        const r0 = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet,asc_stars')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = r0.data; error = r0.error;
+      }
       if (error) {   // column not migrated yet — fall back to the legacy shape
         const r = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet')

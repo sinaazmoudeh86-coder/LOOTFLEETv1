@@ -392,88 +392,74 @@
   }
   function closeOverlay() { const o = $('pa-overlay'); if (o) { o.className = ''; o.innerHTML = ''; } }
 
-  function ownedList() {
-    const S = G().state, out = [];
-    for (const k in (S.ownedShips || {})) {
-      if (!S.ownedShips[k]) continue;
-      const sh = C().SHIP_BY_KEY[k]; if (!sh) continue;
-      let starsN = 0;
-      try { const a = (S.ascension || {})[k] || {}; for (const m in a) starsN += (a[m].s | 0) + (a[m].t | 0) * 5; } catch (e) {}
-      out.push({ key: k, name: sh.name, cls: sh.cls, lvl: (S.shipLevels || {})[k] || 1, stars: starsN,
-        fitted: Object.keys((S.fittings || {})[k] || {}).filter((s) => ((S.fittings || {})[k] || {})[s]).length,
-        active: S.ship === k });
-    }
-    out.sort((a, b) => (b.stars * 100 + b.lvl) - (a.stars * 100 + a.lvl));
-    return out;
-  }
 
-  // STEP 1 — pick the flagship you fly out in (every hull comes with you)
+  // ===========================================================================
+  // THE CONFIRM — ONE screen.
+  // ---------------------------------------------------------------------------
+  // This used to be two steps. Step 1 asked you to pick a flagship, which stopped
+  // being a decision the moment every hull started coming with you: the picker
+  // chose which ship you happen to be sitting in afterwards, and dressed it up as
+  // a choice. It's gone. You fly out in whatever you're flying now, and you can
+  // switch in the Hangar a second later like any other day.
+  //
+  // The copy was also out of date and telling players the opposite of the truth.
+  // It read "you lose N claimed systems · all citadels & Void spires". Territory
+  // now survives, and so do the Moon Colony, the Home Citadel and Prism. Anyone
+  // reading that screen was being warned off a cost that no longer exists.
+  //
+  // One rule for what goes in each column: KEPT is anything you BUILT — hulls,
+  // ground, infrastructure, career record. LOST is anything you were CARRYING —
+  // level, currency, items, the tree those items feed.
+  // ===========================================================================
   function ascendFlow() {
     const pv = preview(); if (!pv.eligible) return;
-    const ships = ownedList();
-    let pick = (ships.find((s) => s.active) || ships[0] || {}).key || null;
-    const o = overlay(); o.className = 'show';
-    const cards = () => ships.map((s) =>
-      '<button class="pa-pick' + (s.key === pick ? ' on' : '') + '" data-pick="' + s.key + '">' +
-        '<img src="ships/ship-' + s.key + '.png" alt="">' +
-        '<span class="pa-pick-n">' + s.name + '</span>' +
-        '<span class="pa-pick-m">' + s.cls + (s.stars ? ' · ★' + s.stars : '') + '</span>' +
-        (s.active ? '<i class="pa-pick-f">FLYING</i>' : '') +
-      '</button>').join('');
-    const paint = () => {
-      o.innerHTML = '<div class="pa-modal">' +
-        '<div class="pa-mh"><b>CHOOSE YOUR FLAGSHIP</b><em>Step 1 of 2</em></div>' +
-        '<p class="pa-mp"><b>Your whole fleet comes with you — fully upgraded.</b> Every hull keeps its <b>upgrade levels</b> and its <b>Ship Ascension (module tiers &amp; stars)</b>. Only what the pilot was carrying is surrendered: <b>fitted equipment, cargo and Starforge tempers</b>. Pick the hull you want to be flying when you warp out.</p>' +
-        '<div class="pa-picks">' + cards() + '</div>' +
-        '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
-        '<button class="pa-btn go" data-next' + (pick ? '' : ' disabled') + '>Continue →</button></div>' +
-      '</div>';
-      o.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { pick = b.dataset.pick; paint(); });
-      o.querySelector('[data-x]').onclick = closeOverlay;
-      const nx = o.querySelector('[data-next]'); if (nx) nx.onclick = () => confirmStep(pick, pv);
-    };
-    paint();
-  }
-
-  // STEP 2 — the heavy confirm
-  function confirmStep(key, pv) {
-    const sh = C().SHIP_BY_KEY[key] || {}, o = overlay();
-    const S = G().state;
+    const S = G().state, o = overlay(); o.className = 'show';
+    const key = S.ship, sh = C().SHIP_BY_KEY[key] || {};
     const nt = nextTierAt();
     const willUnlock = nt && stars() + 1 >= nt.ascReq ? nt : null;
+    const zone = Math.max(S.highestDungeonReached | 0, S.highestUnlocked | 0, 1);
+    const hulls = Object.keys(S.ownedShips || {}).length;
+    const tiles = Object.keys(S.ownedSystems || {}).length;
+
+    const hasAxiom = !!(window.AXIOM && window.AXIOM.owned());
+    const keep = [
+      ['\u2b22', '<b>All ' + hulls + ' hull' + (hulls === 1 ? '' : 's') + '</b> \u2014 upgrade levels and Ship Ascensions intact'],
+      ['\u2691', tiles ? '<b>All ' + tiles + ' system' + (tiles === 1 ? '' : 's') + '</b> \u2014 citadels and Void spires stay yours' : 'Any territory you hold'],
+      ['\u25d0', 'Moon Colony, Home Citadel and Prism \u2014 still producing'],
+      ['\u2b21', 'Badges, career totals and mission boards'],
+      ['\u25c8', 'Everything you paid for'],
+    ];
+    // the one exception to "every item is surrendered"
+    if (hasAxiom) keep.splice(1, 0, ['\u229b', '<b>Evolving Paragon Cannon</b> \u2014 the only item you keep, rescaled to Level 1']);
+    const lose = [
+      ['\u25b2', '<b>Level ' + fmt(S.level) + ' \u2192 1</b> and Zone ' + fmt(zone) + ' progress'],
+      ['$', fmt(S.gold || 0) + ' gold and every resource'],
+      ['\u2756', (hasAxiom ? 'Every other item' : 'Every item') + ' \u2014 equipped, in the bag, and Starforge tempers'],
+      ['\u25c7', 'The Pilot Tree and every Dread Core'],
+      ['\u27a4', 'Your wing disbands \u2014 escort slots re-earn with level'],
+    ];
+    const row = (a) => a.map((x) => '<li><i>' + x[0] + '</i><span>' + x[1] + '</span></li>').join('');
+
     o.innerHTML = '<div class="pa-modal danger">' +
-      '<div class="pa-mh"><b>⚠ THIS CANNOT BE UNDONE</b><em>Step 2 of 2</em></div>' +
-      '<div class="pa-conf">' +
-        '<div class="pa-conf-side lose"><span>YOU LOSE</span>' +
-          '<b>Level ' + fmt(S.level) + ' → 1</b>' +
-          '<ul><li>Zone ' + fmt(Math.max(S.highestDungeonReached | 0, S.highestUnlocked | 0, 1)) + ' progress</li>' +
-          '<li>' + fmt(S.gold || 0) + ' gold + all resources</li>' +
-          '<li>' + Object.keys(S.ownedSystems || {}).length + ' claimed systems</li>' +
-          '<li>All citadels &amp; Void spires — undefended instantly</li>' +
-          '<li>Every item — gear, bag, escort loadouts</li>' +
-          '<li>Starforge tempers, the Pilot Tree &amp; every ◇ Dread Core</li>' +
-          '<li>Your wing disbands</li></ul>' +
-        '</div>' +
-        '<div class="pa-conf-side keep"><span>YOU KEEP</span>' +
-          '<b>' + (sh.name || '—') + '</b>' +
-          '<img class="pa-conf-img" src="ships/ship-' + key + '.png" alt="">' +
-          '<ul><li>+' + pv.total + ' ascension point' + (pv.total === 1 ? '' : 's') + '</li>' +
-          '<li>Rank ' + tierDef(stars() + 1).name + ' ★' + starOf(stars() + 1) + '</li>' +
-          '<li><b>Every hull — upgrade levels intact</b></li>' +
-          '<li><b>Every Ship Ascension</b></li>' +
-          '<li>Level cap → <b>' + (150 + 50 * (stars() + 1)) + '</b></li>' +
-          '<li>All perks &amp; badges</li>' +
-          '<li>All purchases</li></ul>' +
-        '</div>' +
+      '<div class="pa-mh"><b>\u2726 ASCEND</b><em>this cannot be undone</em></div>' +
+      '<div class="pa-gain">' +
+        '<div class="pa-gain-i"><b>+' + pv.total + '</b><span>point' + (pv.total === 1 ? '' : 's') + '</span></div>' +
+        '<div class="pa-gain-i"><b>' + tierDef(stars() + 1).name + ' \u2605' + starOf(stars() + 1) + '</b><span>new rank</span></div>' +
+        '<div class="pa-gain-i"><b>' + (150 + 50 * (stars() + 1)) + '</b><span>level cap</span></div>' +
       '</div>' +
-      (willUnlock ? '<div class="pa-unlock-pre" style="--tc:' + willUnlock.color + '">✦ This ascension unlocks the <b>' + willUnlock.name.toUpperCase() + '</b> loot tier</div>' : '') +
-      '<label class="pa-ack"><input type="checkbox" id="pa-ack"><span></span>' +
-        'I understand. My pilot goes back to <b>Level 1</b> and I lose every <b>item, gold and claimed system</b>. ' +
-        'My fleet comes with me — <b>hulls, upgrade levels and Ship Ascensions</b>.</label>' +
-      '<div class="pa-mb"><button class="pa-btn ghost" data-x>Go back</button>' +
-      '<button class="pa-btn danger" id="pa-do" disabled>✦ ASCEND</button></div>' +
+      (willUnlock ? '<div class="pa-unlock-pre" style="--tc:' + willUnlock.color + '">\u2726 Unlocks the <b>' + willUnlock.name.toUpperCase() + '</b> loot tier</div>' : '') +
+      '<div class="pa-conf">' +
+        '<div class="pa-conf-side keep"><span>YOU KEEP</span><ul>' + row(keep) + '</ul></div>' +
+        '<div class="pa-conf-side lose"><span>YOU LOSE</span><ul>' + row(lose) + '</ul></div>' +
+      '</div>' +
+      '<div class="pa-flag"><img src="ships/ship-' + key + '.png" alt="">' +
+        '<div><b>' + (sh.name || 'Your flagship') + '</b><em>You warp out in the hull you\u2019re flying \u2014 swap any time in the Hangar</em></div></div>' +
+      '<label class="pa-ack"><input type="checkbox" id="pa-ack">' +
+        '<span class="pa-ack-t">I understand \u2014 back to <b>Level 1</b>, and I lose my <b>gold and every item</b>.</span></label>' +
+      '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
+      '<button class="pa-btn danger" id="pa-do" disabled>\u2726 ASCEND</button></div>' +
     '</div>';
-    o.querySelector('[data-x]').onclick = () => ascendFlow();
+    o.querySelector('[data-x]').onclick = closeOverlay;
     const ack = $('pa-ack'), doBtn = $('pa-do');
     ack.onchange = () => { doBtn.disabled = !ack.checked; };
     doBtn.onclick = () => cinematic(key, pv);

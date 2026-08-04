@@ -225,13 +225,21 @@
         const G = window.GAME;
         let asc = (data && data.pasc && data.pasc.stars) | 0;
         if (!asc) { try { asc = window.PASCEND ? (window.PASCEND.stars() | 0) : 0; } catch (e) {} }
-        window.CLOUD.lbUpsert({
+        // LADDER COLUMNS (Aug 2026) — territory revenue, hangar size, lifetime
+        // missions and badges, for the six new Ranks boards. Read through
+        // RANKBOARDS so the published figures and the ones your own row renders
+        // come from one place and can never disagree. Omitted entirely if the
+        // module hasn't loaded: lb_upsert treats null as "leave alone", so a
+        // missing field never zeroes a veteran's career counters.
+        let extra = null;
+        try { extra = window.RANKBOARDS ? window.RANKBOARDS.publishFields() : null; } catch (e) {}
+        window.CLOUD.lbUpsert(Object.assign({
           name: s.name,
           power: (G && G.score) ? G.score() : (data.level || 1),
           level: data.level || 1, zone: data.highestDungeonReached || 1, kills: data.totalKills || 0,
           asc,
           fleet: [data.ship].concat((G && G.fleetShips) ? G.fleetShips().map((x) => x.key) : []).filter(Boolean),
-        });
+        }, extra || {}));
       }
     } catch (e) {}
   }
@@ -388,7 +396,12 @@
     const s = session(); if (!s || !n) return false;
     s.name = n;
     try { localStorage.setItem(SESS, JSON.stringify(s)); } catch (e) {}
-    if (cloudOn() && window.CLOUD.client) { try { window.CLOUD.client.auth.updateUser({ data: { name: n } }); } catch (e) {} }
+    // Written to the SAVE as well: user_metadata.name is provider territory —
+    // Google overwrites it from the Google profile on every OAuth sign-in — so the
+    // save and the app-owned lf_name key are what actually persist a rename.
+    try { if (window.GAME && window.GAME.state) { window.GAME.state.pilotName = n; window.GAME.save(); } } catch (e) {}
+    if (cloudOn() && window.CLOUD.client) { try { window.CLOUD.client.auth.updateUser({ data: { name: n, lf_name: n } }); } catch (e) {} }
+    try { publishNow(); } catch (e) {}   // the board shows the new name at once, not in 90s
     refreshBar();
     return true;
   }

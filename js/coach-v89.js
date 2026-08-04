@@ -204,6 +204,11 @@
     // ASCENDED PILOTS ARE DONE BEING TAUGHT. Set once at ascension and honoured
     // for moments added in later builds too, so the tutorial never comes back.
     if (s.coach.allSeen || ((s.pasc && s.pasc.stars) | 0) > 0) return;
+    // ONE TUTORIAL AT A TIME. onboard.js runs an authored five-step opening for
+    // brand-new pilots and hides most of the interface while it does. Coach
+    // moments firing into that would be a second teacher talking over the first,
+    // pointing at chrome that isn't on screen yet. Wait until it has released.
+    try { if (window.ONBOARD && !window.ONBOARD.isDone()) return; } catch (e) {}
     if (G.getHp && G.getHp().dead) return;          // never over a death
     if (document.hidden) return;
     // grace delay: condition met → arm; fire 2.5s later if still met
@@ -345,9 +350,8 @@
     card = layer.querySelector('.co-card');
     card.querySelector('.co-next').addEventListener('click', advance);
     card.querySelector('.co-skip').addEventListener('click', () => {
-      // skip = silence the whole tutorial
-      ORDER.forEach((k) => { G.state.coach.seen[k] = true; });
-      G.save(); finish();
+      // skip = silence the whole tutorial, permanently and across future builds
+      silence();
     });
     // tap-step: advance when the player clicks the highlighted control
     document.addEventListener('click', (e) => {
@@ -359,5 +363,18 @@
     window.addEventListener('resize', position);
   }
 
-  window.COACH = { init, notify, keys: () => ORDER.slice() };
+  // Silence every moment, now and in future builds. Called by the coach's own
+  // Skip button and by onboard.js's, so opting out of one opts out of both.
+  function silence() {
+    try {
+      if (!G || !G.state) return;
+      G.state.coach = G.state.coach || { seen: {} };
+      G.state.coach.allSeen = true;
+      ORDER.forEach((k) => { G.state.coach.seen[k] = true; });
+      G.save();
+      if (active) finish();
+    } catch (e) {}
+  }
+
+  window.COACH = { init, notify, silence, keys: () => ORDER.slice() };
 })();

@@ -122,12 +122,28 @@
   // Everything that survives an ascension: money the player SPENT REAL CASH on,
   // lifetime recognition, the social graph, and the ascension record itself.
   const ASC_KEEP = [
+    'pilotName',                                               // a rename is identity, not progress
     'pasc',                                                    // stars, points, perks, history
     // PAID ENTITLEMENTS — anything real money or LootCoins bought is permanent.
     // `purchases` carries the one-time 4× battle-speed unlock (speed4lc) and
     // `proUntil` carries the LootFleet Pro subscription window, so the Pro badge,
     // its 5× speed and 2× XP all survive an ascension untouched.
     'purchases', 'credits', 'proUntil', 'vipPts', 'iap', 'payments', 'redeemedCodes',
+    // ONE-TIME OFFERS. discordJoin records the 1,000-LC join reward; keeping it
+    // here means an ascension (which wipes the fleet to nothing) cannot re-arm
+    // the offer and let the same account collect it twice.
+    'discordJoin',
+    // MOON COLONY SURVIVES ASCENSION (Aug 2026). The colony is infrastructure
+    // BUILT on the moons, not the pilot's run — mines, storage and defences that
+    // keep producing while the account is offline. Wiping it made ascending cost
+    // days of construction that had nothing to do with the fleet being reset,
+    // and it silently zeroed the passive income the Hangar now advertises.
+    // The fleet resets. The buildings you put up do not.
+    'moon',
+    // FIRST-RUN TUTORIAL. Ascension resets level to 1, which is exactly the
+    // signal onboard.js uses to recognise a new player — without this a veteran
+    // would be walked through "spend gold on damage" after every ascension.
+    'onboard',
     'cosmetics', 'shipAura',
     'achieve', 'achv', 'achClaimed', 'badgeRanks', 'lifeStats',   // lifetime badges (achievements.js keys off state.achieve)
     // CAREER COUNTERS — the metrics lifetime badge chains measure. These record
@@ -154,6 +170,25 @@
     // republish, and it gave away holds the pilot never lost in a fight.
     // The fleet resets. The map you conquered does not.
     'ownedSystems', 'citadels', 'rivalCitadels', 'tileCd',
+    // …AND THE MIGRATION FLAG THAT PROTECTS THEM. `galaxyVer` is what tells the
+    // loader the save has already moved to the v3 hex grid. Without it here, a
+    // post-ascension state arrives with galaxyVer undefined, the v3 migration
+    // sees `!== 3`, and its first act is `state.ownedSystems = {}` — silently
+    // undoing the four lines above and wiping every galaxy tile and Void spire
+    // the pilot held. Keeping the four keys was necessary but NOT sufficient.
+    'galaxyVer',
+    // Razed natural citadels stay razed. These are tiles the pilot fought to
+    // flatten; regrowing their NPC fortress on ascension would re-lock ground
+    // they still own.
+    'razedCitadels',
+    // HOME CITADEL and PRISM are INFRASTRUCTURE, not run progress — the same
+    // argument as the Moon Colony. The Home Citadel is described in-game as a
+    // "permanent AFK empire": pads, towers and defences built up over days that
+    // keep earning while the account is offline. Prism holds mined ingots and
+    // the Prism Cores forged from them, which are permanent fleet upgrades.
+    // Neither is bought with the pilot's level, so neither goes back to zero
+    // when the pilot does.
+    'homecit', 'prism', 'prismFleet',
   ];
   // Event / premium hulls are entitlements, not progress — never taken.
   const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
@@ -221,18 +256,20 @@
       L.ascend = (L.ascend || 0) + 1;
     } catch (e) {}
 
-    // 1c — SURRENDER EVERY HOLDING. Citadels, galaxy systems and Void spires all
-    // fall the moment you ascend: the server claim is RELEASED so each tile goes
-    // straight to neutral and undefended with NO cooldown — anyone can take it
-    // immediately. A Level 1 pilot must not be left holding fortresses.
-    try {
-      accrueResources();   // settle earnings up to the ascension
-      const held = Object.keys(state.ownedSystems || {});
-      if (window.TERRITORY && window.TERRITORY.enabled() && window.TERRITORY.release) {
-        held.forEach((id) => { try { window.TERRITORY.release(id); } catch (e) {} });
-      }
-      held.forEach((id) => { if (rt.realTiles && rt.realTiles[id]) delete rt.realTiles[id]; });
-    } catch (e) {}
+    // 1c — SETTLE EARNINGS. Territory itself is NOT surrendered.
+    //
+    // This block used to RELEASE every tile on the server — `TERRITORY.release(id)`
+    // for each holding, plus deleting the local mirror. That directly contradicted
+    // keeping `ownedSystems` in ASC_KEEP: the client came back believing it held
+    // the map while the server had already handed every tile to neutral, so the
+    // pilot's galaxy was gone the moment anyone else looked at it, and their own
+    // client sat desynced until the next republish fought it back.
+    //
+    // Two pieces of code with opposite intentions. Territory survives ascension,
+    // so the release is gone. The cost is still real and still paid: the next
+    // republish writes the new (far lower) fleet score onto every tile, making
+    // everything you hold much easier for someone to take while you climb back.
+    try { accrueResources(); } catch (e) {}
 
     // 2 — wipe the account back to a factory save
     Object.keys(state).forEach((k) => { delete state[k]; });
@@ -415,8 +452,8 @@
     const aura = I.supportAura ? I.supportAura(state.equipped.bow) : null;
     // Warden arrays mount only on the Aegis — inert anywhere else (legacy saves)
     const aMul = ship.cls === 'Aegis' ? 2 : 0;
-    s.regen = (aura ? aura.regen * aMul : 0) + (pm.regen || 0);
-    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0));
+    s.regen = Math.min(5, (aura ? aura.regen * aMul : 0) + (pm.regen || 0) + (m.regen || 0));
+    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0) + (m.dmgReduce || 0));
     if (aura) s.multiShot += aura.multiShot * aMul;
     // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
     const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
@@ -441,7 +478,7 @@
     s.maxHp = s.health;
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
     // weapon range — hull mod + fleet share + Warden aura all extend it
-    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0)) / 100);
+    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0) + (m.rangePct || 0)) / 100);
     s.fleetSize = esc.length;
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
     s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
@@ -450,7 +487,8 @@
 
   // ---- SKILL TREE helpers --------------------------------------------------
   function skillMods() {
-    const m = { dmgPct: 0, atkSpeedPct: 0, critChance: 0, critDamage: 0, hpPct: 0, moveSpeed: 0, lifeSteal: 0, multiShot: 0 };
+    const m = { dmgPct: 0, atkSpeedPct: 0, critChance: 0, critDamage: 0, hpPct: 0, moveSpeed: 0, lifeSteal: 0, multiShot: 0,
+                rangePct: 0, regen: 0, dmgReduce: 0 };
     C.SKILLS.nodes.forEach((n) => { const r = state.skills[n.id] || 0; if (r) m[n.mod] += n.per * r; });
     return m;
   }
@@ -571,7 +609,30 @@
     e.regenHold = 0;
   }
 
+  // ZONE IS A LIVE STAT INPUT. The Evolving Paragon Cannon scales on
+  // dungeonScale(highestDungeonReached), so pushing deeper changes its numbers —
+  // but the seven places that advanced that field just assigned it and moved on.
+  // Nothing recomputed. The cannon (and the Ship Score) stayed on the old zone
+  // until some unrelated event happened to call refreshStats().
+  //
+  // Below the level cap that self-heals within a kill or two, because levelling
+  // calls refreshStats(). AT the cap it never heals: level-ups stop, so a pilot
+  // at Lv 150+ pushing from zone 150 to 400 would fly a cannon still costed at
+  // zone 150 — the exact pilot who owns one — and their Ship Score would sit
+  // wrong on the HUD and in every leaderboard publish.
+  function reachZone(z) {
+    const prev = state.highestDungeonReached || 0;
+    const next = Math.max(prev, z | 0);
+    state.highestDungeonReached = next;
+    if (next > prev) { try { refreshStats(); } catch (e) {} }
+    return next;
+  }
   function refreshStats() {
+    // The Evolving Paragon Cannon scales with the pilot, so its stats are rewritten here —
+    // before computeStats() reads it. Doing it at this single choke point means
+    // combat, auto-equip, itemPower, the bag and every tooltip see an ordinary
+    // item with ordinary numbers, and none of them need to know it is special.
+    try { if (window.AXIOM) window.AXIOM.sync(); } catch (e) {}
     const prevMax = rt.stats ? rt.stats.maxHp : 0;
     rt.stats = computeStats();
     // APEX COMMANDER badge — peak fleet power ever reached, on the display scale
@@ -757,7 +818,14 @@
   // itself whenever the beacon could not fire — including every time a routine
   // zone boss spawned — so it appeared to randomly vanish mid-session. It now
   // stays put for the whole grind and simply greys out when it can't fire.
+  //
+  // LEVEL GATE (Aug 2026). The beacon calls a 50× swarm onto your own position.
+  // It is the one system the player triggers by hand, and at low level it is not
+  // a tool — it is a way to die without understanding why. Held back to 30, the
+  // same gate as the Pilot Tree, which is where its perks live anyway.
+  const BEACON_LV = 30;
   function beaconVisible() {
+    if ((state.level | 0) < BEACON_LV) return false;       // not yours yet
     if (state.currentSystem) return false;                 // galaxy / void tile
     if (state.currentDungeon < 1) return false;            // safe hangar
     if (state.dreadRun || rt.sdrun || rt.hcrun) return false;
@@ -773,6 +841,7 @@
   function beaconState() {
     const s = beaconStats();
     return { visible: beaconVisible(), allowed: beaconAllowed(),
+             locked: (state.level | 0) < BEACON_LV, needLv: BEACON_LV,
              blocked: beaconVisible() && !beaconAllowed(),
              ready: beaconAllowed() && s.cdLeft <= 0,
              cd: s.cd, left: s.cdLeft, mult: s.mult, life: s.life, loot: s.loot, ranks: s.ranks,
@@ -1430,10 +1499,23 @@
   // --------------------------------------------------------------------------
   // DEATH PENALTY — drop 1 item, lost forever
   // --------------------------------------------------------------------------
-  function dropOnDeath() {
+  // Everything a death is ALLOWED to take. Protected items (the Evolving Paragon
+  // Cannon) are excluded here rather than at each removal site, so a future third
+  // loss mechanic inherits the protection instead of re-introducing the hole.
+  //
+  // This mattered most in catastrophicLoss(), which sorts by power and rolls the
+  // strongest item at 100%: the cannon is by construction the most powerful item
+  // its owner has, so it was a GUARANTEED first loss on every Lv 100+ death.
+  // AXIOM.sync() would silently re-mint it, so the bug read as "my cannon jumped
+  // out of its slot and my Ship Score dropped" rather than as an item loss.
+  function lossPool() {
     const pool = [];
-    C.SLOT_KEYS.forEach((s) => { if (state.equipped[s]) pool.push({ from: 'eq', slot: s, item: state.equipped[s] }); });
-    state.inventory.forEach((it) => pool.push({ from: 'inv', item: it }));
+    C.SLOT_KEYS.forEach((s) => { const it = state.equipped[s]; if (it && !unsellable(it)) pool.push({ from: 'eq', slot: s, item: it }); });
+    state.inventory.forEach((it) => { if (!unsellable(it)) pool.push({ from: 'inv', item: it }); });
+    return pool;
+  }
+  function dropOnDeath() {
+    const pool = lossPool();
     if (!pool.length) return null;
     const pick = pool[(Math.random() * pool.length) | 0];
     if (pick.from === 'eq') { state.equipped[pick.slot] = null; refreshStats(); }
@@ -1449,9 +1531,7 @@
   // item is rolled in turn at HALF the previous chance: 100% · 50% · 25% · 12.5% …
   // Best gear is rolled first, so the guaranteed loss always stings.
   function catastrophicLoss() {
-    const pool = [];
-    C.SLOT_KEYS.forEach((s) => { if (state.equipped[s]) pool.push({ from: 'eq', slot: s, item: state.equipped[s] }); });
-    state.inventory.forEach((it) => pool.push({ from: 'inv', item: it }));
+    const pool = lossPool();
     if (!pool.length) return [];
     pool.sort((a, b) => I.itemPower(b.item) - I.itemPower(a.item));
     const lost = []; let chance = 1;
@@ -1483,6 +1563,16 @@
       rt.particles.push(new E.Particle(x, y, { vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: (opts.life ?? 0.6)*(0.7+Math.random()*0.7), size: (opts.size ?? (2+Math.random()*2.5)) * 1.5, color, gravity: opts.gravity ?? 0, glow: true }));
     }
   }
+  // The EVOLVING PARAGON CANNON is unsellable, enforced HERE not by a flag nobody reads.
+  // It re-mints itself when missing, so a sellable Axiom is an infinite gold
+  // printer: sell at Paragon rarity → refreshAll → refreshStats → sync() sees no
+  // copy → free replacement → repeat. Re-minting is a recovery path for a
+  // genuinely lost item; it must never be reachable by choice.
+  // Declared as a hoisted function, not a const: autoSellSweep() sits ~450 lines
+  // above the old declaration site and would have been a temporal-dead-zone trap
+  // for anything that ever called it during module init.
+  function unsellable(it) { return !!(it && (it.axiom || it.noSell)); }
+
   // ---- pickup filter / auto-sell helpers ------------------------------------
   function autoSellTier() { return state.autoSellTier == null ? -1 : state.autoSellTier; }
   // Would this drop upgrade ANY of the flagship's slots for its base type?
@@ -1884,7 +1974,7 @@
     const tier = autoSellTier(); if (tier < 0) return;
     let gold = 0, n = 0;
     state.inventory = state.inventory.filter((it) => {
-      if (it.rarity > tier || isPickupUpgrade(it)) return true;
+      if (unsellable(it) || it.rarity > tier || isPickupUpgrade(it)) return true;
       gold += C.sellValue(it); addSalvage(it); n++; return false;
     });
     if (n) {
@@ -2334,7 +2424,14 @@
       if (acc) acc[k] = (acc[k] || 0) + amt;
     }
   }
+  // The EVOLVING PARAGON CANNON is unsellable, enforced HERE not by a flag nobody reads.
+  // It re-mints itself when missing, so a sellable Axiom is an infinite gold
+  // printer: sell at Paragon rarity → refreshAll → refreshStats → sync() sees no
+  // copy → free replacement → repeat. Re-minting is a recovery path for a
+  // genuinely lost item; it must never be reachable by choice.
+
   function sell(item) {
+    if (unsellable(item)) return null;
     const idx = state.inventory.indexOf(item); if (idx === -1) return null;
     const gold = C.sellValue(item);
     state.gold += gold; state.inventory.splice(idx, 1);
@@ -2344,7 +2441,7 @@
   }
   function sellAllBelow(rarityTier) {
     let earned = 0, n = 0; const salvage = {};
-    state.inventory = state.inventory.filter((it) => { if (it.rarity < rarityTier) { earned += C.sellValue(it); addSalvage(it, salvage); n++; return false; } return true; });
+    state.inventory = state.inventory.filter((it) => { if (!unsellable(it) && it.rarity < rarityTier) { earned += C.sellValue(it); addSalvage(it, salvage); n++; return false; } return true; });
     state.gold += earned; if (window.UI) window.UI.refreshAll(); save();
     return { earned, n, salvage };
   }
@@ -2863,7 +2960,7 @@
   function autoSellPreview(maxTier, keepUpgrades) {
     let n = 0, earned = 0;
     state.inventory.forEach((it) => {
-      if (it.rarity > maxTier) return;
+      if (unsellable(it) || it.rarity > maxTier) return;
       if (keepUpgrades) { const cur = state.equipped[it.slot]; if (!cur || I.itemPower(it) > I.itemPower(cur)) return; }
       n++; earned += C.sellValue(it);
     });
@@ -2875,13 +2972,25 @@
     state.sellTier = maxTier; state.keepUpgrades = keepUpgrades;
     let n = 0, earned = 0; const salvage = {};
     state.inventory = state.inventory.filter((it) => {
-      if (it.rarity > maxTier) return true;
+      if (unsellable(it) || it.rarity > maxTier) return true;
       if (keepUpgrades) { const cur = state.equipped[it.slot]; if (!cur || I.itemPower(it) > I.itemPower(cur)) return true; }
       n++; earned += C.sellValue(it); addSalvage(it, salvage); return false;
     });
     state.gold += earned; if (window.UI) window.UI.refreshAll(); save();
     return { n, earned, salvage };
   }
+  // AUTOPILOT IS THE DEFAULT STATE. This is an idle game — hands-off is how it
+  // is meant to be played, and a player who lands in a zone with autopilot off
+  // watches their fleet sit still and take damage without understanding why.
+  // Armed on ENTRY only (not from resetZone, which also fires mid-zone), so
+  // turning it off to dodge something by hand stays off for that whole visit.
+  function armAuto() {
+    if (state.auto) return;
+    state.auto = true;
+    rt.joy.x = rt.joy.y = 0;
+    try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
+  }
+
   function selectDungeon(d) {
     if (d > state.highestUnlocked) return;
     if (isCitadelZone(d) && citadelCooldownLeft(d) > 0) {
@@ -2894,12 +3003,13 @@
     rt.sdrun = null;              // …and any Server Dreadnaught event run
     rt.siege = null;
     rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
+    reachZone(d);
     // pushing into a new 100-block opens the next block (still level-gated)
     const cap = C.zoneCap(state.highestDungeonReached);
     const u = Math.min(cap, unlockCeil(state.level));
     if (u > state.highestUnlocked) state.highestUnlocked = u;
     resetZone();
+    if (d >= 1) armAuto();          // combat zone — autopilot on by default
     if (d >= 1 && isSwarmZone(d) && window.UI && window.UI.unlockToast) window.UI.unlockToast('☣ SWARM ZONE — 20× density · endless waves · ⚠ junk loot');
     // Deploying to the safe Hangar bay (d=0, e.g. the Bail button) always ends
     // combat cleanly: revive the ship and top up health so you're never "downed"
@@ -2919,7 +3029,7 @@
     const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, lvl));
     state.currentDungeon = zone;
     state.currentSystem = null;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    reachZone(zone);
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = { active: true, tier: tier, started: Date.now() };
     resetZone();
@@ -2936,7 +3046,7 @@
     const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, state.level));
     state.currentDungeon = zone;
     state.currentSystem = null;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    reachZone(zone);
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; rt.siege = null; rt.waves = null;
     resetZone();
@@ -3002,7 +3112,7 @@
     const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, state.level));
     state.currentDungeon = zone;
     state.currentSystem = null;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    reachZone(zone);
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; rt.siege = null; rt.waves = null;
     resetZone();
@@ -3043,7 +3153,7 @@
     const zone = Math.max(1, Math.min(state.highestUnlocked || 1, Math.max(1, state.level)));
     state.currentDungeon = zone;
     state.currentSystem = null;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, zone);
+    reachZone(zone);
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; rt.siege = null; rt.waves = null; rt.sdrun = null;
     resetZone();
@@ -3079,7 +3189,7 @@
   function respawnAt(d) {
     if (d > state.highestUnlocked) d = state.highestUnlocked;
     state.currentDungeon = d;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, d);
+    reachZone(d);
     rt.awaitingRespawn = false;
     rt.archer.dead = false; rt.archer.killer = null;
     rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
@@ -3497,7 +3607,8 @@
     if (tile.home) { respawnAt(0); return; }      // Home Citadel → safe harbor
     state.currentSystem = k;
     state.currentDungeon = tile.diff;
-    state.highestDungeonReached = Math.max(state.highestDungeonReached, tile.diff);
+    armAuto();                      // galaxy tile / Void spire — same default
+    reachZone(tile.diff);
     const cap = C.zoneCap(state.highestDungeonReached);
     const u = Math.min(cap, unlockCeil(state.level));
     if (u > state.highestUnlocked) state.highestUnlocked = u;
@@ -4196,10 +4307,18 @@
     });
     return r;
   }
+  // OFFLINE CAP — VIP levels 6, 9 and 13 each sell "Offline earnings cap +Nh".
+  // Nothing read that until now: both caps were hardcoded to 12h, so the perk
+  // was text on a purchase screen and no more. One source of truth for both.
+  function offlineCapHours() {
+    let bonus = 0;
+    try { if (window.VIP && window.VIP.capBonus) bonus = window.VIP.capBonus() | 0; } catch (e) {}
+    return 12 + Math.max(0, bonus);
+  }
   function accrueResources() {
     if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
     const now = Date.now();
-    const hrs = Math.min(12, Math.max(0, (now - (state.lastResTick || now)) / 3600000));
+    const hrs = Math.min(offlineCapHours(), Math.max(0, (now - (state.lastResTick || now)) / 3600000));
     state.lastResTick = now;
     if (hrs <= 0) return null;
     const rates = resourceRates();
@@ -4563,7 +4682,7 @@
   // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
   function computeOffline() {
-    const elapsed = Math.min(12 * 3600, (Date.now() - state.lastSave) / 1000);
+    const elapsed = Math.min(offlineCapHours() * 3600, (Date.now() - state.lastSave) / 1000);
     if (elapsed < 60) return null;
     refreshStats();
     const d = state.currentDungeon;
@@ -4587,6 +4706,27 @@
     refreshStats();
     gainXp(xp);
     return { elapsed, kills, xp, gold, found, lost: lostCount };
+  }
+
+  // RETURN BRIEF — combat and tile income are both already banked by the time
+  // this runs; the brief only REPORTS them. `since` is read before either
+  // accrual so the galaxy-events list covers the true absence, not zero.
+  const RETURN_MIN_MS = 5 * 60 * 1000;   // shorter than this is a tab switch, not a return
+  function reportReturn(since, combat, tiles) {
+    if (!since || Date.now() - since < RETURN_MIN_MS) return;
+    const rawH = Math.max(0, (Date.now() - (since || Date.now())) / 3600000);
+    const capH = offlineCapHours();
+    const payload = {
+      elapsed: combat ? combat.elapsed : Math.min(capH * 3600, rawH * 3600),
+      since: since || 0, combat, tiles,
+      capH, cappedOut: rawH > capH + 0.05,
+      capBonus: capH - 12,
+    };
+    try {
+      if (window.RETURNBRIEF) { window.RETURNBRIEF.show(payload); return; }
+    } catch (e) {}
+    // Fallback to the original combat-only modal if the module didn't load.
+    try { if (combat && window.UI) window.UI.showOffline(combat); } catch (e) {}
   }
 
   // --------------------------------------------------------------------------
@@ -4790,16 +4930,19 @@
     rt.nodes.forEach((n, i) => { n.respawnT = 0.2 + i * 0.2; });
     rt.bossInit = rt.bossTimer = 600 + Math.random() * 300; rt.bossAlive = false; rt.boss = null; rt.lastBoss = -600;
 
+    const awaySince = state.lastSave || Date.now();
     let offline = loaded ? computeOffline() : null;
-    // offline resource accrual from owned systems (per-hour, capped 12h)
-    accrueResources();
+    // Hourly income from held systems. This return value was thrown away at
+    // both call sites — the player earned it and was never shown a digit.
+    const awayTiles = accrueResources();
 
     // Always start docked at the home hangar on (re)login.
     state.currentSystem = null; state.currentDungeon = 0; rt.siege = null; rt.awaitingRespawn = false;
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; }
     resetZone();
 
-    if (window.UI) { window.UI.init(GAME); window.UI.refreshAll(); if (offline) window.UI.showOffline(offline); }
+    if (window.UI) { window.UI.init(GAME); window.UI.refreshAll(); }
+    if (loaded) reportReturn(awaySince, offline, awayTiles);
     initTerritory(); // load + subscribe to the shared cross-account turf war
 
     setInterval(save, 8000);
@@ -4807,7 +4950,7 @@
     setInterval(galaxyTick, 120000); // tick simulated rival turf wars (gently)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) save();
-      else { accrueResources(); const sum = computeOffline(); if (window.UI) { window.UI.refreshAll(); if (sum) window.UI.showOffline(sum); } rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled() && (!rt._terrSync || Date.now() - rt._terrSync > 60000)) { rt._terrSync = Date.now(); window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } }
+      else { const bk = state.lastSave || Date.now(); const tl = accrueResources(); const sum = computeOffline(); if (window.UI) window.UI.refreshAll(); reportReturn(bk, sum, tl); rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled() && (!rt._terrSync || Date.now() - rt._terrSync > 60000)) { rt._terrSync = Date.now(); window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } }
     });
     window.addEventListener('beforeunload', save);
 

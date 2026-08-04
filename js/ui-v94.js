@@ -16,6 +16,13 @@
   const skillOpen = {}; // skill-tree accordion open-state, keyed by branch:tier
   let _galaxyTimer = null; // re-render galaxy while a region cooldown ticks
   let _boardTimer = null;  // live leaderboard refresh while the board is open
+  // HTML-escape for interpolated server text. Every other module defines its own
+  // inside its IIFE and none export it, so ui-v94 needs its own copy — without
+  // it the Ranks error path threw mid-build, leaving the board unpainted and its
+  // tab handlers unbound.
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  let _lbTab = 'power';    // which of the seven Ranks ladders is showing
+  let _lbPage = 0;         // 60 rows a page; the roster runs to several hundred
   let _lcmTimer = null;    // LootCoin market countdowns (Cosmic Cache / Primordial Vault)
   let _buildTick = null;   // live countdown refresh while an Oblivion hull is under construction
   let _msTaps = 0;          // SECRET Mothership unlock: CONSECUTIVE "My Ship" click streak
@@ -1198,6 +1205,9 @@
     html += `<button class="signout-btn" id="signout-btn">Sign Out</button>`;
     el['stat-list'].innerHTML = html;
     const so = $('signout-btn'); if (so) so.addEventListener('click', () => { if (window.AUTH) window.AUTH.signOut(); });
+    // Multiplier pills above the stat list, and the empire-income hero block at
+    // the bottom of the scroll. Both live in ship-panels.js and rebuild in place.
+    try { if (window.SHIPPANELS) window.SHIPPANELS.mount(); } catch (e) {}
   }
 
   // ==========================================================================
@@ -2358,6 +2368,56 @@
       const lm = G.getLCMarket(), lcHave = G.getCredits();
       const C2 = G.LC_PRICES || { cosmic: 10000, prim: 115000 };
       const fmtT = (sec) => { const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s2 = sec%60; return (h>0? h+':' : '') + (m<10&&h>0?'0':'')+m+':'+(s2<10?'0':'')+s2; };
+      // —— EVOLVING PARAGON CANNON — permanent, top of the market ————————
+      // Sits above the rotating vaults deliberately: everything below is a roll
+      // that goes stale, this is the one purchase that never does.
+      if (window.AXIOM) {
+        const ax = window.AXIOM, has = ax.owned(), afford2 = lcHave >= ax.PRICE;
+        const st = ax.statsFor(G.state.level, G.state.highestDungeonReached);
+        const eq = G.state.equipped.bow;
+        const cur = eq ? (eq.stats.attackDamage || 0) : 0;
+        const gain = cur > 0 ? Math.round((st.attackDamage / cur - 1) * 100) : null;
+        const pc = (C.RARITY[C.RARITY.length - 1] || {}).color || '#ffffff';
+        // EVERY stat, rendered from the computed block using the game's own
+        // labels and fmt. The previous version hardcoded four keys and read
+        // `maxHp`, which is not a stat in this game — the key is `health`, so the
+        // Hull tile printed NaN. Driving off Object.keys also means the Paragon
+        // card automatically lists more lines than any Primordial roll, which is
+        // what a top-tier item should look like.
+        const order = ['attackDamage', 'health', 'attackSpeed', 'critChance', 'critDamage', 'moveSpeed', 'multiShot', 'lifeSteal'];
+        const keys = order.filter((k) => st[k] != null && !isNaN(st[k]));
+        // multiShot is NOT in C.STATS — it lives in C.SPECIALS, so the generic
+        // lookup fell through to the raw camelCase key and printed "MULTISHOT".
+        // Overridden locally rather than added to C.STATS, because STAT_KEYS is
+        // derived from that object and feeds generate()'s stat picker: adding it
+        // there would make multi-shot a rollable core stat on every drop.
+        const LBL = { multiShot: 'Multi-Shot' };
+        const tile = (k) => {
+          const d = C.STATS[k] || {};
+          const lbl = (LBL[k] || d.name || k).toUpperCase();
+          const v = d.fmt === 'flat' ? G.formatNum(st[k])
+                  : k === 'multiShot' ? String(st[k])
+                  : '+' + (Math.round(st[k] * 10) / 10) + '%';
+          return `<div><span>${lbl}</span><b>${v}</b></div>`;
+        };
+        html += `<div class="store-sec"><div class="ax-hero${has ? ' owned' : ''}" style="--pc:${pc}">
+          <div class="ax-glow"></div>
+          <div class="ax-rank">PARAGON</div>
+          <div class="ax-tag">THE HIGHEST TIER IN THE GAME · ONE PER ACCOUNT · NEVER ROTATES</div>
+          <div class="ax-top">
+            <div class="ax-sigil">⊛</div>
+            <div class="ax-id"><div class="ax-name">EVOLVING<br>PARAGON CANNON</div>
+              <div class="ax-sub">Rail Cannon · ${keys.length} stats · <b>every one of them scales with you</b></div></div>
+          </div>
+          <div class="ax-lv"><span class="ax-lvp"><span>YOUR LEVEL</span><b>${G.state.level}</b></span><span class="ax-lvp"><span>DEEPEST ZONE</span><b>${G.state.highestDungeonReached || 1}</b></span><em>→ recomputed from both, every time either one moves. Never rolled, never stale, never needs replacing — a weapon this good on your worst day of luck.</em></div>
+          <div class="ax-stats">${keys.map(tile).join('')}</div>
+          ${gain !== null && !has ? `<div class="ax-delta ${gain >= 0 ? 'up' : 'dn'}">${gain >= 0 ? '▲ +' + G.formatNum(gain) + '%' : '▼ ' + gain + '%'} damage vs your equipped weapon</div>` : ''}
+          ${has
+            ? `<div class="ax-owned">✓ OWNED — the only item you keep through an ascension<span>It rescales to Level 1 with you, then climbs again</span></div>`
+            : `<button class="ax-buy${afford2 ? '' : ' cant'}" id="ax-buy">${LC_ICON} ${G.formatNum(ax.PRICE)} — CLAIM IT</button>
+               ${afford2 ? '' : `<div class="ax-short">You have ${LC_ICON} ${G.formatNum(lcHave)}</div>`}`}
+        </div></div>`;
+      }
       // —— COSMIC JACKPOT CACHE removed from the market (July 2026) ——
       //     Backend roll/purchase logic in game-v93.js is untouched.
       {
@@ -2454,6 +2514,12 @@
         <div class="ip-type">${r.name} · ${C.SLOTS[it.slot].name} · matched to your level</div>
         ${wcHTML}${statHTML}${cmpNote}`;
     };
+    const axb = $('ax-buy');
+    if (axb) axb.addEventListener('click', () => {
+      const r = window.AXIOM.buy();
+      if (r.ok) { toast('⊛ EVOLVING PARAGON CANNON claimed — it grows with you from here', '#ffd24d'); refreshAll(); renderStore(); }
+      else toast(r.reason === 'credits' ? 'Not enough LootCoins' : r.reason === 'full' ? 'Cargo hold is full' : 'Already owned', '#e23b4e');
+    });
     el['store-body'].querySelectorAll('[data-lcmcard]').forEach((card) => card.addEventListener('click', () => {
       const [kind, iStr] = card.dataset.lcmcard.split(':'); const idx = +iStr;
       const lm = G.getLCMarket();
@@ -2681,6 +2747,99 @@
     el['board-sub'].textContent = 'All-Time';
     let signedIn = false; try { signedIn = !!(window.ACCOUNT && ACCOUNT.current && ACCOUNT.current()); } catch (e) {}
     let html = hangarTabsHTML('board');
+
+    // ---- SEVEN LADDERS -----------------------------------------------------
+    // The power board is unchanged and still the default. The other six re-sort
+    // the same pool (or read their own table) through RANKBOARDS.
+    const RB = window.RANKBOARDS;
+    if (!RB) { renderBoardLegacy(html, signedIn); return; }
+    const data = RB.board(_lbTab, () => { if (screen === 'board') renderBoard(); });
+    const tab = data.tab;
+    el['board-sub'].textContent = tab.sub;
+
+    html += '<div class="lbx-tabs">' + RB.TABS.map((t) =>
+      `<button class="lbx-tab${t.id === _lbTab ? ' on' : ''}" data-lbtab="${t.id}" style="--c:${t.col || '#5fd1ff'}"><i class="lbx-ic">${t.ic || ''}</i>${t.label}</button>`).join('') + '</div>';
+    html += `<div class="lb-info">${tab.info}</div>`;
+
+    if (data.pending) {
+      html += `<div class="lbx-note">Loading…</div>`;
+    } else if (data.needsSql) {
+      html += `<div class="lbx-note">This ladder is waiting on a database migration.<br><span style="opacity:.7">Until <b>ranks-ladders.sql</b> runs, no real operator has published these figures — so ranking on them would credit records nobody has actually set.</span></div>`;
+    } else if (data.err) {
+      html += `<div class="lbx-note err">This board couldn’t load — ${esc(data.err.message || 'request failed')}</div>`;
+    } else if (!data.rows.length) {
+      html += `<div class="lbx-note">${tab.empty || 'Nothing on this board yet.'}</div>`;
+    } else if (_lbTab === 'power' && (data.real || 0) === 0) {
+      html += `<div style="text-align:center;padding:26px 18px;border:1px dashed var(--line-2,#37475f);border-radius:14px;margin:4px 0 12px;background:rgba(95,209,255,.04);">
+        <div style="font-size:30px;line-height:1;margin-bottom:8px;">🛰️</div>
+        <div style="font-family:var(--font-display,'Orbitron');font-weight:800;font-size:14px;color:var(--text,#eaf0fa);letter-spacing:.02em;">${signedIn ? "You're the first ranked operator" : 'No rivals on the board yet'}</div>
+        <div style="font-size:12px;line-height:1.5;color:var(--muted,#93a2ba);margin:6px auto 0;max-width:34ch;">${signedIn ? 'Real operators appear here as they sign in and play. Climb while it’s wide open — every rank is live.' : 'Sign in to publish your fleet to the live board and compete against real operators worldwide.'}</div>
+      </div>`;
+    }
+
+    const showFleet = _lbTab === 'power';
+    const PER = 60;
+    const pages = Math.max(1, Math.ceil(data.rows.length / PER));
+    if (_lbPage >= pages) _lbPage = pages - 1;
+    const from = _lbPage * PER;
+    const page = data.rows.slice(from, from + PER);
+
+    html += page.map((p, i) => `
+      <div class="lb-row ${p.isMe ? 'me' : ''}" data-rank="${from + i}">
+        <div class="lb-rank ${p.rank <= 3 ? 'top' : ''}">${p.rank}</div>
+        <div class="lb-nm">
+          <div class="lb-topline"><span class="lb-name">${p.isMe ? '★ ' : ''}${p.name}</span>${ascBadge(p)}${simChip(p)}
+            ${showFleet ? `<span class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.rows.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</span>` : ''}</div>
+          <div class="lb-meta">${tab.meta(p)}</div></div>
+        <div class="lb-pow"><span class="pl">${tab.unit}</span>${tab.fmt(tab.metric(p), p)}</div></div>`).join('');
+
+    if (pages > 1) {
+      const mine = data.rows.findIndex((p) => p.isMe);
+      const myPage = mine >= 0 ? Math.floor(mine / PER) : -1;
+      html += `<div class="lbx-pager">
+        <button class="lbx-pg" data-pg="${_lbPage - 1}"${_lbPage === 0 ? ' disabled' : ''}>‹ PREV</button>
+        <span class="lbx-pgn">${from + 1}–${Math.min(from + PER, data.rows.length)} of ${data.rows.length}</span>
+        <button class="lbx-pg" data-pg="${_lbPage + 1}"${_lbPage >= pages - 1 ? ' disabled' : ''}>NEXT ›</button>
+      </div>`;
+      if (myPage >= 0 && myPage !== _lbPage) {
+        html += `<button class="lbx-jump" data-pg="${myPage}">★ JUMP TO YOUR RANK — #${data.rows[mine].rank}</button>`;
+      }
+    }
+
+    const _sc = el['board-body'].scrollTop;
+    // FLICKER GUARD — the 4s auto-refresh only touches the DOM when the board
+    // actually changed (rebuilding identical rows made the ship icons flash).
+    if (el['board-body']._lbHtml === html) return;
+    el['board-body']._lbHtml = html;
+    el['board-body'].innerHTML = html;
+    el['board-body'].scrollTop = _sc;
+    wireHangarTabs(el['board-body']);
+    el['board-body'].querySelectorAll('[data-lbtab]').forEach((b) => b.addEventListener('click', () => {
+      _lbTab = b.dataset.lbtab; _lbPage = 0;
+      el['board-body']._lbHtml = null;      // force a repaint past the flicker guard
+      el['board-body'].scrollTop = 0;
+      renderBoard();
+    }));
+    el['board-body'].querySelectorAll('[data-pg]').forEach((b) => b.addEventListener('click', () => {
+      if (b.disabled) return;
+      _lbPage = Math.max(0, +b.dataset.pg);
+      el['board-body']._lbHtml = null;
+      el['board-body'].scrollTop = 0;
+      renderBoard();
+    }));
+    // Only the power board has loadouts to open — the others rank pilots on
+    // records, and their rows carry no fleet to show.
+    if (showFleet) {
+      el['board-body'].querySelectorAll('.lb-row').forEach((row) =>
+        row.addEventListener('click', () => openLoadout(data.rows[+row.dataset.rank], data.rows.length)));
+    }
+    clearInterval(_boardTimer);
+    _boardTimer = setInterval(() => { if (screen === 'board') renderBoard(); else clearInterval(_boardTimer); }, 4000);
+  }
+
+  // Pre-ladder rendering, kept as a fallback for the case where ranks-boards.js
+  // fails to load. Power only, exactly as it shipped.
+  function renderBoardLegacy(html, signedIn) {
     const data = LB.allTimeBoard(G);
     html += `<div class="lb-info">All-time ranking of every operator, by fleet power.</div>`;
     if ((data.real || 0) === 0) {
@@ -2771,12 +2930,21 @@
           `</div></div>`
         : `<div class="sheet-actions"><button class="btn primary" data-eq>Equip</button></div>`;
       actions = eqBlock +
-        `<div class="sheet-actions"><button class="btn" data-sell>Sell <span class="coin">$</span> ${G.formatNum(C.sellValue(item))}</button></div>` +
-        `<div class="ip-salvage">Scrapping may salvage <span style="color:${GM.RES.fuel.color}">${GM.RES.fuel.glyph}</span> <span style="color:${GM.RES.iron.color}">${GM.RES.iron.glyph}</span> <span style="color:${GM.RES.plasma.color}">${GM.RES.plasma.glyph}</span> for My Galaxy</div>`;
+        // The Evolving Paragon Cannon cannot be sold, so it must not offer a Sell
+        // button. sell()
+        // returns null for it and the handler's `if (r)` swallows that silently —
+        // the sheet would just close and nothing would happen, which reads as
+        // "it sold" until the player finds it still in the bag. The line that
+        // replaces the button also states the item's value at the exact moment
+        // someone is thinking about getting rid of it.
+        ((item.axiom || item.noSell)
+          ? `<div class="ip-nosell">⊛ Cannot be sold, scrapped or lost<span>It survives ship destruction and catastrophic loss, and it is the one item you keep through an ascension.</span></div>`
+          : `<div class="sheet-actions"><button class="btn" data-sell>Sell <span class="coin">$</span> ${G.formatNum(C.sellValue(item))}</button></div>` +
+            `<div class="ip-salvage">Scrapping may salvage <span style="color:${GM.RES.fuel.color}">${GM.RES.fuel.glyph}</span> <span style="color:${GM.RES.iron.color}">${GM.RES.iron.glyph}</span> <span style="color:${GM.RES.plasma.color}">${GM.RES.plasma.glyph}</span> for My Galaxy</div>`);
     } else if (mode === 'equipped') actions = `<div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-uneq>⬆ Unequip</button></div>`;
     const sheet = showSheet(`<div id="item-pop"><div class="sheet-body">
       <div class="ip-name ${rc(item.rarity)}">${item.name}</div>
-      <div class="ip-type">${r.name} · ${C.SLOTS[item.slot].name} · Zone ${item.dungeon}</div>
+      <div class="ip-type">${r.name} · ${C.SLOTS[item.slot].name} · ${item.axiom ? `Zone ${item.dungeon} <b class="ip-evo">· grows as you push deeper</b>` : `Zone ${item.dungeon}`}</div>
       ${(function(){ if (item.slot !== 'bow' || !window.ITEMS.weaponClassOf) return '';
         const wc = window.ITEMS.weaponClassOf(item);
         let extra = '';
@@ -2803,6 +2971,29 @@
   // ==========================================================================
   // SKILL TREE
   // ==========================================================================
+
+  // What each skill mod DOES, in words a player can act on. Keyed by mod so a
+  // node can never describe a stat it doesn't grant — the Tempo/Focus problem
+  // (two nodes wearing another node's stat) is structurally impossible now.
+  const SKILL_HELP = {
+    dmgPct:      ['Damage',           'Raises every shell you fire. The biggest single lever on kill speed.'],
+    atkSpeedPct: ['Fire Rate',        'Shots per second. Past 2.2/s the surplus folds into damage instead.'],
+    critChance:  ['Crit Chance',      'How often a shot crits. Worth little on its own \u2014 pair it with Crit Damage.'],
+    critDamage:  ['Crit Damage',      'How hard a crit lands. Multiplies against Crit Chance.'],
+    hpPct:       ['Max Hull',         'Hull integrity. Also lifts Fleet Score and how long you last in a raid.'],
+    lifeSteal:   ['Life Steal',       'Heals a share of the damage you deal. Hard cap of 19% from all sources.'],
+    moveSpeed:   ['Move Speed',       'Reposition and sweep loot faster. Autopilot uses it to kite.'],
+    multiShot:   ['Multi-Shot',       'Chance to fire on nearby enemies too. Caps at 100%.'],
+    rangePct:    ['Weapon Range',     'You open fire before they close \u2014 approach time becomes free damage.'],
+    regen:       ['Hull Repair',      'Repairs a share of max hull every second, in combat and out.'],
+    dmgReduce:   ['Damage Reduction', 'Cuts every hit you take. Compounds with Max Hull for effective HP.'],
+  };
+  const BRANCH_HELP = {
+    offense: 'Output. Every node here makes your shots hit harder or land more often.',
+    defense: 'Survival. Hull, mitigation and sustain \u2014 plus the Beacon they pay for.',
+    tactics: 'Control of the fight. Reach, mobility, extra targets and field repair.',
+  };
+  const skFmt = (v, unit) => '+' + (Math.round(v * 100) / 100) + (unit || '%');
   function renderSkills() {
     const sp = G.state.skillPoints || 0;
     el['skills-sub'].textContent = sp + ' pts';
@@ -2823,6 +3014,29 @@
     });
     html += '</div>';
 
+    // Branch identity, then what the branch has actually bought you so far. The
+    // tree used to state cost and rank but never the running total, so there was
+    // no way to tell what your points had produced.
+    html += `<p class="sk-brief">${BRANCH_HELP[br.key] || ''}</p>`;
+    const totals = {};
+    C.SKILLS.nodes.filter((n) => n.br === br.key).forEach((n) => {
+      const r = G.skillRank(n.id); if (r) totals[n.mod] = (totals[n.mod] || 0) + n.per * r;
+    });
+    const totKeys = Object.keys(totals).filter((k) => totals[k] > 0);
+    html += '<div class="sk-tot" style="--bc:' + br.color + '">';
+    if (!totKeys.length) {
+      html += '<span class="sk-tot-none">No points invested in ' + br.name + ' yet</span>';
+    } else {
+      html += '<span class="sk-tot-h">Active from ' + br.name + '</span><div class="sk-tot-g">';
+      totKeys.forEach((k) => {
+        const h = SKILL_HELP[k] || [k, ''];
+        const unit = (C.SKILLS.nodes.find((n) => n.mod === k) || {}).unit;
+        html += '<span class="sk-chip"><b>' + skFmt(totals[k], unit) + '</b>' + h[0] + '</span>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
     // ---- ◉ BEACON — the Defense branch's shared payoff ---------------------
     // Shown on the Defense tab so the link between "tank ranks" and "bigger, more
     // frequent swarms" is legible while you are spending points.
@@ -2830,8 +3044,8 @@
       const bs = G.beaconState();
       const cdPct = Math.round((1 - bs.cd / 300) * 100);
       const lifePct = Math.round((bs.life / 30 - 1) * 100);
-      html += `<div class="sk-beacon">
-        <div class="skb-h"><span class="skb-ic">◉</span><b>BEACON</b><em>Defense payoff</em></div>
+      html += `<div class="sk-beacon${bs.locked ? ' locked' : ''}">
+        <div class="skb-h"><span class="skb-ic">◉</span><b>BEACON</b><em>${bs.locked ? '🔒 Unlocks at Lv ' + bs.needLv : 'Defense payoff'}</em></div>
         <p class="skb-p">Fire it from the battle screen to flood a <b>Zone Grind</b> sector with a swarm. Every <b>Defense</b> rank shortens the recharge and lengthens the call — tanks farm the most from one beacon.</p>
         <div class="skb-row">
           <div><span>RECHARGE</span><b>${bs.cd}s</b><em>${cdPct > 0 ? '−' + cdPct + '%' : 'base'}</em></div>
@@ -2890,10 +3104,16 @@
           const rank = G.skillRank(n.id), able = G.canInvest(n), maxed = rank >= n.max;
           let pips = ''; for (let i = 0; i < n.max; i++) pips += `<div class="sn-pip ${i < rank ? 'on' : ''}"></div>`;
           const btn = maxed ? `<button class="sn-buy maxed" disabled>MAX</button>` : `<button class="sn-buy ${able?'able':''}" data-sk="${n.id}" ${able?'':'disabled'}>+</button>`;
-          html += `<div class="skill-node ${maxed?'done':''} ${n.cap?'cap':''}" style="border-left-color:${br.color}">
+          const h = SKILL_HELP[n.mod] || [n.mod, ''];
+          const now = rank * n.per, next = (rank + 1) * n.per;
+          const numRow = maxed
+            ? `<span class="sn-now">${skFmt(now, n.unit)}</span><em class="sn-lab">${h[0]} · maxed</em>`
+            : `<span class="sn-now">${skFmt(now, n.unit)}</span><i class="sn-arw">→</i><span class="sn-next">${skFmt(next, n.unit)}</span><em class="sn-lab">${h[0]}</em>`;
+          html += `<div class="skill-node ${maxed?'done':''} ${n.cap?'cap':''}" style="border-left-color:${br.color};--bc:${br.color}">
             <div class="sn-main"><div class="sn-name">${n.name}${n.cap?'<span class="capm">CAPSTONE</span>':''}</div>
-              <div class="sn-desc">${n.desc}</div>
-              <div class="sn-pips">${pips}<span class="sn-rk">${rank}/${n.max}</span></div></div>${btn}</div>`;
+              <div class="sn-desc">${h[1]}</div>
+              <div class="sn-num">${numRow}</div>
+              <div class="sn-pips">${pips}<span class="sn-rk">${rank}/${n.max}</span><span class="sn-per">${skFmt(n.per, n.unit)}/rank</span></div></div>${btn}</div>`;
         });
         html += '</div>';
       } else if (isNext) {

@@ -242,7 +242,7 @@
 .pa-btn.danger{background:linear-gradient(180deg,#ff8a96,#e0374a);color:#fff;}
 .pa-conf{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
 @media(max-width:400px){.pa-conf{grid-template-columns:1fr;}}
-.pa-conf-side{border-radius:12px;padding:11px;border:1px solid;text-align:center;}
+.pa-conf-side{border-radius:12px;padding:11px 12px;border:1px solid;text-align:left;}
 .pa-conf-side.lose{border-color:rgba(255,90,104,.42);background:rgba(255,90,104,.07);}
 .pa-conf-side.keep{border-color:rgba(124,224,160,.45);background:rgba(124,224,160,.07);}
 .pa-conf-side > span{display:block;font-family:'Orbitron',sans-serif;font-size:8.5px;font-weight:800;letter-spacing:.14em;margin-bottom:6px;}
@@ -250,8 +250,34 @@
 .pa-conf-side.keep > span{color:#8fe8b4;}
 .pa-conf-side > b{display:block;font-family:'Orbitron',sans-serif;font-size:14px;font-weight:900;color:#fff;}
 .pa-conf-img{width:52px;height:52px;object-fit:contain;margin:5px auto 0;display:block;}
-.pa-conf-side ul{margin:8px 0 0;padding-left:15px;text-align:left;display:grid;gap:3px;}
-.pa-conf-side li{font-size:10.5px;color:#b5aac8;line-height:1.4;}
+/* Icon rows instead of bullets. This list is the whole point of the screen —
+   it was 10.5px grey and easy to skip past, on the one modal a player must
+   actually read before doing something irreversible. */
+/* flex column, not grid — grid rows were collapsing against the wrapped text and
+   letting a two-line item overlap the one beneath it */
+.pa-conf-side ul{margin:7px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px;}
+.pa-conf-side li{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.45;color:#cfc4de;}
+.pa-conf-side li i{flex:0 0 15px;font-style:normal;font-size:12px;line-height:1.45;text-align:center;opacity:.95;}
+.pa-conf-side li > span{flex:1;min-width:0;overflow-wrap:anywhere;text-wrap:pretty;}
+.pa-conf-side li b{color:#fff;font-weight:700;}
+.pa-conf-side.keep li i{color:#8fe8b4;}
+.pa-conf-side.lose li i{color:#ff8a96;}
+
+/* what you WALK AWAY WITH — the three numbers, above the fold */
+.pa-mh{flex-wrap:wrap;}
+.pa-mh em{white-space:nowrap;}
+.pa-gain{display:flex;gap:8px;margin:0 0 11px;}
+.pa-gain-i{flex:1;text-align:center;padding:10px 6px;border-radius:11px;
+  border:1px solid rgba(242,169,60,.35);background:rgba(242,169,60,.08);}
+.pa-gain-i b{display:block;font-family:'Orbitron',sans-serif;font-weight:900;font-size:15px;color:#ffd24d;line-height:1.15;}
+.pa-gain-i span{display:block;margin-top:2px;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#a293b8;}
+
+/* the hull you warp out in — a statement, not a choice */
+.pa-flag{display:flex;align-items:center;gap:11px;margin-top:11px;padding:9px 11px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);}
+.pa-flag img{width:40px;height:40px;object-fit:contain;flex:0 0 40px;}
+.pa-flag b{display:block;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13.5px;color:#eaf0fa;}
+.pa-flag em{display:block;font-style:normal;font-size:11px;color:#9186a8;line-height:1.35;margin-top:1px;}
 .pa-unlock-pre{margin-top:11px;text-align:center;font-size:11px;color:#c6b8de;border:1px solid color-mix(in srgb,var(--tc) 50%,transparent);
   border-radius:11px;padding:9px 11px;background:color-mix(in srgb,var(--tc) 10%,transparent);}
 .pa-unlock-pre b{color:var(--tc);font-family:'Orbitron',sans-serif;letter-spacing:.08em;}
@@ -320,8 +346,45 @@
 .pa-skip{position:absolute;right:14px;top:14px;z-index:3;border:1px solid #33284f;border-radius:9px;padding:8px 15px;cursor:pointer;
   font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:#a795c8;background:rgba(255,255,255,.05);}
 
+/* ---- PHONES --------------------------------------------------------------
+   The ladder was the squeeze: minmax(78px) gave FOUR ~76px columns on a 360px
+   screen, so each cap's number sat on a nowrap line barely wider than itself and
+   its caption broke to three. Two columns give every cap real room. */
+@media (max-width:430px){
+  #pasc-body{padding:10px;}
+  .pa-caps{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .pa-cap{padding:11px 10px;}
+  .pa-cap b{font-size:15px;}
+  .pa-cap em{font-size:10px;line-height:1.4;}
+  .pa-perks,.pa-ledger{grid-template-columns:minmax(0,1fr);}
+  .pa-tab{font-size:12px;padding:11px 2px;}
+  .pa-hero{padding:20px 13px 16px;}
+  .pa-hero-t{font-size:15px;letter-spacing:.12em;}
+  .pa-calc-tot b{font-size:26px;}
+  .pa-bank b{font-size:22px;}
+  /* history rows: span+b were flex:none and the note had nowhere to go */
+  .pa-hist{flex-wrap:wrap;}
+  .pa-hist em{flex-basis:100%;}
+}
+
 @media (prefers-reduced-motion: reduce){
   .pa-hero-rings i,.mega-grid .pa-pill::before,.pa-id-st.prism i.f,.pa-cine-core i,.pa-cine-warp i,
   .pa-cine-star.in,.pa-cine.arrived .pa-cine-out{animation:none !important;}
   .pa-cine-ship{transition:none;}
 }
+
+/* ACK — one readable sentence, not a stack of fragments. The bold runs were
+   being treated as separate flex/inline blocks and breaking mid-phrase. */
+.pa-ack{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:10px 11px;border-radius:11px;
+  background:rgba(255,90,104,.07);border:1px solid rgba(255,90,104,.28);cursor:pointer;}
+.pa-ack input{position:static;opacity:1;flex:0 0 auto;margin:1px 0 0;width:17px;height:17px;
+  accent-color:#ff5a68;cursor:pointer;appearance:auto;-webkit-appearance:checkbox;}
+/* the copy lives in ONE span. As bare text nodes beside <b> runs it became a
+   row of flex items and the container's gap opened a visible hole around every
+   bold phrase. */
+.pa-ack > span.pa-ack-t{flex:1 1 auto;min-width:0;width:auto;height:auto;
+  border:none;background:none;box-shadow:none;border-radius:0;
+  display:block;position:static;margin:0;padding:0;}
+.pa-ack{font-size:12px;line-height:1.5;color:#e2d6e8;text-wrap:pretty;}
+.pa-ack b{color:#fff;font-weight:700;white-space:nowrap;}
+.pa-flag em{text-wrap:pretty;}

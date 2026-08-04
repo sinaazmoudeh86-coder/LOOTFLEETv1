@@ -49,13 +49,26 @@
   // ---- CLOUD finalize (after a successful Supabase auth) --------------------
   async function finalizeCloud(user, fresh) {
     const meta = user.user_metadata || {};
-    const name = meta.name || meta.full_name || meta.user_name || (user.email ? user.email.split('@')[0] : 'Operator');
+    const name = meta.lf_name || meta.name || meta.full_name || meta.user_name || (user.email ? user.email.split('@')[0] : 'Operator');
     setSession({ method: 'Supabase', name, id: user.id, email: user.email, at: Date.now() });
     // pin THIS tab to the account it just signed into (account.js), then claim
     // the slot — the newest login kicks any other tab/device on the SAME account
     try { if (window.ACCOUNT) window.ACCOUNT.rebind(); } catch (e) {}
     const sso = $('lg-sso-status'); if (sso) { sso.style.display = 'block'; sso.textContent = 'Syncing your fleet…'; }
     try { if (window.ACCOUNT) await window.ACCOUNT.pull(); } catch (e) {}
+    // The pulled SAVE is the last word on the pilot's name. Google's profile name
+    // is only ever a first-login default; without this, every sign-in reverted a
+    // renamed commander to whatever Google calls them.
+    try {
+      const saved = window.GAME && window.GAME.state && window.GAME.state.pilotName;
+      if (saved && saved !== name) {
+        const s = window.ACCOUNT.session() || {};
+        s.name = saved;
+        localStorage.setItem('lf_session', JSON.stringify(s));
+        window.ACCOUNT.refreshBar();
+        if (window.CLOUD && window.CLOUD.client) window.CLOUD.client.auth.updateUser({ data: { lf_name: saved } });
+      }
+    } catch (e) {}
     try { if (window.SESSIONLOCK) window.SESSIONLOCK.claim(); } catch (e) {}
     if (window.__sessionKicked) return;   // lost the account mid-restore → kick screen is up
     boot(); reveal(true);

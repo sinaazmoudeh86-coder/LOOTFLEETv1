@@ -183,8 +183,39 @@
     if (cost.iron) s.resources.iron -= cost.iron;
     if (cost.plasma) s.resources.plasma -= cost.plasma;
   }
-  function collectAll() {
+  // G is bound only by init(), which runs off a 1000ms timer. The login path
+  // reaches pending() well inside that window on a warm cache, and ensure()
+  // opens with `G.state` — so this threw, the catch upstream swallowed it, and
+  // the colony section vanished exactly as it did before the fix. Bind on
+  // demand; init() adds only a render interval on top of this.
+  function bindG() {
+    if (G) return true;
+    if (!(window.GAME && window.GAME.state)) return false;
+    G = window.GAME; return true;
+  }
+  // ACCRUING PEEK — same path as collectAll, minus the grant. Must go through
+  // accrueAll: mm.stored is recomputed there from lastCollect, so reading it
+  // cold reports the value at last COLLECT (usually 0), not what is owed now.
+  function pending() {
+    if (!bindG()) return null;
     const root = ensure(); accrueAll(root);
+    const got = { gold: 0, fuel: 0, iron: 0, plasma: 0, prism: 0 };
+    let idle = 0;
+    root.moons.forEach((mm) => {
+      Object.keys(got).forEach((k) => { got[k] += Math.floor(mm.stored[k] || 0); });
+      if (mm._idle) idle++;
+    });
+    const total = Object.keys(got).reduce((a, k) => a + got[k], 0);
+    return total >= 1 ? { got, idle, moons: root.moons.length } : null;
+  }
+  // opts.skipAccrue — grant exactly what a prior pending() banked. The raid
+  // roll inside accrueMoon fires once and advances nextRaid; re-accruing would
+  // recompute a raid-free base and silently overwrite the raid outcome the
+  // player was just shown (repel bonus lost, breach skim refunded).
+  function collectAll(opts) {
+    if (!bindG()) return null;
+    const root = ensure();
+    if (!(opts && opts.skipAccrue)) accrueAll(root);
     const s = G.state;
     if (!s.resources) s.resources = { fuel: 0, iron: 0, plasma: 0 };
     const got = { gold: 0, fuel: 0, iron: 0, plasma: 0, prism: 0 };
@@ -535,7 +566,7 @@
   function wire(body, root, mm) {
     const btn = body.querySelector('[data-mn-collect]');
     if (btn) btn.addEventListener('click', () => {
-      const { got, evHtml } = collectAll();
+      const res = collectAll(); if (!res) return; const { got, evHtml } = res;
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#9ecfff';
       t.innerHTML = '🌙 COLONY SHIPMENT<br><span style="font-size:13px;color:#d8e8fa">' +
         [got.gold ? '$ ' + fN(got.gold) : '', got.fuel ? '⬢ ' + fN(got.fuel) : '', got.iron ? '◆ ' + fN(got.iron) : '', got.plasma ? '✦ ' + fN(got.plasma) : '', got.prism ? '◈ ' + fN(got.prism) : ''].filter(Boolean).join(' · ') + '</span>' +
@@ -667,5 +698,19 @@
   }
   function boot() { if (window.GAME && window.GAME.state) init(window.GAME); else setTimeout(boot, 500); }
   setTimeout(boot, 1000);
-  window.MOON = { init, render };
+  // Hourly output of every colony, summed. Exported so the Hangar's income
+  // panel can show Moon alongside Galaxy and Void without duplicating the
+  // production maths (bias, zone scale, buffs and prod bonus all live in here).
+  function totalRates() {
+    try {
+      const root = ensure(); const out = { gold: 0, fuel: 0, iron: 0, plasma: 0, prism: 0 };
+      for (let i = 0; i < (root.moons || []).length; i++) {
+        const r = ratesPerHour(root, i);
+        for (const k in out) out[k] += r[k] || 0;
+      }
+      return out;
+    } catch (e) { return null; }
+  }
+
+  window.MOON = { init, render, totalRates, collectAll, pending };
 })();

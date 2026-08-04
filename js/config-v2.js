@@ -638,17 +638,18 @@
         const p = capPool, max = 5;
         const per = Math.round(p.per * (1 + t * 0.5));
         const name = capNames[Math.min(capNames.length - 1, (t / 4) | 0)];
-        nodes.push({ id: key + '_c' + t, br: key, name, mod: p.mod, per, max, cost, reqBranch, cap: true, desc: `+${per}${p.unit} ${p.label} per rank` });
+        nodes.push({ id: key + '_c' + t, br: key, name, mod: p.mod, per, max, cost, reqBranch, cap: true, unit: p.unit, desc: `+${per}${p.unit} ${p.label} per rank` });
         cum += cost * max;
       } else {
         const count = 2 + (t % 2); // 2–3 nodes per tier
         for (let i = 0; i < count; i++) {
           const p = pools[(t + i) % pools.length];
-          const capped = p.mod === 'lifeSteal' || p.mod === 'multiShot';
+          const capped = p.mod === 'lifeSteal' || p.mod === 'multiShot'
+                      || p.mod === 'regen' || p.mod === 'dmgReduce';
           const per = capped ? p.per : Math.max(1, Math.round(p.per * (1 + t * 0.18)));
           const max = capped ? 3 : 5;
           seen[p.label] = (seen[p.label] || 0) + 1;
-          nodes.push({ id: key + '_' + t + '_' + i, br: key, name: `${p.label} ${romanNum(seen[p.label])}`, mod: p.mod, per, max, cost, reqBranch, desc: `+${per}${p.unit} ${p.label} per rank` });
+          nodes.push({ id: key + '_' + t + '_' + i, br: key, name: `${p.label} ${romanNum(seen[p.label])}`, mod: p.mod, per, max, cost, reqBranch, unit: p.unit, desc: `+${per}${p.unit} ${p.label} per rank` });
           cum += cost * max;
         }
       }
@@ -674,14 +675,14 @@
         [ { mod:'hpPct', label:'Max HP', per:5, unit:'%' },
           { mod:'lifeSteal', label:'Life Steal', per:0.2, unit:'%' },
           { mod:'hpPct', label:'Plating', per:7, unit:'%' },
-          { mod:'critChance', label:'Resolve', per:1, unit:'%' } ],
+          { mod:'dmgReduce', label:'Resolve', per:1, unit:'%' } ],
         { mod:'hpPct', label:'Max HP', per:18, unit:'%' },
         ['Bulwark','Juggernaut','Fortress','Immortal']),
       buildBranch('tactics',
         [ { mod:'moveSpeed', label:'Move Speed', per:4, unit:'%' },
           { mod:'multiShot', label:'Multi-Shot', per:2, unit:'%' },
-          { mod:'atkSpeedPct', label:'Tempo', per:3, unit:'%' },
-          { mod:'critChance', label:'Focus', per:2, unit:'%' } ],
+          { mod:'rangePct', label:'Standoff', per:1, unit:'%' },
+          { mod:'regen', label:'Repair Loop', per:0.1, unit:'%/s' } ],
         { mod:'multiShot', label:'Multi-Shot', per:5, unit:'%' },
         ['Split Fire','Bullet Storm','Hailfire','Singularity']),
     ),

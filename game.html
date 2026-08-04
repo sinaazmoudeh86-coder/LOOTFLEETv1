@@ -48,15 +48,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=415">
-<link rel="stylesheet" href="css/theme.css?v=415">
-<link rel="stylesheet" href="css/web-v89.css?v=415">
-<link rel="stylesheet" href="css/fx-cinematic.css?v=415">
-<link rel="stylesheet" href="css/fx-primordial.css?v=415">
-<link rel="stylesheet" href="css/moon-colony.css?v=415">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=415">
-<link rel="stylesheet" href="css/fx-aaa.css?v=415">
-<link rel="stylesheet" href="css/readability.css?v=415">
+<link rel="stylesheet" href="css/style-v2.css?v=420">
+<link rel="stylesheet" href="css/theme.css?v=420">
+<link rel="stylesheet" href="css/web-v89.css?v=420">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=420">
+<link rel="stylesheet" href="css/fx-primordial.css?v=420">
+<link rel="stylesheet" href="css/moon-colony.css?v=420">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=420">
+<link rel="stylesheet" href="css/fx-aaa.css?v=420">
+<link rel="stylesheet" href="css/readability.css?v=420">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; align-items:flex-start; }
@@ -254,6 +254,9 @@
 /* beacon panel on the Defense skill tab */
 .sk-beacon{border:1px solid rgba(255,138,61,.4);border-radius:13px;padding:11px 12px;margin:0 0 11px;
   background:linear-gradient(180deg,rgba(255,138,61,.1),rgba(255,138,61,.03));}
+.sk-beacon.locked{border-color:rgba(140,155,175,.3);background:rgba(255,255,255,.02);opacity:.75;}
+.sk-beacon.locked .skb-ic{color:#8ba0b5;}
+.sk-beacon.locked .skb-h em{color:#f2b24b;}
 .skb-h{display:flex;align-items:center;gap:8px;}
 .skb-ic{font-size:15px;color:#ff8a3d;}
 .skb-h b{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:800;letter-spacing:.14em;color:#ffc79a;}
@@ -329,7 +332,7 @@
   .mega-title{margin:0 4px 8px;}
   .mega-card.cmd-sdread,.mega-card.cmd-galaxy{min-height:56px;}
 }
-@media (max-height:600px){ .mega-card.cmd-sdread .mc-s,.mega-card.cmd-galaxy .mc-s,.sd-card-cd{display:none !important;} .mega-card.cmd-sdread,.mega-card.cmd-galaxy{min-height:46px;} }
+@media (max-height:600px){ .mega-card.cmd-sdread:not(.locked) .mc-s,.mega-card.cmd-galaxy:not(.locked) .mc-s,.sd-card-cd{display:none !important;} .mega-card.cmd-sdread,.mega-card.cmd-galaxy{min-height:46px;} }
 .mega-card{display:flex;align-items:center;gap:11px;background:linear-gradient(180deg,#1a2333,#131a28);border:1px solid #2a3650;border-radius:14px;padding:13px 12px;position:relative;cursor:pointer;transition:transform .12s,box-shadow .2s;}
 .mega-card::before{content:'';position:absolute;inset:0;border-radius:14px;padding:1px;background:linear-gradient(130deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 300%;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.34;animation:prismShift 6s linear infinite;pointer-events:none;}
 .mega-card:active{transform:scale(.97);box-shadow:0 6px 24px rgba(120,150,255,.28);}
@@ -340,7 +343,23 @@
 .mega-card .mc-s{font-size:10px;color:#93a2ba;margin-top:2px;letter-spacing:.02em;}
 .mega-card .cmd-cardbadge{position:absolute;top:6px;right:8px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--hp,#ff495f);color:#fff;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:10px;line-height:16px;text-align:center;box-shadow:0 0 0 2px #0b1019,0 0 9px rgba(255,73,95,.7);animation:cmdBadgePulse 1.6s ease-in-out infinite;}
 @keyframes cmdBadgePulse{0%,100%{box-shadow:0 0 0 2px #0b1019,0 0 6px rgba(255,73,95,.55);}50%{box-shadow:0 0 0 2px #0b1019,0 0 13px rgba(255,73,95,.95);}}
-.mega-card.locked{opacity:.55;}
+/* LOCKED CARDS — the unlock requirement must be the CLEAREST thing on the card,
+   not the faintest. Card-level opacity used to multiply against text colours
+   already tuned for a full-opacity card, and per-element dimming stacked on top:
+   the level line measured 3.77:1 and the subtitle 3.01:1 against the page, both
+   under the 4.5:1 needed at 10px. The art carries the "locked" read now; the
+   text carries the message and renders at full strength. */
+.mega-card.locked{opacity:1;}
+.mega-card.locked .mc-ic{filter:grayscale(1);opacity:.45;}
+.mega-card.locked .mc-n{color:#93a2ba;}
+.mega-card.locked .mc-s{display:-webkit-box !important;font-size:11.5px !important;color:#b8c6d8 !important;}
+.mc-need{color:#f2b24b;font-weight:800;}
+.mega-hint{grid-column:1 / -1;padding:9px 12px;margin:0 0 2px;border-radius:10px;text-align:center;
+  border:1px dashed rgba(242,178,75,.3);background:rgba(242,178,75,.05);
+  font-family:'Rajdhani',sans-serif;font-size:11.5px;letter-spacing:.03em;color:#9aa9bd;}
+.mega-hint b{color:#f2b24b;font-weight:800;}
+.mega-more{grid-column:1 / -1;display:block;width:100%;padding:13px;margin-top:2px;border-radius:12px;cursor:pointer;border:1px dashed rgba(120,140,170,.35);background:rgba(255,255,255,.02);color:#8ba0b5;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;letter-spacing:.06em;min-height:44px;}
+.mega-more:hover{border-color:rgba(120,140,170,.6);color:#c3cede;}
 .mega-card.locked::before{opacity:.12;animation:none;}
 .mega-card .mc-lock{position:absolute;top:7px;right:9px;font-size:9.5px;font-weight:700;color:#f2b24b;font-family:'Rajdhani',sans-serif;z-index:1;}
 .mega-card.cmd-fr{grid-column:1 / -1;}
@@ -1012,56 +1031,63 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=415"></script>
-<script src="js/items.js?v=415"></script>
-<script src="js/entities.js?v=415"></script>
-<script src="js/render.js?v=415"></script>
-<script src="js/galaxy.js?v=415"></script>
-<script src="js/leaderboard.js?v=415"></script>
+<script src="js/config-v2.js?v=420"></script>
+<script src="js/items.js?v=420"></script>
+<script src="js/entities.js?v=420"></script>
+<script src="js/render.js?v=420"></script>
+<script src="js/galaxy.js?v=420"></script>
+<script src="js/leaderboard.js?v=420"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
-<script src="js/analytics.js?v=415"></script>
-<script src="js/cloud.js?v=415"></script>
-<script src="js/account.js?v=415"></script>
-<script src="js/session-lock.js?v=415"></script>
-<script src="js/vip.js?v=415"></script>
-<script src="js/territory.js?v=415"></script>
-<script src="js/payments-v91.js?v=415"></script>
-<script src="js/game-v93.js?v=415"></script>
-<script src="js/ui-v94.js?v=415"></script>
-<script src="js/fx-cinematic.js?v=415"></script>
-<script src="js/fx-primordial.js?v=415"></script>
-<script src="js/fx-aaa.js?v=415"></script>
-<script src="js/moon-scene.js?v=415"></script>
-<script src="js/moon-colony.js?v=415"></script>
-<script src="js/home-citadel.js?v=415"></script>
-<script src="js/missions.js?v=415"></script>
-<script src="js/achievements.js?v=415"></script>
-<script src="js/coach-v89.js?v=415"></script>
-<script src="js/prism-v5.js?v=415"></script>
+<script src="js/analytics.js?v=420"></script>
+<script src="js/cloud.js?v=420"></script>
+<script src="js/account.js?v=420"></script>
+<script src="js/session-lock.js?v=420"></script>
+<script src="js/vip.js?v=420"></script>
+<script src="js/territory.js?v=420"></script>
+<script src="js/payments-v91.js?v=420"></script>
+<script src="js/game-v93.js?v=420"></script>
+<script src="js/ui-v94.js?v=420"></script>
+<script src="js/fx-cinematic.js?v=420"></script>
+<script src="js/fx-primordial.js?v=420"></script>
+<script src="js/fx-aaa.js?v=420"></script>
+<script src="js/moon-scene.js?v=420"></script>
+<script src="js/moon-colony.js?v=420"></script>
+<script src="js/return-brief.js?v=420"></script>
+<script src="js/home-citadel.js?v=420"></script>
+<script src="js/missions.js?v=420"></script>
+<script src="js/achievements.js?v=420"></script>
+<script src="js/coach-v89.js?v=420"></script>
+<script src="js/prism-v5.js?v=420"></script>
 <script src="js/prism-fleet.js"></script>
-<script src="js/dreadnaught.js?v=415"></script>
-<script src="js/server-dreadnaught.js?v=415"></script>
+<script src="js/dreadnaught.js?v=420"></script>
+<script src="js/server-dreadnaught.js?v=420"></script>
 <script src="js/galaxy-box.js"></script>
-<script src="js/shipworks.js?v=415"></script>
-<script src="js/starforge.js?v=415"></script>
-<script src="js/pilot-ascension.js?v=415"></script>
-<script src="js/sim-pilots.js?v=415"></script>
-<script src="js/social.js?v=415"></script>
-<script src="js/mail.js?v=415"></script>
-<script src="js/alliance.js?v=415"></script>
-<script src="js/alliance-boss.js?v=415"></script>
-<script src="js/void-zone.js?v=415"></script>
-<script src="js/ascension.js?v=415"></script>
-<script src="js/casino.js?v=415"></script>
-<script src="js/casino2.js?v=415"></script>
-<script src="js/redeem.js?v=415"></script>
-<script src="js/auth.js?v=415"></script>
+<script src="js/shipworks.js?v=420"></script>
+<script src="js/starforge.js?v=420"></script>
+<script src="js/pilot-ascension.js?v=420"></script>
+<script src="js/sim-pilots.js?v=420"></script>
+<script src="js/ranks-boards.js?v=420"></script>
+<script src="js/rank-rewards.js?v=420"></script>
+<script src="js/discord-reward.js?v=420"></script>
+<script src="js/onboard.js?v=420"></script>
+<script src="js/ship-panels.js?v=420"></script>
+<script src="js/paragon-cannon.js?v=420"></script>
+<script src="js/social.js?v=420"></script>
+<script src="js/mail.js?v=420"></script>
+<script src="js/alliance.js?v=420"></script>
+<script src="js/alliance-boss.js?v=420"></script>
+<script src="js/void-zone.js?v=420"></script>
+<script src="js/ascension.js?v=420"></script>
+<script src="js/casino.js?v=420"></script>
+<script src="js/casino2.js?v=420"></script>
+<script src="js/redeem.js?v=420"></script>
+<script src="js/auth.js?v=420"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 415;
+  window.LF_BUILD = 420;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1177,11 +1203,54 @@
   (function(){
     const cmd=document.getElementById('nav-command'), mega=document.getElementById('mega');
     if(!cmd||!mega) return;
-    const LOCKS={galaxy:25,dread:30,sdread:50,homecit:150,pilot:30,boxes:30,moon:30,casino:15,forge:100};
+    // GATES — EXHAUSTIVE. Every card in the sheet carries a level, so nothing is
+    // ever open by omission. It used to hold 9 entries against 17 cards, which
+    // left eight endgame systems live on a level-1 account: Void Zone (whose own
+    // subtitle reads "Lv 25+" and was never actually gated), Prism Mining, Prism
+    // Fleet, Shipworks, Ship Ascension, Pilot Ascension, Skills and Missions.
+    // That is what new players were reporting as "confusing at the start" — not
+    // a missing tutorial, an unguarded endgame.
+    const LOCKS={
+      missions:1,                                  // the card that says what to do next
+      skills:8, casino:15, shipworks:20,
+      galaxy:25, voidzone:25,                      // voidzone now matches its own copy
+      dread:30, pilot:30, moon:30, boxes:30,
+      prism:40, sdread:50, prismfleet:50,
+      ascend:60, forge:100, pasc:100, homecit:150,
+    };
+    // Locked cards are DIMMED, NEVER HIDDEN. Seeing the whole map of the game
+    // with a level on each lock reads as a promise and makes the game look deep;
+    // hiding them makes it look small and gives a new player nothing to want.
+    // (An earlier pass collapsed all but the next three behind a "more systems"
+    // row — that traded one problem for another, so the collapse is gone.)
+    let _showAll=false;
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
     function sync(){ const L=lvl();
-      mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const locked=need&&L<need;
-        c.classList.toggle('locked',!!locked); const lk=c.querySelector('.mc-lock'); if(lk) lk.textContent=locked?('🔒 Lv '+need):''; });
+      let nextNeed=Infinity, lockedN=0;
+      mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const isLocked=!!(need&&L<need);
+        c.style.display='';                          // nothing is ever hidden
+        c.classList.toggle('locked',isLocked);
+        const lk=c.querySelector('.mc-lock');
+        if(lk) lk.textContent=isLocked?('🔒 LV '+need):'';
+        if(isLocked){ lockedN++; if(need<nextNeed) nextNeed=need;
+          // say what it takes, on the card itself — a lock with no number is
+          // just a closed door
+          const s=c.querySelector('.mc-s');
+          if(s){ if(!s.dataset.open) s.dataset.open=s.innerHTML;
+            const away=need-L;
+            s.innerHTML='<span class="mc-need">Unlocks at Level '+need+'</span> · '+away+' level'+(away===1?'':'s')+' to go'; }
+        } else {
+          const s=c.querySelector('.mc-s');
+          if(s&&s.dataset.open){ s.innerHTML=s.dataset.open; delete s.dataset.open; }
+        }
+      });
+      // one line at the top of the sheet so the next unlock is never a surprise
+      let hint=document.getElementById('mega-hint');
+      if(!hint){ hint=document.createElement('div'); hint.id='mega-hint'; hint.className='mega-hint'; mega.insertBefore(hint,mega.firstChild); }
+      if(lockedN&&isFinite(nextNeed)){ hint.style.display='';
+        hint.innerHTML='<b>'+lockedN+'</b> system'+(lockedN===1?'':'s')+' still locked · next opens at <b>Level '+nextNeed+'</b>'; }
+      else hint.style.display='none';
+      const old=document.getElementById('mega-more'); if(old) old.remove();
       syncPasc(L);
     }
     // PILOT ASCENSION pill — the one card that carries live numbers, so the
@@ -1201,13 +1270,13 @@
       try{ if(window.PASCEND){ stars=PASCEND.stars(); pts=PASCEND.points(); pv=PASCEND.preview(); tier=PASCEND.tierDef(Math.max(1,stars)); } }catch(e){}
       if(badge) badge.innerHTML = (stars&&window.PASCEND) ? PASCEND.badge(null,stars) : '';
       if(locked){
-        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset the pilot for permanent power — <b>your whole fleet comes with you</b>: hulls, upgrade levels and Ship Ascensions.';
+        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset the pilot for permanent power — <b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony, Home Citadel and Prism. Only <b>level, gold and items</b> reset.';
         if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / 100</span>'+
           '<span class="pa-pill-chip">'+(100-L)+' TO GO</span>'+
           '<span class="pa-pill-chip">3 EXCLUSIVE LOOT TIERS</span>'+
           '<div class="pa-pill-bar" style="flex-basis:100%"><i style="width:'+Math.min(100,L).toFixed(1)+'%"></i></div>';
       } else {
-        if(sub) sub.innerHTML='Ready to ascend — <b>your whole fleet comes with you</b>: hulls, upgrade levels and Ship Ascensions. Only items, gold and territory reset.';
+        if(sub) sub.innerHTML='Ready to ascend — <b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony, Home Citadel and Prism. Only <b>level, gold and items</b> reset.';
         if(meta) meta.innerHTML=
           '<span class="pa-pill-chip hot">+<b>'+(pv?pv.total:0)+'</b> POINTS NOW</span>'+
           (pts?'<span class="pa-pill-chip hot"><b>'+pts+'</b> UNSPENT</span>':'')+
@@ -1263,6 +1332,20 @@
 .mega-card .mc-n{ display:flex; flex-wrap:wrap; align-items:center; gap:2px 5px; }
 .mega-card .mc-n em, .mega-card .sd-live-tag{ white-space:nowrap; flex:none; }
 .mega-card .mc-s{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+/* PHONES — one column. Two 164px columns left ~95px for the name, so every
+   multi-word title ("Dreadnaught Hunt", "Ship Ascension") stacked to 2 lines and
+   the LIVE/TURF badges wrapped to a 3rd. Full-width chips fit the name, its
+   badge and a one-line subtitle on a single row. cmd-sdread/cmd-galaxy must drop
+   their grid-row:1 pin here or they'd both land in the same cell. */
+@media (max-width:430px){
+  .mega-grid{ grid-template-columns:minmax(0,1fr); }
+  .mega-card.cmd-sdread,.mega-card.cmd-galaxy{ grid-row:auto !important; min-height:56px; }
+  .mega-card .mc-n{ flex-wrap:nowrap; font-size:13px; white-space:nowrap; overflow:hidden; }
+  .mega-card .mc-s{ display:block !important; -webkit-line-clamp:1; font-size:10.5px !important;
+    line-height:1.35 !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mega-card.locked .mc-s{ font-size:11px !important; }
+  .mega-card .mc-lock{ display:none; }
+}
 </style>
 <script>
 /* Full-screen support — the toggle lives in ⚙ Account (openAccountSheet wires

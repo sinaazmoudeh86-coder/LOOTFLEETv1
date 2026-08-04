@@ -65,7 +65,7 @@
     {
       // Needs no migration: asc_stars has always been on the leaderboard row and
       // publishes through its own p_asc cascade, so this ladder is live today
-      // while tiles/ships/missions/badges still wait on ranks-ladders.sql.
+      // while tiles/ships/missions/badges still wait on lb-onefunction.sql.
       id: 'asc', ic: '\u2726', col: '#ffd24d', label: 'ASCENSION', sub: 'Pilot Rank',
       info: 'Ranked by ascension stars — pilots who reset a finished run for permanent account-wide perks. Ties break on fleet power.',
       unit: 'STARS',
@@ -203,7 +203,7 @@
        .catch((err) => { _cache[id] = { at: Date.now(), rows: [], err }; cb([], err); });
   }
 
-  // ---- has ranks-ladders.sql run? --------------------------------------------
+  // ---- has lb-onefunction.sql run? --------------------------------------------
   // Until it has, `leaderboard` has no tiles/ships/missions/badges columns, so
   // every REAL pilot reads 0 on four of the six boards and only derived sim
   // figures rank. That is not a thin board — it is a WRONG one, and it would

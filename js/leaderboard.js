@@ -13,7 +13,15 @@
   //      roster so the board is never empty. Fetched from window.CLOUD.lbTop. ----
   let _real = null, _realT = 0, _realInflight = false;
   function myId(){ try { return (window.AUTH && AUTH.session && AUTH.session()) ? AUTH.session().id : null; } catch (e) { return null; } }
-  function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true }; }
+  // LADDER COLUMNS (Aug 2026) — this whitelist used to stop at asc, silently
+  // discarding tiles/citadels/tile_rev/ships/missions/badges even though
+  // cloud.js selects all six. ranks-boards.js decides a migration has run by
+  // asking whether any human row CARRIES those properties, so dropping them here
+  // pinned the Territory, Hangar, Missions and Badges ladders to a permanent
+  // "waiting on a database migration" notice that no migration could ever clear.
+  // Copied through as undefined when absent, so that check keeps working.
+  function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true,
+    tiles: r.tiles, citadels: r.citadels, tile_rev: r.tile_rev, ships: r.ships, missions: r.missions, badges: r.badges }; }
   function ensureReal(cb){
     if (!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.lbTop)) return;
     if (_realInflight || Date.now() - _realT < 8000) return;

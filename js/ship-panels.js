@@ -30,10 +30,15 @@
     const out = [];
 
     // XP — the most stacked stat in the game and the least visible.
+    // KAEVITH RESONANCE (xenXpMult) belongs in this chain: the bonus is applied
+    // inside gainXp() like every other source here, so leaving it out made the
+    // pill under-report for anyone flying a Kaevith hull — exactly the "holds a
+    // source of XP bonus and sees none of it" problem this panel exists to fix.
     const xp = safe(() => (window.DREAD && DREAD.mult ? DREAD.mult('xpGain') : 1), 1)
              * safe(() => (window.PASCEND ? PASCEND.mult('xp') : 1), 1)
              * safe(() => (window.ASCEND && ASCEND.xpMult ? ASCEND.xpMult() : 1), 1)
              * safe(() => (window.VIP ? VIP.mult('xp') : 1), 1)
+             * safe(() => (G().xenXpMult ? G().xenXpMult() : 1), 1)
              * (safe(() => (G().isPro && G().isPro()), false) ? 2 : 1);
     if (xp > 1.001) out.push({ ic: '✦', n: 'XP Gain', v: '+' + pct(xp) + '%', c: '#7ce0a0' });
 

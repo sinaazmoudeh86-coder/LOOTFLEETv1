@@ -8,6 +8,33 @@ hulls, a 3-hourly Discord situation report, and a performance pass.
 
 ---
 
+## ⚠ THREE STAMPS MUST AGREE. Check before every push.
+
+The update gate locks a client out when `version.json` reports a build **higher
+than the client's own `window.LF_BUILD`**. Bumping `version.json` without bumping
+the client constant locks out **every player**, and "Update now" cannot fix it —
+the reload serves the same client, which still reports the old number.
+
+| Stamp | File | Build 437 |
+|---|---|---|
+| Client constant | `game.html` → `window.LF_BUILD` | `437` |
+| Update beacon | `version.json` → `build` | `437` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v437` |
+
+```bash
+grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
+```
+
+All three must print the same number. **This bit us on this release** — the first
+push had `version.json` at 437 and `LF_BUILD` at 421, which locked every player
+out of login until the client constant was corrected.
+
+If it happens again, the fastest recovery is to re-push `version.json` with the
+OLD build number — that reopens login immediately — then fix the client stamp and
+push again.
+
+---
+
 ## Step 1 — run the SQL
 
 Supabase → **SQL Editor** → **New query** → paste **`supabase/xen-hull.sql`** → **Run**.

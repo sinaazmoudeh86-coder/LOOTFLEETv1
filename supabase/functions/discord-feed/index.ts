@@ -15,6 +15,13 @@
 //                      new pilots, top-10 entries
 //    sdread_scores   → Season Dread stage records
 //    alliances       → Armada mark clears, new alliances
+//    war_events      → repelled sieges, daily digest, KAEVITH HULLS EARNED
+//
+//  TWO DIGESTS ride this same 2-minute tick rather than needing their own cron:
+//    · DAILY STANDINGS  — queued into war_events by daily_ranks_award() at 00:05
+//    · SITUATION REPORT — every 3 hours, gated by a timestamp in feed_seen:
+//                          top-5 ladders, Void spire shield countdowns, Voidmaw
+//                          season standing, Incursion status, and what moved.
 //
 //  Simulated rivals live in `sim_pilots` and are NEVER read here, so the feed
 //  only ever announces humans.
@@ -37,6 +44,7 @@ const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MAX_EMBEDS = 10;
 
 const COLOR = {
+  open:     0x00d18f,
   repel:    0x4db4ff,
   void:     0x9b4dff,
   crown:    0xffd24d,
@@ -53,11 +61,32 @@ const COLOR = {
   top10:    0x3dd68c,
   alliance: 0x3dd68c,
   pilot:    0x6e7a8a,
+  xen:      0xc26bff,
+  sitrep:   0x6f7dff,
 };
 
+// ---- THE KAEVITH INCURSION -------------------------------------------------
+// Five recovered hulls, earned only by clearing an alien-held zone in My Galaxy.
+// The ladder here mirrors SHIPS in js/config-v2.js; log_xen_hull() validates the
+// key server-side, so this table is display only.
+const XEN_HULLS: Record<string, { name: string; cls: string; xp: number; tier: number }> = {
+  xen1: { name: 'Kaevith Splinter',  cls: 'Frigate',    xp: 10,  tier: 1 },
+  xen2: { name: 'Kaevith Shard',     cls: 'Cruiser',    xp: 25,  tier: 2 },
+  xen3: { name: 'Kaevith Glaive',    cls: 'Battleship', xp: 45,  tier: 3 },
+  xen4: { name: 'Kaevith Sovereign', cls: 'Carrier',    xp: 70,  tier: 4 },
+  xen5: { name: 'Kaevith Godshard',  cls: 'Dreadnaught', xp: 100, tier: 5 },
+};
+// A fifth of the galaxy is alien-held; mirrors XEN.share in js/galaxy.js.
+const XEN_SHARE = 0.20;
+
+// SITUATION REPORT cadence. The function itself runs every 2 minutes to diff
+// events; the report is a digest posted on its own 3-hour clock, gated by a
+// timestamp in feed_seen rather than a second cron job.
+const SITREP_MS = 3 * 60 * 60 * 1000;
+
 // Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
-const PRIORITY = ['void', 'throne', 'ascend', 'repel', 'armada', 'citadel', 'steal', 'dread', 'top10',
-                  'zone', 'level', 'claim', 'alliance', 'lost', 'pilot'];
+const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'repel', 'armada', 'citadel', 'steal', 'dread', 'top10',
+                  'zone', 'level', 'open', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
 // loop, not a conquest. Owner-unchanged rewrites produce no event at all, but
@@ -87,7 +116,32 @@ function crossed(prev: number, now: number, marks: number[]): number | null {
   return hit;
 }
 
-const stars = (n: number) => '★'.repeat(Math.min(n, 10)) + (n > 10 ? `+${n - 10}` : '');
+// ---- PILOT RANK ------------------------------------------------------------
+// The game renders ascension rank as FIVE STARS PER TIER, where the tier ladder
+// IS the loot-rarity ladder (pilot-ascension.js · THE 5-STAR RANK MODEL). This
+// feed instead printed one star per ascension, capped at ten with a "+N" tail —
+// so a 16-times-ascended pilot posted as "★★★★★★★★★★+6", a string that appears
+// nowhere in the game and reads as a rendering fault.
+// 16 ascensions is EPIC ★1. Mirrors C.RARITY; keep in step if that list changes.
+const RANK_TIERS: Array<[string, number]> = [
+  ['Common', 0x9aa0a6], ['Uncommon', 0x5bc06b], ['Rare', 0x4a90e2], ['Epic', 0xb15cff],
+  ['Legendary', 0xf0972a], ['Mythic', 0xff3b4e], ['Ancient', 0x21d4c4], ['Divine', 0xffe27a],
+  ['Cosmic', 0xff6ad5], ['Void', 0x9a5bff], ['Eternal', 0xeae6ff], ['Relic', 0xc061ff],
+  ['Artifact', 0xff2330], ['Ascendant', 0x5cffbe], ['Celestial', 0x5b7cff], ['Paragon', 0xffffff],
+];
+const tierIdx  = (n: number) => Math.max(0, Math.min(RANK_TIERS.length - 1, Math.floor(((n | 0) - 1) / 5)));
+const starIn   = (n: number) => (n | 0) <= 0 ? 0 : ((((n | 0) - 1) % 5) + 1);
+const tierName = (n: number) => RANK_TIERS[tierIdx(n)][0];
+const rankName = (n: number) => `${tierName(n)} ★${starIn(n)}`;
+const rankHue  = (n: number) => RANK_TIERS[tierIdx(n)][1];
+const ord = (n: number) => {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
+};
+// Level cap is 150 + 50 per star — the concrete thing an ascension BUYS, and the
+// only number on this card that goes up.
+const capAt = (n: number) => 150 + 50 * (n | 0);
 
 // ---- tile names -------------------------------------------------------------
 // territory only stores tile_id ("q,r"). Names are generated deterministically
@@ -183,15 +237,15 @@ Deno.serve(async (req) => {
   ]);
 
   // war_events arrives with war-events.sql; the feed runs fine without it.
-  let war = await db.from('war_events').select('id,kind,tile_id,actor_name,target_name,meta')
+  let war = await db.from('war_events').select('id,kind,tile_id,actor_name,target_name,meta,created_at')
                     .order('id', { ascending: true }).limit(200);
   if (war.error) war = { data: [], error: null } as typeof war;
 
   // citadel_lv arrives with territory-citadel-lv.sql; fall back until it is run.
-  let terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,citadel_lv');
+  let terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,citadel_lv,cooldown_until');
   let hasLv = !terr.error;
   if (terr.error) {
-    terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel');
+    terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,cooldown_until');
     hasLv = false;
   }
 
@@ -207,6 +261,9 @@ Deno.serve(async (req) => {
   const bootstrap = !seen.has('_meta:bootstrap');
 
   const events: Ev[] = [];
+  // Kaevith hull reports, drained from war_events below. Declared out here
+  // because the situation report reads them too.
+  const hullEvents: any[] = [];
   const snap: { kind: string; ref: string; data: Record<string, any>; updated_at: string }[] = [];
 
   // ---- leaderboard -----------------------------------------------------------
@@ -243,14 +300,24 @@ Deno.serve(async (req) => {
     }
 
     if (cur.asc > was.asc) {
+      // Crossing into a new tier (★1 of any tier above Common) is the rare, loud
+      // one — five ascensions apart — so it gets its own header and callout.
+      const brokeTier = starIn(cur.asc) === 1 && tierIdx(cur.asc) > tierIdx(was.asc);
+      const tn = tierName(cur.asc).toUpperCase();
+      const head = brokeTier
+        ? `## ⬆  ${tierName(was.asc).toUpperCase()}  →  ${tn}\n**A new rank tier.**\n\n`
+        : `## ${tn}  ★${starIn(cur.asc)}\n`;
       events.push({
         kind: 'ascend',
-        line: `**${p.name}** ascended to ${stars(cur.asc)}`,
+        line: `**${p.name}** ascended — now **${rankName(cur.asc)}**`,
         embed: {
-          color: COLOR.ascend,
-          author: { name: '✦  ASCENSION' },
-          title: `${p.name} reached ${stars(cur.asc)}`,
-          description: `> Fleet wiped. Rebuilt harder.\n\n**power** \`${fmt(cur.power)}\`  ·  **zone** \`${cur.zone}\`  ·  **level** \`${cur.level}\``,
+          color: rankHue(cur.asc),
+          author: { name: brokeTier ? '✦  NEW RANK TIER' : '✦  ASCENSION' },
+          title: `${p.name}  →  ${rankName(cur.asc)}`,
+          description: head +
+            `Their ${ord(cur.asc)} ascension. The whole fleet and every system carried over — ` +
+            `level, gold and gear back to zero.\n\n` +
+            `**level cap** \`${capAt(cur.asc)}\`  ·  **power** \`${fmt(cur.power)}\`  ·  **zone** \`${cur.zone}\``,
         },
       });
     }
@@ -434,7 +501,12 @@ Deno.serve(async (req) => {
     live.add(t.tile_id);
     const was = seen.get(`tile:${t.tile_id}`);
     const lv = hasLv ? (Number(t.citadel_lv) || 0) : (t.citadel ? 1 : 0);
-    const cur = { owner: t.owner_id ?? '', name: t.owner_name ?? '', lv, gone: 0 };
+    // SHIELD STATE — a claim puts a 24h (or 15min, after a repelled siege) shield
+    // on the tile. Its expiry changes nothing in the row except the clock passing
+    // now(), so it is a diff only in the sense that the SAME value means something
+    // different a minute later. Snapshotting it as a boolean makes it a real edge.
+    const shielded = t.cooldown_until && new Date(t.cooldown_until).getTime() > Date.now() ? 1 : 0;
+    const cur = { owner: t.owner_id ?? '', name: t.owner_name ?? '', lv, gone: 0, sh: shielded };
     snap.push({ kind: 'tile', ref: t.tile_id, data: cur, updated_at: now });
     if (bootstrap) continue;
 
@@ -511,7 +583,7 @@ Deno.serve(async (req) => {
     // Rank changes on a tile that did NOT change hands.
     if (was.owner === cur.owner && cur.lv > was.lv) {
       tileEvents.push({
-        kind: 'citadel', actor: held,
+        kind: 'citadel', actor: held, sys,
         line: was.lv === 0 ? `**${held}** raised a Citadel on ${sys}` : `**${held}** upgraded ${sys} to Rank ${cur.lv}`,
         embed: {
           color: COLOR.citadel,
@@ -524,6 +596,41 @@ Deno.serve(async (req) => {
             : `-# Rank ${was.lv} → ${cur.lv} · ${cur.lv * 10}× output · +${25 * (cur.lv - 1)}% defence`,
         },
       });
+    }
+
+    // SHIELD EXPIRY — the tile is open to attack again. Announced for any held
+    // tile whose clock just ran out; an unowned tile has nothing to defend.
+    if (was.sh && !cur.sh && cur.owner) {
+      if (VOID[t.tile_id]) {
+        const v = VOID[t.tile_id];
+        voidEvents.push({
+          kind: 'void',
+          line: `${v.name} is open to attack`,
+          embed: {
+            color: COLOR.open,
+            author: { name: `\u{1F513}  ${v.name.toUpperCase()} IS OPEN` },
+            title: `\u{1F513} ${v.name.toUpperCase()} IS NOW AVAILABLE FOR ATTACK`,
+            description:
+              `The shield is down. **${held}** holds it.\n\n` +
+              `> \u{1F300} **Lv ${v.tier}** \u00b7 pays all four currencies, every hour\n` +
+              `> \u{1F3F0} Citadel included with the tile\n\n` +
+              '-# \u26a1 First fleet to break the siege takes everything.',
+          },
+        });
+      } else {
+        tileEvents.push({
+          kind: 'open', actor: held, sys,
+          line: `${sys} is open to attack`,
+          embed: {
+            color: COLOR.open,
+            author: { name: '\u{1F513}  SHIELD DOWN' },
+            title: `\u{1F513} ${sys.toUpperCase()} IS NOW AVAILABLE FOR ATTACK`,
+            description: `**${held}** holds it` +
+              (cur.lv > 0 ? ` behind a **Rank ${cur.lv} Citadel**.` : ', unfortified.') +
+              '\n-# \u2694\ufe0f 60 seconds to break it once you engage.',
+          },
+        });
+      }
     }
   }
 
@@ -584,10 +691,25 @@ Deno.serve(async (req) => {
   {
     const seenId = Number((seen.get('_meta:war') || {}).id) || 0;
     let maxId = seenId;
+    const digests: Record<string, unknown>[] = [];
     for (const w of war.data ?? []) {
       const id = Number(w.id) || 0;
       if (id > maxId) maxId = id;
-      if (bootstrap || id <= seenId || w.kind !== 'repelled') continue;
+      if (bootstrap || id <= seenId) continue;
+
+      // DAILY DIGEST — queued by daily_ranks_award() at 00:05 UTC. One message,
+      // all seven ladders, top 5 each.
+      if (w.kind === 'digest') {
+        digests.push(w.meta || {});
+        continue;
+      }
+      // KAEVITH HULL EARNED — the rarest event in the game. Its own message,
+      // never batched, never collapsed into a burst line.
+      if (w.kind === 'xen_hull') {
+        hullEvents.push(w);
+        continue;
+      }
+      if (w.kind !== 'repelled') continue;
       const sys = tileName(w.tile_id || '');
       const lv = Number((w.meta || {}).citadel_lv) || 0;
       const isVoid = !!VOID[w.tile_id || ''];
@@ -611,6 +733,215 @@ Deno.serve(async (req) => {
       });
     }
     if (maxId !== seenId) snap.push({ kind: '_meta', ref: 'war', data: { id: maxId }, updated_at: now });
+
+    // ---- KAEVITH HULL EARNED -------------------------------------------------
+    // The loudest single-pilot event in the game. Only ~1 zone in 5 is invaded
+    // and a clear pays 1–10%, so most accounts will never see one — the card
+    // leads with the scarcity, then what the hull actually does for a fleet.
+    for (const w of hullEvents) {
+      const m = w.meta || {};
+      const h = XEN_HULLS[String(m.ship || '')] ;
+      if (!h) continue;
+      const who = String(w.actor_name || 'A pilot');
+      const nth = Number(m.nth) || 1;
+      const ring = Number(m.ring) || 0;
+      const apex = h.tier === 5;
+      const bar = '▰'.repeat(h.tier) + '▱'.repeat(5 - h.tier);
+      await post({
+        content: apex
+          ? `# ◈ THE GODSHARD HAS BEEN RECOVERED\n-# ${who} holds the Incursion's flagship. There is nothing above it.`
+          : `# ◈ ALIEN SHIP TECHNOLOGY RECOVERED\n-# ${who} tore a Kaevith hull out of the void.`,
+        embeds: [{
+          color: apex ? COLOR.crown : COLOR.xen,
+          author: { name: apex ? '👑  KAEVITH V · GODSHARD' : `◈  KAEVITH ${['', 'I', 'II', 'III', 'IV', 'V'][h.tier]} · RECOVERED` },
+          title: `${apex ? '👑' : '◈'}  ${up(who)}  ⚔  THE KAEVITH\u2003— ${h.name.toUpperCase()} EARNED`,
+          description:
+            `**${who}** cleared an alien-held zone${ring ? ` on **ring ${ring}**` : ''} and walked out with the **${h.name}**.\n\n` +
+            `> \`${bar}\`  **${h.cls}-class**\n` +
+            `> ⚡ **+${h.xp}% XP per kill for their ENTIRE fleet** — flagship or escort\n` +
+            `> 🚫 Never sold, never blueprinted. Earned only in My Galaxy.\n\n` +
+            // The pity flag is recorded but NEVER announced — a public
+            // "guaranteed drop" line would expose the hidden floor.
+            (nth === 1
+              ? '-# 🏆 The **FIRST** of this hull ever recovered. Nobody else has one.'
+              : `-# The **${ord(nth)}** ever recovered · ~${Math.round(XEN_SHARE * 100)}% of zones are alien-held`),
+        }],
+        allowed_mentions: { parse: [] },
+      });
+    }
+
+    // The digest is its own message — a day-in-review header plus one field per
+    // ladder, so it reads as a scoreboard rather than another event in the feed.
+    for (const d of digests) {
+      const boards = (d as any).boards || [];
+      const medal = ['\u{1F947}', '\u{1F948}', '\u{1F949}', '4.', '5.'];
+      const fields = boards
+        .filter((b: any) => (b.top || []).length)
+        .map((b: any) => ({
+          name: String(b.label || b.id).toUpperCase(),
+          value: (b.top || []).slice(0, 5).map((r: any, i: number) =>
+            `${medal[i]} **${r.name}** \u2014 ${b.id === 'voidmaw' ? 'stage ' + Math.round(Number(r.value)) : fmt(Number(r.value))}`
+          ).join('\n') || '\u2014',
+          inline: true,
+        }));
+      if (!fields.length) continue;
+      await post({
+        content: `# \u{1F4CA}\u2003DAILY STANDINGS \u2014 ${(d as any).day || ''}\n-# Top five on all six ladders. Top 100 have been paid \u2014 check your mail in game.`,
+        embeds: [{
+          color: COLOR.crown,
+          fields: fields.slice(0, 9),
+          timestamp: now,
+          footer: { text: 'Resets 00:05 UTC \u00b7 LootFleet' },
+        }],
+        allowed_mentions: { parse: [] },
+      });
+    }
+  }
+
+  // ---- SITUATION REPORT ------------------------------------------------------
+  // Every 3 hours: where the ladders stand, what moved in My Galaxy since the
+  // last report, when each Void spire's shield drops, and how Season 1 of the
+  // Voidmaw is going. This function ticks every 2 minutes to diff events, so the
+  // report rides its own clock kept in feed_seen — no second cron job, and the
+  // timer survives redeploys.
+  //
+  // The "what moved" section is fed by a rolling buffer: every event this feed
+  // announces appends its one-line summary, and the report drains it. That way
+  // the digest reflects exactly what was posted, with no second pass over the
+  // tables and no risk of the two disagreeing.
+  {
+    const meta = seen.get('_meta:sitrep') || {};
+    const last = Number(meta.at) || 0;
+    const buf: string[] = Array.isArray(meta.buf) ? meta.buf : [];
+    const fresh = [...events, ...voidEvents].map((e) => e.line).filter(Boolean);
+    for (const w of hullEvents) {
+      const h = XEN_HULLS[String((w.meta || {}).ship || '')];
+      if (h) fresh.push(`◈ **${w.actor_name}** earned the **${h.name}**`);
+    }
+    const merged = [...buf, ...fresh].slice(-40);
+    const due = !bootstrap && last > 0 && Date.now() - last >= SITREP_MS;
+
+    if (bootstrap || !last) {
+      // Start the clock without posting — the bootstrap message already fired.
+      snap.push({ kind: '_meta', ref: 'sitrep', data: { at: Date.now(), buf: [] }, updated_at: now });
+    } else if (!due) {
+      snap.push({ kind: '_meta', ref: 'sitrep', data: { at: last, buf: merged }, updated_at: now });
+    } else {
+      const medal = ['🥇', '🥈', '🥉', '4.', '5.'];
+      const fields: Record<string, unknown>[] = [];
+
+      // ---- ladders: top five by fleet power ----
+      if (pilots.length) {
+        fields.push({
+          name: '♛  FLEET POWER',
+          value: pilots.slice(0, 5).map((p, i) =>
+            `${medal[i]} **${p.name}** — \`${fmt(Number(p.power) || 0)}\``).join('\n'),
+          inline: true,
+        });
+        // Territory is the other ladder that moves hour to hour.
+        const held = new Map<string, number>();
+        for (const t of tiles) {
+          if (!t.owner_name) continue;
+          held.set(t.owner_name, (held.get(t.owner_name) || 0) + 1);
+        }
+        const topTiles = [...held.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+        if (topTiles.length) {
+          fields.push({
+            name: '⚑  TERRITORY',
+            value: topTiles.map(([n, c], i) => `${medal[i]} **${n}** — \`${c}\` systems`).join('\n'),
+            inline: true,
+          });
+        }
+      }
+
+      // ---- Season Dread / Voidmaw ----
+      const maw = (sd.data ?? []).slice()
+        .sort((a, b) => (Number(b.stage) || 0) - (Number(a.stage) || 0));
+      const season = maw.length ? (Number(maw[0].season) || 1) : 1;
+      if (maw.length) {
+        const deepest = Number(maw[0].stage) || 0;
+        fields.push({
+          name: `☠  VOIDMAW · SEASON ${season}`,
+          value: maw.slice(0, 5).map((s, i) =>
+            `${medal[i]} **${s.name}** — stage \`${Number(s.stage) || 0}\``).join('\n') +
+            `\n-# deepest run this season: stage ${deepest} · ${maw.length} pilots entered`,
+          inline: false,
+        });
+      }
+
+      // ---- Void spires: who holds them, and when the shield drops ----
+      // A spire behind a live shield cannot be attacked at all, so the countdown
+      // IS the schedule players plan around. Discord renders <t:…:R> in each
+      // reader's own timezone, which beats printing a UTC clock nobody converts.
+      const spireLines: string[] = [];
+      for (const id of Object.keys(VOID)) {
+        const v = VOID[id];
+        const row = tiles.find((t) => t.tile_id === id);
+        if (!row || !row.owner_id) {
+          spireLines.push(`🟢 **${v.name}** \`Lv ${v.tier}\` — **UNCLAIMED**, open right now`);
+          continue;
+        }
+        const until = row.cooldown_until ? new Date(row.cooldown_until).getTime() : 0;
+        if (until > Date.now()) {
+          spireLines.push(`🛡️ **${v.name}** \`Lv ${v.tier}\` — ${row.owner_name} · opens <t:${Math.floor(until / 1000)}:R>`);
+        } else {
+          spireLines.push(`🔓 **${v.name}** \`Lv ${v.tier}\` — ${row.owner_name} · **OPEN TO ATTACK NOW**`);
+        }
+      }
+      if (spireLines.length) {
+        const openNow = spireLines.filter((l) => l.startsWith('🔓') || l.startsWith('🟢')).length;
+        fields.push({
+          name: `🌌  THE VOID ZONE — ${openNow} of 7 attackable now`,
+          value: spireLines.join('\n'),
+          inline: false,
+        });
+      }
+
+      // ---- Kaevith Incursion standing ----
+      const hullsOut = (war.data ?? []).filter((w) => w.kind === 'xen_hull');
+      const byHull = new Map<string, number>();
+      for (const w of hullsOut) {
+        const k = String((w.meta || {}).ship || '');
+        if (XEN_HULLS[k]) byHull.set(k, (byHull.get(k) || 0) + 1);
+      }
+      fields.push({
+        name: '◈  THE KAEVITH INCURSION',
+        value: `~**${Math.round(XEN_SHARE * 100)}%** of My Galaxy is alien-held. Clearing a void zone pays **1–10%** for a hull — deeper rings, better odds.\n` +
+          Object.keys(XEN_HULLS).map((k) => {
+            const h = XEN_HULLS[k], n = byHull.get(k) || 0;
+            return `${n ? '✅' : '⬜'} **${h.name}** \`+${h.xp}% fleet XP\` — ${n ? `${n} recovered` : 'never recovered'}`;
+          }).join('\n'),
+        inline: false,
+      });
+
+      // ---- what moved since the last report ----
+      if (merged.length) {
+        const tail = merged.slice(-12);
+        fields.push({
+          name: `⚔  MY GALAXY — LAST 3 HOURS (${merged.length} event${merged.length === 1 ? '' : 's'})`,
+          value: tail.map((l) => `• ${l}`).join('\n').slice(0, 1020),
+          inline: false,
+        });
+      } else {
+        fields.push({
+          name: '⚔  MY GALAXY — LAST 3 HOURS',
+          value: '-# Quiet. No systems changed hands, no sieges broken.',
+          inline: false,
+        });
+      }
+
+      await post({
+        content: `# 📡\u2003FLEET SITUATION REPORT\n-# <t:${Math.floor(Date.now() / 1000)}:f> · next report in 3 hours`,
+        embeds: [{
+          color: COLOR.sitrep,
+          fields: fields.slice(0, 9),
+          timestamp: now,
+          footer: { text: 'Every 3 hours · LootFleet' },
+        }],
+        allowed_mentions: { parse: [] },
+      });
+      snap.push({ kind: '_meta', ref: 'sitrep', data: { at: Date.now(), buf: [] }, updated_at: now });
+    }
   }
 
   // ---- publish ---------------------------------------------------------------

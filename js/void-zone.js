@@ -125,7 +125,7 @@
     body.querySelectorAll('[data-vzopen]').forEach((b) => b.addEventListener('click', () => openTile(b.dataset.vzopen)));
   }
   // live refresh while the screen is open (cooldowns tick, claims stream in)
-  setInterval(() => { if (document.querySelector('#screen-voidzone.active')) render(); }, 4000);
+  setInterval(() => { if (document.hidden) return; if (document.querySelector('#screen-voidzone.active')) render(); }, 4000);
   window.VOIDZ = { render };
 
   const HEX = 'polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)';

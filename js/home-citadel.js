@@ -1249,7 +1249,7 @@
 
   function boot() {
     injectCSS();
-    setInterval(() => { try { updateHud(); } catch (e) {} }, 1000);
+    setInterval(() => { if (document.hidden) return; try { updateHud(); } catch (e) {} }, 1000);
   }
   window.HOMECIT = { render, updateHud, openHowTo, engineTick, engineRender, onDeath };
 

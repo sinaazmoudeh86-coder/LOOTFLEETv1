@@ -225,7 +225,7 @@
       mo.observe(document.body, { childList: true, subtree: true });
     } catch (e) {}
     // safety net for any renders the observer misses
-    setInterval(scan, 1200);
+    setInterval(() => { if (document.hidden) return; scan(); }, 1200);
     window.addEventListener('resize', function () { attached.forEach(sizeCanvas); });
   }
 

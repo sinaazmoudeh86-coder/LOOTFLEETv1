@@ -1,0 +1,63 @@
+/* =============================================================================
+   sheet-cta.css — pin the primary action to the bottom of every sheet
+   -----------------------------------------------------------------------------
+   .sheet-actions was the last child INSIDE the scrolling .sheet-body, so on any
+   sheet taller than the viewport the primary CTA — Attack / Claim / Deploy, and
+   Close — scrolled off the bottom. The galaxy tile sheet is the worst case: value
+   block, invasion block, seven stat rows, citadel builder and the abandon panel
+   all sit above the buttons, so the one thing the sheet exists to do was two
+   swipes away.
+
+   Fix is structural, not per-sheet: sticky-position the action row against the
+   bottom of the scrollport. It now always sits over the content with a fade, the
+   body scrolls behind it, and no markup changes — every sheet in the game gets
+   it. Negative margins cancel .sheet-body's 18px padding so the bar spans the
+   full width and sits flush with the sheet's rounded bottom edge.
+   ============================================================================= */
+
+.sheet-body{ padding-bottom:6px !important; }
+
+.sheet-body > .sheet-actions,
+.sheet-body .sheet-actions{
+  position:sticky; bottom:-6px; z-index:6;
+  margin:14px -18px -6px; padding:12px 18px 14px;
+  /* Opaque toward the buttons, fading up so scrolled content passes under it
+     instead of colliding with a hard edge. */
+  background:linear-gradient(180deg,rgba(10,14,22,0) 0%,rgba(10,14,22,.86) 38%,rgba(10,14,22,.97) 100%);
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+}
+/* The scroll cue: a hairline that only reads while the bar is actually
+   overlapping content. Harmless when the sheet is short. */
+.sheet-body .sheet-actions::before{
+  content:''; position:absolute; left:0; right:0; top:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.14) 20%,rgba(255,255,255,.14) 80%,transparent);
+}
+/* Primary CTA carries the weight now that it is always on screen. */
+.sheet-body .sheet-actions .btn{ padding:13px 11px; font-size:13.5px; }
+.sheet-body .sheet-actions .btn.gold,
+.sheet-body .sheet-actions .btn.primary{ flex:1.6; box-shadow:0 6px 18px -8px rgba(0,0,0,.9); }
+.sheet-body .sheet-actions .btn[disabled]{ flex:1.6; }
+/* Close is secondary — narrower, quieter, but never hidden. */
+.sheet-body .sheet-actions .btn:not(.gold):not(.primary){ flex:1; }
+
+/* A sheet whose only action is Close keeps it full width. */
+.sheet-body .sheet-actions .btn:only-child{ flex:1; }
+
+/* ---- galaxy tile sheet: the decision bar ----------------------------------
+   The two numbers that decide whether to commit — what the trip costs and how
+   hard the garrison hits — sat six rows down. This lifts them directly under the
+   sheet head, above the fold, so the pinned CTA has context without scrolling. */
+.tile-brief{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:-2px 0 12px}
+.tb-cell{padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09)}
+.tb-k{font-size:9.5px;font-weight:800;letter-spacing:.14em;color:#8b95a6}
+.tb-v{margin-top:3px;font-family:var(--font-display);font-size:14px;font-weight:800;color:#e6edf8;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Warp cost can carry three resource chips — smaller and tighter so it always
+   stays on ONE line instead of wrapping the cell to double height. */
+.tb-cell.cost .tb-v{font-size:12px;letter-spacing:-.01em}
+.tb-cell.cost .tb-v span{margin-right:5px}
+.tb-cell.cost .tb-v span:last-child{margin-right:0}
+.tb-cell.bad .tb-v{color:#ff8a96}
+.tb-cell.warn .tb-v{color:#ffcf4d}
+.tb-cell.xen{background:rgba(122,42,196,.14);border-color:rgba(194,107,255,.4)}
+.tb-cell.xen .tb-v{color:#e6c8ff}
+.tb-cell.full{grid-column:1/-1}

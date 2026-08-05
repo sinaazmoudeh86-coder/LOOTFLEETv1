@@ -32,6 +32,20 @@
     try { await cl.rpc('log_repelled', { p_tile_id: tileId }); } catch (e) {}
   }
 
+  // KAEVITH HULL EARNED — the roll is resolved client-side as part of battle
+  // resolution, so the client has to be the one that reports it. log_xen_hull()
+  // validates the ship key against a fixed list and is idempotent per
+  // (pilot, hull), so a replayed or forged call announces nothing.
+  async function logXenHull(shipKey, tileId, ring, pity) {
+    const cl = client(); if (!cl || !myId() || !shipKey) return;
+    try {
+      await cl.rpc('log_xen_hull', {
+        p_ship: shipKey, p_tile_id: tileId || null,
+        p_ring: ring || 0, p_pity: !!pity,
+      });
+    } catch (e) {}
+  }
+
   // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil, citadel, fleetScore, defense } }
   async function loadAll() {
     const cl = client(); if (!cl) return {};
@@ -121,5 +135,5 @@
       return { ok: !e2 };
     } catch (e) { return { ok: false }; }
   }
-  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe, logRepelled };
+  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe, logRepelled, logXenHull };
 })();

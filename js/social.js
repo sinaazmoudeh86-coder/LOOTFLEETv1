@@ -236,7 +236,7 @@
       b.classList.toggle('has-dot', !!(need || pend));
     });
   }
-  setInterval(updateDot, 2500);
+  setInterval(() => { if (document.hidden) return; updateDot(); }, 2500);
 
   window.SOCIAL = { render, open, setTab, wallet, buyAC, refreshWallet, sheet, confirmSheet, toast, esc, rpc, signedIn, ensure, online };
 

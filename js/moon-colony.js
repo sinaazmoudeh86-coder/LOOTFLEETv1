@@ -694,7 +694,7 @@
   // ---------------------------------------------------------------------------
   function init(game) {
     G = game; ensure();
-    setInterval(() => { if (document.querySelector('#screen-moon.active')) render(); }, 15000);
+    setInterval(() => { if (document.hidden) return; if (document.querySelector('#screen-moon.active')) render(); }, 15000);
   }
   function boot() { if (window.GAME && window.GAME.state) init(window.GAME); else setTimeout(boot, 500); }
   setTimeout(boot, 1000);

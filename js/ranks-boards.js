@@ -139,6 +139,19 @@
   function fmtRaw(n) { try { return (G().formatNumRaw || G().formatNum)(n); } catch (e) { return String(Math.floor(n || 0)); } }
 
   // ---- deterministic sim figures --------------------------------------------
+  // How many hulls a simulated pilot can plausibly own. Derived from the live
+  // roster so it can never drift out of range again, and it EXCLUDES the Kaevith
+  // event hulls (alienTech): those are earned only by clearing an alien-held zone
+  // in My Galaxy, at 1–10% per clear, so crediting bots with them would both
+  // overstate the ceiling and imply they play an event they do not participate in.
+  const SIM_HULL_CAP = (() => {
+    try {
+      const all = (window.CONFIG && window.CONFIG.SHIPS) || [];
+      const n = all.filter((s) => !s.alienTech).length;
+      return n > 0 ? n : 32;
+    } catch (e) { return 32; }
+  })();
+
   // Seeded on the pilot's NAME, so a given sim shows identical numbers forever,
   // on every device, without a byte of storage. Values track level and ascension
   // the way a human account's would — a Lv 400 ★12 pilot reads like one.
@@ -159,8 +172,11 @@
     // hourly revenue scales with tiles, with citadels paying an order more
     const rev = tiles ? Math.round((tiles * 1.8e4 + citadels * 3.1e5) * Math.pow(1.028, lv) * (0.7 + r() * 0.8)) : 0;
 
-    // HANGAR — hulls unlock roughly every 12 levels, capped at the roster size
-    const ships = Math.max(1, Math.min(48, Math.floor(lv / 12) + Math.floor(st * 1.4) + Math.floor(r() * 3)));
+    // HANGAR — hulls unlock roughly every 12 levels, capped at the roster size.
+    // SIM_HULL_CAP is derived from CONFIG.SHIPS rather than hardcoded: the literal
+    // 48 here predated several roster changes and outran the real count, so top
+    // sim pilots were credited with more hulls than exist in the game.
+    const ships = Math.max(1, Math.min(SIM_HULL_CAP, Math.floor(lv / 12) + Math.floor(st * 1.4) + Math.floor(r() * 3)));
 
     // MISSIONS — a board a day, give or take, across the whole career
     const missions = Math.floor(career * (0.55 + r() * 0.75));

@@ -511,6 +511,34 @@
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
       megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:900000, dreadCores:60 } },
+    // ---- KAEVITH ALIEN TECHNOLOGY · THE INCURSION EVENT ---------------------
+    // Five recovered hulls, never sold and never blueprinted: the ONLY way to
+    // get one is to clear an invaded zone in My Galaxy and win the salvage roll
+    // (1% on ring 1 → 10% at the rim; deeper rings favour the bigger hulls).
+    // Their real value is the RESONANCE FIELD: any Kaevith hull in the fleet
+    // (flagship or escort) raises EVERY kill's XP for the whole fleet — xpBonus
+    // is a percentage, and stacking them adds up to a +100% ceiling.
+    // Performance runs entry-level (Splinter) → Dreadnaught-class (Godshard).
+    { key:'xen1', name:'Kaevith Splinter', cls:'Frigate', price:0, reqKills:0, weapons:1, ammo:1, hull:1, drones:0,
+      mods:{ moveSpeed:30, dmgPct:10, critChance:5 },
+      tag:'KAEVITH I · SPLINTER', xen:1, xpBonus:10, alienTech:true,
+      desc:'A single shard of Kaevith hullstone flying on a stolen drive — entry-level performance, but the resonance core alone lifts your whole fleet\u2019s XP by 10% per kill.' },
+    { key:'xen2', name:'Kaevith Shard', cls:'Cruiser', price:0, reqKills:0, weapons:2, ammo:1, hull:1, drones:0,
+      mods:{ dmgPct:20, hpPct:14, critChance:6 },
+      tag:'KAEVITH II · SHARD', xen:2, xpBonus:25, alienTech:true,
+      desc:'Cruiser-grade alien plate around a wider resonance lattice. +25% fleet XP per kill.' },
+    { key:'xen3', name:'Kaevith Glaive', cls:'Battleship', price:0, reqKills:0, weapons:3, ammo:2, hull:2, drones:0,
+      mods:{ dmgPct:40, hpPct:55, critChance:10, multiShot:8 },
+      tag:'KAEVITH III · GLAIVE', xen:3, xpBonus:45, alienTech:true,
+      desc:'A battleship-weight blade of crystal with three void hardpoints. +45% fleet XP per kill.' },
+    { key:'xen4', name:'Kaevith Sovereign', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8,
+      mods:{ hpPct:120, dmgPct:75, multiShot:22, critChance:16, critDamage:60, atkSpeedPct:25, rangePct:30 },
+      tag:'KAEVITH IV · SOVEREIGN', xen:4, xpBonus:70, alienTech:true,
+      desc:'A carrier-class Kaevith command hull with eight drone spines. +70% fleet XP per kill.' },
+    { key:'xen5', name:'Kaevith Godshard', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:30,
+      mods:{ hpPct:700, dmgPct:400, multiShot:110, critChance:90, critDamage:320, moveSpeed:60, atkSpeedPct:135, rangePct:210, lifeSteal:3.8 },
+      tag:'KAEVITH V · GODSHARD', xen:5, xpBonus:100, alienTech:true,
+      desc:'The Incursion\u2019s flagship — a Dreadnaught-class monolith of living crystal. Its resonance field alone doubles every kill\u2019s XP for the entire fleet.' },
     // ---- THE AETERNUM · ASCENSION-CLASS PLANETBREAKER -----------------------
     // Not a ship. An artificial world, forged by an extinct civilisation to erase
     // star systems, and the single hardest thing in LOOTFLEET to obtain:
@@ -553,11 +581,14 @@
   SHIPS.forEach((s) => { s.bpZone = SHIP_BP_ZONE[s.key] || 0; });
   // Previous hull in the upgrade chain. `side` hulls (Aegis) are optional
   // branches: they hang off the chain but are never required by later hulls.
+  // Previous hull in the upgrade chain. `side` hulls (Aegis) are optional
+  // branches, and `alienTech` hulls (Kaevith event drops) sit outside the chain
+  // entirely — both hang off it but are never anyone's predecessor.
   function shipPrevKey(key) {
     let i = SHIPS.findIndex((s) => s.key === key);
     if (i <= 0) return null;
     i--;
-    while (i > 0 && SHIPS[i].side) i--;
+    while (i > 0 && (SHIPS[i].side || SHIPS[i].alienTech)) i--;
     return SHIPS[i].key;
   }
   // Which hull blueprint (if any) drops from the boss of a given zone.

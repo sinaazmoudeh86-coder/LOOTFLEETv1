@@ -83,7 +83,7 @@
         if (r && r.ok) toast('◉ BEACON — ' + r.spawned + ' hostiles inbound for ' + Math.round(r.life) + 's', '#ff8a3d');
         syncBeacon();
       });
-      setInterval(syncBeacon, 250);
+      setInterval(() => { if (document.hidden) return; syncBeacon(); }, 250);
     }
     const bailBtn = $('bail-btn');
     if (bailBtn) bailBtn.addEventListener('click', () => {
@@ -1383,6 +1383,68 @@
     _citTint[color] = cv; return cv;
   }
   const GX_HEX = 26;                         // base hex size at zoom 1
+  // The tile outline, as a path. Extracted because the canvas current path is NOT
+  // part of the drawing state: any beginPath() between building the hex and
+  // stroking it silently replaces it, and save()/restore() will not restore it.
+  // Call this again after any such interruption rather than assuming the hex
+  // survived. Radius matches the original inline loop exactly.
+  function gxHexPath(ctx, cx, cy) {
+    const r = GX_HEX - 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 3 * i + Math.PI / 6;
+      const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
+  // PERF — THE KAEVITH VOID VEIL. Painting the invasion originally built two
+  // radial gradients per invaded tile per world bake. At ~20% of the map that is
+  // 80–160 gradient objects and fills every rebake (~2/s idle, every zoom step),
+  // for an effect that is identical on every tile. Both layers are now baked ONCE
+  // into offscreen sprites and blitted — zero per-tile allocation.
+  //
+  // The two layers MUST stay separate, because they composite differently:
+  //   · core  — clipped to the hex, drawn source-over: the dark void hole.
+  //   · bloom — UNCLIPPED at radius GX_HEX×1.5 (39px vs the hex's 24.5px
+  //             circumradius) and drawn with 'lighter' AGAINST THE MAP, so it
+  //             bleeds ~14.5px past every edge and pools additively across
+  //             adjacent invaded tiles. That bleed is what makes the invasion
+  //             read as one continuous void field instead of discrete cells;
+  //             pre-compositing it into a single sprite loses it entirely.
+  // Four phase frames preserve the per-tile shimmer the old Date.now() term gave.
+  const XEN_PHASES = 4;
+  let _xenVeil = null;
+  function xenVeil(phase) {
+    if (!_xenVeil) {
+      _xenVeil = [];
+      const CR = Math.ceil(GX_HEX), BR = Math.ceil(GX_HEX * 1.5);
+      for (let i = 0; i < XEN_PHASES; i++) {
+        const vp = 0.55 + 0.45 * Math.sin((i / XEN_PHASES) * Math.PI * 2);
+        // ---- core: dark void hole bleeding purple ----
+        const cc = document.createElement('canvas');
+        cc.width = cc.height = CR * 2;
+        const cx2 = cc.getContext('2d');
+        const vg = cx2.createRadialGradient(CR, CR, 0, CR, CR, GX_HEX);
+        vg.addColorStop(0, 'rgba(6,0,14,0.92)');
+        vg.addColorStop(0.52, 'rgba(58,10,110,0.78)');
+        vg.addColorStop(1, 'rgba(194,107,255,0.30)');
+        cx2.fillStyle = vg;
+        cx2.beginPath(); cx2.arc(CR, CR, GX_HEX, 0, 7); cx2.fill();
+        // ---- bloom: wide falloff, blitted additively against the live map ----
+        const bc = document.createElement('canvas');
+        bc.width = bc.height = BR * 2;
+        const bx = bc.getContext('2d');
+        const vr = bx.createRadialGradient(BR, BR, GX_HEX * 0.25, BR, BR, BR);
+        vr.addColorStop(0, 'rgba(160,70,255,' + (0.16 + 0.14 * vp).toFixed(3) + ')');
+        vr.addColorStop(1, 'rgba(160,70,255,0)');
+        bx.fillStyle = vr;
+        bx.beginPath(); bx.arc(BR, BR, BR, 0, 7); bx.fill();
+        _xenVeil.push({ core: cc, cr: CR, bloom: bc, br: BR });
+      }
+    }
+    return _xenVeil[phase % XEN_PHASES];
+  }
   function renderGalaxy() {
     const res = G.getResources(), rates = G.resourceRates();
     el['galaxy-sub'].textContent = 'one galaxy · ' + GM.tileCount() + ' tiles · conquer & hold';
@@ -1392,6 +1454,15 @@
       html += `<div class="res-pill" style="--rc:${d.color}"><span class="res-g">${d.glyph}</span><span class="res-txt"><b>${G.formatNum(res[k] || 0)}</b><span class="res-rate">+${G.formatNum(rates[k] || 0)}/h</span></span></div>`;
     });
     html += '</div>';
+    // —— THE KAEVITH INCURSION —— live event banner, always tappable for the full briefing
+    {
+      const bonus = G.xenXpBonus ? G.xenXpBonus() : 0;
+      html += `<button class="xen-banner" id="xen-open">
+        <span class="xb-glyph">◈</span>
+        <span class="xb-txt"><b>THE KAEVITH INCURSION</b><i>~20% of the galaxy is alien-held · clear a void zone for a chance to earn their ship technology</i></span>
+        <span class="xb-cta">${bonus ? '+' + bonus + '% XP' : 'BRIEFING'}</span>
+      </button>`;
+    }
     const feed = G.getGalaxyFeed ? G.getGalaxyFeed() : [];
     if (feed.length) {
       html += '<div class="gx-feed"><div class="gxf-h">⚔ Contested Space · live</div>';
@@ -1407,12 +1478,15 @@
       </div>
       <div class="gx-hud" id="gx-ringlab"></div>
     </div>`;
-    html += `<div class="gx-legend"><span class="gxl gxl-cit" style="color:#8fc4ff;font-weight:800">◈ ${(G.tileCount ? G.tileCount() : 0)}/${(G.tileCap ? G.tileCap() : 50)} Systems</span><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl">⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
+    html += `<div class="gx-legend"><span class="gxl gxl-cit ${(G.atTileCap && G.atTileCap()) ? 'gxl-full' : ''}" style="font-weight:800">◈ ${(G.tileCount ? G.tileCount() : 0)}/${(G.tileCap ? G.tileCap() : 50)} Systems${(G.atTileCap && G.atTileCap()) ? ' · FULL' : ''}</span><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl"><i style="background:#7a2ac4"></i>◈ Kaevith</span><span class="gxl"><i style="background:#ffbe6e"></i>⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
+    const xb = document.getElementById('xen-open');
+    if (xb) xb.addEventListener('click', () => openXenBriefing());
     bindGalaxyMap();
     drawGalaxyMap();
     clearInterval(_galaxyTimer);
     _galaxyTimer = setInterval(() => { if (screen === 'galaxy') drawGalaxyMap(); else clearInterval(_galaxyTimer); }, 1000);
+    maybeAnnounceXen();
   }
   function bindGalaxyMap() {
     const cv = document.getElementById('gx-canvas'); if (!cv) return;
@@ -1527,24 +1601,59 @@
         else if (rival) { fill = 'rgba(210,59,78,0.42)'; edge = '#ff5468'; }     // rival — red
         else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
         else { fill = 'rgba(120,134,158,0.14)'; edge = '#566884'; }              // unclaimed — neutral slate
-        // hex path
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const a = Math.PI / 3 * i + Math.PI / 6;
-          const px = p.x + Math.cos(a) * (GX_HEX - 1.5), py = p.y + Math.sin(a) * (GX_HEX - 1.5);
-          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-        }
-        ctx.closePath();
+        // hex path (see gxHexPath — the current path is NOT part of canvas drawing
+        // state, so anything that calls beginPath() below must re-establish it)
+        gxHexPath(ctx, p.x, p.y);
         ctx.fillStyle = fill; ctx.fill();
-        // contested lockout — dim the hex so "can't take this yet" reads at a glance
+        // —— KAEVITH INCURSION —— an invaded tile reads as a hole in the map:
+        // a dark void core bleeding purple, over whatever the ownership fill is.
+        // (Ownership, citadels and cooldowns are untouched — this is a veil.)
+        let xenBloom = null;
+        if (t.alien && !t.home) {
+          // Phase varies per tile by coordinate — what the old per-tile Date.now()
+          // term was really doing.
+          const veil = xenVeil((((c.q * 3 + c.r * 5) % XEN_PHASES) + XEN_PHASES) % XEN_PHASES);
+          ctx.save();
+          ctx.clip();                                    // core stays inside the hex
+          ctx.drawImage(veil.core, p.x - veil.cr, p.y - veil.cr, veil.cr * 2, veil.cr * 2);
+          ctx.restore();
+          xenBloom = veil;                               // blitted below, unclipped
+          edge = '#c26bff';
+        }
+        // contested lockout — dim the hex so "can't take this yet" reads at a glance.
+        // MUST run while the hex path is still current — the bloom blit below is
+        // deliberately after it, and drawImage does not disturb the path.
         if (cd > 0 && !owned) { ctx.fillStyle = 'rgba(5,8,14,0.48)'; ctx.fill(); }
-        // PLAYER CITADEL — themed fortress: BLUE if it's yours, RED if a rival's
+        // Kaevith bloom: unclipped and ADDITIVE against the map, so it spills past
+        // the hex edge and pools across neighbouring invaded tiles.
+        if (xenBloom) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.drawImage(xenBloom.bloom, p.x - xenBloom.br, p.y - xenBloom.br, xenBloom.br * 2, xenBloom.br * 2);
+          ctx.restore();
+        }
+        // CITADEL FORTRESS — themed: BLUE yours · RED a rival's · AMBER unclaimed.
+        //
+        // CONSISTENCY BUG (fixed): whether the fortress was drawn at all came only
+        // from per-account state — hasMyCitadel() reads YOUR save's state.citadels,
+        // and rivalCitadelScore() reads the server claim. captureSystem() writes a
+        // state.citadels entry only for VOID tiles, so a NATURAL citadel you had
+        // taken produced neither: it rendered as a bare prismatic hex to you, while
+        // every other account — reading your published claim, which does carry
+        // citadel:true — saw a full red fortress on the same tile. Same coordinate,
+        // two different maps.
+        //
+        // A natural citadel is part of the seeded terrain (galaxy.js, identical on
+        // every account), so its fortress is now drawn from t.citadel. Ownership
+        // only picks the TINT, never whether the structure exists.
         {
-          const myCit = owned && G.hasMyCitadel && G.hasMyCitadel(id);
-          const rivCit = !myCit && G.rivalCitadelScore && G.rivalCitadelScore(id) != null;
-          if (myCit || rivCit) {
-            const cc = myCit ? [70, 150, 255] : [240, 60, 70];
-            const tint = myCit ? '#2f7dff' : '#e23b3b';
+          const natural = !!t.citadel && !t.home;
+          const myCit = owned && (natural || (G.hasMyCitadel && G.hasMyCitadel(id)));
+          const rivCit = !myCit && ((natural && (rival || ally)) || (G.rivalCitadelScore && G.rivalCitadelScore(id) != null));
+          const freeCit = !myCit && !rivCit && natural;
+          if (myCit || rivCit || freeCit) {
+            const cc = myCit ? [70, 150, 255] : rivCit ? [240, 60, 70] : [255, 190, 110];
+            const tint = myCit ? '#2f7dff' : rivCit ? '#e23b3b' : '#ffbe6e';
             const pp = 0.55 + 0.45 * Math.sin(Date.now() / 380 + ring);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
@@ -1566,6 +1675,13 @@
             }
           }
         }
+        // The fortress block above calls beginPath()+arc() for its glow, which
+        // REPLACES the hex path with a radius-44.2 circle. The current path is not
+        // part of the drawing state, so its ctx.save()/restore() does not bring the
+        // hex back — the prismatic stroke below was painting that circle, a rainbow
+        // ring ~1.8× the tile radius bleeding over all six neighbours. Rebuild the
+        // hex here so the stroke always outlines the tile.
+        gxHexPath(ctx, p.x, p.y);
         if (t.citadel) {
           // PRISMATIC edge — slow color-cycling sheen, phase-offset per tile
           const hue = (Date.now() / 30 + (c.q * 47 + c.r * 31)) % 360;
@@ -1587,6 +1703,9 @@
             const hue2 = (Date.now() / 25 + ring * 30) % 360;
             ctx.fillStyle = 'hsl(' + hue2 + ',90%,65%)';
             ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, 7); ctx.fill();
+          } else if (t.alien) {
+            ctx.fillStyle = '#c26bff';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, 7); ctx.fill();
           }
           continue;
         }
@@ -1598,11 +1717,15 @@
             const dw = GX_HEX * 1.5, dh = dw * (gxCitImg.naturalHeight / gxCitImg.naturalWidth);
             ctx.drawImage(gxCitImg, p.x - dw / 2, p.y - dh / 2 - 3, dw, dh);
           } else {
-            const icon = t.citadel ? '⛴' : t.boss ? '☠' : (t.resource ? GM.RES[t.resource].glyph : '');
+            // The citadel's own '⛴' is omitted — the tinted fortress sprite above is
+          // now drawn on EVERY natural citadel (not just owned/rival ones), so the
+          // glyph was a third centred mark stacked on the art and the level label.
+          const icon = t.citadel ? '' : t.boss ? '☠' : (t.resource ? GM.RES[t.resource].glyph : '');
             if (icon) { ctx.font = '800 10px Rajdhani, sans-serif'; ctx.fillStyle = t.citadel ? '#ffb088' : t.boss ? '#ff6a78' : (t.resource ? GM.RES[t.resource].color : '#9fb2d0'); ctx.fillText(icon, p.x, p.y - 3); }
           }
+          if (t.alien && !t.home) { ctx.font = '800 11px Rajdhani, sans-serif'; ctx.fillStyle = '#e0b3ff'; ctx.fillText('◈', p.x, p.y - GX_HEX * 0.42); }
           ctx.font = '800 8px Rajdhani, sans-serif';
-          ctx.fillStyle = locked ? '#5a6270' : '#dfe9ff';
+          ctx.fillStyle = locked ? '#5a6270' : t.alien ? '#e6c8ff' : '#dfe9ff';
           ctx.fillText('L' + t.level, p.x, p.y + (t.citadel ? GX_HEX * 0.62 : (t.boss || t.resource) ? 9 : 3));
           if (cd > 0 && !owned && showText) {
             // CLEAR COUNTDOWN — dark pill + live ticking clock (h for citadels)
@@ -1692,6 +1815,23 @@
       return;
     }
     const typeName = t.citadel ? '⛴ CITADEL SIEGE ZONE' : t.boss ? '☠ Boss Tile' : t.resource ? (GM.RES[t.resource].glyph + ' Resource Field') : 'Combat Sector';
+    // KAEVITH INCURSION — an invaded zone fights differently. Ownership does not change.
+    const xenChance = (t.alien && !t.void && GM.alienChance) ? Math.round(GM.alienChance(t.ring) * 100) : 0;
+    // EMPIRE AT CAPACITY — explain the block BEFORE the pilot taps a dead button.
+    // Only relevant on a tile you don't already hold; redeploying to your own is
+    // never capped.
+    const atCap = !t.owned && G.atTileCap && G.atTileCap();
+    const capNow = G.tileCap ? G.tileCap() : 50;
+    const capBlock = atCap ? `<div class="cap-warn">
+      <div class="cw-h"><span>◈</span> EMPIRE AT CAPACITY — ${capNow}/${capNow} SYSTEMS</div>
+      <div class="cw-b">You hold every system you have room for, so you can't claim <b>${t.name}</b> yet. This is a hard cap on how many systems one pilot can own — not a cooldown, and not a level gate. It won't clear on its own.</div>
+      <div class="cw-b">Free a slot by <b>abandoning</b> a system you already hold: open it from the map and tap <b>⏏ Abandon tile</b>. You keep everything it has already paid you — you give up its hourly production, its citadel if it has one, and it returns to neutral for anyone to claim.</div>
+      <button class="cw-btn" data-cap-help>⏏ Free up a slot — show my systems</button>
+    </div>` : '';const xenBlock = (t.alien && !t.void) ? `<div class="xen-tile">
+      <div class="xt-h"><span class="xt-g">◈</span> KAEVITH-HELD ZONE</div>
+      <div class="xt-b">Every hostile here flies a Kaevith hull — <b>+35% hull, +22% damage</b> over this ring's normal garrison. Ownership, citadels and cooldowns work exactly as anywhere else.</div>
+      <div class="xt-r"><span>◈ Chance to earn a hull on clear</span><b>${xenChance}%</b></div>
+    </div>` : '';
     const owner = t.owned ? 'You' : (t.rival || 'Unclaimed');
     const ownerCol = t.owned ? '#5fa8ff' : (t.rival ? '#e8a34a' : '#7fb4ff');
     let ratePerH = t.rate ? t.rate * (t.deep ? GM.DEEP_MULT.resource : 1) : 0;
@@ -1713,7 +1853,7 @@
     const ec = G.entryCostFor ? G.entryCostFor(id) : null;
     // BIG VALUE HERO — what this tile pays per hour, with every multiplier spelled out
     const valChips = [];
-    if (t.citadel) valChips.push('⛴ CITADEL ×' + GM.CITADEL_RATE_MULT);
+    if (t.citadel) valChips.push('⛴ CITADEL ×' + GM.CITADEL_RATE_MULT + ' vs a resource field');
     if (t.deep) valChips.push('☢ DEEP SPACE ×' + GM.DEEP_MULT.resource);
     if (t.rarity) valChips.push(t.rarity === 2 ? '★★ RARE' : '★ UNCOMMON');
     if (_cit && !t.void) valChips.push('⛓ YOUR CITADEL ×' + (10 * (_cit.lv || 1)));
@@ -1727,6 +1867,11 @@
     const ecAfford = !ec || GM.RES_KEYS.every((k2) => (myRes[k2] || 0) >= (ec[k2] || 0));
     const ecRow = ec ? `<div class="ip-stat"><span class="ip-sname">Entry cost</span><span class="v">${GM.RES_KEYS.filter((k2) => ec[k2]).map((k2) => `<span style="color:${(myRes[k2] || 0) >= ec[k2] ? GM.RES[k2].color : 'var(--bad)'}">${GM.RES[k2].glyph} ${G.formatNum(ec[k2])}</span>`).join(' ')}${t.owned ? ' <span style="color:var(--muted-2)">(½ — your territory)</span>' : ''}</span></div>` : '';
     let actionLabel = action;
+    // Compact cost for the above-the-fold decision bar: glyphs only, no labels.
+    const ecBrief = ec
+      ? GM.RES_KEYS.filter((k2) => ec[k2]).map((k2) =>
+          `<span style="color:${(myRes[k2] || 0) >= ec[k2] ? GM.RES[k2].color : '#ff8a96'}">${GM.RES[k2].glyph}${G.formatNum(ec[k2])}</span>`).join(' ') || 'Free'
+      : 'Free';
     if (t.rivalCitadelScore != null && !t.owned) actionLabel = '⚔ Siege Citadel';
     let citBlock = '';
     if (t.myCitadel) {
@@ -1782,7 +1927,7 @@
     } else if (t.owned && t.citadel) {
       citBlock = '<div style="background:rgba(255,210,77,.06);border:1px solid rgba(255,210,77,.3);border-radius:10px;padding:9px 11px;margin-top:8px">' +
         '<div style="font-size:12px;font-weight:700;color:#ffd24d">⛴ Natural Citadel — captured intact</div>' +
-        '<div style="font-size:11px;color:#9fb0c4;margin-top:5px">Its ×' + GM.CITADEL_RATE_MULT + ' output is built into the fortress — nothing to build or rank up here.</div>' +
+        '<div style="font-size:11px;color:#9fb0c4;margin-top:5px">Its ×' + GM.CITADEL_RATE_MULT + ' output — measured against a resource field on this ring — is built into the fortress. Nothing to build or rank up here, and the figure above is what actually deposits.</div>' +
       '</div>';
     } else if (t.owned && G.citadelBuildCost) {
       const bc = G.citadelBuildCost(id), cn = G.citadelCount ? G.citadelCount() : 0;
@@ -1796,7 +1941,21 @@
       '</div>';
     }
     const sheet = showSheet(`<div class="sheet-head">${t.rival ? 'Contest' : t.owned ? 'Your Tile' : 'Claim'} · ${t.name}</div><div class="sheet-body">
+      <div class="tile-brief">
+        <div class="tb-cell cost${!ecAfford ? ' bad' : ''}"><div class="tb-k">WARP COST</div><div class="tb-v">${ecBrief}</div></div>
+        <div class="tb-cell${t.deep ? ' warn' : ''}"><div class="tb-k">GARRISON</div><div class="tb-v">Zone Lv ${t.diff}</div></div>
+        ${atCap
+          ? `<div class="tb-cell bad full"><div class="tb-k">BLOCKED</div><div class="tb-v">Empire full — ${capNow}/${capNow} systems</div></div>`
+          : blocked
+            ? `<div class="tb-cell warn full"><div class="tb-k">SHIELDED</div><div class="tb-v">Opens in ${cdTxt}</div></div>`
+            : t.locked
+              ? `<div class="tb-cell bad full"><div class="tb-k">LOCKED</div><div class="tb-v">Needs Lv ${Math.max(1, t.level - 10)}</div></div>`
+              : t.alien && !t.void
+                ? `<div class="tb-cell xen full"><div class="tb-k">◈ KAEVITH-HELD</div><div class="tb-v">${xenChance}% chance to earn a hull</div></div>`
+                : ''}
+      </div>
       ${valueBlock}
+      ${xenBlock}
       <div class="ip-stat"><span class="ip-sname">Ring · Level</span><span class="v">Ring ${t.ring} · Lv ${t.level}${t.deep ? ' · ☢ DEEP SPACE' : ''}</span></div>
       <div class="ip-stat"><span class="ip-sname">Type</span><span class="v">${typeName}${t.rarity ? ' · ' + (t.rarity === 2 ? '★★ Rare' : '★ Uncommon') : ''}</span></div>
       <div class="ip-stat"><span class="ip-sname">Owner</span><span class="v" style="color:${ownerCol}">${owner}</span></div>
@@ -1812,7 +1971,10 @@
       ${t.deep ? '<p style="color:var(--hp);font-size:11px;margin-top:6px">⚠ Deep space — you lose <b>2 items</b> on death, but loot & resources are vastly richer.</p>' : ''}
       ${!ecAfford ? '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough Galaxy Resources to warp this deep — farm or capture closer rings first.</p>' : ''}
       ${t.owned ? '<div style="background:rgba(255,73,95,.05);border:1px solid rgba(255,73,95,.28);border-radius:10px;padding:8px 11px;margin-top:8px"><div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#ff8a96">⏏ ABANDON THIS ZONE</div><div style="font-size:11px;color:#b08f96;line-height:1.45;margin-top:3px">Releases the tile back to neutral — you lose its hourly production' + (t.myCitadel ? ', <b style="color:#ff8a96">and your CITADEL here is scrapped</b> (no refund)' : '') + '. Anyone may claim it again.</div><button class="btn" data-abandon style="width:100%;margin-top:7px;border-color:rgba(255,73,95,.45);color:#ff8a96">⏏ Abandon tile' + (t.myCitadel ? ' + citadel' : '') + '</button></div>' : ''}
-      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford) ? 'disabled' : ''}>${blocked ? '◷ ' + cdTxt : actionLabel}</button></div></div>`);
+      ${capBlock}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford || atCap) ? 'disabled' : ''}>${atCap ? '◈ At capacity — ' + capNow + '/' + capNow : blocked ? '◷ ' + cdTxt : actionLabel}</button></div></div>`);
+    const ch = sheet.querySelector('[data-cap-help]');
+    if (ch) ch.addEventListener('click', () => { closeSheet(); openTileCapSheet(id); });
     const ab = sheet.querySelector('[data-abandon]');
     if (ab) ab.addEventListener('click', () => {
       if (!ab.dataset.arm) { ab.dataset.arm = '1'; ab.textContent = '⚠ TAP AGAIN TO CONFIRM — this cannot be undone'; ab.style.background = 'rgba(255,73,95,.15)'; return; }
@@ -1835,7 +1997,54 @@
     if (ok) ok.addEventListener('click', () => {
       const r = G.warp(id);
       if (r.ok) { closeSheet(); toast((t.rival ? 'Attacking ' : t.owned ? 'Deploying to ' : 'Claiming ') + t.name, '#5b9cff'); showScreen('battle'); }
-      else toast(r.reason === 'tilecap' ? '◈ Empire at capacity (' + (r.cap || (G.tileCap ? G.tileCap() : 50)) + ' systems) — abandon one, or raise VIP (+5 each)' : r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
+      else if (r.reason === 'tilecap') { closeSheet(); openTileCapSheet(id); }
+      else toast(r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
+    });
+  }
+  // ==========================================================================
+  // EMPIRE AT CAPACITY — the full explainer. A toast was too easy to miss for a
+  // block that never clears on its own, so this is a sheet: what the cap is, how
+  // to raise it, and a live list of your systems sorted cheapest-to-lose first,
+  // each abandonable right here. `target` is the tile you were trying to take.
+  // ==========================================================================
+  function openTileCapSheet(target) {
+    const cap = G.tileCap ? G.tileCap() : 50, held = G.tileCount ? G.tileCount() : 0;
+    const tgt = target ? G.tileInfo(target) : null;
+    const rows = Object.keys(G.state.ownedSystems || {})
+      .map((k) => G.tileInfo(k)).filter((x) => x && !x.home)
+      .sort((a, b) => (a.rate * (a.myCitadel ? 10 : 1)) - (b.rate * (b.myCitadel ? 10 : 1)))
+      .slice(0, 12);
+    const list = rows.map((x) => `<div class="cap-row" data-cap-tile="${x.id}">
+      <div class="cr-m"><div class="cr-n">${x.name}${x.myCitadel ? ' <i>⛓ citadel</i>' : ''}</div>
+      <div class="cr-s">Ring ${x.ring} · Lv ${x.level} · ${GM.RES[x.resource] ? GM.RES[x.resource].glyph + ' ' + G.formatNum(Math.round(x.rate * (x.myCitadel ? 10 : 1))) + '/hr' : 'no yield'}</div></div>
+      <button class="cr-b">⏏ Abandon</button></div>`).join('');
+    const sheet = showSheet(`<div class="sheet-head">◈ Empire at capacity</div><div class="sheet-body">
+      <div class="cap-hero">
+        <div class="ch-n">${held}<i>/${cap}</i></div>
+        <div class="ch-l">SYSTEMS HELD · CAP REACHED</div>
+      </div>
+      <div class="cap-why">${tgt ? `You can't claim <b>${tgt.name}</b> because your empire is full.` : 'Your empire is full.'} A pilot can hold <b>${cap}</b> systems at once. The cap is a hard limit — it is not a cooldown and does not expire, so nothing changes until you free a slot yourself.</div>
+      <div class="lo-sect">Two ways to make room</div>
+      <div class="cap-opt"><span class="co-n">1</span><div><b>Abandon a system you hold.</b> Releases it to neutral and frees a slot immediately. You keep all resources it has already produced; you lose its hourly income, and its citadel is scrapped with no refund. Anyone can then claim it — including rivals.</div></div>
+      <div class="cap-opt"><span class="co-n">2</span><div><b>Raise the cap with VIP.</b> Every VIP level adds <b>+5</b> permanent system slots on top of the base 50. Nothing is abandoned and nothing is lost.</div></div>
+      <div class="lo-sect">Your systems · lowest earners first</div>
+      <p class="cap-hint">Tap <b>Abandon</b> to free a slot now, then claim your new zone. Each needs a second tap to confirm.</p>
+      <div class="cap-list">${list || '<div class="cap-none">You hold no abandonable systems.</div>'}</div>
+      <div class="sheet-actions"><button class="btn" data-x>Close</button>${tgt ? `<button class="btn gold" data-back>← Back to ${tgt.name}</button>` : ''}</div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const bk = sheet.querySelector('[data-back]');
+    if (bk) bk.addEventListener('click', () => { closeSheet(); openTileAction(target); });
+    sheet.querySelectorAll('[data-cap-tile]').forEach((row) => {
+      const btn = row.querySelector('.cr-b');
+      btn.addEventListener('click', () => {
+        if (!btn.dataset.arm) { btn.dataset.arm = '1'; btn.textContent = '⚠ Tap to confirm'; btn.classList.add('arm'); return; }
+        const r = G.abandonTile(row.dataset.capTile);
+        if (!r.ok) { toast('This system cannot be abandoned', '#e23b4e'); return; }
+        toast('⏏ Slot freed — ' + (G.tileCount ? G.tileCount() : 0) + '/' + cap + ' systems', '#e8a34a');
+        renderGalaxy();
+        closeSheet();
+        if (target) openTileAction(target); else openTileCapSheet(null);
+      });
     });
   }
 
@@ -2088,6 +2297,7 @@
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     if (owned) return '';
     if (ship.event) return '❖ Season 1';
+    if (ship.alienTech) return '◈ Kaevith';
     if (ship.missionShip) return '⌘ 1,000 Missions';
     if (ship.purchase) return `${LC_ICON}${(ship.purchase.lc || 0).toLocaleString()}`;
     if (ship.build) return '⚒ Build';
@@ -2149,6 +2359,7 @@
     sheet.querySelectorAll('[data-mega-buy]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.megaBuy; closeSheet(); openMegaBuy(k); }));
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
+    sheet.querySelectorAll('[data-go-galaxy]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('galaxy'); }));
     sheet.querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('missions'); }));
     sheet.querySelectorAll('[data-go-alliance]').forEach((b) => b.addEventListener('click', () => { closeSheet(); if (window.SOCIAL && window.SOCIAL.setTab) window.SOCIAL.setTab('alliance'); showScreen('social'); toast('⬡ Monolith Shipyard is in the store below', '#7ff2e0'); }));
   }
@@ -2213,6 +2424,10 @@
         lock = `<div class="ship-lock ${can ? 'ready' : ''}"><span class="lk-ic">⚒</span><span>${can ? 'Ready to build' : 'Need more resources'} · <b>${inf.days}-day</b> build</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
       }
     }
+    else if (ship.alienTech) {
+      action = `<button class="ship-btn buy" data-go-galaxy="1">◈ Hunt</button>`;
+      lock = `<div class="ship-lock ready"><span class="lk-ic">◈</span><span>Kaevith Incursion — earned <b>only</b> by clearing an alien-held zone in <b>My Galaxy</b>. Never sold. <b style="color:#d9a0ff">+${ship.xpBonus}% fleet XP per kill</b> while it flies with you.</span></div>`;
+    }
     else if (ship.alliance) {
       const prev = ship.monoReq && C.SHIP_BY_KEY[ship.monoReq];
       action = `<button class="ship-btn buy" data-go-alliance="1">⬡ ${ship.acPrice.toLocaleString()}</button>`;
@@ -2222,7 +2437,7 @@
       ? `<button class="ship-btn buy res" data-ship-buy="${key}">${resCostChips(ship.resPrice)}</button>`
       : `<button class="ship-btn buy" data-ship-buy="${key}"><span class="coin">$</span> ${G.formatNum(ship.price)}</button>`;
     else action = `<span class="ship-badge locked">🔒</span>`;
-    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build && !ship.alliance) {
+    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build && !ship.alliance && !ship.alienTech) {
       if (!st.hasBlueprint) {
         const z = st.bpZone, reach = z <= G.state.highestUnlocked;
         lock = `<div class="ship-lock"><span class="lk-ic">◷</span><span>Recover the <b>Blueprint</b> — defeat the <b>boss</b> in <b>${zoneName(z)}</b> (Zone ${z})</span>` +
@@ -2238,6 +2453,7 @@
       : ship.missionShip ? `<span class="bp-chip have" style="border-color:#59d98c88;color:#a5f2c4">⌘ MISSIONS</span>`
       : ship.purchase ? `<span class="bp-chip have" style="border-color:#f2a93c88;color:#ffd9a0">◈ LOOTCOIN</span>`
       : ship.megaCost ? `<span class="bp-chip have" style="border-color:#ff5a6888;color:#ff9aa6">◇ DREAD</span>`
+      : ship.alienTech ? `<span class="bp-chip have" style="border-color:#c26bff88;color:#e0b3ff">◈ KAEVITH</span>`
       : ship.alliance ? `<span class="bp-chip have" style="border-color:#2ee6c988;color:#8ff2e0">⬡ ALLIANCE</span>`
       : ship.build ? (st.owned ? '' : ((G.state.blueprints && G.state.blueprints[key]) ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◈ CITADEL</span>`))
       : ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
@@ -3221,6 +3437,90 @@
     el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700);
   }
   function unlockToast(msg) { toast('★ ' + msg, '#e6b566'); }
+  // ==========================================================================
+  // THE KAEVITH INCURSION — event briefing, first-entry announcement, and the
+  // earn-a-hull payoff. The event is a VEIL over My Galaxy: roughly a fifth of
+  // the map is alien-held, those zones fight harder, and clearing one is a
+  // chance to earn a hull no amount of money can buy.
+  // ==========================================================================
+  const XEN_SHIPS = ['xen1', 'xen2', 'xen3', 'xen4', 'xen5'];
+  function xenRoster() {
+    return XEN_SHIPS.map((k) => {
+      const s = C.SHIP_BY_KEY[k]; if (!s) return '';
+      const owned = !!(G.state.ownedShips && G.state.ownedShips[k]);
+      return `<div class="xr-row ${owned ? 'have' : ''}">
+        <img src="ships/ship-${k}.png" alt="">
+        <div class="xr-m"><div class="xr-n">${s.name}${owned ? ' <i>✔ earned</i>' : ''}</div>
+        <div class="xr-c">${s.cls}${k === 'xen1' ? ' · entry class' : k === 'xen5' ? ' · Dreadnaught class' : ''}</div></div>
+        <div class="xr-xp">+${s.xpBonus}%<i>fleet XP</i></div>
+      </div>`;
+    }).join('');
+  }
+  function openXenBriefing() {
+    const lo = GM.XEN ? Math.round(GM.XEN.minChance * 100) : 1;
+    const hi = GM.XEN ? Math.round(GM.XEN.maxChance * 100) : 10;
+    const bonus = G.xenXpBonus ? G.xenXpBonus() : 0;
+    const sheet = showSheet(`<div class="sheet-head">◈ THE KAEVITH INCURSION</div><div class="sheet-body xen-sheet">
+      <div class="xen-hero">
+        <div class="xh-tag">LIVE EVENT · MY GALAXY</div>
+        <div class="xh-t">THE KAEVITH INCURSION</div>
+        <div class="xh-s">A crystalline fleet from outside the rim has taken <b>roughly one zone in five</b>. Invaded zones show as <b>purple voids</b> on the map.</div>
+      </div>
+      <div class="xen-steps">
+        <div class="xs-row"><span class="xs-n">1</span><div><b>The map is unchanged.</b> Zone ownership, citadels, shields and cooldowns all work exactly as before. The Kaevith hold no territory — they garrison it.</div></div>
+        <div class="xs-row"><span class="xs-n">2</span><div><b>They hit harder.</b> Attack an invaded zone and every hostile flies a Kaevith hull: <b>+35% hull and +22% damage</b> over that ring's normal garrison, and the zone boss is a Kaevith command ship.</div></div>
+        <div class="xs-row"><span class="xs-n">3</span><div><b>Clear it for a chance to earn their ship technology.</b> <b>${lo}%</b> on ring 1, rising to <b>${hi}%</b> at the rim — the deeper the zone, the better the odds <i>and</i> the bigger the hull. You're told the result at the end of every void-zone battle.</div></div>
+        <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>. Bonuses stack up to <b>+100%</b>.</div></div>
+      </div>
+      <div class="lo-sect">The five hulls · entry → Dreadnaught</div>
+      <div class="xen-roster">${xenRoster()}</div>
+      <div class="xen-now"><span>Your resonance field right now</span><b>${bonus ? '+' + bonus + '% XP per kill' : 'none — no Kaevith hull in the fleet'}</b></div>
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>◈ Hunt a void zone</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-ok]').addEventListener('click', closeSheet);
+    try { localStorage.setItem('lf_xen_seen', new Date().toDateString()); } catch (e) {}
+  }
+  // Auto-announce on entering My Galaxy — once a day, so it lands as an event
+  // rather than a nag. The banner keeps it one tap away the rest of the time.
+  function maybeAnnounceXen() {
+    let seen = null;
+    try { seen = localStorage.getItem('lf_xen_seen'); } catch (e) {}
+    if (seen === new Date().toDateString()) return;
+    setTimeout(() => { if (screen === 'galaxy') openXenBriefing(); }, 420);
+  }
+  // End-of-battle result for an alien-held zone. Fires on EVERY invaded-zone
+  // clear so the roll is never silent — you either earned a hull or you didn't.
+  function xenTechResult(r, tile) {
+    if (!_inited || !r) return;
+    const zone = tile && tile.name ? tile.name : 'the zone';
+    if (r.won && r.ship) {
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.fontSize = '24px';
+      t.innerHTML = `<span style="color:#d9a0ff;text-shadow:0 0 20px #b04dff">◈ ALIEN SHIP TECHNOLOGY</span><br><span style="font-size:14px;color:#efe2ff">${r.ship.name} earned</span>`;
+      el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 4600);
+    }
+    const sheet = showSheet(`<div class="sheet-head">◈ ${zone} · zone cleared</div><div class="sheet-body">
+      ${r.won && r.ship ? `<div class="xres won">
+        <div class="xres-tag">ALIEN SHIP TECHNOLOGY EARNED</div>
+        <img class="xres-img" src="ships/ship-${r.key}.png" alt="">
+        <div class="xres-t">${r.ship.name}</div>
+        <div class="xres-c">${r.ship.cls}${r.key === 'xen1' ? ' · entry class' : r.key === 'xen5' ? ' · Dreadnaught class' : ''}</div>
+        <div class="xres-xp">+${r.ship.xpBonus}% fleet XP per kill<i>while it flies in your fleet — flagship or escort</i></div>
+        <div class="xres-note">It's in your hangar now. Put it in the fleet to switch the bonus on.</div>
+      </div>` : `<div class="xres miss">
+        <div class="xres-tag">NO ALIEN TECHNOLOGY THIS TIME</div>
+        <div class="xres-g">◈</div>
+        <div class="xres-t2">The Kaevith wreckage gave up nothing</div>
+        <div class="xres-c">${r.complete
+          ? 'You already hold all five Kaevith hulls — there is nothing left to earn.'
+          : 'This zone rolled a <b>' + r.pct + '%</b> chance to earn a hull. The zone is still yours, and the fight still paid gold, XP and loot.'}</div>
+        ${r.complete ? '' : `<div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim.</div>`}
+      </div>`}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button>${r.won ? '<button class="btn gold" data-fleet>Open Hangar</button>' : '<button class="btn gold" data-galaxy>Find another void zone</button>'}</div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const f = sheet.querySelector('[data-fleet]'); if (f) f.addEventListener('click', () => { closeSheet(); tapMyShip(); storeCat = 'ships'; showScreen('store'); });
+    const g2 = sheet.querySelector('[data-galaxy]'); if (g2) g2.addEventListener('click', () => { closeSheet(); showScreen('galaxy'); });
+    refreshAll();
+  }
   function blueprintEvent(ship) {
     if (!_inited || !ship) return;
     if (ship.build) {
@@ -3402,5 +3702,5 @@
     }
   }
 
-  window.UI = { openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
+  window.UI = { openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
 })();

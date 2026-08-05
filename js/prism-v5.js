@@ -638,7 +638,7 @@
     mo.observe(screen, { attributes: true, attributeFilter: ['class'] });
     if (screen.classList.contains('active')) renderHub();
     const chip = $('prism-chip'); if (chip) chip.addEventListener('click', () => window.PRISM.open());
-    setInterval(() => { try { if (G() && G().state.prism) { updateHud(); syncChrome(); if (screen.classList.contains('active') || _modal) updateLockTimers(); } } catch (e) {} }, 700);
+    setInterval(() => { if (document.hidden) return; try { if (G() && G().state.prism) { updateHud(); syncChrome(); if (screen.classList.contains('active') || _modal) updateLockTimers(); } } catch (e) {} }, 700);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   setTimeout(boot, 1200);

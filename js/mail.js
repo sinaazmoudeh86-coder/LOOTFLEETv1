@@ -209,7 +209,7 @@
       b.setAttribute('data-n', n > 9 ? '9+' : n);
     });
   }
-  setInterval(badge, 2500);
+  setInterval(() => { if (document.hidden) return; badge(); }, 2500);
 
   window.MAIL = { push, render, unread, tileLost, tileWon, raceLost };
 

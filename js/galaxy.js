@@ -96,6 +96,34 @@
     return Math.max(3, Math.round(base * mult));
   }
 
+  // ---- THE KAEVITH INCURSION -------------------------------------------------
+  // A galaxy-wide EVENT layer sitting on top of the map: ~20% of conquerable
+  // tiles are held by an alien fleet. Rolled from its OWN seeded stream (never
+  // the tile's, so no existing name / type / rate / rarity shifts), which makes
+  // the invasion identical for every account without a single server round-trip.
+  // Ownership, citadels and cooldowns are untouched — only what defends the
+  // tile, and what clearing it can drop.
+  const XEN = {
+    name: 'The Kaevith', event: 'THE KAEVITH INCURSION', seed: 0x4b41ff,
+    share: 0.20, color: '#c26bff', deepColor: '#7a2ac4',
+    hpMod: 1.35, dmgMod: 1.22,          // slightly above the zone's normal garrison
+    minChance: 0.01, maxChance: 0.10,   // per-clear odds of recovering a hull, ring 1 → rim
+  };
+  function isInvaded(q, r) {
+    const ring = ringOf(q, r);
+    if (ring <= 0 || ring > RINGS) return false;
+    return rngFor(((q * 0x27d4eb2d) ^ (r * 0x165667b1) ^ XEN.seed) >>> 0)() < XEN.share;
+  }
+  // Recovery odds for clearing an invaded tile: 1% on ring 1 → 10% at the rim.
+  // The curve is sqrt-shaped, not linear: over RINGS rings a linear ramp left
+  // almost every real player parked near the 1% floor (ring 5 paid 2.5%), which
+  // read as broken. Square-rooting climbs fast out of the low rings and still
+  // lands exactly on the 1% / 10% endpoints.
+  function alienChance(ring) {
+    const f = RINGS > 1 ? Math.min(1, Math.max(0, (ring - 1) / (RINGS - 1))) : 1;
+    return XEN.minChance + (XEN.maxChance - XEN.minChance) * Math.sqrt(f);
+  }
+
   // ---- deterministic tile ----------------------------------------------------
   const HOME = tileId(0, 0);
   const _cache = {};
@@ -132,12 +160,20 @@
     // (combat tiles are a real but smaller faucet, so resource tiles stay best).
     const typeMult = boss ? 1.5 : (type === 'resource' ? 1 : 0.4);
     let rate = Math.max(3, Math.round(baseRate(ring, resource) * (1 + rarity * 0.6) * typeMult));
-    if (citadel) rate = Math.round(baseRate(ring, resource) * (1 + rarity * 0.6)) * CITADEL_RATE_MULT;
+    // NATURAL CITADEL — CITADEL_RATE_MULT× a RESOURCE-GRADE tile of the same ring
+    // and rarity. Stated explicitly because the citadel branch cannot use
+    // typeMult: a citadel tile's own type is 'citadel', which scores 0.4 on the
+    // line above, so folding it in would silently cut fortress output to 40% and
+    // make the advertised multiplier wrong in the other direction. Pinning the
+    // comparand to 1.0 is what makes the ×1000 in the UI literally true — the
+    // copy names the comparand for the same reason.
+    if (citadel) rate = Math.round(baseRate(ring, resource) * (1 + rarity * 0.6) * 1) * CITADEL_RATE_MULT;
     rate *= TILE_VALUE_MULT;
     const tile = {
       id, q: p.q, r: p.r, ring, type, home: false, boss, citadel, deep,
       resource, rarity, diff: ringDiff(ring), level: ringLevel(ring),
       name: citadel ? ('Citadel ' + genName(rnd)) : genName(rnd), rate,
+      alien: isInvaded(p.q, p.r),
     };
     return (_cache[id] = tile);
   }
@@ -162,6 +198,6 @@
   window.GALAXYMAP = {
     RES, RES_KEYS, RINGS, DEEP_RING, DEEP_MULT, CITADEL_RATE_MULT, CITADEL_COST_MULT, TILE_VALUE_MULT, HOME,
     tileId, parseId, ringOf, neighbors, ringCoords, ringTiles, tileAt, tileCount,
-    ringLevel, ringDiff, pixel, unpixel, entryCost,
+    ringLevel, ringDiff, pixel, unpixel, entryCost, XEN, isInvaded, alienChance,
   };
 })();

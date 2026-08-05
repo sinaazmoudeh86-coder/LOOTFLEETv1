@@ -366,7 +366,7 @@
     });
     mo.observe(screen, { attributes: true, attributeFilter: ['class'] });
     if (screen.classList.contains('active')) renderHub();
-    setInterval(() => { try { if (G() && G().state) syncBadge(); } catch (e) {} }, 700);
+    setInterval(() => { if (document.hidden) return; try { if (G() && G().state) syncBadge(); } catch (e) {} }, 700);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   setTimeout(boot, 1200);

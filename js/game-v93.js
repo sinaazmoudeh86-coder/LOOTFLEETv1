@@ -101,6 +101,7 @@
     equipped: { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null, bow2: null, arrows2: null },
     inventory: [],
     totalKills: 0, highestDungeonReached: 1, playTime: 0, itemsFound: 0, itemsLost: 0,
+    xenDry: 0,              // Kaevith Incursion — invaded clears since the last hull earned
     purchases: {},          // { speed2:true, speed4:true, speed10:true, afk:true }
     gameSpeed: 1,
     skillPoints: 0,         // unspent level points
@@ -669,6 +670,7 @@
     if (window.DREAD && window.DREAD.mult) amount *= window.DREAD.mult('xpGain');   // PILOT: XP Gain nodes
     if (window.PASCEND) amount *= window.PASCEND.mult('xp');   // ASCENSION: Neural Uplink
     if (window.ASCEND && window.ASCEND.xpMult) amount *= window.ASCEND.xpMult();    // ASCENSION: Combat Computer
+    amount *= xenXpMult();   // KAEVITH RESONANCE FIELD — alien hulls in the fleet lift every kill's XP
     state.xp += amount;
     // LEVEL CAP — Lv 150, +50 per Ascension Star. At the cap XP is not banked at
     // all (no phantom bar that fills into nothing): the run is over, and the only
@@ -952,11 +954,40 @@
     }
     return best;
   }
+  // PERF — n-nearest without a full sort. This is called once per shot (and
+  // multishot fires it repeatedly inside a single frame), and the old
+  // filter().sort().slice() allocated two arrays and did an O(n log n) sort over
+  // EVERY living enemy just to keep the closest 2–4. With a screen full of
+  // hostiles that was the single largest per-frame cost in combat. This is one
+  // pass with an insertion into a fixed n-slot buffer: no intermediate arrays,
+  // O(n·k) with k ≤ 4, and identical output ordering.
+  const _nearBuf = [], _nearD = [];
   function nearbyEnemies(n, exclude) {
-    return rt.enemies
-      .filter((e) => !e.dying && e !== exclude)
-      .sort((a, b) => ((a.x - rt.archer.x) ** 2 + (a.y - rt.archer.y) ** 2) - ((b.x - rt.archer.x) ** 2 + (b.y - rt.archer.y) ** 2))
-      .slice(0, n);
+    const ax = rt.archer.x, ay = rt.archer.y;
+    _nearBuf.length = 0; _nearD.length = 0;
+    const list = rt.enemies;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (e.dying || e === exclude) continue;
+      const dx = e.x - ax, dy = e.y - ay, d = dx * dx + dy * dy;
+      if (_nearBuf.length < n) {
+        let j = _nearBuf.length;
+        while (j > 0 && _nearD[j - 1] > d) { _nearD[j] = _nearD[j - 1]; _nearBuf[j] = _nearBuf[j - 1]; j--; }
+        _nearD[j] = d; _nearBuf[j] = e;
+      } else if (d < _nearD[n - 1]) {
+        let j = n - 1;
+        while (j > 0 && _nearD[j - 1] > d) { _nearD[j] = _nearD[j - 1]; _nearBuf[j] = _nearBuf[j - 1]; j--; }
+        _nearD[j] = d; _nearBuf[j] = e;
+      }
+    }
+    return _nearBuf.slice(0, n);
+  }
+  // Living-enemy count without materialising an array — the wave/siege checks ran
+  // rt.enemies.filter(...).length every frame purely to test for zero.
+  function livingEnemies() {
+    let n = 0;
+    for (let i = 0; i < rt.enemies.length; i++) if (!rt.enemies[i].dying) n++;
+    return n;
   }
   function rollDamage(s) {
     const crit = Math.random() * 100 < s.critChance;
@@ -1455,6 +1486,8 @@
     b.size *= isSuper ? 3.1 : 2.5;
     b.speed *= 0.72;
     b.name = isSuper ? ('SUPER ' + type.name + ' Prime') : (type.name + ' Alpha');
+    // INVADED TILE — the zone boss is a Kaevith command hull, not the local fauna
+    if (xenSkin(b, true)) b.name = isSuper ? 'KAEVITH OVERSEER' : 'KAEVITH WARDEN';
     rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = isSuper;
     burst(x, y, isSuper ? '#ff2a4a' : '#e23b4e', isSuper ? 90 : 50, { speed: isSuper ? 360 : 280, life: 1.1, glow: true });
     if (window.UI) window.UI.bossEvent(isSuper ? 'super' : 'spawn');
@@ -1955,8 +1988,18 @@
       autoSellSweep(null);
     }
     // dps
-    rt.dmgWindow = rt.dmgWindow.filter((d) => rt.time - d.t < 2);
-    rt.dps = rt.dmgWindow.reduce((s, d) => s + d.dmg, 0) / 2;
+    // dps — one pass, in place. The old form allocated a new array every frame
+    // and then reduced over it.
+    {
+      const w = rt.dmgWindow;
+      let k = 0, sum = 0;
+      for (let i = 0; i < w.length; i++) {
+        const d = w[i];
+        if (rt.time - d.t < 2) { w[k++] = d; sum += d.dmg; }
+      }
+      w.length = k;
+      rt.dps = sum / 2;
+    }
   }
 
   // BATTLE-END SWEEP — every arena teardown (tile secured tow, event end,
@@ -3294,7 +3337,6 @@
     e.spriteImg = _vzMobImgs[k]; e.tint = '#b04dff';
   }
   const VOID_ART = { 25: 'void-cit-1', 50: 'void-cit-1', 100: 'void-cit-2', 200: 'void-cit-2', 300: 'void-cit-3', 400: 'void-cit-3', 500: 'void-cit-4' };
-  let _vzArenaImg = null;
   function drawVoidArena(ctx) {
     const t = state.currentSystem ? sysAt(state.currentSystem) : null; if (!t || !t.void) return;
     const art = VOID_ART[t.vtier] || 'void-cit-4';
@@ -3334,6 +3376,102 @@
     }
   }
   function sysAt(k) { return VOID_TILES[k] || GX.tileAt(k); }
+  // ==========================================================================
+  // THE KAEVITH INCURSION — the alien-held ~20% of My Galaxy (GX.isInvaded).
+  // Invaded tiles keep the normal conquest pipeline (ownership, citadels,
+  // cooldowns, claims all unchanged). What changes is who defends them: every
+  // hostile in the zone flies a Kaevith hull and hits slightly harder than the
+  // ring's usual garrison — and clearing the zone can drop alien technology.
+  // ==========================================================================
+  const XEN_MOB_KEYS = ['xen1', 'xen2', 'xen3', 'xen4', 'xen5'];
+  const _xenMobImgs = {};
+  // Is the tile the pilot is fighting in alien-held? (Void spires are never invaded.)
+  function inXenZone() {
+    if (!state.currentSystem) return false;
+    const t = sysAt(state.currentSystem);
+    return !!(t && t.alien && !t.void && !t.home);
+  }
+  // Skin + stat pass for one hostile in an invaded zone. Bigger hulls appear as
+  // the ring deepens, so a rim incursion looks like a rim incursion.
+  function xenSkin(e, boss) {
+    if (!inXenZone()) return false;
+    const t = sysAt(state.currentSystem);
+    const frac = Math.min(1, Math.max(0, (t.ring - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
+    const top = Math.min(5, 2 + Math.round(frac * 3));                 // ring 1 → xen1..2 · rim → xen1..5
+    const k = boss ? XEN_MOB_KEYS[top - 1] : XEN_MOB_KEYS[(Math.random() * top) | 0];
+    if (!_xenMobImgs[k]) { _xenMobImgs[k] = new Image(); _xenMobImgs[k].src = 'ships/ship-' + k + '.png'; }
+    e.spriteImg = _xenMobImgs[k];
+    e.tint = GX.XEN.color;
+    e.xen = true;
+    e.maxHp = Math.round(e.maxHp * GX.XEN.hpMod); e.hp = e.maxHp;
+    e.damage *= GX.XEN.dmgMod;
+    return true;
+  }
+  // RESONANCE FIELD — every Kaevith hull in the fleet (flagship OR escort) lifts
+  // XP per kill for the WHOLE fleet. Bonuses add, ceiling +100%.
+  function xenXpBonus() {
+    const keys = [state.ship].concat((state.fleet || []).filter(Boolean));
+    const seen = {};
+    let pct = 0;
+    keys.forEach((k) => {
+      if (!k || seen[k] || !(state.ownedShips && state.ownedShips[k])) return;
+      seen[k] = 1;
+      const sh = C.SHIP_BY_KEY[k];
+      if (sh && sh.xpBonus) pct += sh.xpBonus;
+    });
+    return Math.min(100, pct);
+  }
+  function xenXpMult() { return 1 + xenXpBonus() / 100; }
+  // Chance to earn alien ship technology on clearing an invaded zone: 1% on
+  // ring 1 → 10% at the rim. Deeper rings weight the roll toward bigger hulls.
+  // ALWAYS returns a result for an invaded tile ({won:false} on a miss) so the
+  // end-of-battle popup can tell the player either way. ("Salvage" is already
+  // this game's word for scrapping items into resources — kept distinct.)
+  //
+  // PITY (HIDDEN): only ~1 tile in 5 is invaded, so a low-ring pilot can
+  // legitimately clear dozens of zones and see nothing. Every invaded clear that
+  // misses banks a counter, and XEN_PITY misses in a row forces the next one to
+  // pay. The counter resets on any win and persists in the save.
+  //
+  // DELIBERATELY NOT SURFACED: no popup, briefing line, HUD readout or Discord
+  // mention exposes the counter or the threshold. A visible floor turns the event
+  // into a checklist players grind to a known number; kept hidden it just stops
+  // long dry streaks from feeling broken. `dry`/`pityAt`/`pity` still ride along
+  // on the result object for debugging — nothing renders them.
+  const XEN_PITY = 25;
+  function xenTechRoll(tile) {
+    if (!tile || !tile.alien || tile.void || tile.home) return null;
+    const chance = GX.alienChance(tile.ring);
+    const pct = Math.max(1, Math.round(chance * 100));
+    const have = XEN_MOB_KEYS.filter((k) => state.ownedShips && state.ownedShips[k]).length;
+    if (have >= XEN_MOB_KEYS.length) return { won: false, complete: true, pct };
+    const dry = state.xenDry || 0;
+    const pity = dry + 1 >= XEN_PITY;
+    if (!pity && Math.random() >= chance) {
+      state.xenDry = dry + 1; save();
+      return { won: false, pct, dry: state.xenDry, pityAt: XEN_PITY };
+    }
+    const frac = Math.min(1, Math.max(0, (tile.ring - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
+    const base = [50, 25, 14, 8, 3];
+    const pool = [];
+    XEN_MOB_KEYS.forEach((k, i) => {
+      if (state.ownedShips && state.ownedShips[k]) return;
+      pool.push({ k, w: base[i] * (1 + frac * i * 1.15) });
+    });
+    let roll = Math.random() * pool.reduce((a, b) => a + b.w, 0);
+    const hit = pool.find((p) => (roll -= p.w) <= 0) || pool[pool.length - 1];
+    if (!grantShip(hit.k)) { state.xenDry = dry + 1; save(); return { won: false, pct, dry: state.xenDry, pityAt: XEN_PITY }; }
+    state.xenDry = 0;
+    const sh = C.SHIP_BY_KEY[hit.k];
+    pushFeed('◈ ALIEN SHIP TECHNOLOGY EARNED — the ' + sh.name + ' is in your hangar');
+    // Announce to the shared world. Server-side the call is whitelisted and
+    // idempotent per (pilot, hull), so it can't be replayed into spam.
+    try { if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.logXenHull(hit.k, tile.id, tile.ring, pity); } catch (e) {}
+    save();
+    return { won: true, key: hit.k, ship: sh, pct, pity: pity };
+  }
+
+  let _vzArenaImg = null;
   function isOwned(k) { return !!state.ownedSystems[k]; }
   const turfOn = () => !!(window.TERRITORY && window.TERRITORY.enabled());
   // GLOBAL NPC layer — when the shared turf war is live, simulated rivals are a
@@ -3699,6 +3837,7 @@
     }
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     voidSkin(e);
+    xenSkin(e);
     if (cit) {
       // garrison hulks: walls, not bombs — brutal HP, feeble guns
       e.maxHp *= 4.5; e.hp = e.maxHp;
@@ -3807,7 +3946,7 @@
       }
       return;
     }
-    const living = rt.enemies.filter((e) => !e.dying).length;
+    const living = livingEnemies();
     if (living > 0) return;
     // current wave cleared
     if (s.bossSpawned) { captureSystem(); return; }
@@ -3841,7 +3980,7 @@
       }
       return;
     }
-    if (rt.enemies.filter((e) => !e.dying).length > 0) return;
+    if (livingEnemies() > 0) return;
     if (s.bossSpawned) {
       if (s.dread) {
         // DREADNAUGHT DOWN — hand off to the hunt module (cores + weekly lock), tow home.
@@ -3909,6 +4048,12 @@
   function captureSystem() {
     const k = state.currentSystem, tile = sysAt(k);
     if (!tile) { rt.siege = null; return; }
+    // KAEVITH INCURSION — roll FIRST, before any early return below. Clearing the
+    // zone is what earns the technology, so the roll must not depend on the tile
+    // being annexable: it fires at the tile cap, on a re-clear of a tile you
+    // already hold, and on a claim you go on to lose in the server race.
+    const xenRoll = xenTechRoll(tile);
+    if (xenRoll && window.UI && window.UI.xenTechResult) window.UI.xenTechResult(xenRoll, tile);
     // You just razed a citadel on this tile → the claim is earned; don't let a
     // stale server protection (the old owner's fortress) hand the tile back.
     const razing = !!rt.razingClaim; rt.razingClaim = false;
@@ -4130,6 +4275,14 @@
   function rivalDefense(id) {
     const real = rt.realTiles && rt.realTiles[id];
     const myUid = (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null;
+    // NEVER publish a garrison for a tile YOU hold. The uid comparison alone was
+    // not enough: when TERRITORY is offline myUid is null, so `!(myUid && ...)`
+    // passed and your own tile came back with a defending fleet. On a captured
+    // natural citadel that was visible — the sheet's `else if (t.defense)` branch
+    // runs BEFORE the owned-citadel branch, so the fortress panel that states the
+    // ×1000 output was replaced by an enemy-garrison card, and the tile looked
+    // like it was paying nothing it had promised.
+    if (isOwned(id)) return null;
     if (real && (real.ownerId || real.ownerName) && !(myUid && real.ownerId === myUid)) {
       let d = real.defense || null;
       const sc0 = (d && d.score) || real.fleetScore || 0;
@@ -4299,7 +4452,8 @@
         r.fuel += vr; r.iron += vr; r.plasma += vr; r.gold = (r.gold || 0) + vr * 1000;
         return;
       }
-      // citadel tiles already carry their 100× in t.rate; deep space adds ×25
+      // citadel tiles already carry their ×1000 (CITADEL_RATE_MULT) in t.rate;
+      // deep space adds ×25 on top
       let rate = t.rate * (t.deep ? GX.DEEP_MULT.resource : 1);
       if (!t.void && state.citadels && state.citadels[k]) rate *= CITADEL_MULT * (state.citadels[k].lv || 1);   // PLAYER CITADEL — 10× per rank (VOID premium is baked into t.rate)
       rate *= 25;   // GALAXY YIELD ×25 — holding territory is the resource engine
@@ -4664,7 +4818,33 @@
   // --------------------------------------------------------------------------
   // SAVE / LOAD + OFFLINE (AFK) PROGRESS
   // --------------------------------------------------------------------------
-  function save() { state.lastSave = Date.now(); try { if (window.ACCOUNT) window.ACCOUNT.push(state); else localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {} }
+  // PERF — AUTOSAVE CHANGE DETECTION. save() JSON-serialises the whole state and
+  // writes it synchronously; on a large account that is a multi-hundred-KB
+  // stringify, and the 8-second autosave ran it unconditionally — including while
+  // the player sat on a menu with nothing changed, which read as a periodic hitch.
+  //
+  // A dirty FLAG would be wrong here: combat mutates xp/gold/kills every frame
+  // without calling save(), so anything the flag missed would be lost progress.
+  // Instead the autosave compares a cheap signature of the volatile fields. While
+  // the game is actually running playTime advances every second, so this saves
+  // exactly as often as before — no risk. The write is skipped only when nothing
+  // observable has moved.
+  function saveSig() {
+    // Math.round, not `| 0` — bitwise truncates to int32 and this is an idle game
+    // whose numbers run well past 2^31 (3e9 | 0 === -1294967296), so distinct
+    // values would alias to the same signature and skip a real save.
+    return Math.round(state.xp || 0) + '|' + Math.round(state.gold || 0) + '|' +
+      Math.round(state.totalKills || 0) + '|' + (state.level | 0) + '|' +
+      (state.inventory ? state.inventory.length : 0) + '|' +
+      Object.keys(state.ownedSystems || {}).length + '|' + Math.floor(state.playTime || 0) + '|' +
+      Math.round((state.resources || {}).fuel || 0);
+  }
+  let _lastSig = '';
+  function save() {
+    state.lastSave = Date.now(); _lastSig = saveSig();
+    try { if (window.ACCOUNT) window.ACCOUNT.push(state); else localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function autosave() { if (saveSig() !== _lastSig) save(); }
   // ADOPT — a cloud CAS conflict merged another device's timeline into ours
   // mid-session; fold the result into the LIVE state so the player keeps
   // playing the merged save instead of a copy that's already been superseded.
@@ -4945,7 +5125,7 @@
     if (loaded) reportReturn(awaySince, offline, awayTiles);
     initTerritory(); // load + subscribe to the shared cross-account turf war
 
-    setInterval(save, 8000);
+    setInterval(autosave, 8000);
     setInterval(() => { accrueResources(); }, 60000); // tick resources every minute
     setInterval(galaxyTick, 120000); // tick simulated rival turf wars (gently)
     document.addEventListener('visibilitychange', () => {
@@ -5149,6 +5329,8 @@
     pilotAscend, ascStars,
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
+    // Kaevith Incursion
+    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => XEN_PITY,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,

@@ -514,7 +514,7 @@
   // ===========================================================================
   function boot() {
     injectCSS();
-    setInterval(() => { try { if (window.GAME && GAME.state) updateBadge(); } catch (e) {} }, 2500);
+    setInterval(() => { if (document.hidden) return; try { if (window.GAME && GAME.state) updateBadge(); } catch (e) {} }, 2500);
   }
   function injectCSS() {
     if ($('sw-css')) return;

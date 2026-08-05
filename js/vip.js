@@ -142,11 +142,16 @@
 
   function boot() {
     injectCSS();
-    setInterval(() => { try { track(); ensureBadge(); } catch (e) {} }, 1000);
+    setInterval(() => { if (document.hidden) return; try { track(); ensureBadge(); } catch (e) {} }, 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 900));
   else setTimeout(boot, 900);
-  window.VIP = { level, score, mult, grant, openSheet };
+  // Offline-cap hours granted by the PERKS table above (levels 6, 9, 13).
+  // Kept next to the wording it comes from so the two can't drift apart.
+  const CAP = [0, 0, 0, 0, 0, 0, 2, 2, 2, 4, 4, 4, 4, 8, 8, 8];
+  function capBonus() { return CAP[Math.min(level(), 15)] || 0; }
+
+  window.VIP = { level, score, mult, grant, openSheet, capBonus };
 
   function injectCSS() {
     if ($('vip-css')) return;

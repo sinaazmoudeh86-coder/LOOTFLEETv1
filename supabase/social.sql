@@ -111,8 +111,15 @@ end; $$;
 grant execute on function public.friend_remove(uuid) to authenticated;
 
 -- friends + pending, joined with public leaderboard stats — one call per open
+--
+-- NUMERIC power, and dropped first. leaderboard.power is numeric (fleet power passes
+-- 1e29 in the late game, far beyond bigint), and a function's return type cannot be
+-- changed by CREATE OR REPLACE — running this file over an existing install fails with
+-- 42P13 unless the old row type is dropped. Declaring bigint here would also silently
+-- re-narrow the column's exposed type and revive the 22P02 error flood.
+drop function if exists public.friend_list();
 create or replace function public.friend_list()
-returns table (user_id uuid, name text, power bigint, level int, zone int, fleet jsonb,
+returns table (user_id uuid, name text, power numeric, level int, zone int, fleet jsonb,
                last_seen timestamptz, status text, requested_by_me boolean)
 language sql security definer set search_path = public as $$
   select l.user_id, l.name, l.power, l.level, l.zone, l.fleet, l.updated_at,
@@ -124,8 +131,9 @@ language sql security definer set search_path = public as $$
 $$;
 grant execute on function public.friend_list() to authenticated;
 
+drop function if exists public.pilot_search(text);
 create or replace function public.pilot_search(p_q text)
-returns table (user_id uuid, name text, power bigint, level int)
+returns table (user_id uuid, name text, power numeric, level int)
 language sql security definer set search_path = public as $$
   select user_id, name, power, level from public.leaderboard
   where user_id <> auth.uid() and name ilike '%' || coalesce(p_q,'') || '%'
@@ -312,6 +320,31 @@ begin
   return aid;
 end; $$;
 grant execute on function public.alliance_create(text, text, text, boolean) to authenticated;
+
+-- ALLIANCE RENAME · ◈ 1000 LootCoins (charged client-side after this returns).
+-- LEADER ONLY. The tag is intentionally NOT renameable: it is what members
+-- recognise each other by on the galaxy map and in war.
+-- Uniqueness is enforced case-insensitively and excludes the caller's own row so
+-- re-casing your own name ("void kings" -> "VOID KINGS") is allowed.
+create or replace function public.alliance_rename(p_name text)
+returns void language plpgsql security definer set search_path = public as $$
+declare me uuid := auth.uid(); aid uuid; nm text; old text;
+begin
+  if me is null then raise exception 'not authenticated'; end if;
+  select alliance_id into aid from public.alliance_members where user_id = me;
+  if aid is null then raise exception 'not in an alliance'; end if;
+  if not exists (select 1 from public.alliance_members where user_id = me and alliance_id = aid and role = 'leader')
+    then raise exception 'only the leader can rename the alliance'; end if;
+  nm := trim(coalesce(p_name,''));
+  if length(nm) < 3 or length(nm) > 24 then raise exception 'name must be 3-24 chars'; end if;
+  select name into old from public.alliances where id = aid;
+  if old = nm then raise exception 'that is already the name'; end if;
+  if exists (select 1 from public.alliances where lower(name) = lower(nm) and id <> aid)
+    then raise exception 'that name is taken'; end if;
+  update public.alliances set name = nm where id = aid;
+  perform public._al_feed(aid, 'sys', '✎ Renamed from ' || old || ' to ' || nm);
+end; $$;
+grant execute on function public.alliance_rename(text) to authenticated;
 
 create or replace function public.alliance_join(p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
@@ -649,6 +682,7 @@ language sql security definer set search_path = public as $$
 $$;
 grant execute on function public.alliance_browse(text) to authenticated;
 
+drop function if exists public.alliance_weekly_board();
 create or replace function public.alliance_weekly_board()
 returns table (id uuid, name text, tag text, week_score bigint, xp bigint)
 language sql security definer set search_path = public as $$

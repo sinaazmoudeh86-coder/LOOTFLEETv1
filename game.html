@@ -23,6 +23,20 @@
   }).catch(function(){});
 })();
 </script>
+<script>
+// BLANK-SCREEN INSURANCE — record every early failure so a boot that dies can
+// report itself on screen instead of leaving a black page behind a hidden gate.
+window.__lfErr=[];
+(function(){
+  function push(kind,msg,at){ try{ if(window.__lfErr.length<14) window.__lfErr.push({kind:kind,msg:String(msg||''),at:at||''}); }catch(e){} }
+  window.addEventListener('error',function(e){
+    var t=e.target;
+    if(t&&t.tagName&&/^(SCRIPT|LINK|IMG)$/.test(t.tagName)){ push('asset',(t.src||t.href||t.tagName)+' failed to load'); return; }
+    push('error',e.message,(e.filename||'').split('/').pop()+':'+e.lineno);
+  },true);
+  window.addEventListener('unhandledrejection',function(e){ var r=e.reason; push('promise',(r&&(r.message||r.msg))||r||'unknown'); });
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0b1018">
@@ -54,10 +68,12 @@
 <link rel="stylesheet" href="css/fx-cinematic.css?v=421">
 <link rel="stylesheet" href="css/fx-primordial.css?v=421">
 <link rel="stylesheet" href="css/moon-colony.css?v=421">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=421">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=439">
 <link rel="stylesheet" href="css/fx-aaa.css?v=421">
 <link rel="stylesheet" href="css/readability.css?v=421">
-<link rel="stylesheet" href="css/kaevith.css?v=429">
+<link rel="stylesheet" href="css/kaevith.css?v=440">
+<link rel="stylesheet" href="css/ember-choir.css?v=442">
+<link rel="stylesheet" href="css/hangar-ships.css?v=446">
 <link rel="stylesheet" href="css/sheet-cta.css?v=428">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
@@ -1033,8 +1049,8 @@
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=424"></script>
-<script src="js/items.js?v=421"></script>
+<script src="js/config-v2.js?v=447"></script>
+<script src="js/items.js?v=447"></script>
 <script src="js/entities.js?v=421"></script>
 <script src="js/render.js?v=422"></script>
 <script src="js/galaxy.js?v=430"></script>
@@ -1042,14 +1058,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js"></script>
 <script src="js/analytics.js?v=421"></script>
-<script src="js/cloud.js?v=421"></script>
+<script src="js/cloud.js?v=451"></script>
 <script src="js/account.js?v=421"></script>
 <script src="js/session-lock.js?v=421"></script>
 <script src="js/vip.js?v=431"></script>
 <script src="js/territory.js?v=426"></script>
 <script src="js/payments-v91.js?v=421"></script>
-<script src="js/game-v93.js?v=434"></script>
-<script src="js/ui-v94.js?v=435"></script>
+<script src="js/game-v93.js?v=442"></script>
+<script src="js/ui-v94.js?v=446"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
 <script src="js/fx-aaa.js?v=421"></script>
@@ -1063,33 +1079,34 @@
 <script src="js/prism-v5.js?v=431"></script>
 <script src="js/prism-fleet.js?v=431"></script>
 <script src="js/dreadnaught.js?v=421"></script>
-<script src="js/server-dreadnaught.js?v=421"></script>
+<script src="js/server-dreadnaught.js?v=448"></script>
 <script src="js/galaxy-box.js"></script>
 <script src="js/shipworks.js?v=431"></script>
 <script src="js/starforge.js?v=421"></script>
-<script src="js/pilot-ascension.js?v=421"></script>
+<script src="js/pilot-ascension.js?v=440"></script>
 <script src="js/sim-pilots.js?v=421"></script>
 <script src="js/ranks-boards.js?v=436"></script>
 <script src="js/rank-rewards.js?v=421"></script>
 <script src="js/discord-reward.js?v=421"></script>
 <script src="js/onboard.js?v=421"></script>
-<script src="js/ship-panels.js?v=438"></script>
+<script src="js/ship-panels.js?v=441"></script>
 <script src="js/paragon-cannon.js?v=421"></script>
 <script src="js/social.js?v=431"></script>
-<script src="js/mail.js?v=431"></script>
-<script src="js/alliance.js?v=421"></script>
+<script src="js/mail.js?v=448"></script>
+<script src="js/alliance.js?v=447"></script>
 <script src="js/alliance-boss.js?v=421"></script>
 <script src="js/void-zone.js?v=431"></script>
 <script src="js/ascension.js?v=421"></script>
-<script src="js/casino.js?v=421"></script>
-<script src="js/casino2.js?v=421"></script>
+<script src="js/casino.js?v=449"></script>
+<script src="js/casino2.js?v=449"></script>
+<script src="js/casino-citadels.js?v=451"></script>
 <script src="js/redeem.js?v=421"></script>
 <script src="js/auth.js?v=421"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 437;
+  window.LF_BUILD = 452;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1149,12 +1166,74 @@
     // Boot is gated on a signed-in (or guest) session so each account loads its
     // OWN save. Returning sessions boot immediately; new logins boot via auth.js.
     let booted=false;
-    function boot(){ if(booted) return; booted=true; window.GAME.init(); if(window.ACCOUNT) window.ACCOUNT.refreshBar(); if(window.COACH) window.COACH.init(window.GAME); }
+    // GAME.init() throwing used to leave the page blank: auth.js had already
+    // hidden the login gate, so nothing was left to look at and nothing said why.
+    function boot(){
+      if(booted) return; booted=true;
+      try{ window.GAME.init(); }
+      catch(ex){ booted=false; try{ window.__lfErr.push({kind:'boot',msg:(ex&&ex.message)||String(ex),at:'GAME.init'}); }catch(e){} bootFailed('The game could not start.'); return; }
+      try{ if(window.ACCOUNT) window.ACCOUNT.refreshBar(); }catch(e){}
+      try{ if(window.COACH) window.COACH.init(window.GAME); }catch(e){}
+    }
     window.__bootGame = boot;
+    window.__lfBooted = ()=>booted;
     function tryBoot(){ if(window.__cloudPending) return; if(!window.ACCOUNT || window.ACCOUNT.current()) boot(); }
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>requestAnimationFrame(tryBoot));
     window.addEventListener('load',()=>setTimeout(tryBoot,80));
     setTimeout(tryBoot,1500);
+    // WATCHDOG — a cloud check that never returns (blocked network, OAuth landing
+    // back on a dead session) left __cloudPending true forever and the game never
+    // booted. After 9s, take the local save and say so.
+    setTimeout(function(){
+      if(booted) return;
+      var sess=null; try{ sess=window.ACCOUNT&&window.ACCOUNT.current(); }catch(e){}
+      if(window.__cloudPending!==true && !sess) return;   // signed out, gate is up — nothing is wrong
+      window.__cloudPending=false;
+      try{ tryBoot(); }catch(e){}
+      if(!booted) bootFailed('Sign-in didn\u2019t finish.');
+    },9000);
+    function bootFailed(headline){
+      if(document.getElementById('lf-bootfail')) return;
+      var errs=(window.__lfErr||[]).map(function(e){ return e.kind.toUpperCase()+': '+e.msg+(e.at?'  ['+e.at+']':''); });
+      var txt=errs.length?errs.join('\n'):'No script error was reported \u2014 the sign-in check never came back.';
+      var d=document.createElement('div'); d.id='lf-bootfail';
+      d.innerHTML='<style>#lf-bootfail{position:fixed;inset:0;z-index:900;display:grid;place-items:center;padding:20px;background:#070b14;font-family:Rajdhani,system-ui,sans-serif}'+
+        '#lf-bf-card{width:100%;max-width:360px;background:linear-gradient(180deg,#141b2b,#0d1220);border:1px solid #2c3a58;border-radius:18px;padding:22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.6)}'+
+        '#lf-bf-card h2{font-family:Orbitron,sans-serif;font-size:15px;letter-spacing:.06em;color:#eaf0fa;margin:10px 0 6px;text-align:center}'+
+        '#lf-bf-card p{font-size:12.5px;color:#9fb0c4;line-height:1.5;margin:0 0 12px;text-align:center}'+
+        '#lf-bf-log{max-height:118px;overflow:auto;-webkit-overflow-scrolling:touch;user-select:text;-webkit-user-select:text;background:#080d17;border:1px solid #26314a;border-radius:10px;padding:9px 10px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.5;color:#ffb9c2;white-space:pre-wrap;word-break:break-word}'+
+        '#lf-bf-card .bf-row{display:flex;flex-direction:column;gap:8px;margin-top:13px}'+
+        '#lf-bf-card button{border:none;border-radius:11px;padding:12px;font-family:Rajdhani,sans-serif;font-weight:800;font-size:14px;letter-spacing:.04em;cursor:pointer}'+
+        '#lf-bf-go{background:linear-gradient(180deg,#4d94ff,#1f61d8);color:#fff}'+
+        '#lf-bf-card .bf-alt{background:#182133;border:1px solid #32405f!important;color:#c3d0e2}</style>'+
+        '<div id="lf-bf-card"><div style="font-size:30px;text-align:center">\u26A0</div><h2>'+headline+'</h2>'+
+        '<p>Your fleet is safe. Reload to try again \u2014 if it keeps happening, copy the details below and send them over.</p>'+
+        '<div id="lf-bf-log"></div>'+
+        '<div class="bf-row"><button id="lf-bf-go">Reload</button>'+
+        '<button class="bf-alt" id="lf-bf-copy">Copy error details</button>'+
+        '<button class="bf-alt" id="lf-bf-out">Sign out and start over</button></div></div>';
+      document.body.appendChild(d);
+      d.querySelector('#lf-bf-log').textContent=txt;
+      d.querySelector('#lf-bf-go').onclick=function(){ location.reload(); };
+      d.querySelector('#lf-bf-out').onclick=function(){ try{ window.AUTH.signOut(); }catch(e){ location.reload(); } };
+      // writeText() is async and iOS/WKWebView rejects it outside a trusted gesture
+      // — a sync catch never fired, so the button claimed “Copied” over a dead
+      // fallback. Chain the promise and fall back to selectable text.
+      d.querySelector('#lf-bf-copy').onclick=function(ev){
+        var btn=ev.currentTarget, l=d.querySelector('#lf-bf-log');
+        var body='LootFleet boot failure \u2014 build '+(window.LF_BUILD||'?')+'\n'+navigator.userAgent+'\n\n'+txt;
+        var manual=function(){
+          l.textContent=body; l.style.maxHeight='200px';
+          btn.textContent='Select the text above to copy';
+          try{ var r=document.createRange(); r.selectNodeContents(l); var s=getSelection(); s.removeAllRanges(); s.addRange(r); }catch(e){}
+        };
+        Promise.resolve().then(function(){
+          if(!navigator.clipboard||!navigator.clipboard.writeText) throw new Error('no clipboard');
+          return navigator.clipboard.writeText(body);
+        }).then(function(){ btn.textContent='Copied \u2713'; }).catch(manual);
+      };
+    }
+    window.__lfBootFailed = bootFailed;
     // offline / installable PWA (only on a real https host — NEVER the preview
     // sandbox: its assets are auth-gated and a SW would 401 every fetch)
     var sandbox=/claudeusercontent\.com$/.test(location.hostname);
@@ -1233,14 +1312,19 @@
         c.style.display='';                          // nothing is ever hidden
         c.classList.toggle('locked',isLocked);
         const lk=c.querySelector('.mc-lock');
-        if(lk) lk.textContent=isLocked?('🔒 LV '+need):'';
+        // Corner lock badge retired: it was absolutely positioned into the same
+        // top-right corner as the count badge and over the title, which is what
+        // made every locked card look broken. The chip line below carries it.
+        if(lk) lk.textContent='';
         if(isLocked){ lockedN++; if(need<nextNeed) nextNeed=need;
           // say what it takes, on the card itself — a lock with no number is
-          // just a closed door
+          // just a closed door. Two nowrap chips, never a wrapped sentence:
+          // “Unlocks at Level 50 · 7 levels to go” broke into three lines in a
+          // half-width column and clamped mid-phrase.
           const s=c.querySelector('.mc-s');
           if(s){ if(!s.dataset.open) s.dataset.open=s.innerHTML;
             const away=need-L;
-            s.innerHTML='<span class="mc-need">Unlocks at Level '+need+'</span> · '+away+' level'+(away===1?'':'s')+' to go'; }
+            s.innerHTML='<span class="mc-need">🔒 LV '+need+'</span><span class="mc-away">'+away+' level'+(away===1?'':'s')+' to go</span>'; }
         } else {
           const s=c.querySelector('.mc-s');
           if(s&&s.dataset.open){ s.innerHTML=s.dataset.open; delete s.dataset.open; }
@@ -1329,6 +1413,31 @@
 @keyframes chipGlowPulse{0%,100%{box-shadow:0 0 7px rgba(242,169,60,.45),0 0 1px rgba(242,169,60,.7);}50%{box-shadow:0 0 16px rgba(242,169,60,.85),0 0 3px rgba(242,169,60,.9);}}
 .chip-earn{animation:chipEarn .7s ease-out;}
 @keyframes chipEarn{0%{transform:scale(1);}22%{transform:scale(1.2);filter:brightness(1.7) saturate(1.3);}100%{transform:scale(1);filter:none;}}
+/* ===== COMMAND MENU — mobile text layout =====================================
+   Reported as “stacking issues” and it was exactly that: three absolutely
+   positioned things (lock badge, count badge, chevron) landing in the same
+   top-right corner as wrapping titles, inside a 2-column grid that a modern
+   large phone was never meant to get. Fixes, in order of impact:
+   1. The one-column breakpoint was 430px. An iPhone 16 Pro Max reports 440pt,
+      so the whole mobile treatment silently stopped applying on the newest
+      phones — the exact devices in the bug report. Now 480px.
+   2. Locked state is a chip line in normal flow, not a corner badge over the
+      title, so nothing can collide with anything.
+   3. Count badges hide while locked: a queue count on a system you can't open
+      is noise, and it shared the lock's corner.                              */
+.mega-card .mc-lock{ display:none !important; }
+.mega-card.locked .cmd-cardbadge,.mega-card.locked .badge{ display:none !important; }
+.mega-card.locked .mc-s{ display:flex !important; flex-wrap:nowrap; align-items:center; gap:6px;
+  overflow:hidden; -webkit-line-clamp:none; margin-top:3px; }
+.mc-need{ flex:none; font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; letter-spacing:.05em;
+  color:#ffcf7a; background:rgba(242,178,75,.13); border:1px solid rgba(242,178,75,.36);
+  border-radius:6px; padding:1px 6px; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.mc-away{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b8c6d8; }
+/* TABLETS (and any multi-column width) \u2014 the grid runs 3\u20134 columns, so a card is
+   ~200px: the chip alone reads cleanly, the trailing "N levels to go" does not
+   and only earns an ellipsis. The chip carries the requirement either way. */
+@media (min-width:481px){ .mc-away{ display:none; }
+  .mega-grid .pa-pill.locked{ padding-right:74px; } }
 /* Command cards, mobile: badges never shear ("LI", "TURF/WAR") — they wrap
    WHOLE to the next line; subtitles clamp to 2 tidy lines */
 .mega-card .mc-n{ display:flex; flex-wrap:wrap; align-items:center; gap:2px 5px; }
@@ -1339,14 +1448,27 @@
    the LIVE/TURF badges wrapped to a 3rd. Full-width chips fit the name, its
    badge and a one-line subtitle on a single row. cmd-sdread/cmd-galaxy must drop
    their grid-row:1 pin here or they'd both land in the same cell. */
-@media (max-width:430px){
+@media (max-width:480px){
   .mega-grid{ grid-template-columns:minmax(0,1fr); }
   .mega-card.cmd-sdread,.mega-card.cmd-galaxy{ grid-row:auto !important; min-height:56px; }
+  .mega-card{ padding-right:13px !important; }
   .mega-card .mc-n{ flex-wrap:nowrap; font-size:13px; white-space:nowrap; overflow:hidden; }
+  .mega-card .mc-n > span:first-child,.mega-card .mc-n{ min-width:0; }
   .mega-card .mc-s{ display:block !important; -webkit-line-clamp:1; font-size:10.5px !important;
     line-height:1.35 !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .mega-card.locked .mc-s{ font-size:11px !important; }
-  .mega-card .mc-lock{ display:none; }
+  .mega-card.locked .mc-s{ font-size:10.5px !important; }
+  /* count badges sat over the title's last word on a full-width chip — move them
+     to the right edge, vertically centred, where there is no text */
+  .mega-card .cmd-cardbadge,.mega-card > .badge{ top:50% !important; transform:translateY(-50%); right:11px !important; }
+  /* PILOT ASCENSION pill: title row, then chips. It was one wrapping flex row
+     with an absolutely centred lock badge printing straight over the chips. */
+  .mega-grid .pa-pill{ padding:11px 12px; gap:10px; }
+  .pa-pill-txt{ flex-direction:column; align-items:flex-start; gap:6px; }
+  .pa-pill-n{ max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+  .pa-pill-meta{ width:100%; }
+  .pa-pill-go{ display:none; }
+  .pa-pill-lock{ top:11px; right:12px; transform:none; }
+  .mega-grid .pa-pill.locked{ padding-right:66px; }
 }
 </style>
 <script>

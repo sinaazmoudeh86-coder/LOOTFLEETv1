@@ -63,6 +63,8 @@ const COLOR = {
   pilot:    0x6e7a8a,
   xen:      0xc26bff,
   sitrep:   0x6f7dff,
+  bigbet:   0xffd66a,
+  whale:    0xff3b6b,
 };
 
 // ---- THE KAEVITH INCURSION -------------------------------------------------
@@ -85,7 +87,7 @@ const XEN_SHARE = 0.20;
 const SITREP_MS = 3 * 60 * 60 * 1000;
 
 // Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
-const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'repel', 'armada', 'citadel', 'steal', 'dread', 'top10',
+const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'top10',
                   'zone', 'level', 'open', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
@@ -709,6 +711,49 @@ Deno.serve(async (req) => {
         hullEvents.push(w);
         continue;
       }
+      // BIG BET — posted the moment the round settles. Rate limited in SQL
+      // (casino_big_bet), so anything arriving here has already earned its place.
+      if (w.kind === 'bigbet') {
+        const m: any = w.meta || {};
+        const who = String(w.actor_name || 'A pilot');
+        const tier = String(m.tier || 'big');
+        const cur = String(m.cur || 'gold');
+        const G: Record<string, { g: string; n: string }> = {
+          gold:    { g: '$', n: 'gold' },
+          credits: { g: '◈', n: 'LootCoins' },
+          fuel:    { g: '⬢', n: 'fuel' },
+          iron:    { g: '◆', n: 'iron' },
+          plasma:  { g: '✦', n: 'plasma' },
+        };
+        const cu = G[cur] || G.gold;
+        const stake = Number(m.stake) || 0;
+        const net = Number(m.net) || 0;
+        const won = net > 0;
+        const push = net === 0;
+        const head = tier === 'colossal'
+          ? `# 🐋 WHALE AT THE TABLE`
+          : tier === 'huge' ? `## 🎰 HIGH ROLLER` : `### 🎰 HIGH STAKES`;
+        const outcome = push
+          ? `pushed — stake returned`
+          : won ? `**won ${cu.g} ${fmt(net)}**` : `**lost ${cu.g} ${fmt(Math.abs(net))}**`;
+        events.push({
+          kind: 'bigbet', sys: '',
+          line: `**${who}** staked ${cu.g} ${fmt(stake)} on ${m.game || 'the tables'} and ${push ? 'pushed' : won ? 'won' : 'lost'}`,
+          embed: {
+            color: tier === 'colossal' ? COLOR.whale : COLOR.bigbet,
+            author: { name: tier === 'colossal' ? '🐋  WHALE AT THE TABLE' : tier === 'huge' ? '🎰  HIGH ROLLER' : '🎰  HIGH STAKES' },
+            title: `${who} — ${m.game || 'the tables'}`,
+            description: `Staked **${cu.g} ${fmt(stake)}** ${cu.n} and ${outcome}.` +
+              (won ? '' : push ? '' : `\n-# The house keeps it — **1%** goes to the three citadel holders at midnight UTC.`),
+            fields: [
+              { name: 'STAKE', value: `${cu.g} ${fmt(stake)}`, inline: true },
+              { name: push ? 'RESULT' : won ? 'WON' : 'LOST', value: push ? 'push' : `${cu.g} ${fmt(Math.abs(net))}`, inline: true },
+              { name: 'TABLE', value: String(m.game || '—'), inline: true },
+            ],
+          },
+        });
+        continue;
+      }
       if (w.kind !== 'repelled') continue;
       const sys = tileName(w.tile_id || '');
       const lv = Number((w.meta || {}).citadel_lv) || 0;
@@ -913,6 +958,44 @@ Deno.serve(async (req) => {
           }).join('\n'),
         inline: false,
       });
+
+      // ---- THE HOUSE CITADELS ----
+      // Who holds the three casino holds, what the house took today, and what 1%
+      // of it is worth. Read live rather than from war_events so the owners are
+      // current even on a report where nothing changed hands.
+      const [cits, pool] = await Promise.all([
+        db.from('casino_citadels').select('id,name,owner_name,shield_until').order('id'),
+        db.from('casino_day_losses').select('*')
+          .eq('day', new Date().toISOString().slice(0, 10)).maybeSingle(),
+      ]);
+      {
+        const p: any = pool.data || {};
+        const cut = (v: any) => fmt(Math.floor((Number(v) || 0) * 0.01));
+        const took = [
+          Number(p.gold) ? `$ ${fmt(Number(p.gold))}` : '',
+          Number(p.credits) ? `◈ ${fmt(Number(p.credits))}` : '',
+          Number(p.fuel) ? `⬢ ${fmt(Number(p.fuel))}` : '',
+          Number(p.iron) ? `◆ ${fmt(Number(p.iron))}` : '',
+          Number(p.plasma) ? `✦ ${fmt(Number(p.plasma))}` : '',
+        ].filter(Boolean).join(' · ') || 'nothing yet today';
+        const rows = (cits.data ?? []).map((c: any) => {
+          const sh = c.shield_until ? Math.floor((new Date(c.shield_until).getTime() - Date.now()) / 1000) : 0;
+          if (!c.owner_name) return `⬜ **${c.name}** — *unclaimed, free to take*`;
+          return `${sh > 0 ? '🛡' : '🔓'} **${c.name}** — **${c.owner_name}**` +
+            (sh > 0 ? ` · shielded <t:${Math.floor(Date.now() / 1000 + sh)}:R>` : ' · **attackable now**');
+        });
+        const held = (cits.data ?? []).filter((c: any) => c.owner_name).length;
+        fields.push({
+          name: `🎰  THE HOUSE CITADELS — ${held} of 3 held`,
+          value: `The house took **${took}** today from **${fmt(Number(p.hands) || 0)}** hands across **${fmt(Number(p.players) || 0)}** pilots.\n` +
+            `Each hold pays its owner **1%** at midnight UTC` +
+            (Number(p.gold) || Number(p.credits)
+              ? ` — currently **$ ${cut(p.gold)}** + **◈ ${cut(p.credits)}** each.\n`
+              : '.\n') +
+            (rows.length ? rows.join('\n') : '-# No citadels configured.'),
+          inline: false,
+        });
+      }
 
       // ---- what moved since the last report ----
       if (merged.length) {

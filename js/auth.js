@@ -11,6 +11,15 @@
   let mode = 'login';
   const $ = (id) => document.getElementById(id);
   const cloudOn = () => !!(window.CLOUD && window.CLOUD.enabled);
+  // A cloud call that never settles used to wedge boot forever (__cloudPending
+  // stayed true → blank page). Every await on the boot path is now bounded.
+  const TIMED_OUT = { __timeout: true };
+  function withTimeout(p, ms, fallback) {
+    return Promise.race([
+      Promise.resolve(p).catch(() => fallback),
+      new Promise((res) => setTimeout(() => res(fallback), ms)),
+    ]);
+  }
 
   function getUsers() { try { return JSON.parse(localStorage.getItem(USERS)) || {}; } catch (e) { return {}; } }
   function setUsers(u) { try { localStorage.setItem(USERS, JSON.stringify(u)); } catch (e) {} }
@@ -55,7 +64,7 @@
     // the slot — the newest login kicks any other tab/device on the SAME account
     try { if (window.ACCOUNT) window.ACCOUNT.rebind(); } catch (e) {}
     const sso = $('lg-sso-status'); if (sso) { sso.style.display = 'block'; sso.textContent = 'Syncing your fleet…'; }
-    try { if (window.ACCOUNT) await window.ACCOUNT.pull(); } catch (e) {}
+    try { if (window.ACCOUNT) await withTimeout(window.ACCOUNT.pull(), 15000, null); } catch (e) {}
     // The pulled SAVE is the last word on the pilot's name. Google's profile name
     // is only ever a first-login default; without this, every sign-in reverted a
     // renamed commander to whatever Google calls them.
@@ -64,14 +73,18 @@
       if (saved && saved !== name) {
         const s = window.ACCOUNT.session() || {};
         s.name = saved;
-        localStorage.setItem('lf_session', JSON.stringify(s));
+        setSession(s);   // SESS ('io-auth') — writing 'lf_session' here wrote a key nothing reads
         window.ACCOUNT.refreshBar();
         if (window.CLOUD && window.CLOUD.client) window.CLOUD.client.auth.updateUser({ data: { lf_name: saved } });
       }
     } catch (e) {}
     try { if (window.SESSIONLOCK) window.SESSIONLOCK.claim(); } catch (e) {}
     if (window.__sessionKicked) return;   // lost the account mid-restore → kick screen is up
-    boot(); reveal(true);
+    try { boot(); } catch (ex) {
+      try { (window.__lfErr = window.__lfErr || []).push({ kind: 'boot', msg: (ex && ex.message) || String(ex), at: 'finalizeCloud' }); } catch (e) {}
+      try { if (window.__lfBootFailed) window.__lfBootFailed('The game could not start.'); } catch (e) {}
+    }
+    reveal(true);
     // publish the public Ranks row IMMEDIATELY — it must not wait on the save
     // pipeline (see the heartbeat note in account.js)
     setTimeout(() => { try { window.ACCOUNT && window.ACCOUNT.publishNow && window.ACCOUNT.publishNow(); } catch (e) {} }, 2500);
@@ -85,7 +98,7 @@
   function maybePromptName() {
     try {
       const g = window.GAME;
-      if (!g || !g.state) { setTimeout(maybePromptName, 400); return; }
+      if (!g || !g.state) { if ((maybePromptName._n = (maybePromptName._n || 0) + 1) < 30) setTimeout(maybePromptName, 400); return; }
       const st = g.state;
       if (st.nameSet) return;
       if ((st.level || 1) > 1 || (st.playTime || 0) > 120) {   // veteran save — don't nag
@@ -246,8 +259,9 @@
 
   // returning cloud session (incl. OAuth redirect callback) → auto-login
   async function restoreCloud() {
-    let user = null;
-    try { user = await window.CLOUD.getUser(); } catch (e) {}
+    let user = null, offline = false;
+    try { user = await withTimeout(window.CLOUD.getUser(), 9000, TIMED_OUT); } catch (e) {}
+    if (user === TIMED_OUT) { offline = true; user = null; }
     if (user) {
       // OAuth redirect lands here — cloud.js flagged it as a fresh login
       let fresh = false;
@@ -256,6 +270,9 @@
     }
     const s = getSession();
     if (s && s.method === 'Guest') { boot(); reveal(false); return; }   // local guest world
+    // Supabase unreachable — play the local copy of THIS account. Do NOT treat an
+    // unanswered check as a stale token: that signed the player out on bad wifi.
+    if (s && s.method === 'Supabase' && offline) { boot(); reveal(false); return; }
     if (s && s.method === 'Supabase') { try { localStorage.removeItem(SESS); if (window.ACCOUNT) window.ACCOUNT.rebind(); } catch (e) {} } // stale token
     window.__cloudPending = false;   // unblock boot; gate stays for the user to sign in
   }

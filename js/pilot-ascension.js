@@ -195,7 +195,7 @@
             '<div class="pa-cta-n"><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '<br>+ 1 ★</em></div>' +
             '<div class="pa-cta-sum">' +
               '<div class="pa-cta-k">✓ <b>Your whole fleet comes with you</b> — every hull, every hull upgrade level, and every Ship Ascension</div>' +
-              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level, items, gold, territory and the Pilot Tree</div>' +
+              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level, items, gold and the Pilot Tree</div>' +
             '</div>' +
           '</div>' +
           '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button>' +
@@ -256,17 +256,24 @@
             '<li>Gold &amp; all Galaxy resources</li>' +
             '<li>All Starforge hardpoint tempers &amp; purity</li>' +
             '<li><b>The whole Pilot Tree</b> — every node unlocked, and every ◇ Dread Core you were holding</li>' +
-            '<li>Galaxy progress — every claimed system</li>' +
-            '<li>Void Zone progress</li>' +
-            '<li>Home Citadel &amp; defence towers</li>' +
-            '<li><b>Every claimed system, citadel &amp; Void spire</b> — they fall to neutral immediately, no cooldown</li>' +
             '<li>Your wing — escorts disband (the hulls stay in the hangar, fully upgraded)</li>' +
-            '<li>Prism mining rigs &amp; ingots</li>' +
           '</ul></div>' +
           '<div class="pa-led keep"><div class="pa-led-h">✓ CARRIED OVER</div><ul>' +
             '<li><b>Every hull in your hangar</b> — nothing is taken from the fleet</li>' +
             '<li><b>Every hull upgrade level</b> — your ships stay exactly as strong as you built them</li>' +
             '<li><b>Every Ship Ascension</b> — module tiers &amp; stars, on <b>every</b> hull</li>' +
+            // TERRITORY, HOME CITADEL, PRISM AND THE MOON COLONY SURVIVE. This
+            // ledger still listed all four under RESET TO ZERO long after
+            // ASC_KEEP started preserving them (ownedSystems / citadels /
+            // rivalCitadels / tileCd / razedCitadels / homecit / prism /
+            // prismFleet / moon) — the confirm gate had been corrected but this
+            // screen had not, so it warned players off a cost that no longer
+            // exists. Anything claimed here must be checked against ASC_KEEP.
+            '<li><b>Your whole galaxy</b> — every claimed system, citadel and Void spire stays yours</li>' +
+            '<li><b>Home Citadel</b> — pads, towers and defences, still earning</li>' +
+            '<li><b>Moon Colony</b> — every building keeps producing</li>' +
+            '<li><b>Prism</b> — rigs, ingots and forged Prism Cores</li>' +
+            '<li><b>Season 1: Voidmaw</b> — Event Coins, ❖ Voidmaw Parts, best stage and season rank</li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
             '<li><b>A higher level ceiling</b> — +' + CAP_STEP + ' max pilot level, every time</li>' +
             '<li>Your <b>mission boards</b> — daily, weekly and monthly carry on mid-cycle</li>' +
@@ -426,6 +433,7 @@
       ['\u2b22', '<b>All ' + hulls + ' hull' + (hulls === 1 ? '' : 's') + '</b> \u2014 upgrade levels and Ship Ascensions intact'],
       ['\u2691', tiles ? '<b>All ' + tiles + ' system' + (tiles === 1 ? '' : 's') + '</b> \u2014 citadels and Void spires stay yours' : 'Any territory you hold'],
       ['\u25d0', 'Moon Colony, Home Citadel and Prism \u2014 still producing'],
+      ['\u2756', 'Season 1: Voidmaw \u2014 Event Coins, parts and best stage'],
       ['\u2b21', 'Badges, career totals and mission boards'],
       ['\u25c8', 'Everything you paid for'],
     ];
@@ -460,9 +468,16 @@
       '<button class="pa-btn danger" id="pa-do" disabled>\u2726 ASCEND</button></div>' +
     '</div>';
     o.querySelector('[data-x]').onclick = closeOverlay;
-    const ack = $('pa-ack'), doBtn = $('pa-do');
+    // Scope the lookups to the overlay, and read the LIVE checkbox on click —
+    // a stale/duplicate #pa-ack elsewhere in the document would otherwise gate
+    // the button on the wrong node.
+    const ack = o.querySelector('#pa-ack'), doBtn = o.querySelector('#pa-do');
     ack.onchange = () => { doBtn.disabled = !ack.checked; };
-    doBtn.onclick = () => cinematic(key, pv);
+    doBtn.onclick = (e) => {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (!ack.checked) { doBtn.disabled = true; return; }
+      cinematic(key, pv);
+    };
   }
 
   // ===========================================================================

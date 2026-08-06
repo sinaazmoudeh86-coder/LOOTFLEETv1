@@ -204,12 +204,31 @@
     return msg.indexOf('pgrst202') !== -1 || msg.indexOf('42883') !== -1 ||
            msg.indexOf('does not exist') !== -1 || msg.indexOf('could not find') !== -1;
   }
+  // BIG NUMBERS ON THE WIRE. Late-game fleet power reaches ~1e29, and two things
+  // then go wrong on the way to Postgres:
+  //   · JS serialises anything past ~1e21 in exponential notation ("2.3e+29"),
+  //     which an integer column will not parse — hundreds of 22P02 errors an hour,
+  //     and the player's row silently stops updating on every ladder.
+  //   · Infinity/NaN out of a broken stat calc serialise as null or "Infinity"
+  //     and fail the same way.
+  // BigInt — NOT toFixed(0), which itself switches to exponential notation at 1e21
+  // and up and so fails on exactly the magnitudes that caused the problem. BigInt
+  // stringifies plain decimal digits at any size, in a form numeric always accepts.
+  // (Columns and parameters are numeric as of bignum-power-fix.sql; this keeps the
+  // payload clean regardless of which server version is live.)
+  function bignum(v) {
+    const n = Number(v);
+    if (!isFinite(n) || n <= 0) return 0;
+    if (n < 1e15) return Math.round(n);
+    try { return BigInt(Math.trunc(n)).toString(); } catch (e) { return Math.round(n); }
+  }
+
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
       const base = {
-        p_name: p.name || 'Operator', p_power: Math.round(p.power || 0),
-        p_level: p.level || 1, p_zone: p.zone || 1, p_kills: Math.round(p.kills || 0),
+        p_name: p.name || 'Operator', p_power: bignum(p.power),
+        p_level: p.level || 1, p_zone: p.zone || 1, p_kills: bignum(p.kills),
         p_fleet: p.fleet || [],
       };
       if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
@@ -222,7 +241,7 @@
       // to prevent.
       const ladder = (p.tiles !== undefined || p.missions !== undefined) ? {
         p_tiles: p.tiles | 0, p_citadels: p.citadels | 0,
-        p_tile_rev: Math.round(p.tile_rev || 0),
+        p_tile_rev: bignum(p.tile_rev),
         p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
       } : null;
       if (ladder && !_lbNoLadder) {

@@ -1096,6 +1096,15 @@
     if (p.lc) { if (g.addCredits) g.addCredits(p.lc); else g.state.credits = (g.state.credits || 0) + p.lc; }
     if (p.gold) g.state.gold = (g.state.gold || 0) + p.gold;
     if (p.cores) g.state.dreadCores = (g.state.dreadCores || 0) + p.cores;
+    // RESOURCES. Every mailed prize is paid through here, and casino citadel
+    // payouts are denominated in all five casino currencies — without these three
+    // the fuel/iron/plasma half of a payout was accepted and then dropped.
+    if (p.fuel || p.iron || p.plasma) {
+      const r = g.state.resources = g.state.resources || { fuel: 0, iron: 0, plasma: 0 };
+      if (p.fuel) r.fuel = (r.fuel || 0) + p.fuel;
+      if (p.iron) r.iron = (r.iron || 0) + p.iron;
+      if (p.plasma) r.plasma = (r.plasma || 0) + p.plasma;
+    }
     try { g.save(); } catch (e) {}
     try { updateHud(); } catch (e) {}
     const bits = [];
@@ -1103,6 +1112,9 @@
     if (p.lc) bits.push('◈ ' + p.lc + ' LootCoins');
     if (p.gold) bits.push('$ ' + p.gold.toLocaleString());
     if (p.cores) bits.push('◇ ' + p.cores + ' Cores');
+    if (p.fuel) bits.push('⬢ ' + p.fuel.toLocaleString() + ' Fuel');
+    if (p.iron) bits.push('◆ ' + p.iron.toLocaleString() + ' Iron');
+    if (p.plasma) bits.push('✦ ' + p.plasma.toLocaleString() + ' Plasma');
     return bits.join(' · ') || 'collected';
   }
   window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };

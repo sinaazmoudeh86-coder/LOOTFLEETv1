@@ -27,7 +27,22 @@
   function cas() {
     const st = G().state;
     if (!st.casino) st.casino = { cur: 'gold', bet: 10000, hands: 0, won: 0, lost: 0 };
+    // PER-CURRENCY BOOKS. `won`/`lost` sum every currency into one number, so a
+    // 40,000-gold loss and a 40,000-LootCoin loss were indistinguishable. Nothing
+    // could be paid out from that. These track each wallet separately, plus a
+    // rolling day bucket the citadel payout reads. Legacy totals are kept so old
+    // saves and the existing stats strip keep working.
+    if (!st.casino.book) st.casino.book = { won: {}, lost: {} };
+    if (!st.casino.day) st.casino.day = { d: today(), lost: {}, won: {}, hands: 0, sent: {} };
     return st.casino;
+  }
+  const today = () => new Date().toISOString().slice(0, 10);   // UTC day, matches SQL
+  // Net losses this UTC day, per currency, that have NOT yet been reported to the
+  // server. Rolls over automatically at midnight UTC.
+  function dayBook() {
+    const c = cas();
+    if (c.day.d !== today()) c.day = { d: today(), lost: {}, won: {}, hands: 0, sent: {} };
+    return c.day;
   }
   const bal = () => CUR[cas().cur].get();
   function glyphOf(k) { return CUR[k || cas().cur].glyph; }
@@ -35,7 +50,66 @@
   // currency it was staked in — switching wallets mid-hand can't cross wires.
   function stake(n, k) { CUR[k || cas().cur].add(-n); }
   function payout(n, k) { CUR[k || cas().cur].add(n); }
-  function bookend(net) { const c = cas(); c.hands++; if (net > 0) c.won += net; else c.lost += -net; G().save(); if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); }
+  // ---- WHAT COUNTS AS A BIG BET ---------------------------------------------
+  // Judged per currency, because the wallets are not remotely comparable: 250
+  // LootCoins is real money, 250 gold is nothing. Three tiers so the channel can
+  // tell a heavy hand from a genuine whale.
+  //
+  // Significance is measured on the LARGER of the stake and the swing — a huge
+  // win on a modest stake is news too, and a stake that pushes is not.
+  const BIG = {
+    gold:    [500e6, 2.5e9, 10e9],
+    credits: [250, 1000, 5000],        // real money — a far lower bar
+    fuel:    [250e3, 1e6, 5e6],
+    iron:    [250e3, 1e6, 5e6],
+    plasma:  [250e3, 1e6, 5e6],
+  };
+  const TIERS = ['big', 'huge', 'colossal'];
+  function bigBetTier(k, amount) {
+    const t = BIG[k]; if (!t) return -1;
+    let tier = -1;
+    for (let i = 0; i < t.length; i++) if (amount >= t[i]) tier = i;
+    return tier;
+  }
+  function announceBig(stake, net, k) {
+    const amount = Math.max(Math.abs(stake || 0), Math.abs(net || 0));
+    const tier = bigBetTier(k, amount);
+    if (tier < 0) return;
+    if (!window.SOCIAL || !SOCIAL.rpc) return;
+    const gm = GAMES[game] || {};
+    try {
+      SOCIAL.rpc('casino_big_bet', {
+        p_game: gm.name || 'the tables',
+        p_cur: k,
+        p_stake: Math.floor(Math.abs(stake || 0)),
+        p_net: Math.floor(net || 0),
+        p_tier: TIERS[tier],
+        // normalised against the tier-1 threshold so the server's rate limiter can
+        // compare rounds staked in different currencies
+        p_score: +(amount / BIG[k][0]).toFixed(3),
+        p_name: G().state.pilotName || 'A pilot',
+      });
+    } catch (e) {}
+  }
+
+  // Every settled round lands here. curKey is REQUIRED for the books to mean
+  // anything — it defaults to the active wallet only so an un-updated call site
+  // still records something rather than silently vanishing.
+  function bookend(net, curKey, stake) {
+    const c = cas(), k = curKey || c.cur;
+    c.hands++;
+    if (net > 0) c.won += net; else c.lost += -net;              // legacy totals
+    const b = c.book, d = dayBook();
+    if (net > 0) { b.won[k] = (b.won[k] || 0) + net; d.won[k] = (d.won[k] || 0) + net; }
+    else if (net < 0) { b.lost[k] = (b.lost[k] || 0) + -net; d.lost[k] = (d.lost[k] || 0) + -net; }
+    d.hands++;
+    G().save();
+    // push the day's losses to the server pool that funds the citadels
+    try { if (window.CASCIT && window.CASCIT.reportSoon) window.CASCIT.reportSoon(); } catch (e) {}
+    // a notable round is called out in Discord immediately
+    try { announceBig(stake == null ? Math.abs(net) : stake, net, k); } catch (e) {}
+    if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+  }
   function betOK(mult) { return cas().bet >= 100 && bal() >= Math.floor(cas().bet * (mult || 1)); }
 
   // ---- LOOTCOIN SAFETY GUARD ---------------------------------------------------
@@ -166,7 +240,10 @@
       '</div>' +
       (game && GAMES[game]
         ? '<button class="cs-back" data-back>◂ CASINO FLOOR <i>· ' + GAMES[game].name.toUpperCase() + ' TABLE</i></button><div id="cs-game"></div>'
-        : floorHTML()) ;
+        // THE HOUSE CITADELS sit on the floor, above the tables — they are about
+        // the house's daily take, so they'd be noise mid-hand.
+        : '<div id="cs-citadels"></div>' + floorHTML()) ;
+    { const cc = $('cs-citadels'); if (cc && window.CASCIT) window.CASCIT.mount(cc); }
     body.querySelectorAll('[data-cur]').forEach((b) => b.onclick = () => { if (roundActive()) return; cas().cur = b.dataset.cur; G().save(); render(); });
     body.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { if (roundActive()) return; const c2 = cas(); c2.bet = Math.min(Math.max(100, bal()), c2.bet + parseInt(b.dataset.add)); G().save(); renderBet(); });
     body.querySelectorAll('[data-tool]').forEach((b) => b.onclick = () => {
@@ -290,7 +367,7 @@
     else if (pv < dv) { win = false; text = dv + ' BEATS ' + pv; }
     else { ret = bj.bet; text = 'PUSH · ' + pv; }
     if (ret) payout(ret, bj.cur);
-    bookend(ret - bj.bet);
+    bookend(ret - bj.bet, bj.cur, bj.bet);
     bj.over = true;
     renderBJ(host);
     syncLock();   // hand settled → wallet unlocks immediately
@@ -366,7 +443,7 @@
           if (b.hit(x)) { ret = bet * b.pays; win = true; }
         }
         if (ret) payout(ret, curK);
-        bookend(ret - bet);
+        bookend(ret - bet, curK, bet);
         renderRU(host, false, x);
         syncLock();
         resultBanner('cs-res', win,
@@ -384,7 +461,7 @@
     const s = document.createElement('style'); s.id = 'cs-css'; s.textContent = CSS; document.head.appendChild(s);
   }
 
-  window.CASINO = { render, reg, guard, syncLock, fmt, CUR, cas, bal, stake, payout, bookend, betOK, resultBanner, freshDeck, cardHTML, handVal, evalBest, cmpHands, handName, glyphOf };
+  window.CASINO = { render, reg, guard, syncLock, fmt, CUR, cas, bal, stake, payout, bookend, dayBook, today, bigBetTier, betOK, resultBanner, freshDeck, cardHTML, handVal, evalBest, cmpHands, handName, glyphOf };
 
   const CSS = `
   .mega-grid .mega-card.cmd-casino{ background:linear-gradient(180deg,#0c2417,#081409); }

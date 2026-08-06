@@ -1831,6 +1831,7 @@
       <div class="xt-h"><span class="xt-g">◈</span> KAEVITH-HELD ZONE</div>
       <div class="xt-b">Every hostile here flies a Kaevith hull — <b>+35% hull, +22% damage</b> over this ring's normal garrison. Ownership, citadels and cooldowns work exactly as anywhere else.</div>
       <div class="xt-r"><span>◈ Chance to earn a hull on clear</span><b>${xenChance}%</b></div>
+      <div class="xt-r"><span>◈ Which hull</span><b>${xenPick(t.ring)}</b></div>
     </div>` : '';
     const owner = t.owned ? 'You' : (t.rival || 'Unclaimed');
     const ownerCol = t.owned ? '#5fa8ff' : (t.rival ? '#e8a34a' : '#7fb4ff');
@@ -2066,6 +2067,19 @@
     };
     const lyOf = (d) => Math.round(Math.pow(d, 1.6) * 3.2);
     let html = '<div class="zj">';
+    // ✦ THE EMBER CHOIR — event entry point, in the same slot the Kaevith banner
+    // occupies on the galaxy map. Always tappable for the full briefing, and it
+    // reports live resonance once a Choir hull is in the fleet.
+    {
+      const eb = G.emberBeaconBonus ? G.emberBeaconBonus() : null;
+      const rate = G.emberRate ? G.emberRate() : 30;
+      const cta = eb && eb.hulls ? '−' + Math.round(eb.cdCut * 100) + '% CD' : 'BRIEFING';
+      html += `<button class="emb-banner" id="emb-open">
+        <span class="eb-glyph">✦</span>
+        <span class="eb-txt"><b>THE EMBER CHOIR</b><i>1 zone in ${rate} ends on a Choir hull · kill it for a chance to recover it and supercharge your ◉ beacon</i></span>
+        <span class="eb-cta">${cta}</span>
+      </button>`;
+    }
     const safe = s.currentDungeon < 1;
     html += `<div class="zone-row safe ${safe?'active':''}" data-d="0">
         <div class="z-num" style="color:var(--hp)">⌂</div>
@@ -2103,14 +2117,22 @@
       const wave = d % 11 === 0;
       const cit = G.isCitadelZone && G.isCitadelZone(d);
       const citCd = cit ? G.citadelCooldownLeft(d) : 0;
+      // EMBER CHOIR — a Choir-claimed zone reads as its own encounter type, in the
+      // same vocabulary as WAVE ZONE and CITADEL SIEGE. It names the hull, because
+      // which hull garrisons a zone is fixed by depth and worth travelling for.
+      const emb = G.isEmberZone && G.isEmberZone(d);
+      const embT = emb ? (G.emberTierFor ? G.emberTierFor(d) : 1) : 0;
+      const embName = emb ? ((C.SHIP_BY_KEY[(G.emberKeys ? G.emberKeys() : [])[embT - 1]] || {}).name || 'Choir hull') : '';
+      const embPct = emb && G.emberChance ? (G.emberChance(d) * 100).toFixed(1) : '0';
       const bonus = (wave?`<span class="z-bon wave">◎ WAVE ZONE · 25 waves → boss</span>`:'') +
+                    (emb?`<span class="z-bon emb">✦ EMBER CHOIR · ${embName} ends this zone · ${embPct}% to recover it</span>`:'') +
                     (cit?`<span class="z-bon cit">⛴ CITADEL SIEGE · raze the fortress</span>`:'') +
                     (citCd>0?`<span class="z-bon citcd">◷ rebuilds in ${fmtCd(citCd)}</span>`:'') +
                     (bz.density>1?`<span class="z-bon dens">☣ SWARM · ${bz.density}× density · endless waves · ⚠ junk loot</span>`:'') +
                     (bz.quality>1?`<span class="z-bon qual">✦ ${bz.quality}× loot quality</span>`:'');
-      html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}" style="${pvars}">
-        <div class="z-orb ${ptype}${d % 5 === 0 ? ' ringed' : ''}${cit ? ' cit' : ''}${wave ? ' wav' : ''}"><span>${d}</span></div>
-        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${bz.density>1?' <span class="z-wtag" style="background:rgba(226,59,78,.16);color:#ff8090;border-color:rgba(226,59,78,.5)">SWARM</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}</div>
+      html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''} ${emb?'embzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}" style="${pvars}">
+        <div class="z-orb ${ptype}${d % 5 === 0 ? ' ringed' : ''}${cit ? ' cit' : ''}${wave ? ' wav' : ''}${emb ? ' emb' : ''}"><span>${d}</span></div>
+        <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${bz.density>1?' <span class="z-wtag" style="background:rgba(226,59,78,.16);color:#ff8090;border-color:rgba(226,59,78,.5)">SWARM</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}${emb?' <span class="z-etag">CHOIR</span>':''}</div>
           <div class="z-sub">${G.formatNum(lyOf(d))} ly · Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
           ${bonus?`<div class="z-bons">${bonus}</div>`:''}
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
@@ -2118,6 +2140,7 @@
     }
     html += '</div>';
     el['zones-body'].innerHTML = html;
+    { const ebtn = document.getElementById('emb-open'); if (ebtn) ebtn.addEventListener('click', () => openEmberBriefing()); }
     el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => {
       const d = +row.dataset.d;
       const deploy = () => { G.selectDungeon(d); showScreen('battle'); };
@@ -2222,16 +2245,6 @@
       return `<span style="color:${r.color}">${r.glyph} ${G.formatNum(rp[k])}</span>`;
     }).join(' ');
   }
-  // Format a build/arrival duration (days→hours→minutes).
-  function fmtBuildLeft(ms) {
-    let s = Math.max(0, Math.floor(ms / 1000));
-    const d = Math.floor(s / 86400); s -= d * 86400;
-    const h = Math.floor(s / 3600); s -= h * 3600;
-    const m = Math.floor(s / 60);
-    if (d > 0) return d + 'd ' + h + 'h';
-    if (h > 0) return h + 'h ' + m + 'm';
-    return Math.max(1, m) + 'm';
-  }
   const BUILD_RES = [['gold','●','#f2b24b'],['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◈','#ff3a3a']];
   function buildCostChips(cost, have) {
     return BUILD_RES.filter(([k]) => cost[k]).map(([k, g, c]) => {
@@ -2298,6 +2311,7 @@
     if (owned) return '';
     if (ship.event) return '❖ Season 1';
     if (ship.alienTech) return '◈ Kaevith';
+    if (ship.emberTech) return '✦ Choir';
     if (ship.missionShip) return '⌘ 1,000 Missions';
     if (ship.purchase) return `${LC_ICON}${(ship.purchase.lc || 0).toLocaleString()}`;
     if (ship.build) return '⚒ Build';
@@ -2348,6 +2362,100 @@
       ${owned ? '' : `<div class="st-badge">${badge}</div>`}
     </button>`;
   }
+  // ==========================================================================
+  // HANGAR ▸ SHIPS — grouped by HULL CLASS.
+  //
+  // The tab used to be 42 tiles in one undifferentiated 3-up grid, which made a
+  // Frigate and a Titan Sina look like the same kind of purchase and gave the
+  // player no way to answer "what should I be flying?".
+  //
+  // `cls` is NOT cosmetic — it drives the escort weapon an escort fires
+  // (ESCORT_WTYPE), the Aegis Warden-array multiplier, weapon mounting rules and
+  // the in-game icon accent. So the grouping uses the REAL class, and the hero
+  // band finally states what each class does, including the escort weapon, which
+  // was previously undocumented anywhere in the game.
+  //
+  // Dread-class and Titan Sina are their own tiers here rather than being buried in
+  // Carrier, which is where the player looks for them.
+  // ==========================================================================
+  // Seven DISPLAY TIERS. Dread and Titan are derived, not stored: `cls` drives real
+  // gameplay (ESCORT_WTYPE, SHIP_ACCENT, Aegis Warden doubling, weapon mounting),
+  // so a Dread hull stays cls:'Carrier' in CONFIG and fires railguns as an escort
+  // exactly as before — only where it FILES in the hangar changes. `pick` runs in
+  // order, first match wins, so Titan is tested before Dread and Dread before the
+  // plain Carrier bucket.
+  const SHIP_CLASSES = [
+    { cls: 'Frigate', accent: '#5b9cff', pick: (s) => s.cls === 'Frigate',
+      role: 'Fast, cheap, fragile — the hulls you learn the game in.',
+      benefit: 'Highest speed per credit and the lowest upgrade costs. As an escort a Frigate fires <b>lasers</b>: fast, accurate, single-target.' },
+    { cls: 'Cruiser', accent: '#46d07a', pick: (s) => s.cls === 'Cruiser',
+      role: 'The all-rounder — real plating without losing manoeuvrability.',
+      benefit: 'The first hulls that survive a boss without perfect play. As an escort a Cruiser fires <b>gatlings</b>: high rate of fire, best against packs.' },
+    { cls: 'Battleship', accent: '#f0972a', pick: (s) => s.cls === 'Battleship',
+      role: 'Heavy line hulls — built to trade hits and win.',
+      benefit: 'Large hull pools and multi-weapon mounts, at the cost of speed. As an escort a Battleship fires <b>missiles</b>: slow, heavy, splash damage.' },
+    { cls: 'Aegis', accent: '#7ce0a0', pick: (s) => s.cls === 'Aegis',
+      role: 'The support hull — it keeps the rest of the fleet alive.',
+      benefit: 'The <b>only</b> hull that mounts Warden arrays, at <b>double</b> their listed regen and damage reduction. As an escort an Aegis fires nothing — it pulses <b>repairs</b> instead.' },
+    { cls: 'Titan', accent: '#ffd24d', pick: (s) => s.key === 'titansina',
+      role: 'A class of one. Nothing else in the game is built to this scale.',
+      benefit: 'The single largest hull ever fielded — every stat line on it is an order above Dread-class. There is no upgrade path beyond it.' },
+    { cls: 'Dread', accent: '#ff4d6d', pick: (s) => !!s.megaCost,
+      role: 'Dread-class — the apex hulls, priced in Dread Cores rather than gold.',
+      benefit: 'The heaviest weapon mounts and drone bays in the game. Every one is an endgame commitment: you buy these instead of upgrading, not as well as. As an escort a Dread fires <b>railguns</b>.' },
+    { cls: 'Carrier', accent: '#b15cff', pick: (s) => s.cls === 'Carrier',
+      role: 'Capital hulls with drone bays — they fight with a fleet of their own.',
+      benefit: 'Drone bays add damage that needs no aiming and never stops. As an escort a Carrier fires <b>railguns</b>: piercing shots that punch through a whole line.' },
+  ];
+  // Display order on screen: the progression ladder, with the two specialist tiers
+  // last. (SHIP_CLASSES order is MATCH priority, which is a different thing.)
+  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Carrier', 'Dread', 'Titan', 'Aegis'];
+
+  function shipRoster() {
+    const owned = G.state.ownedShips || {};
+    const flying = G.state.ship;
+    // One pass, first match wins, so no hull can land in two tiers and none can be
+    // silently dropped when a hull is added to CONFIG.
+    const bucket = {};
+    SHIP_CLASSES.forEach((m) => { bucket[m.cls] = { meta: m, list: [] }; });
+    const orphans = [];
+    C.SHIPS.forEach((s) => {
+      const m = SHIP_CLASSES.find((x) => x.pick(s));
+      if (m) bucket[m.cls].list.push(s); else orphans.push(s);
+    });
+    const groups = SHIP_TIER_ORDER.map((k) => bucket[k]).filter(Boolean);
+    if (orphans.length) groups.push({ meta: { cls: 'Other', accent: '#8fa3bd', role: 'Hulls outside the standard class ladder.', benefit: 'These fall back to gatling escort fire.' }, list: orphans });
+
+    // Sticky jump bar — one chip per tier. Every heading below is reachable, so no
+    // second row is needed now that Dread and Titan are tiers in their own right.
+    const live = groups.filter((g) => g.list.length);
+    let out = '<div class="sc-jump">' + live.map((g) => {
+      const have = g.list.filter((s) => owned[s.key]).length;
+      const mine = g.list.some((s) => s.key === flying);
+      return `<button class="scj ${mine ? 'flying' : ''}" data-scj="${g.meta.cls}" style="--ca:${g.meta.accent}">
+        <b>${g.meta.cls}</b><span>${have}/${g.list.length}</span></button>`;
+    }).join('') + '</div>';
+
+    live.forEach((g) => {
+      const have = g.list.filter((s) => owned[s.key]).length;
+      const pct = Math.round(have / g.list.length * 100);
+      const flyingHere = g.list.some((s) => s.key === flying);
+      out += `<div class="sc-class" id="sc-${g.meta.cls}" style="--ca:${g.meta.accent}">
+        <div class="sc-hero">
+          <div class="sc-h-top">
+            <div class="sc-h-name">${g.meta.cls}<em>class</em></div>
+            <div class="sc-h-count"><b>${have}</b>/${g.list.length}${flyingHere ? '<i>● flying</i>' : ''}</div>
+          </div>
+          <div class="sc-h-role">${g.meta.role}</div>
+          <div class="sc-h-benefit">${g.meta.benefit}</div>
+          <div class="sc-h-bar"><i style="width:${pct}%"></i></div>
+        </div>
+        <div class="ship-grid">${g.list.map((s) => shipTile(s.key)).join('')}</div>
+      </div>`;
+    });
+    return out;
+  }
+
   function openShipDetail(key) {
     const sheet = showSheet(`<div class="sheet-head">${C.SHIP_BY_KEY[key].name}</div><div class="sheet-body ship-detail-sheet">${shipCard(key)}<div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Close</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
@@ -2360,6 +2468,7 @@
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
     sheet.querySelectorAll('[data-go-galaxy]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('galaxy'); }));
+    sheet.querySelectorAll('[data-go-zones]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('zones'); }));
     sheet.querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('missions'); }));
     sheet.querySelectorAll('[data-go-alliance]').forEach((b) => b.addEventListener('click', () => { closeSheet(); if (window.SOCIAL && window.SOCIAL.setTab) window.SOCIAL.setTab('alliance'); showScreen('social'); toast('⬡ Monolith Shipyard is in the store below', '#7ff2e0'); }));
   }
@@ -2397,14 +2506,7 @@
         <div class="ship-lock" style="margin-top:6px">${megaCostHTML(ship.megaCost, true)}</div>`;
     } else if (ship.build) {
       const inf = G.buildShipInfo(key) || {};
-      if (inf.status === 'building') {
-        const total = (inf.days || 14) * 86400000, left = inf.arrivesAt - Date.now(), pct = Math.max(0, Math.min(100, (1 - left / total) * 100));
-        action = `<span class="ship-badge build">⏳</span>`;
-        lock = `<div class="ship-lock building"><span class="lk-ic">⏳</span><span>Under construction — arrives in <b>${fmtBuildLeft(left)}</b></span><div class="lk-bar"><div class="lk-fill prism" style="width:${pct}%"></div></div></div>`;
-      } else if (inf.status === 'ready') {
-        action = `<span class="ship-badge active">✦ ARRIVED</span>`;
-        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Construction complete — boarding…</span></div>`;
-      } else if (inf.status === 'needasc') {
+      if (inf.status === 'needasc') {
         action = `<span class="ship-badge locked">🔒</span>`;
         lock = `<div class="ship-lock"><span class="lk-ic">✦</span><span>Requires <b>Ascension ★${inf.reqAsc}</b> — you are at <b>★${inf.ascHave | 0}</b>. No currency substitutes for prestige.</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
       } else if (inf.status === 'noblueprint') {
@@ -2415,14 +2517,16 @@
         const pct = Math.min(100, inf.killsHave / inf.reqKills * 100);
         action = `<span class="ship-badge bp">✦ BP</span>`;
         lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Blueprint secured · <b>${G.formatNum(inf.killsHave)} / ${G.formatNum(inf.reqKills)}</b> total kills — any ship</span><div class="lk-bar"><div class="lk-fill" style="width:${pct}%"></div></div></div>`;
-      } else if (inf.status === 'busy') {
-        action = `<span class="ship-badge locked">⏳</span>`;
-        lock = `<div class="ship-lock"><span class="lk-ic">⏳</span><span>Another hull is already under construction — finish it first</span></div>`;
       } else {
         const can = inf.status === 'buildable';
         action = can ? `<button class="ship-btn buy res" data-build-start="${key}">⚒ Construct</button>` : `<span class="ship-badge locked">⚒</span>`;
-        lock = `<div class="ship-lock ${can ? 'ready' : ''}"><span class="lk-ic">⚒</span><span>${can ? 'Ready to build' : 'Need more resources'} · <b>${inf.days}-day</b> build</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
+        lock = `<div class="ship-lock ${can ? 'ready' : ''}"><span class="lk-ic">⚒</span><span>${can ? 'Ready to build — <b>delivered instantly</b>' : 'Need more resources'}</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
       }
+    }
+    else if (ship.emberTech) {
+      const b = ship.beacon || {};
+      action = `<button class="ship-btn buy" data-go-zones="1">✦ Hunt</button>`;
+      lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Ember Choir — recovered <b>only</b> by killing the hull that ends a <b>Choir zone</b> in Zone Grind. Never sold. <b style="color:#ffd98a">−${b.cdCut}% beacon recharge · +${b.life}% duration · +${b.size}% swarm · +${b.loot}% loot</b></span></div>`;
     }
     else if (ship.alienTech) {
       action = `<button class="ship-btn buy" data-go-galaxy="1">◈ Hunt</button>`;
@@ -2454,6 +2558,7 @@
       : ship.purchase ? `<span class="bp-chip have" style="border-color:#f2a93c88;color:#ffd9a0">◈ LOOTCOIN</span>`
       : ship.megaCost ? `<span class="bp-chip have" style="border-color:#ff5a6888;color:#ff9aa6">◇ DREAD</span>`
       : ship.alienTech ? `<span class="bp-chip have" style="border-color:#c26bff88;color:#e0b3ff">◈ KAEVITH</span>`
+      : ship.emberTech ? `<span class="bp-chip have emb">✦ CHOIR</span>`
       : ship.alliance ? `<span class="bp-chip have" style="border-color:#2ee6c988;color:#8ff2e0">⬡ ALLIANCE</span>`
       : ship.build ? (st.owned ? '' : ((G.state.blueprints && G.state.blueprints[key]) ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◈ CITADEL</span>`))
       : ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
@@ -2547,7 +2652,7 @@
         }
       }
       html += `<div class="sec-blurb">Buy hulls with gold. Each unlocks only after you recover its <b>blueprint</b> from a zone boss and prove yourself in the previous hull. <b style="color:#5fa8ff">Tap any hull</b> for full stats.</div>`;
-      html += '<div class="ship-grid">' + C.SHIPS.map((s) => shipTile(s.key)).join('') + '</div>';
+      html += shipRoster();
       html += '</div>';
     }
 
@@ -2857,6 +2962,18 @@
     }));
     // ship buy / switch / blueprint-hunt
     el['store-body'].querySelectorAll('[data-ship-tile]').forEach((b) => b.addEventListener('click', () => openShipDetail(b.dataset.shipTile)));
+    // class jump bar. Scrolls the tab's own scroller \u2014 never scrollIntoView, which
+    // pans the whole app shell on this layout.
+    el['store-body'].querySelectorAll('[data-scj]').forEach((b) => b.addEventListener('click', () => {
+      const sec = el['store-body'].querySelector('#sc-' + b.dataset.scj);
+      if (!sec) return;
+      let sc = sec.parentElement;
+      while (sc && sc !== document.documentElement && sc.scrollHeight <= sc.clientHeight + 4) sc = sc.parentElement;
+      if (!sc) return;
+      const top = sec.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+      sc.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' });
+      el['store-body'].querySelectorAll('[data-scj]').forEach((x) => x.classList.toggle('on', x === b));
+    }));
     el['store-body'].querySelectorAll('[data-ship-buy]').forEach((b) => b.addEventListener('click', () => openShipBuy(b.dataset.shipBuy)));
     el['store-body'].querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
@@ -2875,31 +2992,24 @@
     wireHangarTabs(el['store-body']);
     const glc = el['store-body'].querySelector('[data-getlc]');
     if (glc) glc.addEventListener('click', openCredits);
-    // live-refresh the construction countdown while a hull is building
+    // no build countdown to refresh — hulls are delivered instantly
     clearInterval(_buildTick); _buildTick = null;
-    if (storeCat === 'ships' && G.getConstruction && G.getConstruction()) {
-      _buildTick = setInterval(() => {
-        const sc = document.getElementById('screen-store');
-        if (sc && sc.classList.contains('active') && storeCat === 'ships' && G.getConstruction && G.getConstruction()) renderStore();
-        else { clearInterval(_buildTick); _buildTick = null; }
-      }, 20000);
-    }
   }
-  // CONSTRUCT confirm — warns about the cost + multi-week wait before committing.
+  // CONSTRUCT confirm — the cost is the whole commitment now; the build is instant.
   function openBuildConfirm(key) {
     const inf = G.buildShipInfo(key); if (!inf) return;
     const ship = C.SHIP_BY_KEY[key];
     const sheet = showSheet(`<div class="sheet-head">⚒ Construct ${ship.name}</div><div class="sheet-body">
-      <p style="margin:0 0 10px;font-size:12.5px;line-height:1.55;color:#cbd6e6">Commit the resources below to begin construction. The hull takes <b style="color:#c9a0ff">${inf.days} days</b> to build and arrives automatically when complete.</p>
+      <p style="margin:0 0 10px;font-size:12.5px;line-height:1.55;color:#cbd6e6">Commit the resources below and the yard delivers the hull <b style="color:#c9a0ff">immediately</b> — straight into your hangar.</p>
       <div class="bc-row" style="margin-bottom:10px">${buildCostChips(inf.cost, inf.have)}</div>
-      <div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,120,120,.35);border-radius:9px;padding:9px 11px;color:#ff9a64;font-size:11.5px;line-height:1.45;margin-bottom:6px">⚠ Resources are spent immediately and are <b>non-refundable</b>. Only one hull can be under construction at a time.</div>
-      <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button><button class="btn gold" data-ok ${inf.affordable ? '' : 'disabled'}>⚒ Begin ${inf.days}-day build</button></div></div>`);
+      <div style="background:rgba(255,80,80,.08);border:1px solid rgba(255,120,120,.35);border-radius:9px;padding:9px 11px;color:#ff9a64;font-size:11.5px;line-height:1.45;margin-bottom:6px">⚠ Resources are spent immediately and are <b>non-refundable</b>.</div>
+      <div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Cancel</button><button class="btn gold" data-ok ${inf.affordable ? '' : 'disabled'}>⚒ Build it now</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
       const r = G.startBuildShip(key); closeSheet();
-      if (r.ok) { toast('⚒ ' + ship.name + ' — construction begun', '#c9a0ff'); renderStore(); }
-      else { toast(r.reason === 'resources' ? 'Not enough resources' : r.reason === 'ascension' ? '✦ Requires a higher Ascension rank' : r.reason === 'busy' ? 'Another hull is already building' : 'Cannot build yet', '#e23b4e'); }
+      if (r.ok) { toast('⚒ ' + ship.name + ' delivered — board it in Hangar ▸ Ships', '#c9a0ff'); renderStore(); }
+      else { toast(r.reason === 'resources' ? 'Not enough resources' : r.reason === 'ascension' ? '✦ Requires a higher Ascension rank' : 'Cannot build yet', '#e23b4e'); }
     });
   }
   function openCredits() {
@@ -3444,14 +3554,37 @@
   // chance to earn a hull no amount of money can buy.
   // ==========================================================================
   const XEN_SHIPS = ['xen1', 'xen2', 'xen3', 'xen4', 'xen5'];
-  function xenRoster() {
-    return XEN_SHIPS.map((k) => {
+  // One-line "which hull" summary for a tile tooltip: the most likely hull at
+  // this ring plus the top hull's share, so scarcity is visible before the fight.
+  function xenPick(ring) {
+    const split = G.xenSplit ? G.xenSplit(ring || 1) : null;
+    if (!split) return 'any of the five';
+    const live = split.filter((r) => !r.owned);
+    if (!live.length) return 'all five earned';
+    const best = live.reduce((a, b) => (b.share > a.share ? b : a));
+    const top = split[4];
+    const nm = (k) => ((C.SHIP_BY_KEY[k] || {}).name || k).replace(/^Kaevith\s+/, '');
+    const topTxt = (top && !top.owned) ? ` · Sovereign ${(top.share * 100).toFixed(2)}%` : '';
+    return `mostly ${nm(best.key)}${topTxt}`;
+  }
+  // Relative scarcity, stated plainly. The roll's per-hull weights live in
+  // game-v93 (XEN_BASE_W); xenSplit() reports the real shares so this roster
+  // shows what the table actually does instead of a hand-written guess.
+  const XEN_RARITY_NOTE = { xen3: '5× rarer', xen4: '5× rarer', xen5: '10× rarer' };
+  function xenRoster(ring) {
+    const split = G.xenSplit ? G.xenSplit(ring || 1) : null;
+    return XEN_SHIPS.map((k, i) => {
       const s = C.SHIP_BY_KEY[k]; if (!s) return '';
       const owned = !!(G.state.ownedShips && G.state.ownedShips[k]);
+      const row = split ? split[i] : null;
+      const pct = row && !owned ? (row.share * 100) : 0;
+      const pctTxt = !row || owned ? '' : pct >= 10 ? Math.round(pct) + '%' : pct >= 1 ? pct.toFixed(1) + '%' : pct.toFixed(2) + '%';
+      const note = XEN_RARITY_NOTE[k];
       return `<div class="xr-row ${owned ? 'have' : ''}">
         <img src="ships/ship-${k}.png" alt="">
         <div class="xr-m"><div class="xr-n">${s.name}${owned ? ' <i>✔ earned</i>' : ''}</div>
-        <div class="xr-c">${s.cls}${k === 'xen1' ? ' · entry class' : k === 'xen5' ? ' · Dreadnaught class' : ''}</div></div>
+        <div class="xr-c">${s.cls}${k === 'xen1' ? ' · entry class' : k === 'xen5' ? ' · Dreadnaught class' : ''}${note && !owned ? ` · <b class="xr-rare">${note}</b>` : ''}</div>
+        ${owned ? '' : `<div class="xr-odds">${pctTxt} of a winning roll</div>`}</div>
         <div class="xr-xp">+${s.xpBonus}%<i>fleet XP</i></div>
       </div>`;
     }).join('');
@@ -3460,6 +3593,8 @@
     const lo = GM.XEN ? Math.round(GM.XEN.minChance * 100) : 1;
     const hi = GM.XEN ? Math.round(GM.XEN.maxChance * 100) : 10;
     const bonus = G.xenXpBonus ? G.xenXpBonus() : 0;
+    const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
+    const xpCap = xi ? xi.cap : 1000, xpRaw = xi ? xi.rawPct : 0, xpOver = !!(xi && xi.capped);
     const sheet = showSheet(`<div class="sheet-head">◈ THE KAEVITH INCURSION</div><div class="sheet-body xen-sheet">
       <div class="xen-hero">
         <div class="xh-tag">LIVE EVENT · MY GALAXY</div>
@@ -3470,11 +3605,13 @@
         <div class="xs-row"><span class="xs-n">1</span><div><b>The map is unchanged.</b> Zone ownership, citadels, shields and cooldowns all work exactly as before. The Kaevith hold no territory — they garrison it.</div></div>
         <div class="xs-row"><span class="xs-n">2</span><div><b>They hit harder.</b> Attack an invaded zone and every hostile flies a Kaevith hull: <b>+35% hull and +22% damage</b> over that ring's normal garrison, and the zone boss is a Kaevith command ship.</div></div>
         <div class="xs-row"><span class="xs-n">3</span><div><b>Clear it for a chance to earn their ship technology.</b> <b>${lo}%</b> on ring 1, rising to <b>${hi}%</b> at the rim — the deeper the zone, the better the odds <i>and</i> the bigger the hull. You're told the result at the end of every void-zone battle.</div></div>
-        <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>. Bonuses stack up to <b>+100%</b>.</div></div>
+        <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>, and the five hulls stack to <b>+250%</b> on their own. Your fleet's XP bonus from <b>all</b> sources combined is capped at <b>+${xpCap}%</b>${xpOver ? ` — you are already <b>past it</b> at +${xpRaw.toLocaleString()}%, so more XP is wasted` : ''}.</div></div>
       </div>
       <div class="lo-sect">The five hulls · entry → Dreadnaught</div>
-      <div class="xen-roster">${xenRoster()}</div>
+      <div class="xen-note-rare">Two chassis are common. The <b>Glaive</b> and <b>Harbinger</b> are <b>5× rarer</b>, and the <b>Sovereign</b> is <b>10× rarer</b> again — scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>; deeper rings tilt them toward the top hulls.</div>
+      <div class="xen-roster">${xenRoster(GM.RINGS || 25)}</div>
       <div class="xen-now"><span>Your resonance field right now</span><b>${bonus ? '+' + bonus + '% XP per kill' : 'none — no Kaevith hull in the fleet'}</b></div>
+      ${xpOver ? `<div class="xen-note-rare" style="border-color:rgba(242,178,75,.4);background:rgba(242,178,75,.07);color:#b9a98c">⚠ <b style="color:#ffcf7a">You are over the fleet XP cap.</b> Your sources stack to <b style="color:#ffcf7a">+${xpRaw.toLocaleString()}%</b> against a ceiling of <b style="color:#ffcf7a">+${xpCap}%</b> — the difference is doing nothing. Fly a Kaevith hull for its <b style="color:#ffcf7a">stats</b> rather than its XP, or swap one out for damage or loot at no cost.</div>` : ''}
       <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>◈ Hunt a void zone</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     sheet.querySelector('[data-ok]').addEventListener('click', closeSheet);
@@ -3513,7 +3650,7 @@
         <div class="xres-c">${r.complete
           ? 'You already hold all five Kaevith hulls — there is nothing left to earn.'
           : 'This zone rolled a <b>' + r.pct + '%</b> chance to earn a hull. The zone is still yours, and the fight still paid gold, XP and loot.'}</div>
-        ${r.complete ? '' : `<div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim.</div>`}
+        ${r.complete ? '' : `<div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim. The two entry chassis are the common drops; the Glaive and Harbinger are <b>5× rarer</b> and the Sovereign <b>10× rarer</b> again.</div>`}
       </div>`}
       <div class="sheet-actions"><button class="btn" data-x>Close</button>${r.won ? '<button class="btn gold" data-fleet>Open Hangar</button>' : '<button class="btn gold" data-galaxy>Find another void zone</button>'}</div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
@@ -3702,5 +3839,113 @@
     }
   }
 
-  window.UI = { openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
+  // ==========================================================================
+  // THE EMBER CHOIR — Zone Grind incursion. Briefing, roster and the recovery
+  // payoff. Kaevith is the galaxy-map event and pays XP; the Choir is the Zone
+  // Grind event and pays BEACON. Deliberately the same shape of UI as the
+  // Kaevith sheet so the two read as siblings, with its own palette (obsidian
+  // and molten gold) so they are never confused.
+  // ==========================================================================
+  const EMB_SHIPS = ['emb1', 'emb2', 'emb3', 'emb4', 'emb5'];
+  const EMB_ZONEBAND = { emb1: '10–49', emb2: '50–119', emb3: '120–249', emb4: '250–399', emb5: '400+' };
+  function embRoster() {
+    return EMB_SHIPS.map((k, i) => {
+      const s = C.SHIP_BY_KEY[k]; if (!s) return '';
+      const owned = !!(G.state.ownedShips && G.state.ownedShips[k]);
+      const b = s.beacon || {};
+      return `<div class="er-row ${owned ? 'have' : ''}">
+        <img src="ships/ship-${k}.png" alt="">
+        <div class="er-m"><div class="er-n">${s.name}${owned ? ' <i>✔ recovered</i>' : ''}</div>
+          <div class="er-c">${s.cls} · garrisons zones <b>${EMB_ZONEBAND[k]}</b></div>
+          <div class="er-b">
+            <span class="erb cd">−${b.cdCut}% recharge</span>
+            <span class="erb life">+${b.life}% duration</span>
+            <span class="erb size">+${b.size}% swarm</span>
+            <span class="erb loot">+${b.loot}% loot</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  function openEmberBriefing() {
+    const eb = G.emberBeaconBonus ? G.emberBeaconBonus() : null;
+    const rate = G.emberRate ? G.emberRate() : 30;
+    const minZ = G.emberMinZone ? G.emberMinZone() : 10;
+    const bs = G.beaconState ? G.beaconState() : null;
+    const have = EMB_SHIPS.filter((k) => G.state.ownedShips && G.state.ownedShips[k]).length;
+    const sheet = showSheet(`<div class="sheet-head">✦ THE EMBER CHOIR</div><div class="sheet-body emb-sheet">
+      <div class="emb-hero">
+        <img class="emb-hero-art" src="ships/ship-emb5.png" alt="">
+        <div class="eh-tag">LIVE EVENT · ZONE GRIND</div>
+        <div class="eh-t">THE EMBER CHOIR</div>
+        <div class="eh-s">They hunt by <b>signal</b>. Obsidian husks lit from within, drifting toward every distress call ever broadcast — and roughly <b>one zone in ${rate}</b> already answers to them.</div>
+      </div>
+      <div class="emb-steps">
+        <div class="es-row"><span class="es-n">1</span><div><b>One zone in ${rate} is Choir-claimed.</b> Fixed zones, the same for every commander, from <b>Zone ${minZ}</b> up. The zone list marks them <b class="es-hl">CHOIR</b> — nothing else about the zone changes.</div></div>
+        <div class="es-row"><span class="es-n">2</span><div><b>They take over the ending.</b> The encounter that closes the zone — the roaming boss, or the boss after a wave zone's final wave — is replaced by a Choir hull: <b>+55% hull, +28% damage</b>. Citadel sieges are never touched.</div></div>
+        <div class="es-row"><span class="es-n">3</span><div><b>Kill it for a chance to keep it.</b> <b>0.9%</b> in the shallows, rising to <b>5%</b> deep. Which hull is fixed by depth, so a specific hull means travelling for it.</div></div>
+        <div class="es-row"><span class="es-n">4</span><div><b>The reward is your ◉ BEACON.</b> Choir hulls in your fleet — flagship or escort — cut its <b>recharge</b>, stretch its <b>swarm window</b>, widen the <b>swarm</b> and raise the <b>loot every summoned kill drops</b>. Bonuses add across hulls.</div></div>
+      </div>
+      ${eb && eb.hulls ? `<div class="emb-now">
+        <div class="en-h">YOUR RESONANCE RIGHT NOW · ${eb.hulls} hull${eb.hulls === 1 ? '' : 's'} in the fleet</div>
+        <div class="en-grid">
+          <div class="en-c"><b>−${Math.round(eb.cdCut * 100)}%</b><span>recharge</span></div>
+          <div class="en-c"><b>+${Math.round(eb.life * 100)}%</b><span>duration</span></div>
+          <div class="en-c"><b>+${Math.round(eb.size * 100)}%</b><span>swarm size</span></div>
+          <div class="en-c"><b>+${Math.round(eb.loot * 100)}%</b><span>beacon loot</span></div>
+        </div>
+        ${bs ? `<div class="en-live">Your beacon: <b>${bs.cd}s</b> recharge · <b>${bs.life}s</b> window · <b>×${bs.mult}</b> swarm</div>` : ''}
+        ${eb.capped ? '<div class="en-cap">⚠ One or more bonuses are at their ceiling — the extra is doing nothing.</div>' : ''}
+      </div>` : '<div class="emb-now empty">No Choir hull in your fleet — your beacon is running on the Defense tree and ascension perks alone.</div>'}
+      <div class="lo-sect">The five hulls · ${have}/5 recovered</div>
+      <div class="emb-roster">${embRoster()}</div>
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>✦ Find a Choir zone</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const ok = sheet.querySelector('[data-ok]');
+    if (ok) ok.addEventListener('click', () => { closeSheet(); const n = document.querySelector('.nav-btn[data-screen="dungeon"]'); if (n) n.click(); });
+  }
+  // Fires on killing the hull that ends a Choir zone — win or lose, so the roll is
+  // never silent (the same contract as the Kaevith result popup).
+  function emberTechResult(r) {
+    if (!_inited || !r) return;
+    const o = document.createElement('div');
+    o.className = 'emb-veil';
+    const b = r.won && r.ship ? (r.ship.beacon || {}) : {};
+    o.innerHTML = r.won
+      ? `<div class="embres win">
+        <div class="embres-tag">CHOIR HULL RECOVERED</div>
+        <img class="embres-art" src="ships/ship-${r.key}.png" alt="">
+        <div class="embres-t">${r.ship.name}</div>
+        <div class="embres-c">${r.ship.cls} · Choir ${['I','II','III','IV','V'][r.tier - 1]}</div>
+        <div class="embres-b">
+          <span class="erb cd">−${b.cdCut}% recharge</span>
+          <span class="erb life">+${b.life}% duration</span>
+          <span class="erb size">+${b.size}% swarm</span>
+          <span class="erb loot">+${b.loot}% loot</span>
+        </div>
+        <div class="embres-note">A <b>${r.pct}%</b> roll — the <b>${ord(r.nth)}</b> you have recovered. It's in your hangar; put it in the fleet to switch the bonus on.</div>
+        <button class="embres-x" data-x>Continue</button>
+      </div>`
+      : `<div class="embres miss">
+        <div class="embres-tag">THE HUSK GAVE UP NOTHING</div>
+        <div class="embres-g">✦</div>
+        <div class="embres-t2">${(C.SHIP_BY_KEY[r.key] || {}).name || 'The Choir hull'} broke apart</div>
+        <div class="embres-c2">${r.owned
+          ? (r.complete ? 'You already hold all five Choir hulls — there is nothing left to recover here.' : 'You already hold this hull. Deeper Choir zones garrison the ones you don\u2019t.')
+          : 'This zone rolled a <b>' + r.pct + '%</b> chance to recover it. The kill still paid its full boss loot.'}</div>
+        <button class="embres-x" data-x>Continue</button>
+      </div>`;
+    document.body.appendChild(o);
+    const close = () => o.remove();
+    o.querySelector('[data-x]').addEventListener('click', close);
+    o.addEventListener('click', (e) => { if (e.target === o) close(); });
+    if (r.won) { try { if (window.FX && FX.flash) FX.flash('#ffb347'); } catch (e) {} }
+  }
+  function ord(n) {
+    const v = n | 0; if (!v) return '1st';
+    const s = ['th', 'st', 'nd', 'rd'][(v % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][v % 100] || 'th';
+    return v + s;
+  }
+
+  window.UI = { openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
 })();

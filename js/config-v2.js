@@ -28,19 +28,20 @@
     { key: 'cosmic',    name: 'Cosmic',    color: '#ff6ad5', glow: 'rgba(255,106,213,1)',   minStats: 6, maxStats: 6, mult: 11.5, weight: 0.017,   particles: 10 },
     { key: 'void',      name: 'Void',      color: '#9a5bff', glow: 'rgba(154,91,255,1)',    minStats: 6, maxStats: 6, mult: 15.5, weight: 0.003,   particles: 12 },
     { key: 'eternal',   name: 'Eternal',   color: '#eae6ff', glow: 'rgba(234,230,255,1)',   minStats: 6, maxStats: 6, mult: 21.0, weight: 0.0005,  particles: 16 },
-    { key: 'primordial',name: 'Primordial',color: '#ffe6a8', glow: 'rgba(255,230,168,1)',   minStats: 6, maxStats: 6, mult: 28.5, weight: 0.00004, particles: 22 },
-    { key: 'relic',     name: 'Relic',     color: '#c061ff', glow: 'rgba(192,97,255,1)',    minStats: 6, maxStats: 6, mult: 38.0, weight: 0.0000016,  particles: 26 },
-    { key: 'artifact',  name: 'Artifact',  color: '#ff2330', glow: 'rgba(255,35,48,1)',     minStats: 6, maxStats: 6, mult: 50.0, weight: 0.00000006, particles: 30 },
+    { key: 'primordial',name: 'Primordial',color: '#ffe6a8', glow: 'rgba(255,230,168,1)',   minStats: 6, maxStats: 6, mult: 28.5, weight: 0.0040, particles: 22 },
+    { key: 'relic',     name: 'Relic',     color: '#c061ff', glow: 'rgba(192,97,255,1)',    minStats: 6, maxStats: 6, mult: 38.0, weight: 0.00075,  particles: 26 },
+    { key: 'artifact',  name: 'Artifact',  color: '#ff2330', glow: 'rgba(255,35,48,1)',     minStats: 6, maxStats: 6, mult: 50.0, weight: 0.00013, particles: 30 },
     // ---- ASCENSION-EXCLUSIVE TIERS ----------------------------------------
     // These three CANNOT drop until the pilot has ascended. No zone, boss or
     // crate produces them below the required star count — the gate is the
     // Ascension itself, which is what makes prestige feel like real access
     // rather than a stat bump. `ascReq` = Ascension Stars needed.
-    { key: 'ascendant', name: 'Ascendant', color: '#5cffbe', glow: 'rgba(92,255,190,1)',    minStats: 6, maxStats: 7, mult: 68.0,  weight: 0.00000004,  particles: 34, ascReq: 1 },
-    { key: 'celestial', name: 'Celestial', color: '#5b7cff', glow: 'rgba(91,124,255,1)',    minStats: 7, maxStats: 7, mult: 92.0,  weight: 0.000000008, particles: 38, ascReq: 20 },
-    { key: 'paragon',   name: 'Paragon',   color: '#ffffff', glow: 'rgba(255,255,255,1)',   minStats: 7, maxStats: 8, mult: 125.0, weight: 0.0000000012, particles: 44, ascReq: 50, prismatic: true },
+    { key: 'ascendant', name: 'Ascendant', color: '#5cffbe', glow: 'rgba(92,255,190,1)',    minStats: 6, maxStats: 7, mult: 68.0,  weight: 0.000022,  particles: 34, ascReq: 1 },
+    { key: 'celestial', name: 'Celestial', color: '#5b7cff', glow: 'rgba(91,124,255,1)',    minStats: 7, maxStats: 7, mult: 92.0,  weight: 0.0000036, particles: 38, ascReq: 12 },
+    { key: 'paragon',   name: 'Paragon',   color: '#ffffff', glow: 'rgba(255,255,255,1)',   minStats: 7, maxStats: 8, mult: 125.0, weight: 0.0000006, particles: 44, ascReq: 25, prismatic: true },
   ];
   // Post-mythic tiers (Ancient and beyond) are ~10× rarer across the board.
+  // NOTE: weights above are PRE-multiplier — the ×0.1 below is applied to tier 6+.
   RARITY.forEach((r, i) => { if (i >= 6) r.weight *= 0.1; });
   const RARITY_BY_KEY = {};
   RARITY.forEach((r, i) => { r.tier = i; RARITY_BY_KEY[r.key] = r; if (r.ascReq == null) r.ascReq = 0; });
@@ -235,8 +236,17 @@
   // clamped in game.js). Tier index → see RARITY above.
   // ---------------------------------------------------------------------------
   function rarityCap(zone) {
-    // Every tier — up to Artifact — is reachable by zone 100; the roll weights
-    // (items.js) keep the top end a real grind. Bosses/citadels beat this by +1.
+    // ZONE half of the rarity gate. The ASCENSION half is ascRarityCap(); the roll
+    // takes min(both), so BOTH have to reach a tier for it to drop.
+    //
+    // This function used to stop at 13 (Artifact) for every zone, which silently
+    // made the three ascension-exclusive tiers unobtainable at any zone, at any
+    // star count — ascReq was gating a tier that the zone cap had already
+    // excluded. The top three now open with depth as well, so reaching them takes
+    // ascensions AND the zones to match.
+    if (zone >= 170) return 16;  // Paragon
+    if (zone >= 140) return 15;  // Celestial
+    if (zone >= 115) return 14;  // Ascendant
     if (zone >= 100) return 13;  // Artifact
     if (zone >= 90)  return 12;  // Relic
     if (zone >= 78)  return 11;  // Primordial
@@ -457,7 +467,7 @@
       tag:'OBLIVION SPEAR T1',
       desc:'A forbidden tier above the Mothership — twice the firepower, twice the plating, 16 drone bays. Forged only from a stolen blueprint, a million kills, and a fortune in resources.',
       bpDrop:{ minCitLevel:300, chance:0.01 },
-      build:{ days:14, reqShip:'mothership', reqShipKills:1000000, cost:{ fuel:120000000, iron:60000000, plasma:40000000, prism:5000 } } },
+      build:{ reqShip:'mothership', reqShipKills:1000000, cost:{ fuel:120000000, iron:60000000, plasma:40000000, prism:5000 } } },
     // OBLIVION SPEAR ALPHA — the apex prototype, TWICE as hard to earn as the T1
     // and twice the hull again (≈4× a Mothership). Its blueprint only drops from
     // the very deepest Lv500+ citadels (half the odds), it demands you already
@@ -468,7 +478,7 @@
       tag:'OBLIVION SPEAR · ALPHA',
       desc:'The apex prototype — double the Oblivion Spear again, 24 drone bays, reality-bending output. The single hardest vessel in the galaxy to forge.',
       bpDrop:{ minCitLevel:500, chance:0.005, reqOwn:'oblivionspear' },
-      build:{ days:28, reqShip:'oblivionspear', reqShipKills:2000000, cost:{ fuel:400000000, iron:200000000, plasma:140000000, prism:20000 } } },
+      build:{ reqShip:'oblivionspear', reqShipKills:2000000, cost:{ fuel:400000000, iron:200000000, plasma:140000000, prism:20000 } } },
     // OBLIVION FINAL — the ultimate hull, sold for LootCoins only (Lv200+). It is
     // 2.5× the original Oblivion Spear in every stat, renders at colossal scale,
     // and projects a unique GREEN reactor aura.
@@ -539,6 +549,35 @@
       mods:{ hpPct:700, dmgPct:400, multiShot:110, critChance:90, critDamage:320, moveSpeed:60, atkSpeedPct:135, rangePct:210, lifeSteal:3.8 },
       tag:'KAEVITH V · GODSHARD', xen:5, xpBonus:100, alienTech:true,
       desc:'The Incursion\u2019s flagship — a Dreadnaught-class monolith of living crystal. Its resonance field alone doubles every kill\u2019s XP for the entire fleet.' },
+    // ---- THE EMBER CHOIR · ZONE GRIND INCURSION ------------------------------
+    // Sister event to the Kaevith Incursion, on the other axis. Kaevith pays XP;
+    // the Choir pays BEACON. Every hull carries a `beacon` block — percentages,
+    // summed across the fleet and clamped in game-v93 (emberBeaconBonus):
+    //   cdCut = % off the recharge · life = % longer swarm window
+    //   size  = % bigger swarm     · loot = % more from every beacon-summoned kill
+    // Recovered ONLY by killing the hull that ends a Choir-claimed zone (~1 zone
+    // in 30, Zone Grind). Never sold, never crated. Stat lines track the Kaevith
+    // ladder tier for tier, so neither event is the strictly better one to chase.
+    { key:'emb1', name:'Ember Mote', cls:'Frigate', price:0, reqKills:0, weapons:1, ammo:1, hull:1, drones:0,
+      mods:{ dmgPct:10, hpPct:8 },
+      tag:'CHOIR I · MOTE', ember:1, beacon:{ cdCut:4, life:8, size:5, loot:6 }, emberTech:true,
+      desc:'A single obsidian husk with a molten seam down its spine. Cuts your beacon\u2019s recharge by 4% and holds the swarm 8% longer.' },
+    { key:'emb2', name:'Cinder Acolyte', cls:'Cruiser', price:0, reqKills:0, weapons:2, ammo:1, hull:1, drones:0,
+      mods:{ dmgPct:20, hpPct:14, critChance:6 },
+      tag:'CHOIR II · ACOLYTE', ember:2, beacon:{ cdCut:7, life:15, size:10, loot:12 }, emberTech:true,
+      desc:'Cruiser-weight plate around a wider resonator. \u22127% recharge, +15% swarm window, +12% loot from every kill it calls in.' },
+    { key:'emb3', name:'Ashen Cantor', cls:'Battleship', price:0, reqKills:0, weapons:3, ammo:2, hull:2, drones:0,
+      mods:{ dmgPct:40, hpPct:55, critChance:10, multiShot:8 },
+      tag:'CHOIR III · CANTOR', ember:3, beacon:{ cdCut:11, life:25, size:18, loot:22 }, emberTech:true,
+      desc:'A battleship built around a choir-stone that answers signals on its own. \u221211% recharge, +25% duration, +22% beacon loot.' },
+    { key:'emb4', name:'Molten Herald', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8,
+      mods:{ hpPct:120, dmgPct:75, multiShot:22, critChance:16, critDamage:60, atkSpeedPct:25, rangePct:30 },
+      tag:'CHOIR IV · HERALD', ember:4, beacon:{ cdCut:15, life:40, size:28, loot:35 }, emberTech:true,
+      desc:'A carrier whose eight spines each carry a resonator. \u221215% recharge, +40% duration, +28% swarm size, +35% beacon loot.' },
+    { key:'emb5', name:'Choirmaster Vhorn', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:30,
+      mods:{ hpPct:700, dmgPct:400, multiShot:110, critChance:90, critDamage:320, moveSpeed:60, atkSpeedPct:135, rangePct:210, lifeSteal:3.8 },
+      tag:'CHOIR V · VHORN', ember:5, beacon:{ cdCut:22, life:65, size:45, loot:60 }, emberTech:true,
+      desc:'The Choir\u2019s flagship — a Dreadnaught-class husk that IS a beacon. \u221222% recharge, +65% duration, +45% swarm and +60% loot on every kill it calls in.' },
     // ---- THE AETERNUM · ASCENSION-CLASS PLANETBREAKER -----------------------
     // Not a ship. An artificial world, forged by an extinct civilisation to erase
     // star systems, and the single hardest thing in LOOTFLEET to obtain:
@@ -555,7 +594,7 @@
       mods:{ hpPct:4224, dmgPct:2376, multiShot:634, critChance:528, critDamage:1848, moveSpeed:397, atkSpeedPct:792, rangePct:3200, lifeSteal:23.4 },
       tag:'ASCENSION CLASS · PLANETBREAKER', lance:true, sinaTracers:true,
       desc:'The first Ascension-Class Planetbreaker — an artificial world built to erase star systems. The Event Horizon Lance charges for 15 seconds in full view of the galaxy, then carves a beam clean across the zone: every hull in the lane is vaporised, and the rift it leaves behind pays out on everything that dies in it. Requires Ascension ★5, five trillion of every primary resource, and three days in the forge.',
-      build:{ reqAsc:5, noBlueprint:true, days:3,
+      build:{ reqAsc:5, noBlueprint:true,
               cost:{ gold:5e12, fuel:5e12, iron:5e12, plasma:5e12 } } },
     // TITAN SINA — the FINAL-CLASS hero ship. Double the Dread Omega in every
     // stat, with weapon range that effectively covers the entire battle zone.

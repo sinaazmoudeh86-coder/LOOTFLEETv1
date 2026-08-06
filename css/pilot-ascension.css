@@ -42,7 +42,9 @@
 .pa-pill-go{flex:none;font-family:'Orbitron',sans-serif;font-size:17px;color:#c9a8ff;}
 .pa-pill.locked{filter:saturate(.35);opacity:.82;}
 .pa-pill.locked::before{animation:none;opacity:.2;}
-.pa-pill-lock{position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:2;font-size:9px;font-weight:800;letter-spacing:.08em;color:#9c8fc0;}
+/* nowrap: "🔒 LV 100" broke onto two lines and printed straight over the meta
+   chips, because it is absolutely positioned over the pill's content box */
+.pa-pill-lock{position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:2;font-size:9px;font-weight:800;letter-spacing:.08em;color:#9c8fc0;white-space:nowrap;}
 .pa-pill-bar{flex-basis:100%;margin-top:2px;height:4px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden;}
 .pa-pill-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#7c4bd8,#c07bff);}
 @media(max-width:520px){.pa-pill-s{display:none;}}
@@ -282,11 +284,16 @@
   border-radius:11px;padding:9px 11px;background:color-mix(in srgb,var(--tc) 10%,transparent);}
 .pa-unlock-pre b{color:var(--tc);font-family:'Orbitron',sans-serif;letter-spacing:.08em;}
 .pa-ack{display:flex;align-items:flex-start;gap:9px;margin-top:13px;font-size:11px;color:#c6b8de;line-height:1.5;cursor:pointer;}
-.pa-ack input{position:absolute;opacity:0;width:0;height:0;}
-.pa-ack span{flex:none;width:19px;height:19px;border-radius:6px;border:1px solid #4a4062;background:rgba(255,255,255,.05);position:relative;margin-top:1px;}
-.pa-ack input:checked + span{background:#e0374a;border-color:#ff8a96;}
-.pa-ack input:checked + span::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;font-size:13px;font-weight:900;color:#fff;}
-.pa-ack input:focus-visible + span{box-shadow:0 0 0 3px rgba(255,138,150,.3);}
+/* LEGACY CUSTOM CHECKBOX — NEUTRALISED. These styled the ack box as a fake
+   checkbox out of the label's <span>, but the ack copy now lives in that span
+   (.pa-ack-t) and the native input is styled directly further down. The
+   leftover `:checked + span::after{position:absolute;inset:0}` was the desktop
+   ascend bug: with .pa-ack-t position:static, the ✓ pseudo-element resolved
+   against the MODAL and covered it edge to edge. Every click on ASCEND landed
+   on the label's own pseudo-element instead — which toggled the checkbox back
+   OFF and never reached the button. It also drew a stray ✓ mid-modal.
+   Keep these scoped to a box that no longer exists, so they can never re-apply. */
+.pa-ack input:focus-visible + span.pa-ack-t{box-shadow:0 0 0 3px rgba(255,138,150,.3);}
 
 /* ---- THE CINEMATIC ------------------------------------------------------- */
 #pa-overlay.cine{background:#05040c;backdrop-filter:none;-webkit-backdrop-filter:none;padding:0;}
@@ -385,6 +392,7 @@
 .pa-ack > span.pa-ack-t{flex:1 1 auto;min-width:0;width:auto;height:auto;
   border:none;background:none;box-shadow:none;border-radius:0;
   display:block;position:static;margin:0;padding:0;}
+.pa-ack > span.pa-ack-t::after,.pa-ack > span.pa-ack-t::before{content:none;}
 .pa-ack{font-size:12px;line-height:1.5;color:#e2d6e8;text-wrap:pretty;}
 .pa-ack b{color:#fff;font-weight:700;white-space:nowrap;}
 .pa-flag em{text-wrap:pretty;}

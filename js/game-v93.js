@@ -153,7 +153,13 @@
     // so there is no double payout, but every progress bar would lie.
     'totalKills', 'playTime', 'itemsFound', 'itemsLost', 'lifetimeLooted', 'lifetimeMissions', 'stats',
     'friends', 'alliance', 'allianceId', 'mail', 'social',
-    'sdread', 'season', 'shipParts',                           // event progress & entitlements
+    // SEASON 1: VOIDMAW SURVIVES ASCENSION. `sdread` holds the whole event
+    // record — Event Coins, best stage, daily/season history, the vmGranted
+    // assembly flag and claim queue — and `shipParts` holds the ❖ Voidmaw Parts
+    // counting toward the 150-part hull. A live event runs on its own season
+    // clock, not the pilot's run, so ascending mid-season must not cost a player
+    // their standing in it.
+    'sdread', 'season', 'shipParts',
     'startWeek', 'name', 'sellTier', 'keepUpgrades', 'autoEquipAlways', 'auto', 'gameSpeed',
     'deathExplained', 'joystick', 'fs',
     // ONBOARDING IS A CAREER FACT, NOT RUN PROGRESS. An ascended pilot has
@@ -664,13 +670,45 @@
     const fraction = C.xpToNext(state.level) / XP_KILLS_PER_LEVEL * appropriate;
     return Math.max(flat, Math.floor(fraction));
   }
+  // ---- FLEET XP MULTIPLIER ---------------------------------------------------
+  // Every XP source in the game stacks MULTIPLICATIVELY, and there are seven of
+  // them. Left uncapped a full Kaevith fleet on Pro with maxed perks runs into
+  // five figures of bonus, which flattens the level curve into nothing.
+  //
+  // Aug 2026: ONE ceiling, +1000% (×11), applied to the COMBINED multiplier — not
+  // per source. Sources are collected here rather than multiplied inline so the
+  // UI can show the real breakdown and say plainly when the cap is clipping it.
+  const XP_FLEET_CAP_PCT = 1000;
+  function xpSources() {
+    const safe = (fn) => { try { const v = fn(); return isFinite(v) && v > 0 ? v : 1; } catch (e) { return 1; } };
+    const out = [];
+    const add = (n, m) => { if (m > 1.0001) out.push({ n, m }); };
+    add('LootFleet Pro', isPro() ? 2 : 1);
+    add('VIP', safe(() => (window.VIP ? window.VIP.mult('xp') : 1)));
+    add('Pilot Tree', safe(() => (window.DREAD && window.DREAD.mult ? window.DREAD.mult('xpGain') : 1)));
+    add('Neural Uplink', safe(() => (window.PASCEND ? window.PASCEND.mult('xp') : 1)));
+    add('Combat Computer', safe(() => (window.ASCEND && window.ASCEND.xpMult ? window.ASCEND.xpMult() : 1)));
+    add('Kaevith Resonance', safe(() => xenXpMult()));
+    return out;
+  }
+  // { pct, rawPct, cap, capped, mult, sources } — pct/mult are what actually
+  // applies; rawPct is what the sources add up to before the ceiling.
+  function xpFleetInfo() {
+    const src = xpSources();
+    const raw = src.reduce((a, s) => a * s.m, 1);
+    const capMult = 1 + XP_FLEET_CAP_PCT / 100;
+    const mult = Math.min(capMult, raw);
+    return {
+      sources: src,
+      rawPct: Math.round((raw - 1) * 100),
+      pct: Math.round((mult - 1) * 100),
+      cap: XP_FLEET_CAP_PCT,
+      capped: raw > capMult * 1.0001,
+      mult,
+    };
+  }
   function gainXp(amount) {
-    if (isPro()) amount *= 2;   // LootFleet Pro — 2× XP on every source, account-wide
-    if (window.VIP) amount *= window.VIP.mult('xp');   // VIP program XP perk
-    if (window.DREAD && window.DREAD.mult) amount *= window.DREAD.mult('xpGain');   // PILOT: XP Gain nodes
-    if (window.PASCEND) amount *= window.PASCEND.mult('xp');   // ASCENSION: Neural Uplink
-    if (window.ASCEND && window.ASCEND.xpMult) amount *= window.ASCEND.xpMult();    // ASCENSION: Combat Computer
-    amount *= xenXpMult();   // KAEVITH RESONANCE FIELD — alien hulls in the fleet lift every kill's XP
+    amount *= xpFleetInfo().mult;   // all sources, combined, clamped to +1000%
     state.xp += amount;
     // LEVEL CAP — Lv 150, +50 per Ascension Star. At the cap XP is not banked at
     // all (no phantom bar that fills into nothing): the run is over, and the only
@@ -800,10 +838,14 @@
     const r = defenseRanks();
     const pm = (window.PASCEND && window.PASCEND.beaconMods) ? window.PASCEND.beaconMods()
              : { cdCut: 0, life: 1, size: 1, loot: 1 };
+    // EMBER CHOIR RESONANCE — Choir hulls in the fleet feed the same four numbers
+    // the Defense tree and the ascension perks do. Composed here so there is one
+    // place the beacon is tuned and the UI can always report the real figures.
+    const em = emberBeaconBonus();
     const dCut = Math.min(0.4, r * 0.005);
-    // reductions are multiplicative, so neither source can ever reach zero
-    const cd = Math.max(30, Math.round(BEACON.cd * (1 - dCut) * (1 - pm.cdCut)));
-    let life = Math.round(BEACON.life * (1 + Math.min(1.5, r * 0.019)) * pm.life);
+    // reductions are multiplicative, so no source can ever reach zero
+    const cd = Math.max(30, Math.round(BEACON.cd * (1 - dCut) * (1 - pm.cdCut) * (1 - em.cdCut)));
+    let life = Math.round(BEACON.life * (1 + Math.min(1.5, r * 0.019)) * pm.life * (1 + em.life));
     // A DOWNTIME FLOOR. Fully stacked, duration outran the cooldown (506s of swarm
     // on a 72s recharge), so the beacon was permanently on — it stops being a
     // decision and the zone is simply always a swarm. Duration is capped so at
@@ -811,9 +853,12 @@
     life = Math.min(life, Math.round(cd * 0.66));
     // the advertised swarm size must be one the field can actually hold, or the
     // tooltip promises ×320 and delivers the cap
-    const mult = Math.min(BEACON.cap, Math.round(BEACON.mult * (1 + Math.min(0.6, r * 0.008)) * pm.size));
+    const mult = Math.min(BEACON.cap, Math.round(BEACON.mult * (1 + Math.min(0.6, r * 0.008)) * pm.size * (1 + em.size)));
     _bcCd = cd;
-    return { ranks: r, cd, life, mult, loot: pm.loot, cdLeft: beaconLeft() };
+    // `loot` is stamped onto every beacon-summoned enemy as its tithe, so the
+    // Choir's share has to be folded in HERE \u2014 returning pm.loot alone silently
+    // dropped the whole +loot half of the event.
+    return { ranks: r, cd, life, mult, loot: pm.loot * (1 + em.loot), ember: em, cdLeft: beaconLeft() };
   }
   // Zone Grind means: a plain numbered zone with no special encounter running.
   // VISIBILITY and PERMISSION are separate on purpose. The button used to hide
@@ -1390,6 +1435,13 @@
       rt.bossTimer = rt.bossInit = 600 + Math.random() * 300; // reset 10–15 min
       state.stats = state.stats || {}; state.stats.bossKills = (state.stats.bossKills || 0) + 1; // missions credit
       bossLoot(e, isSuper);
+      // EMBER CHOIR — killing the hull that ends a Choir-claimed zone carries a
+      // small chance to recover it. Rolled here, on the kill, so it fires whether
+      // the zone ended on a roaming boss or the boss after a wave-zone finale.
+      if (e.ember) {
+        const r = emberTechRoll();
+        if (r && window.UI && window.UI.emberTechResult) window.UI.emberTechResult(r);
+      }
       // BLUEPRINT: this zone's boss may hold the schematics for a hull.
       grantBlueprintFor(state.currentDungeon);
       if (window.UI) { window.UI.bossEvent(isSuper ? 'superdown' : 'down'); window.UI.syncStatsTab(); }
@@ -1488,6 +1540,15 @@
     b.name = isSuper ? ('SUPER ' + type.name + ' Prime') : (type.name + ' Alpha');
     // INVADED TILE — the zone boss is a Kaevith command hull, not the local fauna
     if (xenSkin(b, true)) b.name = isSuper ? 'KAEVITH OVERSEER' : 'KAEVITH WARDEN';
+    // CHOIR-CLAIMED ZONE — the encounter that ends the zone is a Choir hull.
+    // Checked after xenSkin because the two events never overlap: Kaevith lives on
+    // galaxy tiles, the Choir in Zone Grind, and isEmberBossPending() requires no
+    // currentSystem.
+    else if (emberSkin(b, true)) {
+      const nm = (C.SHIP_BY_KEY[EMB_KEYS[b.emberTier - 1]] || {}).name || 'CHOIR HULL';
+      b.name = nm.toUpperCase();
+      b.isSuper = isSuper;
+    }
     rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = isSuper;
     burst(x, y, isSuper ? '#ff2a4a' : '#e23b4e', isSuper ? 90 : 50, { speed: isSuper ? 360 : 280, life: 1.1, glow: true });
     if (window.UI) window.UI.bossEvent(isSuper ? 'super' : 'spawn');
@@ -1759,8 +1820,9 @@
       while (dA < -Math.PI) dA += Math.PI * 2;
       rt.archer.facing = (rt.archer.facing || 0) + dA * (1 - Math.exp(-9 * dt));
     }
-    // OBLIVION construction clock — grant the hull the moment its 2-week build lands
-    if (state.construction) { update._cc = (update._cc || 0) + dt; if (update._cc > 1) { update._cc = 0; checkConstruction(); } }
+    // Timed builds are gone. This only drains a legacy in-progress build on the
+    // first frame after the update, handing the player the hull they paid for.
+    if (state.construction) { checkConstruction(); }
     // when downed, freeze everything until the player picks a respawn zone
     if (rt.awaitingRespawn) { a.update(dt); return; }
     a.update(dt);
@@ -3030,7 +3092,7 @@
   function armAuto() {
     if (state.auto) return;
     state.auto = true;
-    rt.joy.x = rt.joy.y = 0;
+    rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
     try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
   }
 
@@ -3297,6 +3359,13 @@
         rt.nodes.forEach((n, i) => { n.respawnT = swarm ? 0.3 + i * 0.06 : 0.2 + i * 0.25; }); }
       // boss meter: 10–15 min to first boss; min 5 min between bosses
       rt.bossInit = rt.bossTimer = 600 + Math.random() * 300;
+      // EMBER CHOIR — a Choir-claimed zone brings its boss forward hard. The event
+      // IS the ending encounter, and a 10–15 minute wait on a zone you travelled to
+      // specifically would read as the event being broken. ~2–3 minutes: long enough
+      // to still be a boss meter, short enough that arriving feels like arriving.
+      if (!state.currentSystem && isEmberZone(state.currentDungeon)) {
+        rt.bossInit = rt.bossTimer = 120 + Math.random() * 60;
+      }
       rt.bossAlive = false; rt.boss = null; rt.lastBoss = rt.time - 600;
     }
     burst(rt.archer.x, rt.archer.y, '#e6b566', 18, { speed: 200, life: 0.6 });
@@ -3419,7 +3488,10 @@
       const sh = C.SHIP_BY_KEY[k];
       if (sh && sh.xpBonus) pct += sh.xpBonus;
     });
-    return Math.min(100, pct);
+    // No local ceiling. This used to clip at +100%, which meant a pilot holding
+    // all five hulls threw away most of what they earned (the roster sums to
+    // +250%). The only XP ceiling now is the combined fleet cap in xpFleetInfo.
+    return pct;
   }
   function xenXpMult() { return 1 + xenXpBonus() / 100; }
   // Chance to earn alien ship technology on clearing an invaded zone: 1% on
@@ -3439,6 +3511,161 @@
   // long dry streaks from feeling broken. `dry`/`pityAt`/`pity` still ride along
   // on the result object for debugging — nothing renders them.
   const XEN_PITY = 25;
+  // ==========================================================================
+  // THE EMBER CHOIR — the ZONE GRIND incursion (sister event to the Kaevith
+  // Incursion in My Galaxy).
+  //
+  // THE HOOK: the Choir hunt by SIGNAL. They are obsidian husks lit from within
+  // by a molten core, and they migrate toward noise — which is why their
+  // technology, bolted into your fleet, supercharges the one thing you fire to
+  // make noise on purpose: the ◉ BEACON. The faction that hunts signals hands you
+  // better signals. That is the whole loop, and it is deliberately a different
+  // axis from Kaevith (which pays XP): Kaevith makes levelling faster, the Choir
+  // makes FARMING faster.
+  //
+  // WHERE: roughly ONE ZONE IN THIRTY is Choir-claimed. Deterministic per zone
+  // number (hashed, not `% 30`, so it scatters instead of landing on a tidy
+  // multiple and colliding with the wave-zone cadence every 330). Stable for
+  // everyone, forever — the same zones are Choir zones on every account, so the
+  // knowledge is shareable, exactly like the Kaevith map.
+  //
+  // WHAT CHANGES: only the ENCOUNTER THAT ENDS THE ZONE. In a plain zone that is
+  // the roaming boss; in a wave zone it is the boss after the final wave. Nothing
+  // else about the zone moves — density, loot quality, respawn and level gates are
+  // untouched. Citadel sieges are excluded: their finale is razing the fortress,
+  // and replacing that would break the objective.
+  //
+  // THE PRIZE: killing a Choir hull carries a small chance to recover it. Five
+  // hulls, entry → Dreadnaught, each a bigger beacon bonus than the last.
+  // ==========================================================================
+  const EMB_KEYS = ['emb1', 'emb2', 'emb3', 'emb4', 'emb5'];
+  const EMB_MIN_ZONE = 10;      // below this the swap is just an unexplained wall
+  const EMB_RATE = 30;          // ~1 zone in 30
+  const _embImgs = {};
+  // Deterministic zone hash. Same input → same answer on every device, no state.
+  function embHash(z) {
+    let h = ((z | 0) + 0x9e37) * 0x85ebca6b;
+    h ^= h >>> 13; h = (h * 0xc2b2ae35) | 0; h ^= h >>> 16;
+    return (h < 0 ? -h : h);
+  }
+  function isEmberZone(z) {
+    const d = z | 0;
+    if (d < EMB_MIN_ZONE) return false;
+    if (isCitadelZone && isCitadelZone(d)) return false;   // don't clobber a siege objective
+    return embHash(d) % EMB_RATE === 0;
+  }
+  // Which Choir hull garrisons a given zone: deeper zones field bigger ones.
+  // Anchored to the zone (not random) so the tooltip can name it before you go.
+  function emberTierFor(z) {
+    const d = z | 0;
+    const t = d >= 400 ? 5 : d >= 250 ? 4 : d >= 120 ? 3 : d >= 50 ? 2 : 1;
+    return Math.max(1, Math.min(5, t));
+  }
+  // Chance to recover the hull on killing the zone's Choir boss. Deliberately
+  // rarer than Kaevith's tile roll: this is one encounter per zone visit, not a
+  // per-tile clear, and the beacon bonuses compound with everything.
+  function emberChance(z) {
+    const d = z | 0;
+    return Math.min(0.05, 0.008 + d * 0.00009);          // 0.9% → 5% cap
+  }
+  function isEmberBossPending() {
+    if (state.currentSystem) return false;                 // Zone Grind only
+    return isEmberZone(state.currentDungeon);
+  }
+  // Reskin + harden a boss into its Choir hull. Mirrors xenSkin's contract.
+  function emberSkin(e, boss) {
+    if (!boss || !isEmberBossPending()) return false;
+    const tier = emberTierFor(state.currentDungeon);
+    const k = EMB_KEYS[tier - 1];
+    if (!_embImgs[k]) { _embImgs[k] = new Image(); _embImgs[k].src = 'ships/ship-' + k + '.png'; }
+    e.spriteImg = _embImgs[k];
+    e.ember = true; e.emberTier = tier;
+    e.tint = '#ffb347';
+    // A named encounter should FEEL like one: tougher than the zone's own boss,
+    // but nowhere near a Dreadnaught — it has to stay killable on the way past.
+    e.maxHp *= 1.55; e.hp = e.maxHp;
+    e.damage *= 1.28;
+    e.size *= 1.12;
+    return true;
+  }
+  // ---- BEACON RESONANCE — the Choir's actual reward ------------------------
+  // Every Choir hull in the FLEET (flagship or escort) contributes. Bonuses add
+  // across hulls, then clamp: the beacon already has hard floors downstream (a
+  // 30s cooldown floor and a duration ceiling tied to the cooldown), and these
+  // caps stop the stack from pinning both at once and leaving the beacon
+  // permanently up — which would stop it being a decision at all.
+  const EMB_CAP = { cdCut: 0.45, life: 1.5, size: 1.0, loot: 1.5 };
+  function emberBeaconBonus() {
+    const keys = [state.ship].concat((state.fleet || []).filter(Boolean));
+    const seen = {};
+    let cdCut = 0, life = 0, size = 0, loot = 0;
+    keys.forEach((k) => {
+      if (!k || seen[k] || !(state.ownedShips && state.ownedShips[k])) return;
+      seen[k] = 1;
+      const b = (C.SHIP_BY_KEY[k] || {}).beacon;
+      if (!b) return;
+      cdCut += b.cdCut || 0; life += b.life || 0; size += b.size || 0; loot += b.loot || 0;
+    });
+    return {
+      cdCut: Math.min(EMB_CAP.cdCut, cdCut / 100),
+      life: Math.min(EMB_CAP.life, life / 100),
+      size: Math.min(EMB_CAP.size, size / 100),
+      loot: Math.min(EMB_CAP.loot, loot / 100),
+      raw: { cdCut, life, size, loot },
+      capped: (cdCut / 100 > EMB_CAP.cdCut) || (life / 100 > EMB_CAP.life) || (size / 100 > EMB_CAP.size) || (loot / 100 > EMB_CAP.loot),
+      hulls: Object.keys(seen).filter((k) => (C.SHIP_BY_KEY[k] || {}).beacon).length,
+    };
+  }
+  // The roll, on killing a Choir boss. Always returns a result so the popup can
+  // report either way — same contract as xenTechRoll.
+  function emberTechRoll() {
+    const zone = state.currentDungeon | 0;
+    const tier = emberTierFor(zone), key = EMB_KEYS[tier - 1];
+    const chance = emberChance(zone);
+    const pct = Math.max(0.1, +(chance * 100).toFixed(1));
+    const have = EMB_KEYS.filter((k) => state.ownedShips && state.ownedShips[k]).length;
+    if (state.ownedShips && state.ownedShips[key]) {
+      return { won: false, owned: true, pct, key, tier, complete: have >= EMB_KEYS.length };
+    }
+    if (Math.random() >= chance) return { won: false, pct, key, tier };
+    if (!grantShip(key)) return { won: false, pct, key, tier };
+    state.embFound = (state.embFound || 0) + 1;
+    save();
+    const sh = C.SHIP_BY_KEY[key];
+    return { won: true, pct, key, tier, ship: sh, nth: state.embFound };
+  }
+  // WHICH hull the roll pays out. The first two are the common Kaevith chassis
+  // and their rarity is unchanged; the top three are the prizes.
+  //
+  // Aug 2026 rebalance: Glaive and Harbinger are exactly 5× rarer, and the
+  // Sovereign 10× rarer, measured as SHARE OF A WINNING ROLL at the rim. Note
+  // that simply dividing the weights by 5 and 10 does NOT achieve that — it
+  // shrinks the denominator too, so the common hulls absorb the freed
+  // probability and the realised factors come out at only ~3× and ~6×. These
+  // values are solved for the intended share ratio instead (rim shares: 43.9 /
+  // 47.2 / 4.57 / 3.52 / 0.83%). Low rings land slightly rarer still (~6.9× /
+  // ~13.8×), which is the right direction: the rim is where you hunt.
+  //
+  // The OVERALL chance of any hull dropping is untouched — this only changes
+  // WHICH hull you get. xenSplit() feeds the same numbers to the event tooltips
+  // so the briefing can never drift from the table.
+  const XEN_BASE_W = [50, 25, 1.576, 0.901, 0.169];
+  // Per-hull share of a winning roll at a given ring, for the event tooltips.
+  // Mirrors the pool build in xenTechRoll exactly — including which hulls are
+  // already owned and therefore out of the pool.
+  function xenSplit(ring) {
+    const R = Math.max(1, ring || 1);
+    const frac = Math.min(1, Math.max(0, (R - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
+    const rows = XEN_MOB_KEYS.map((k, i) => ({
+      key: k, i,
+      owned: !!(state.ownedShips && state.ownedShips[k]),
+      w: XEN_BASE_W[i] * (1 + frac * i * 1.15),
+    }));
+    const live = rows.filter((r) => !r.owned);
+    const tot = live.reduce((a, b) => a + b.w, 0) || 1;
+    rows.forEach((r) => { r.share = r.owned ? 0 : r.w / tot; });
+    return rows;
+  }
   function xenTechRoll(tile) {
     if (!tile || !tile.alien || tile.void || tile.home) return null;
     const chance = GX.alienChance(tile.ring);
@@ -3452,11 +3679,10 @@
       return { won: false, pct, dry: state.xenDry, pityAt: XEN_PITY };
     }
     const frac = Math.min(1, Math.max(0, (tile.ring - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
-    const base = [50, 25, 14, 8, 3];
     const pool = [];
     XEN_MOB_KEYS.forEach((k, i) => {
       if (state.ownedShips && state.ownedShips[k]) return;
-      pool.push({ k, w: base[i] * (1 + frac * i * 1.15) });
+      pool.push({ k, w: XEN_BASE_W[i] * (1 + frac * i * 1.15) });
     });
     let roll = Math.random() * pool.reduce((a, b) => a + b.w, 0);
     const hit = pool.find((p) => (roll -= p.w) <= 0) || pool[pool.length - 1];
@@ -4481,7 +4707,12 @@
     if (gained.gold) state.gold = (state.gold || 0) + gained.gold;   // VOID tiles pay gold too
     return gained;
   }
-  function setAuto(v) { state.auto = !!v; rt.joy.x = rt.joy.y = 0; save(); }
+  // AUTO ↔ MANUAL must release the STICK, not just centre it. This cleared x/y
+  // but left rt.joy.active true, so a player who tapped AUTO mid-drag (or came
+  // back to manual after one) landed in manual mode with active=true and a zero
+  // vector: manualMove's `active && (x||y)` guard never fired and the ship sat
+  // still until they touched and released the joystick again.
+  function setAuto(v) { state.auto = !!v; rt.joy.x = rt.joy.y = 0; rt.joy.active = false; save(); }
   function setJoystick(x, y, active) { rt.joy.x = x; rt.joy.y = y; rt.joy.active = active; }
   function setGameSpeed(mult) {
     // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it
@@ -4921,6 +5152,17 @@
     rt.worldW = Math.round(cw * mul); rt.worldH = Math.round(ch * mul);
     rt.zoom = zoomFor(state.currentDungeon);
     if (rt.archer && (rt.archer.x === 0 || rt.archer.x > rt.worldW)) { rt.archer.x = rt.worldW/2; rt.archer.y = rt.worldH/2; }
+    // SNAP THE CAMERA. resize() rebuilds the world box and the zoom, which moves
+    // the camera's TARGET without the ship having moved at all — and update()
+    // only glides toward it (a snap needs a >60%-of-a-screen jump). The result
+    // was the camera sliding away from a stationary ship after any layout
+    // change: on mobile, showing the joystick when you leave AUTO, or the
+    // browser's own chrome/keyboard resizing the viewport, is exactly that.
+    if (rt.cam && rt.archer && rt.cam.x != null) {
+      const z = rt.zoom || 1, visW = rt.w / z, visH = rt.h / z;
+      rt.cam.x = rt.worldW <= visW ? (rt.worldW - visW) / 2 : Math.max(0, Math.min(rt.worldW - visW, rt.archer.x - visW / 2));
+      rt.cam.y = rt.worldH <= visH ? (rt.worldH - visH) / 2 : Math.max(0, Math.min(rt.worldH - visH, rt.archer.y - visH / 2));
+    }
   }
   function initPortrait() {
     rt.portraitCanvas = document.getElementById('portrait-canvas');
@@ -5224,7 +5466,15 @@
   // ===========================================================================
   // OBLIVION-class CONSTRUCTION — a hull you can't buy: recover its blueprint
   // (1% / 0.5% drop from a deep Void Citadel), grind the kill gate in the
-  // required hull, pay a fortune in resources, then WAIT for the build (2–4 wk).
+  // required hull, and pay a fortune in resources.
+  //
+  // BUILD TIMERS REMOVED (Aug 2026). Every hull is now delivered the instant the
+  // yard is paid — no 2–4 week wait, and no "another hull is already building"
+  // lock, so nothing serialises. The gates that make these hulls special are the
+  // blueprint, the kill count, the ascension rank and the cost; a real-time wall
+  // added no decision, just dead time. `state.construction` is kept only long
+  // enough to hand back any hull a player had in the yard when this shipped
+  // (see the migration in checkConstruction).
   // ===========================================================================
   function buildShipInfo(key) {
     const ship = C.SHIP_BY_KEY[key]; const b = ship && ship.build; if (!b) return null;
@@ -5241,25 +5491,18 @@
     const cost = b.cost || {};
     const have = { gold: state.gold || 0, fuel: (state.resources && state.resources.fuel) || 0, iron: (state.resources && state.resources.iron) || 0, plasma: (state.resources && state.resources.plasma) || 0, prism: prismIngots() };
     let affordable = true; for (const k in cost) { if ((have[k] || 0) < cost[k]) affordable = false; }
-    const con = state.construction;
-    const building = !!(con && con.ship === key);
-    const otherBuilding = !!(con && con.ship !== key);
     let status;
     if (owned) status = 'owned';
-    else if (building) status = (Date.now() >= con.arrivesAt) ? 'ready' : 'building';
     else if (!ascMet) status = 'needasc';
     else if (!hasBp) status = 'noblueprint';
     else if (!killsMet) status = 'needkills';
-    else if (otherBuilding) status = 'busy';
     else status = affordable ? 'buildable' : 'needres';
-    return { key, ship, build: b, owned, hasBp, reqShip, reqKills, killsHave, killsMet, reqAsc, ascHave, ascMet, cost, have, affordable, building, otherBuilding, status,
-             arrivesAt: building ? con.arrivesAt : 0, startedAt: building ? con.startedAt : 0, days: b.days };
+    return { key, ship, build: b, owned, hasBp, reqShip, reqKills, killsHave, killsMet, reqAsc, ascHave, ascMet, cost, have, affordable,
+             building: false, otherBuilding: false, status, arrivesAt: 0, startedAt: 0, days: 0, instant: true };
   }
   function startBuildShip(key) {
     const inf = buildShipInfo(key); if (!inf) return { ok: false, reason: 'invalid' };
     if (inf.owned) return { ok: false, reason: 'owned' };
-    if (inf.building) return { ok: false, reason: 'building' };
-    if (state.construction) return { ok: false, reason: 'busy' };
     if (!inf.ascMet) return { ok: false, reason: 'ascension' };
     if (!inf.hasBp) return { ok: false, reason: 'blueprint' };
     if (!inf.killsMet) return { ok: false, reason: 'kills' };
@@ -5269,20 +5512,20 @@
     if (cost.gold) state.gold = Math.max(0, (state.gold || 0) - cost.gold);
     state.resources.fuel -= cost.fuel || 0; state.resources.iron -= cost.iron || 0; state.resources.plasma -= cost.plasma || 0;
     if (cost.prism && state.prism) state.prism.ingots = Math.max(0, (state.prism.ingots || 0) - cost.prism);
-    const ms = (inf.days || 14) * 86400000;
-    state.construction = { ship: key, startedAt: Date.now(), arrivesAt: Date.now() + ms, days: inf.days || 14 };
-    save(); if (window.UI) window.UI.refreshAll();
-    return { ok: true };
+    // delivered on the spot
+    grantShip(key); save();
+    if (window.UI) { if (window.UI.shipBuilt) window.UI.shipBuilt(C.SHIP_BY_KEY[key]); else if (window.UI.refreshAll) window.UI.refreshAll(); }
+    return { ok: true, instant: true };
   }
+  // MIGRATION ONLY. Timed builds are gone; any save still carrying one gets the
+  // hull handed over immediately rather than being held to a timer that no
+  // longer ticks anywhere.
   function checkConstruction() {
     const con = state.construction; if (!con) return false;
-    if (Date.now() >= con.arrivesAt) {
-      const key = con.ship; state.construction = null;
-      grantShip(key); save();
-      if (window.UI) { if (window.UI.shipBuilt) window.UI.shipBuilt(C.SHIP_BY_KEY[key]); else if (window.UI.unlockToast) window.UI.unlockToast('★ ' + ((C.SHIP_BY_KEY[key] || {}).name || 'Hull') + ' construction complete!'); }
-      return true;
-    }
-    return false;
+    const key = con.ship; state.construction = null;
+    grantShip(key); save();
+    if (window.UI) { if (window.UI.shipBuilt) window.UI.shipBuilt(C.SHIP_BY_KEY[key]); else if (window.UI.unlockToast) window.UI.unlockToast('★ ' + ((C.SHIP_BY_KEY[key] || {}).name || 'Hull') + ' delivered!'); }
+    return true;
   }
   // Ultra-rare blueprint roll on a Void Citadel explosion (Zone Grind only).
   function buildBlueprintDropFromCitadel(zone) {
@@ -5330,7 +5573,12 @@
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
     // Kaevith Incursion
-    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => XEN_PITY,
+    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => XEN_PITY, xenSplit,
+    // Ember Choir (Zone Grind incursion)
+    isEmberZone, emberTierFor, emberChance, emberBeaconBonus, isEmberBossPending,
+    emberKeys: () => EMB_KEYS.slice(), emberFound: () => state.embFound || 0, emberMinZone: () => EMB_MIN_ZONE,
+    emberRate: () => EMB_RATE, emberCaps: () => EMB_CAP,
+    xpFleetInfo, xpFleetCap: () => XP_FLEET_CAP_PCT,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,

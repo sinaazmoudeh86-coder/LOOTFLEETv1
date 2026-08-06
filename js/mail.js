@@ -139,6 +139,12 @@
       '</div>';
   }
   // 🏆 claimable prize mails — the winnings are collected RIGHT HERE
+  // source chip — "CASINO CITADEL", "SEASON DREAD" etc, so the inbox says where
+  // a payout came from instead of every prize looking identical
+  function labelChip(meta) {
+    if (!meta || !meta.label) return '';
+    return '<em class="ml-src">' + esc(meta.label) + '</em>';
+  }
   function prizeBtn(m) {
     const meta = m.meta;
     if (!meta || meta.kind !== 'prize' || !meta.prize) return '';
@@ -167,7 +173,7 @@
         const open = _openId === m.id;
         return '<div class="ml-row ' + (m.read ? '' : 'unread') + (open ? ' open' : '') + '" data-mid="' + m.id + '">' +
           '<div class="ml-r-head"><span class="ml-ic">' + m.ic + '</span>' +
-          '<div class="ml-r-m"><b>' + m.title + '</b><span>' + ago(m.t) + '</span></div>' +
+          '<div class="ml-r-m"><b>' + m.title + labelChip(m.meta) + '</b><span>' + ago(m.t) + '</span></div>' +
           (m.read ? '' : '<i class="ml-dot"></i>') + '<span class="ml-chev">' + (open ? '▾' : '▸') + '</span></div>' +
           (open ? '<div class="ml-r-body"><p>' + m.body + '</p>' + fleetCard(m.meta) + prizeBtn(m) + ctaBtn(m.meta) + '</div>' : '') +
           '</div>';
@@ -253,6 +259,9 @@
   .ml-act:disabled{ animation:none; opacity:.4; box-shadow:none !important; text-shadow:none; }
   @keyframes mlActGlow{ 0%,100%{ box-shadow:0 0 10px -3px rgba(95,168,255,.55), inset 0 1px 0 rgba(140,190,255,.25); } 50%{ box-shadow:0 0 16px -1px rgba(95,168,255,.9), inset 0 1px 0 rgba(140,190,255,.35); } }
   @media (prefers-reduced-motion:reduce){ .ml-act{ animation:none; } }
+  .ml-src{ font-style:normal; margin-left:6px; font-family:'Orbitron',sans-serif; font-weight:900; font-size:7.5px;
+    letter-spacing:.1em; color:#231302; background:linear-gradient(90deg,#ffd66a,#e0a52d); border-radius:5px;
+    padding:2px 5px; vertical-align:1px; white-space:nowrap; }
   .ml-claim{ display:block; width:100%; margin-top:9px; border:none; border-radius:10px; padding:12px; cursor:pointer;
     font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.1em; color:#231302;
     background:linear-gradient(180deg,#ffd24d,#e09a2d); box-shadow:0 0 14px -2px rgba(255,210,77,.8); animation:msnClaimPulse 1.8s ease-in-out infinite; }

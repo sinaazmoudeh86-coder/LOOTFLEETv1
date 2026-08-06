@@ -82,7 +82,7 @@
       if (done) {
         const curK = cr.cur;
         if (ret) C.payout(ret, curK);
-        C.bookend(ret - bet);
+        C.bookend(ret - bet, curK, bet);
         cr = null;
         renderCR(host, false, a, b);
         C.syncLock();   // round over → unlock immediately
@@ -165,7 +165,7 @@
         slotLast = slotFaces(o);
         const ret = Math.floor(bet * o.p);
         if (ret) C2.payout(ret, curK);
-        C2.bookend(ret - bet);
+        C2.bookend(ret - bet, curK, bet);
         renderSL(host, false);
         C2.syncLock();
         C2.resultBanner('cs-res', o.p > 1 ? true : o.p > 0 ? null : false,
@@ -236,7 +236,7 @@
     on('[data-fold]', () => {
       he.stage = 'over'; he.played = false;
       he.pEval = CS().evalBest(he.p.concat(he.board)); he.dEval = CS().evalBest(he.d.concat(he.board));
-      CS().bookend(-he.ante);
+      CS().bookend(-he.ante, he.cur, he.ante);
       renderHE(host);
       CS().syncLock();
       CS().resultBanner('cs-res', false, 'FOLDED — ante forfeited', he.ante, he.cur);
@@ -252,7 +252,7 @@
       else if (cmp < 0) { win = false; text = 'HOUSE TAKES IT — ' + C2.handName(he.dEval).toUpperCase(); }
       else { ret = total; text = 'SPLIT POT — PUSH'; }
       if (ret) C2.payout(ret, he.cur);
-      C2.bookend(ret - total);
+      C2.bookend(ret - total, he.cur, total);
       renderHE(host);
       C2.syncLock();
       C2.resultBanner('cs-res', win, text, win === null ? 0 : (win ? ret - total : total), he.cur);

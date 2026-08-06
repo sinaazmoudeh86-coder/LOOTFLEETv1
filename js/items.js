@@ -9,11 +9,19 @@
 
   let _idSeq = 1;
 
-  // Weighted rarity roll. Deeper zones apply a GENTLE upward "luck" pressure so
-  // the rare tiers stay genuinely rare; a per-tier dampener makes each step up
-  // the chain progressively harder to reach.
-  function rollRarity(dungeon) {
-    const luck = 1 + dungeon * 0.004;             // gentle depth pressure
+  // ---------------------------------------------------------------------------
+  // ONE weight table, used by BOTH the live roll and the odds the Bag displays.
+  //
+  // These were two separate copies of the same formula and they had drifted: the
+  // roll used dampener 1.30 and luck 0.004, the display used 1.18 and 0.0045. The
+  // odds shown to players were therefore 3–7× more generous than the odds they
+  // were actually being given, worst at the top of the table where it mattered
+  // most. Anything that changes the roll must change here and nowhere else.
+  // ---------------------------------------------------------------------------
+  const LUCK_PER_ZONE = 0.004;   // gentle depth pressure
+  const TIER_DAMPEN = 1.30;      // each step up is markedly rarer than the last
+  function rarityWeights(dungeon) {
+    const luck = 1 + dungeon * LUCK_PER_ZONE;
     // ceiling = the stricter of the zone gate and the ascension gate
     const zCap = C.rarityCap ? C.rarityCap(dungeon) : 11;
     const cap = Math.min(zCap, C.ascRarityCap ? C.ascRarityCap() : 13);
@@ -22,13 +30,14 @@
     const TT = C.TOP_TIER == null ? 11 : C.TOP_TIER;
     // FORTUNE LATTICE perk: lifts every above-common weight
     const perk = (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('rare') : 1;
-    // Steeper per-tier dampener (1.30) — each rarity step is markedly rarer than
-    // the last, so top-end drops are a genuine grind even once unlocked.
-    const weights = C.RARITY.map((r) =>
+    return C.RARITY.map((r) =>
       r.tier > cap ? 0
         : r.tier === 0 ? r.weight
-        : r.weight * Math.pow(luck, r.tier) / Math.pow(1.30, r.tier) * perk * (r.tier >= TT ? top : 1)
+        : r.weight * Math.pow(luck, r.tier) / Math.pow(TIER_DAMPEN, r.tier) * perk * (r.tier >= TT ? top : 1)
     );
+  }
+  function rollRarity(dungeon) {
+    const weights = rarityWeights(dungeon);
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = Math.random() * total;
     for (let i = 0; i < weights.length; i++) {
@@ -339,23 +348,24 @@
     return delta;
   }
 
-  // Per-tier drop probabilities for a given zone — mirrors rollRarity's exact
-  // weighting so the Bag legend can show a player their real odds. Returns an
-  // array of probabilities (0..1) indexed by rarity tier, summing to 1.
+  // Per-tier drop probabilities for a zone. Reads the SAME weights the roll uses,
+  // so what a player is shown is what they are actually rolling.
   function rarityChances(dungeon) {
-    const luck = 1 + dungeon * 0.0045;
-    const cap = Math.min(C.rarityCap ? C.rarityCap(dungeon) : 11, C.ascRarityCap ? C.ascRarityCap() : 13);
-    const top = C.ascTopBoost ? C.ascTopBoost() : 1;
-    const TT = C.TOP_TIER == null ? 11 : C.TOP_TIER;
-    const perk = (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('rare') : 1;
-    const weights = C.RARITY.map((r) =>
-      r.tier > cap ? 0
-        : r.tier === 0 ? r.weight
-        : r.weight * Math.pow(luck, r.tier) / Math.pow(1.18, r.tier) * perk * (r.tier >= TT ? top : 1)
-    );
+    const weights = rarityWeights(dungeon);
     const total = weights.reduce((a, b) => a + b, 0) || 1;
     return weights.map((w) => w / total);
   }
+  // Why a tier can't drop here yet — so the Bag can say "zone 115" or "12 stars"
+  // instead of just showing nothing. Returns null when the tier is available.
+  function rarityBlockedBy(tier) {
+    const r = C.RARITY[tier]; if (!r) return null;
+    const need = r.ascReq || 0;
+    const stars = (() => { try { return (window.PASCEND && window.PASCEND.stars()) | 0; } catch (e) { return 0; } })();
+    if (need && stars < need) return { kind: 'stars', need, have: stars };
+    // lowest zone whose cap reaches this tier
+    if (C.rarityCap) { for (let z = 1; z <= 400; z++) if (C.rarityCap(z) >= tier) return { kind: 'zone', need: z }; }
+    return null;
+  }
 
-  window.ITEMS = { generate, rollRarity, rarityChances, itemPower, compare, weaponClassOf, supportAura, WEAPON_CLASSES };
+  window.ITEMS = { generate, rollRarity, rarityChances, rarityWeights, rarityBlockedBy, itemPower, compare, weaponClassOf, supportAura, WEAPON_CLASSES };
 })();

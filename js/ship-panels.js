@@ -29,18 +29,21 @@
     const s = (G() || {}).state || {};
     const out = [];
 
-    // XP — the most stacked stat in the game and the least visible.
-    // KAEVITH RESONANCE (xenXpMult) belongs in this chain: the bonus is applied
-    // inside gainXp() like every other source here, so leaving it out made the
-    // pill under-report for anyone flying a Kaevith hull — exactly the "holds a
-    // source of XP bonus and sees none of it" problem this panel exists to fix.
-    const xp = safe(() => (window.DREAD && DREAD.mult ? DREAD.mult('xpGain') : 1), 1)
-             * safe(() => (window.PASCEND ? PASCEND.mult('xp') : 1), 1)
-             * safe(() => (window.ASCEND && ASCEND.xpMult ? ASCEND.xpMult() : 1), 1)
-             * safe(() => (window.VIP ? VIP.mult('xp') : 1), 1)
-             * safe(() => (G().xenXpMult ? G().xenXpMult() : 1), 1)
-             * (safe(() => (G().isPro && G().isPro()), false) ? 2 : 1);
-    if (xp > 1.001) out.push({ ic: '✦', n: 'XP Gain', v: '+' + pct(xp) + '%', c: '#7ce0a0' });
+    // XP — the most stacked stat in the game and the least visible. Read the
+    // combined, CAPPED figure straight from GAME.xpFleetInfo() rather than
+    // re-multiplying the chain here: this pill used to compute its own product,
+    // which is how it drifted from what gainXp() actually applied. One source of
+    // truth, and when the +1000% fleet ceiling is clipping, say so.
+    const xi = safe(() => (G().xpFleetInfo ? G().xpFleetInfo() : null), null);
+    if (xi && xi.pct > 0) {
+      out.push({
+        ic: '✦', n: 'XP Gain', v: '+' + xi.pct + '%', c: '#7ce0a0',
+        capped: xi.capped, rawPct: xi.rawPct, cap: xi.cap,
+        tip: xi.capped
+          ? 'Fleet XP is capped at +' + xi.cap + '%. Your sources stack to +' + xi.rawPct.toLocaleString() + '%, so ' + (xi.rawPct - xi.cap).toLocaleString() + '% is going to waste — swapping an XP source for damage or loot costs you nothing right now.'
+          : 'Every XP source combined. The fleet ceiling is +' + xi.cap + '%.',
+      });
+    }
 
     // Damage against the things that matter
     const cm = safe(() => (window.DREAD && DREAD.combatMods ? DREAD.combatMods() : {}), {});
@@ -73,7 +76,18 @@
     const b = bonuses();
     if (!b.length) return '';
     return '<div class="sp-pills">' + b.map((x) =>
-      '<span class="sp-pill" style="--c:' + x.c + '"><i>' + x.ic + '</i>' + x.n + '<b>' + x.v + '</b></span>').join('') + '</div>';
+      '<span class="sp-pill' + (x.capped ? ' capped' : '') + '" style="--c:' + x.c + '"'
+      + (x.tip ? ' title="' + String(x.tip).replace(/"/g, '&quot;') + '"' : '') + '>'
+      + '<i>' + x.ic + '</i>' + x.n + '<b>' + x.v + '</b>'
+      + (x.capped ? '<em class="sp-cap">CAP</em>' : '') + '</span>').join('') + '</div>'
+      // Spell the cap out in full underneath — a `title` alone is invisible on a
+      // phone, and this is exactly the case where a player is losing value and
+      // has no way to know it.
+      + (b.some((x) => x.capped)
+        ? '<div class="sp-capnote">\u26a0 <b>Fleet XP is capped at +' + (b.find((x) => x.capped).cap) + '%.</b> '
+          + 'Your sources stack to <b>+' + b.find((x) => x.capped).rawPct.toLocaleString() + '%</b> \u2014 everything past the cap is wasted. '
+          + 'Trade an XP source for damage, gold or loot and you lose nothing.</div>'
+        : '');
   }
 
   // ---- 2. INCOME ---------------------------------------------------------------
@@ -189,6 +203,13 @@
     font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11.5px;letter-spacing:.02em;color:#c3cede;white-space:nowrap}
   .sp-pill i{font-style:normal;color:var(--c);font-size:12px}
   .sp-pill b{color:var(--c);font-weight:800}
+  .sp-pill.capped{border-color:rgba(242,178,75,.6);background:rgba(242,178,75,.12)}
+  .sp-pill.capped b{color:#ffcf7a}
+  .sp-cap{font-style:normal;font-family:'Orbitron',sans-serif;font-size:8px;font-weight:900;letter-spacing:.1em;
+    color:#1c1004;background:linear-gradient(90deg,#ffd24d,#f2a93c);border-radius:5px;padding:2px 4px;margin-left:1px}
+  .sp-capnote{margin-top:7px;padding:8px 10px;border-radius:10px;border:1px solid rgba(242,178,75,.34);
+    background:rgba(242,178,75,.07);font-family:'Rajdhani',sans-serif;font-size:11.5px;line-height:1.5;color:#b9a98c;text-wrap:pretty}
+  .sp-capnote b{color:#ffcf7a;font-weight:800}
   #sp-inc-host{margin:14px 0 4px}
   .sp-inc{border:1px solid rgba(95,168,255,.3);border-radius:15px;overflow:hidden;
     background:linear-gradient(180deg,rgba(95,168,255,.09),rgba(95,168,255,.02))}

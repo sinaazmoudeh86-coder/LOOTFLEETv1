@@ -252,6 +252,7 @@
         '<div class="al-h-m"><b>' + esc(a.name) + '</b>' +
         '<span>Alliance Lv ' + p.lv + ' · ' + mem.length + '/' + cap + ' pilots · Weekly ' + fmt(a.week_key === curWeekSql() ? a.week_score : 0) + ' pts</span>' +
         '<div class="al-xp"><i style="width:' + Math.round(p.cur / p.need * 100) + '%"></i></div></div>' +
+        (isLead ? '<button class="sc-btn sm ghost" id="al-rename" title="Rename alliance">✎</button>' : '') +
         '<button class="sc-btn sm ghost" id="al-leave">Leave</button></div>' +
       // WALLET — the alliance-coin balance, front and center
       '<div class="al-wallet"><span class="al-w-ic">⬡</span>' +
@@ -325,8 +326,46 @@
   // SQL week key (IYYY-IW) — approximate match for display gating
   function curWeekSql() { const a = _st && _st.alliance; return a ? a.week_key : ''; }
 
+  const RENAME_LC = 1000;
+  // Rename the alliance for ◈ 1000 LootCoins. LEADER ONLY — a co-leader renaming
+  // the alliance out from under the leader is the kind of thing that ends one.
+  // The TAG is not editable here on purpose: it is what members recognise each
+  // other by on the galaxy map and in war, and a silent tag change breaks that.
+  function renameSheet(host) {
+    const a = _st.alliance;
+    const lc = (G().state.credits || 0);
+    const can = lc >= RENAME_LC;
+    const v = S().sheet('<h3>✎ Rename alliance</h3>' +
+      '<p>Costs <b style="color:#ffd66a">◈ ' + fmt(RENAME_LC) + ' LootCoins</b>' + (can ? '' : ' — you have ◈ ' + fmt(lc)) + '. ' +
+        'Your tag <b>' + esc(a.tag) + '</b> stays the same, so members still recognise you in war.</p>' +
+      '<input id="al-rn" class="al-in" placeholder="New alliance name (3–24 chars)" maxlength="24" value="' + esc(a.name) + '">' +
+      '<div class="al-form-err" id="al-rn-err"></div>' +
+      '<div class="sc-sheet-btns"><button class="sc-btn gold" data-ok ' + (can ? '' : 'disabled') + '>Rename · ◈ ' + fmt(RENAME_LC) + '</button>' +
+      '<button class="sc-btn ghost" data-x>Cancel</button></div>');
+    v.querySelector('[data-x]').addEventListener('click', () => v.remove());
+    const err = (m) => { const e = v.querySelector('#al-rn-err'); e.textContent = m; e.style.display = 'block'; };
+    v.querySelector('[data-ok]').addEventListener('click', async () => {
+      const nm = (v.querySelector('#al-rn').value || '').trim();
+      if (nm.length < 3 || nm.length > 24) return err('Name must be 3–24 characters.');
+      if (nm === a.name) return err('That is already the name.');
+      if ((G().state.credits || 0) < RENAME_LC) return err('Not enough LootCoins.');
+      const ok = v.querySelector('[data-ok]'); ok.disabled = true; ok.textContent = '…';
+      try {
+        await S().rpc('alliance_rename', { p_name: nm });
+        // charge only after the server accepts, so a rejected name is never billed
+        G().state.credits = (G().state.credits || 0) - RENAME_LC; G().save();
+        v.remove(); _st = null; _browse = null; await load();
+        S().toast('✎ Alliance renamed to ' + nm, '#7ce0a0');
+        renderInto($('sc-pane'));
+      } catch (e) {
+        ok.disabled = false; ok.textContent = 'Rename · ◈ ' + fmt(RENAME_LC);
+        err(e && e.message ? e.message : 'Rename failed — that name may be taken.');
+      }
+    });
+  }
   function wireMain(host) {
     const a = _st.alliance;
+    { const rb = $('al-rename'); if (rb) rb.addEventListener('click', () => renameSheet(host)); }
     $('al-leave').addEventListener('click', () => {
       S().confirmSheet('Leave ' + a.name + '?',
       (myRow() || {}).role === 'leader' ? 'Leadership passes to your senior member. If you\u2019re the last pilot, the alliance disbands. 24-hour cooldown before you can join or found another alliance.' : 'Leaving starts a 24-hour cooldown before you can join or found another alliance.',

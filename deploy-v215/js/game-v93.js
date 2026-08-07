@@ -1931,6 +1931,8 @@
     separateEnemies();
     rt.enemies = rt.enemies.filter((e) => !e.dead);
     updateEbolts(dt);
+    // absolute projectile ceiling — no fire source may outrun impact/expiry
+    if (rt.projectiles.length > 260) rt.projectiles.splice(0, rt.projectiles.length - 260);
 
     // carrier drones: orbit the ship and fire on nearby enemies
     updateDrones(dt);
@@ -2792,7 +2794,11 @@
         if (state.auto) dmg *= 0.8;
         p.damage = Math.max(1, Math.round(dmg * (crowd2 ? 2 : 1))); p.crit = crit; p.drone = true;
         p.angle = Math.atan2(best.y - dr.y, best.x - dr.x);
-        rt.projectiles.push(p);
+        // CAP (Aug 2026, the siege crash). Drone fire had NO ceiling — player shots
+        // fold past 90, but a 30-drone carrier vs a regenerating Qa-HP warden at
+        // 10× speed pumps shots in far faster than impacts remove them. Past the
+        // cap the shot simply doesn't spawn — next tick fires again.
+        if (rt.projectiles.length < 240) rt.projectiles.push(p);
         dr.cd = (crowd2 ? 2 : 1) / C.DRONE.fireRate;
         rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.12, size: 1.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
       }
@@ -2887,7 +2893,7 @@
         p.damage = Math.max(1, Math.round(dmg)); p.crit = crit;
         p.wtype = ESCORT_WTYPE[es.cls] || 'gatling';
         p.angle = Math.atan2(best.y - es.y, best.x - es.x);
-        rt.projectiles.push(p);
+        if (rt.projectiles.length < 240) rt.projectiles.push(p);   // same ceiling as drone fire
         es.cd = 1 / C.FLEET.escortFireRate;
       }
     }
@@ -5166,7 +5172,7 @@
     if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
     return fixed;
   }
-  function load() { try { try { sessionStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
+  function load() { try { try { if (window.__lfPrevBoot === undefined) window.__lfPrevBoot = localStorage.getItem('lf_boot'); localStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
 
   // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
@@ -5483,9 +5489,12 @@
     // Written to sessionStorage so a frozen/OOM-killed boot — which throws no
     // exception — still names its last phase on the NEXT load. The repair count
     // from sanitizeSave() rides along.
-    const bootMark = (ph) => { try { sessionStorage.setItem('lf_boot', ph); } catch (e) {} };
+    const bootMark = (ph) => { try { localStorage.setItem('lf_boot', ph); } catch (e) {} };
     try {
-      const prev = sessionStorage.getItem('lf_boot');
+      // read the CAPTURED pre-boot marker — load() has already stamped
+      // 'load-save' over the storage slot by the time init runs, which is why
+      // the recovery banner never fired (the crash marker was self-erased)
+      const prev = (window.__lfPrevBoot !== undefined) ? window.__lfPrevBoot : localStorage.getItem('lf_boot');
       if (prev === 'alive') {
         // Last session reached play and died WITHOUT a clean exit — a mid-combat
         // freeze/OOM. This is the reload-loop case: boot is fine, so no safe boot
@@ -5505,7 +5514,7 @@
     } catch (e) {}
     // a reload or navigation is NOT a crash — mark it clean so recovery only
     // ever arms on a genuine freeze/OOM kill
-    window.addEventListener('pagehide', () => { try { sessionStorage.setItem('lf_boot', 'clean-exit'); } catch (e) {} });
+    window.addEventListener('pagehide', () => { try { localStorage.setItem('lf_boot', 'clean-exit'); } catch (e) {} });
     if (window.__lfSafeBoot || window.__lfPlayRecovery) {
       try {
         let lastPlay = '';
@@ -5515,6 +5524,7 @@
         bar.innerHTML = (window.__lfPlayRecovery
           ? '⚠ RECOVERY MODE — your last session froze mid-combat. Heavy visual effects are trimmed for this session. Screenshot this and report it.'
           : '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.')
+          + ' <i style="font-style:normal;color:#8d7b62">· build ' + (window.LF_BUILD || '?') + '</i>'
           + (lastPlay ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + lastPlay.replace(/[<>]/g, '') + '</div>' : '');
         const x = document.createElement('button');
         x.textContent = '×'; x.style.cssText = 'margin-left:10px;background:none;border:none;color:#ffcf7a;font-size:15px;cursor:pointer';
@@ -5583,7 +5593,7 @@
     // 'alive' only after the sim has actually survived a few seconds of frames —
     // a boot that dies in its first combat updates (the save-specific case) still
     // reports 'first-frame' rather than a false clean bill.
-    setTimeout(() => { try { sessionStorage.setItem('lf_boot', 'alive'); } catch (e) {} }, 5000);
+    setTimeout(() => { try { localStorage.setItem('lf_boot', 'alive'); } catch (e) {} }, 5000);
     requestAnimationFrame(loop);
     setInterval(() => { if (rt.running && !window.__sessionKicked) { const now = performance.now(); if (now - rt.last > 120) step(now); } }, 1000/30);
   }

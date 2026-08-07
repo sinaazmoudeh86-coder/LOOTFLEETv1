@@ -1506,7 +1506,9 @@
   // MY SYSTEMS — every hold you own: revenue, citadel rank, one-tap abandon.
   // Opened from the ◈ N/M Systems pill on the My Galaxy legend.
   // ==========================================================================
-  const MS_RES = { gold: ['$', '#e6b566'], fuel: ['⬢', '#5fd1ff'], iron: ['◆', '#c3cede'], plasma: ['✦', '#b57bff'] };
+  // Colours mirror GALAXYMAP.RES exactly — iron is amber (#d0a060), not the
+  // silver-grey it was drawn with here, which read as a different resource.
+  const MS_RES = { gold: ['$', '#e6b566'], fuel: ['⬢', '#5bc0ff'], iron: ['◆', '#d0a060'], plasma: ['✦', '#c07bff'] };
   function mySystemsHtml() {
     const list = (G.ownedSystemList ? G.ownedSystemList() : []);
     const cap = G.tileCap ? G.tileCap() : 50;
@@ -2099,7 +2101,7 @@
       const pips = Array.from({ length: cr.max }, (_, i) =>
         `<i class="${known && i < cr.lv ? 'on' : ''}"></i>`).join('');
       const meta = cr.kind === 'natural'
-        ? `Pays <b>×${G.formatNum(cr.mult)}</b> a resource field · fortress included with the tile`
+        ? `Full-strength fortress — pays <b>×${G.formatNum(cr.mult)}</b> a resource field, included with the tile`
         : known
           ? `Output <b>×${cr.mult}</b> · defence <b>+${cr.def}%</b>${cr.kind === 'rival' ? ' for ' + cr.owner : ''}`
           : `Rank unknown — <b>${cr.owner || 'the holder'}</b> has not reported it. Expect Rank 1–${cr.max}.`;

@@ -108,11 +108,13 @@
   }
 
   // ---- 2. INCOME ---------------------------------------------------------------
+  // Colours mirror GALAXYMAP.RES so a resource reads the same everywhere:
+  // iron is amber (#d0a060), NOT the silver-grey it used to draw with here.
   const CUR = [
     { k: 'gold',   g: '$', n: 'Gold',   c: '#e6b566' },
-    { k: 'fuel',   g: '⬢', n: 'Fuel',   c: '#5fd1ff' },
-    { k: 'iron',   g: '◆', n: 'Iron',   c: '#c3cede' },
-    { k: 'plasma', g: '✦', n: 'Plasma', c: '#b57bff' },
+    { k: 'fuel',   g: '⬢', n: 'Fuel',   c: '#5bc0ff' },
+    { k: 'iron',   g: '◆', n: 'Iron',   c: '#d0a060' },
+    { k: 'plasma', g: '✦', n: 'Plasma', c: '#c07bff' },
     { k: 'prism',  g: '◈', n: 'Prism',  c: '#ff8ad4' },
   ];
 

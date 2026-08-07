@@ -159,11 +159,26 @@
   }
   // ◎ VIEW ON MAP — every galaxy report about a specific hex gets one. Opens My
   // Galaxy, flies the camera to the tile, flashes it, and opens its panel.
+  // Reports filed before tile ids were recorded only carry the system NAME, so
+  // resolve that through the deterministic name index rather than showing
+  // nothing — an inbox full of buttonless old reports reads as a broken feature.
+  function mapTileId(meta) {
+    if (!meta) return null;
+    if (meta.tileId) return meta.tileId;
+    if (!meta.tile) return null;
+    if (meta._noId) return null;                       // resolved once, not found
+    let id = null;
+    try { id = G().tileIdByName ? G().tileIdByName(meta.tile) : null; } catch (e) {}
+    if (id) { meta.tileId = id; try { G().save(); } catch (e) {} }
+    else meta._noId = 1;
+    return id;
+  }
   function mapBtn(meta) {
-    if (!meta || !meta.tileId) return '';
+    const id = mapTileId(meta);
+    if (!id) return '';
     const label = meta.kind === 'loss' ? '◎ SHOW ME — PLAN THE COUNTERATTACK'
       : meta.kind === 'race' ? '◎ VIEW THE SYSTEM' : '◎ VIEW ON MAP';
-    return '<button class="ml-map" data-map-tile="' + esc(meta.tileId) + '">' + label + '</button>';
+    return '<button class="ml-map" data-map-tile="' + esc(id) + '">' + label + '</button>';
   }
   const ago = (t) => { const s = (Date.now() - t) / 1000; if (s < 90) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
   function render() {

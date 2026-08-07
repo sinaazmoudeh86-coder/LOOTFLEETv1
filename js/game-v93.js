@@ -3576,6 +3576,31 @@
     }
   }
   function sysAt(k) { return VOID_TILES[k] || CASINO_TILES[k] || GX.tileAt(k); }
+  // NAME → TILE ID. War reports written before tile ids were recorded only carry
+  // the system NAME, and the ◎ jump-to-map button needs an id. Names are
+  // generated deterministically from each coordinate, so the whole galaxy can be
+  // walked once and cached (≈1,900 tiles + the Void spires and House holds).
+  // Built lazily — nothing pays for it unless an old report is opened.
+  let _nameIdx = null;
+  function tileIdByName(name) {
+    if (!name) return null;
+    if (!_nameIdx) {
+      _nameIdx = {};
+      const put = (id, nm) => { if (nm && !_nameIdx[String(nm).toLowerCase()]) _nameIdx[String(nm).toLowerCase()] = id; };
+      try {
+        Object.keys(VOID_TILES).forEach((k) => put(k, VOID_TILES[k].name));
+        Object.keys(CASINO_TILES).forEach((k) => put(k, CASINO_TILES[k].name));
+        for (let ring = 0; ring <= (GX.RINGS || 25); ring++) {
+          GX.ringCoords(ring).forEach((c) => {
+            const id = GX.tileId(c.q, c.r);
+            const t = GX.tileAt(id);
+            if (t && t.name) put(id, t.name);
+          });
+        }
+      } catch (e) {}
+    }
+    return _nameIdx[String(name).toLowerCase()] || null;
+  }
   // ==========================================================================
   // THE KAEVITH INCURSION — the alien-held ~20% of My Galaxy (GX.isInvaded).
   // Invaded tiles keep the normal conquest pipeline (ownership, citadels,
@@ -4569,22 +4594,25 @@
       return { kind: 'mine', lv, max: CMAX, mult: CITADEL_MULT * lv, def: Math.round((citadelDefenseMult(lv) - 1) * 100), natural: !!t.citadel };
     }
     if (isOwned(id) && t.citadel) {
-      return { kind: 'natural', owned: true, lv: 0, max: CMAX, mult: GX.CITADEL_RATE_MULT || 1000, def: 0, natural: true };
+      // A natural fortress is seeded at full strength — it IS the top rank, which
+      // is why it pays ×1000 with no builds. Report it as Rank 5, never unknown.
+      return { kind: 'natural', owned: true, lv: CMAX, max: CMAX, mult: GX.CITADEL_RATE_MULT || 1000, def: 0, natural: true };
     }
     const real = rt.realTiles && rt.realTiles[id];
     const my = realMyUid();
     if (real && real.citadel && !(my && real.ownerId === my)) {
-      const lv = Math.max(0, real.citadelLv | 0);
+      // An unreported rank on a NATURAL fortress is still a full-strength one.
+      const lv = Math.max(0, real.citadelLv | 0) || (t.citadel ? CMAX : 0);
       return { kind: 'rival', lv, max: CMAX, owner: real.ownerName || 'a rival',
         mult: lv ? CITADEL_MULT * lv : 0, def: lv ? Math.round((citadelDefenseMult(lv) - 1) * 100) : 0, natural: !!t.citadel };
     }
     if (!isOwned(id) && state.rivalCitadels && state.rivalCitadels[id] != null) {
       const rc = state.rivalCitadels[id];
-      const lv = Math.max(0, (rc && rc.lv) | 0);
+      const lv = Math.max(0, (rc && rc.lv) | 0) || (t.citadel ? CMAX : 0);
       return { kind: 'rival', lv, max: CMAX, owner: rivalOf(id) || 'a rival',
         mult: lv ? CITADEL_MULT * lv : 0, def: lv ? Math.round((citadelDefenseMult(lv) - 1) * 100) : 0, natural: !!t.citadel };
     }
-    if (t.citadel) return { kind: 'natural', owned: false, lv: 0, max: CMAX, mult: GX.CITADEL_RATE_MULT || 1000, def: 0, natural: true };
+    if (t.citadel) return { kind: 'natural', owned: false, lv: CMAX, max: CMAX, mult: GX.CITADEL_RATE_MULT || 1000, def: 0, natural: true };
     return null;
   }
 
@@ -5970,7 +5998,7 @@
     emberRate: () => EMB_RATE, emberCaps: () => EMB_CAP,
     xpFleetInfo,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
-    citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip, citadelRankOf,
+    citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip, citadelRankOf, tileIdByName,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     ownedSystemList,
     getGalaxyFeed: () => state.galaxyFeed || [],

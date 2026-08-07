@@ -483,6 +483,13 @@
     s.lifeSteal = Math.min(19, s.lifeSteal);   // global ceiling — was 95 before the 80% sustain cut
     s.multiShot = Math.min(100, s.multiShot);
     s.maxHp = s.health;
+    // MOVE SPEED CAP — +1000% (×10 base). FrostSkull hit 3541%: at 5× game speed and
+    // a stalled frame's catch-up dt that is a ~65,000px jump in one tick — the ship
+    // teleports across zone edges, sweeps hundreds of pickups in one frame (each
+    // spawning UI floats/particles), and thrashes the camera + node collision
+    // sweeps. Everything past the cap did nothing useful anyway: the ship already
+    // outruns every enemy and projectile in the game long before ×10.
+    s.moveSpeed = Math.min(1000, s.moveSpeed);
     s.moveSpeedPx = 92 * (s.moveSpeed / 100);
     // weapon range — hull mod + fleet share + Warden aura all extend it
     s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0) + (m.rangePct || 0)) / 100);
@@ -1737,8 +1744,12 @@
     const a = rt.archer;
     const dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy) || 1;
     if (stopDist && d <= stopDist) return false;
-    a.x += (dx / d) * speed * dt;
-    a.y += (dy / d) * speed * dt;
+    // never overshoot the target — at extreme move speeds an uncapped step made
+    // the ship oscillate across its destination every frame (autopilot retargets
+    // each tick, so the thrash also churned the camera and collision sweeps)
+    const step = Math.min(d, speed * dt);
+    a.x += (dx / d) * step;
+    a.y += (dy / d) * step;
     return true;
   }
   function autopilot(dt) {
@@ -1884,8 +1895,10 @@
     // SMOOTH AIM v2 — frame-rate-independent glide toward the firing bearing
     if (rt.archer && rt.archer.aim != null) {
       let dA = rt.archer.aim - (rt.archer.facing || 0);
-      while (dA > Math.PI) dA -= Math.PI * 2;
-      while (dA < -Math.PI) dA += Math.PI * 2;
+      // loop-free normalisation: the old while-loops hang the tab forever if
+      // either angle ever goes non-finite (Infinity - 2π is still Infinity)
+      if (!isFinite(dA)) { dA = 0; rt.archer.facing = rt.archer.aim = 0; }
+      dA = dA - Math.PI * 2 * Math.round(dA / (Math.PI * 2));
       rt.archer.facing = (rt.archer.facing || 0) + dA * (1 - Math.exp(-9 * dt));
     }
     // Timed builds are gone. This only drains a legacy in-progress build on the

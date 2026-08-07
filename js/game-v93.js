@@ -1811,7 +1811,63 @@
     }
     draw();
   }
-  function loop(now) { if (!rt.running) return; step(now); requestAnimationFrame(loop); }
+  // LIVE STALL DETECTOR (Aug 2026). Every fix so far depended on a RELOG to show
+  // evidence — but the OOM reaper kills the tab before markers help, and players
+  // relog into fresh tabs. A >1.5s frame gap is the EARLY symptom of every one of
+  // these crashes, and it fires while the page is still alive: recovery happens
+  // IN SESSION, with the evidence on screen for a screenshot, instead of waiting
+  // for a relog that never carries the data.
+  let _stallN = 0, _stallT = 0, _visT = 0;
+  document.addEventListener('visibilitychange', () => { _visT = performance.now(); });
+  function crashBanner(msg) {
+    try {
+      let bar = document.getElementById('lf-recover');
+      if (!bar) {
+        bar = document.createElement('div'); bar.id = 'lf-recover';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#2a1508;color:#ffcf7a;border-bottom:1px solid #7a4a12;font:700 12px/1.45 system-ui;padding:8px 12px;text-align:center';
+        bar.appendChild(document.createElement('span'));
+        const x = document.createElement('button');
+        x.textContent = '×'; x.style.cssText = 'margin-left:10px;background:none;border:none;color:#ffcf7a;font-size:15px;cursor:pointer';
+        x.onclick = () => bar.remove(); bar.appendChild(x);
+        document.body.appendChild(bar);
+      }
+      bar.firstChild.innerHTML = msg;
+    } catch (e) {}
+  }
+  function liveSample() {
+    const mem = (performance && performance.memory) ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '?';
+    return JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
+      en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
+      ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem });
+  }
+  function engageRecovery(reason) {
+    if (engageRecovery._t && performance.now() - engageRecovery._t < 10000) return;
+    engageRecovery._t = performance.now();
+    window.__lfPlayRecovery = true;   // the live caps (storm bolts 12/16) key off this
+    try {
+      rt.bolts = (rt.bolts || []).slice(-12); rt.ebolts = rt.ebolts.slice(-30);
+      rt.projectiles = rt.projectiles.slice(-120); rt.particles = rt.particles.slice(-80);
+      rt.floats = rt.floats.slice(-20); rt.ground = rt.ground.slice(-30);
+    } catch (e) {}
+    const sample = liveSample();
+    try { localStorage.setItem('lf_play', sample); localStorage.setItem('lf_err', reason); } catch (e) {}
+    crashBanner('⚠ RECOVERY — the game stalled (<b>' + reason + '</b>). Effects trimmed. Screenshot this and report it. · build ' + (window.LF_BUILD || '?')
+      + '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + sample.replace(/[<>]/g, '') + '</div>');
+    try { console.warn('[LOOTFLEET] recovery engaged: ' + reason + ' ' + sample); } catch (e) {}
+  }
+  function loop(now) {
+    if (!rt.running) return;
+    // rAF suspends in background tabs — only count stalls while visible and settled
+    if (rt.last && !document.hidden && now - _visT > 3000) {
+      const gap = now - rt.last;
+      if (gap > 1500) {
+        if (now - _stallT > 60000) _stallN = 0;
+        _stallT = now; _stallN++;
+        if (gap > 4000 || _stallN >= 2) engageRecovery(Math.round(gap) + 'ms stall');
+      }
+    }
+    step(now); requestAnimationFrame(loop);
+  }
   // SESSION KICK — a screen that lost the account lock must stop SIMULATING,
   // not just stop saving: otherwise the player keeps banking progress behind
   // the takeover notice that can never be written anywhere.
@@ -5172,7 +5228,7 @@
     if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
     return fixed;
   }
-  function load() { try { try { localStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
+  function load() { try { try { if (window.__lfPrevBoot === undefined) window.__lfPrevBoot = localStorage.getItem('lf_boot'); localStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
 
   // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
@@ -5491,7 +5547,10 @@
     // from sanitizeSave() rides along.
     const bootMark = (ph) => { try { localStorage.setItem('lf_boot', ph); } catch (e) {} };
     try {
-      const prev = localStorage.getItem('lf_boot');
+      // read the CAPTURED pre-boot marker — load() has already stamped
+      // 'load-save' over the storage slot by the time init runs, which is why
+      // the recovery banner never fired (the crash marker was self-erased)
+      const prev = (window.__lfPrevBoot !== undefined) ? window.__lfPrevBoot : localStorage.getItem('lf_boot');
       if (prev === 'alive') {
         // Last session reached play and died WITHOUT a clean exit — a mid-combat
         // freeze/OOM. This is the reload-loop case: boot is fine, so no safe boot
@@ -5512,21 +5571,25 @@
     // a reload or navigation is NOT a crash — mark it clean so recovery only
     // ever arms on a genuine freeze/OOM kill
     window.addEventListener('pagehide', () => { try { localStorage.setItem('lf_boot', 'clean-exit'); } catch (e) {} });
-    if (window.__lfSafeBoot || window.__lfPlayRecovery) {
-      try {
-        let lastPlay = '';
-        try { lastPlay = localStorage.getItem('lf_play') || ''; } catch (e) {}
-        const bar = document.createElement('div');
-        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#2a1508;color:#ffcf7a;border-bottom:1px solid #7a4a12;font:700 12px/1.45 system-ui;padding:8px 12px;text-align:center';
-        bar.innerHTML = (window.__lfPlayRecovery
-          ? '⚠ RECOVERY MODE — your last session froze mid-combat. Heavy visual effects are trimmed for this session. Screenshot this and report it.'
-          : '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.')
-          + (lastPlay ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + lastPlay.replace(/[<>]/g, '') + '</div>' : '');
-        const x = document.createElement('button');
-        x.textContent = '×'; x.style.cssText = 'margin-left:10px;background:none;border:none;color:#ffcf7a;font-size:15px;cursor:pointer';
-        x.onclick = () => bar.remove(); bar.appendChild(x);
-        document.body.appendChild(bar);
-      } catch (e) {}
+    // capture real JS errors too — an exception-crash stores its message and
+    // the next boot displays it even when every marker claims a clean exit
+    try {
+      window.addEventListener('error', (ev) => { try { localStorage.setItem('lf_err', ((ev.message || 'error') + ' @ ' + String(ev.filename || '').split('/').pop() + ':' + (ev.lineno || 0)).slice(0, 200)); } catch (x) {} });
+      window.addEventListener('unhandledrejection', (ev) => { try { localStorage.setItem('lf_err', ('promise: ' + ((ev.reason && ev.reason.message) || ev.reason)).slice(0, 200)); } catch (x) {} });
+    } catch (e) {}
+    let _prevErr = '';
+    try { _prevErr = localStorage.getItem('lf_err') || ''; if (_prevErr) localStorage.removeItem('lf_err'); } catch (e) {}
+    if (window.__lfSafeBoot || window.__lfPlayRecovery || _prevErr) {
+      let lastPlay = '';
+      try { lastPlay = localStorage.getItem('lf_play') || ''; } catch (e) {}
+      crashBanner((window.__lfPlayRecovery
+        ? '⚠ RECOVERY MODE — your last session froze mid-combat. Heavy visual effects are trimmed for this session. Screenshot this and report it.'
+        : window.__lfSafeBoot
+          ? '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.'
+          : '⚠ Your last session ended with an error. Screenshot this and report it.')
+        + ' <i style="font-style:normal;color:#8d7b62">· build ' + (window.LF_BUILD || '?') + '</i>'
+        + (_prevErr ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#ffb0a0;margin-top:3px;word-break:break-all">' + _prevErr.replace(/[<>]/g, '') + '</div>' : '')
+        + (lastPlay ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + lastPlay.replace(/[<>]/g, '') + '</div>' : ''));
     }
     bootMark('stats');
     refreshStats();
@@ -5584,6 +5647,8 @@
         localStorage.setItem('lf_play', JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
           en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
           ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem }));
+        const mb = (performance && performance.memory) ? performance.memory.usedJSHeapSize / 1048576 : 0;
+        if (mb > 1400 && !window.__lfPlayRecovery) engageRecovery('heap ' + Math.round(mb) + 'MB');
       } catch (e) {}
     }, 10000);
     // 'alive' only after the sim has actually survived a few seconds of frames —

@@ -59,6 +59,18 @@
     const st = g.state;
     if (!st.sdread) st.sdread = { v: 1, shards: 0, seen: 0, day: dayIdx(), att: 0, bestDay: 0, bestEver: 0, total: 0, hist: [], runs: 0 };
     const s = st.sdread;
+    // SEASON RESET WITH THE 456 REBALANCE. The client keeps its own season record,
+    // and the server board was zeroed (voidmaw-season-reset.sql) because pre-scale
+    // totals are unbeatable on the new numbers. Wipe PROGRESS, keep everything
+    // already PAID: coins, parts, claims, prize history, the assembled-Voidmaw flag.
+    if (!s.rebal4) {
+      s.rebal4 = 1;
+      s.total = 0; s.bestDay = 0; s.bestEver = 0; s.att = 0; s.buys = 0;
+      s.lbRank = null; s.lbSeasonRank = null;
+      if (!s.hist) s.hist = [];
+      s.hist.unshift({ d: Date.now(), s: 0, txt: '⚖ SEASON REBALANCED — damage and HP were scaled down galaxy-wide, so the season board restarted for everyone on the new numbers. Coins, parts and prizes already paid are untouched.' });
+      try { g.save(); } catch (e) {}
+    }
     if (s.day !== dayIdx()) {                                    // daily reset
       settleLeaderboard(s);                                       // grant yesterday's placement first
       s.day = dayIdx(); s.att = 0; s.bestDay = 0; s.buys = 0;

@@ -1230,6 +1230,14 @@
   }
   // jagged polyline with 1-2 branch forks — stored on rt.bolts, drawn in draw()
   function pushBolt(x1, y1, x2, y2, scale) {
+    // HARD CAP (Aug 2026, the Zone-800 freeze). rt.bolts was the ONE combat array
+    // with no ceiling — only a lifetime filter. Storm Conduit gear pushes a main
+    // bolt + 2 forks per PROC, and at endgame proc rates (90%+ crit, multishot,
+    // 5× game speed) thousands of multi-point polylines were alive at once, each
+    // drawn in two render passes: the tab froze, swelled and was OOM-killed.
+    // Past the cap the DAMAGE already landed (chainDamage runs first) — only the
+    // decoration is skipped, and at 60+ live bolts the screen is already white.
+    if (rt.bolts.length > (window.__lfPlayRecovery ? 12 : 66)) return;
     const dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
     const n = Math.max(5, Math.floor(dist / 34));
     const pts = [[x1, y1]];
@@ -1923,6 +1931,8 @@
     separateEnemies();
     rt.enemies = rt.enemies.filter((e) => !e.dead);
     updateEbolts(dt);
+    // absolute projectile ceiling — no fire source may outrun impact/expiry
+    if (rt.projectiles.length > 260) rt.projectiles.splice(0, rt.projectiles.length - 260);
 
     // carrier drones: orbit the ship and fire on nearby enemies
     updateDrones(dt);
@@ -2038,7 +2048,7 @@
     // particles + floats (hard caps to bound per-frame draw cost)
     for (const p of rt.particles) p.update(dt); rt.particles = rt.particles.filter((p) => !p.dead);
     // storm bolts fade fast; flash decays
-    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); }
+    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); const _bc = window.__lfPlayRecovery ? 16 : 80; if (rt.bolts.length > _bc) rt.bolts.splice(0, rt.bolts.length - _bc); }
     if (rt.stormFlash > 0) rt.stormFlash -= dt;
     if (rt.particles.length > 320) rt.particles.splice(0, rt.particles.length - 320);
     for (const f of rt.floats) f.update(dt); rt.floats = rt.floats.filter((f) => !f.dead);
@@ -2784,7 +2794,11 @@
         if (state.auto) dmg *= 0.8;
         p.damage = Math.max(1, Math.round(dmg * (crowd2 ? 2 : 1))); p.crit = crit; p.drone = true;
         p.angle = Math.atan2(best.y - dr.y, best.x - dr.x);
-        rt.projectiles.push(p);
+        // CAP (Aug 2026, the siege crash). Drone fire had NO ceiling — player shots
+        // fold past 90, but a 30-drone carrier vs a regenerating Qa-HP warden at
+        // 10× speed pumps shots in far faster than impacts remove them. Past the
+        // cap the shot simply doesn't spawn — next tick fires again.
+        if (rt.projectiles.length < 240) rt.projectiles.push(p);
         dr.cd = (crowd2 ? 2 : 1) / C.DRONE.fireRate;
         rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.12, size: 1.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
       }
@@ -2879,7 +2893,7 @@
         p.damage = Math.max(1, Math.round(dmg)); p.crit = crit;
         p.wtype = ESCORT_WTYPE[es.cls] || 'gatling';
         p.angle = Math.atan2(best.y - es.y, best.x - es.x);
-        rt.projectiles.push(p);
+        if (rt.projectiles.length < 240) rt.projectiles.push(p);   // same ceiling as drone fire
         es.cd = 1 / C.FLEET.escortFireRate;
       }
     }
@@ -5146,7 +5160,7 @@
   function sanitizeSave() {
     let fixed = 0; const seen = new Set();
     (function walk(o, depth) {
-      if (!o || typeof o !== 'object' || depth > 8 || seen.has(o)) return;
+      if (!o || typeof o !== 'object' || depth > 14 || seen.has(o)) return;
       seen.add(o);
       for (const k in o) {
         const v = o[k];
@@ -5158,7 +5172,7 @@
     if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
     return fixed;
   }
-  function load() { try { try { sessionStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
+  function load() { try { try { localStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
 
   // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
@@ -5405,7 +5419,7 @@
     //     new-curve magnitude are skipped outright.
     //   \u00b7 Zone \u2264100 gear is untouched \u2014 the curves are identical there.
     //   \u00b7 Percent stats are untouched \u2014 they never rode the curve.
-    if (loaded && state.scaleVer !== 4) {
+    if (loaded && state.scaleVer !== 4 && !window.__lfSafeBoot) try {
       let rescaled = 0;
       const FLAT4 = ['attackDamage', 'health'];
       const remap = (it) => {
@@ -5447,7 +5461,7 @@
         try { console.warn('[LOOTFLEET] scale v4: ' + rescaled + ' stat(s) mapped onto the tapered curve'); } catch (e) {}
         setTimeout(() => { try { window.UI && window.UI.unlockToast && window.UI.unlockToast('\u2696 Galaxy-wide rebalance \u2014 your gear kept its roll, the numbers got readable'); } catch (e) {} }, 1800);
       }
-    }
+    } catch (e) { try { console.error('[LOOTFLEET] scale v4 migration failed — deferred to next boot', e); } catch (e2) {} }
     // ---- ONE-TIME crit nerf migration: compress item crit onto the new ladder ----
     if (state.critVer !== 4) {
       const capCrit = (it) => { if (it && it.stats && it.stats.critChance != null) it.stats.critChance = Math.min(it.stats.critChance, Math.round((0.005 + (it.rarity || 0) * 0.01) * 1180) / 1000, 1); };
@@ -5475,14 +5489,45 @@
     // Written to sessionStorage so a frozen/OOM-killed boot — which throws no
     // exception — still names its last phase on the NEXT load. The repair count
     // from sanitizeSave() rides along.
-    const bootMark = (ph) => { try { sessionStorage.setItem('lf_boot', ph); } catch (e) {} };
+    const bootMark = (ph) => { try { localStorage.setItem('lf_boot', ph); } catch (e) {} };
     try {
-      const prev = sessionStorage.getItem('lf_boot');
-      if (prev && prev !== 'alive') {
+      const prev = localStorage.getItem('lf_boot');
+      if (prev === 'alive') {
+        // Last session reached play and died WITHOUT a clean exit — a mid-combat
+        // freeze/OOM. This is the reload-loop case: boot is fine, so no safe boot
+        // fires, the game auto-resumes the same combat and dies again seconds
+        // later — which players report as “the site won’t load”. Enter PLAY
+        // RECOVERY: hard-trim visual effects this session so the killer effect
+        // cannot re-balloon before the player can react.
+        window.__lfPlayRecovery = true;
+      } else if (prev && prev !== 'clean-exit') {
         console.warn('[LOOTFLEET] previous boot never finished — it died during: ' + prev + '. Send this line with a bug report.');
         window.__lfBootDiedAt = prev;
+        // SAFE BOOT — arms automatically so the affected account can get in
+        // without a console: skip the offline sim, the return brief and the v4
+        // remap this one time, and show a banner naming the dead phase.
+        window.__lfSafeBoot = true;
       }
     } catch (e) {}
+    // a reload or navigation is NOT a crash — mark it clean so recovery only
+    // ever arms on a genuine freeze/OOM kill
+    window.addEventListener('pagehide', () => { try { localStorage.setItem('lf_boot', 'clean-exit'); } catch (e) {} });
+    if (window.__lfSafeBoot || window.__lfPlayRecovery) {
+      try {
+        let lastPlay = '';
+        try { lastPlay = localStorage.getItem('lf_play') || ''; } catch (e) {}
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#2a1508;color:#ffcf7a;border-bottom:1px solid #7a4a12;font:700 12px/1.45 system-ui;padding:8px 12px;text-align:center';
+        bar.innerHTML = (window.__lfPlayRecovery
+          ? '⚠ RECOVERY MODE — your last session froze mid-combat. Heavy visual effects are trimmed for this session. Screenshot this and report it.'
+          : '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.')
+          + (lastPlay ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + lastPlay.replace(/[<>]/g, '') + '</div>' : '');
+        const x = document.createElement('button');
+        x.textContent = '×'; x.style.cssText = 'margin-left:10px;background:none;border:none;color:#ffcf7a;font-size:15px;cursor:pointer';
+        x.onclick = () => bar.remove(); bar.appendChild(x);
+        document.body.appendChild(bar);
+      } catch (e) {}
+    }
     bootMark('stats');
     refreshStats();
     rt.archer.hp = rt.stats.maxHp;
@@ -5495,7 +5540,8 @@
 
     const awaySince = state.lastSave || Date.now();
     bootMark('offline-sim');
-    let offline = loaded ? computeOffline() : null;
+    let offline = null;
+    if (loaded && !window.__lfSafeBoot) { try { offline = computeOffline(); } catch (e) { offline = null; try { console.error('[LOOTFLEET] offline sim failed', e); } catch (e2) {} } }
     // Hourly income from held systems. This return value was thrown away at
     // both call sites — the player earned it and was never shown a digit.
     const awayTiles = accrueResources();
@@ -5508,7 +5554,7 @@
     bootMark('ui');
     if (window.UI) { window.UI.init(GAME); window.UI.refreshAll(); }
     bootMark('return-brief');
-    if (loaded) reportReturn(awaySince, offline, awayTiles);
+    if (loaded && !window.__lfSafeBoot) { try { reportReturn(awaySince, offline, awayTiles); } catch (e) {} }
     bootMark('territory');
     initTerritory(); // load + subscribe to the shared cross-account turf war
 
@@ -5523,10 +5569,27 @@
 
     rt.running = true; rt.last = performance.now();
     bootMark('first-frame');
+    // PLAY WATCHDOG — forensics for mid-combat freezes (the class of crash the
+    // boot breadcrumbs can't see). Every 10s, snapshot the live array sizes into
+    // sessionStorage; after a freeze-kill the NEXT load prints the last sample,
+    // naming exactly what was ballooning when the tab died.
+    try {
+      const prevPlay = localStorage.getItem('lf_play');
+      if (prevPlay && (window.__lfPlayRecovery || window.__lfBootDiedAt !== undefined)) console.warn('[LOOTFLEET] last sample before the crash: ' + prevPlay);
+      else if (prevPlay) console.info('[LOOTFLEET] last session sample: ' + prevPlay);
+    } catch (e) {}
+    setInterval(() => {
+      try {
+        const mem = (performance && performance.memory) ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '?';
+        localStorage.setItem('lf_play', JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
+          en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
+          ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem }));
+      } catch (e) {}
+    }, 10000);
     // 'alive' only after the sim has actually survived a few seconds of frames —
     // a boot that dies in its first combat updates (the save-specific case) still
     // reports 'first-frame' rather than a false clean bill.
-    setTimeout(() => { try { sessionStorage.setItem('lf_boot', 'alive'); } catch (e) {} }, 5000);
+    setTimeout(() => { try { localStorage.setItem('lf_boot', 'alive'); } catch (e) {} }, 5000);
     requestAnimationFrame(loop);
     setInterval(() => { if (rt.running && !window.__sessionKicked) { const now = performance.now(); if (now - rt.last > 120) step(now); } }, 1000/30);
   }

@@ -227,7 +227,7 @@
     const sb = body.querySelector('[data-sina-accept]');
     if (sb) sb.addEventListener('click', acceptSina);
   }
-  window.ACHIEVE = { tick, html, bind, claimable };
+  window.ACHIEVE = { tick, html, bind, claimable, totalClaimed };
 
   const CSS = `
   .ach-shelf{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; background:linear-gradient(180deg,#10182a,#0b1120);

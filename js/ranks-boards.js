@@ -284,7 +284,14 @@
     q.tile_rev = tileRevenue();
     q.ships = Object.keys(s.ownedShips || {}).length || 1;
     q.missions = s.lifetimeMissions | 0;
-    q.badges = (s.badgeRanks | 0) || (s.achClaimed | 0) || 0;
+    q.badges = (() => {
+      // Badges live in state.achieve.claimed (per-chain counts) — the old
+      // badgeRanks/achClaimed fields never existed, so every real player
+      // published 0 on this board. ACHIEVE.totalClaimed() is the same figure the
+      // Missions screen shows; the inline sum is the no-module fallback.
+      try { if (window.ACHIEVE && ACHIEVE.totalClaimed) return ACHIEVE.totalClaimed() | 0; } catch (e) {}
+      try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(1000, n); } catch (e) { return 0; }
+    })();
     return q;
   }
 
@@ -326,7 +333,14 @@
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,
-        badges: (s.badgeRanks | 0) || (s.achClaimed | 0) || 0,
+        badges: (() => {
+      // Badges live in state.achieve.claimed (per-chain counts) — the old
+      // badgeRanks/achClaimed fields never existed, so every real player
+      // published 0 on this board. ACHIEVE.totalClaimed() is the same figure the
+      // Missions screen shows; the inline sum is the no-module fallback.
+      try { if (window.ACHIEVE && ACHIEVE.totalClaimed) return ACHIEVE.totalClaimed() | 0; } catch (e) {}
+      try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(1000, n); } catch (e) { return 0; }
+    })(),
       };
     } catch (e) { return null; }
   }

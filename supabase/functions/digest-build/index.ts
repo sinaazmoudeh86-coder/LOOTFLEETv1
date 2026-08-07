@@ -43,7 +43,8 @@ function snapshot(save: Record<string, any>) {
     items:    n(save?.itemsFound),
     fuel:     n(res.fuel), iron: n(res.iron), plasma: n(res.plasma),
     tiles:    Object.keys(owned).length,
-    badges:   n(save?.badgeRanks ?? save?.achClaimed),
+    // badges live in save.achieve.claimed (per-chain counts) — badgeRanks/achClaimed never existed
+    badges:   Object.values(save?.achieve?.claimed ?? {}).reduce((a: number, v: any) => a + (Number(v) | 0), 0),
     vip:      n(save?.vipPts),
   };
 }

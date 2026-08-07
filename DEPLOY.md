@@ -1,7 +1,7 @@
-# Loot Fleet — deploy v216 · build 478
+# Loot Fleet — deploy v216 · build 486
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v215. Service worker cache is `lootfleet-v478`.
+Supersedes v215. Service worker cache is `lootfleet-v486`.
 
 **Headline:** the XP-rate rework (additive bonuses, no cap), the REAL fix for
 post-ascension gold coming back, the global layout clip guard, and a Discord
@@ -25,13 +25,20 @@ grep -c "GOLD RESCUE — REMOVED" js/game-v93.js   # must be 1
 grep -c "stars \* 5e6" js/account.js             # must be 1
 ```
 
-## ⚠ THREE STAMPS MUST AGREE — verified for this folder.
+## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 478 |
+| Stamp | File | Build 486 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `478` |
-| Update beacon | `version.json` → `build` | `478` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v478` |
+| Client constant | `game.html` → `window.LF_BUILD` | `486` |
+| Update beacon | `version.json` → `build` | `486` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v486` |
+| Project root beacon | root `version.json` (source tree) | `486` |
+
+The fourth is easy to miss and now matters more than ever: the root beacon
+drifted nine builds behind, and the in-session update gate compares
+`version.json` against `LF_BUILD` — a stale beacon silently disables update
+enforcement for every client. Root `sw.js` is NOT a stamp; it is a deliberate
+kill-switch worker for an old poisoned origin, and must stay un-versioned.
 
 ```bash
 grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
@@ -85,6 +92,78 @@ first load.
 ---
 
 ## What shipped
+
+### ↻ LIVE UPDATE ENFORCEMENT — `js/update-gate.js` (build 486, operator note)
+
+Until now the version check ran **once, at page load, and only blocked login**.
+Anyone already playing never learned a new build had shipped and kept running
+old code indefinitely — exactly what the gate exists to prevent, since stale
+code on one device is what forks a save between iPad and PC.
+
+The gate now runs **during play**: it polls `version.json` every 90s while the
+tab is visible (and on regaining focus). On a newer build it pulls the fleet out
+of combat, saves locally **and pushes to cloud**, then raises a full-screen
+blocking veil — every click, tap, key and scroll behind it is swallowed, with no
+dismiss — runs a 60s countdown, and force-reloads onto the new build (purging
+caches and updating the SW). Offline or failed fetches never lock anyone out.
+
+**What this means for releases:** bumping `version.json` now actively evicts
+every connected player within ~90 seconds. Push the site FIRST, then confirm the
+beacon — never bump the beacon ahead of the files. Players still on 485 or older
+pick the gate up on their next manual reload; from then on it is automatic.
+Test with `UPDATEGATE._test()` in console.
+
+### SHARED-OWNERSHIP BUG — two players holding the same system (build 479)
+
+Same root cause as the Discord spam: `territory.loadAll()` selected the whole
+table with no pagination, and PostgREST silently caps every select at 1000 rows.
+Once `territory` outgrew that, each client received a DIFFERENT partial map —
+tiles past the cap read as unowned, so two players could both hold one system,
+each seeing themselves as the owner ("I can attack it but it says I'm defending
+it, and I can abandon it"). Now paged. `isOwned()` is also server-authoritative:
+when the shared map carries another player's claim for a tile, the stale local
+flag is dropped on the spot.
+
+### ◈ MY SYSTEMS panel (builds 479–481)
+
+The `◈ N/M Systems` chip on the My Galaxy legend is now a button — breathing
+glow, sweeping sheen and a **MANAGE** CTA, turning amber with a blinking FULL
+badge at the tile cap. It opens every hold you own: per-hour revenue by
+currency, citadel rank, ring/level, VOID/KAEVITH/DEEP/HERE tags, and one-tap
+abandon with a confirm. Header totals your whole empire's hourly income; sorted
+richest first. Home citadel can never be abandoned.
+
+### CITADEL RANK HERO on the tile sheet (builds 481, 485)
+
+A fortress rank changes every number under it, and on a rival's tile the rank
+appeared nowhere at all. Every citadel tile now opens with a hero banner: giant
+rank numeral, five pips, and what the rank buys (output ×N, defence +N%).
+Colour-coded gold (yours) / red-orange (enemy, holder named) / amber (unclaimed
+natural fortress). Natural fortresses report **Rank 5** — they are seeded at full
+strength, which is why they pay ×1000 with no builds.
+
+This exposed a real gap: rival citadel ranks were **never fetched**.
+`territory.loadAll()` didn't select `citadel_lv` at all, so the game had no idea
+how fortified an enemy fortress was. Now pulled on load and on live updates.
+
+### MAIL → MAP jump (builds 482–483)
+
+Every galaxy war report carries a **◎ SHOW ME — PLAN THE COUNTERATTACK** button:
+opens My Galaxy, glides the camera to that hex, pings it, and opens the tile
+panel. Reports filed before tile ids were recorded resolve through
+`GAME.tileIdByName()` — names are deterministic per coordinate, so the galaxy is
+walked once into a cached index (Void spires and House holds included) — which
+means historical reports get the button too.
+
+### Smaller (builds 484–485)
+
+- **Iron rendered grey** in My Systems and Empire Income. All four currency
+  colours now mirror `GALAXYMAP.RES` exactly, so a resource reads identically
+  everywhere.
+
+---
+
+## What shipped in build 478
 
 ### XP RATE REWORK — additive, uncapped, legible
 
@@ -177,9 +256,9 @@ cards into their own `overflow:hidden` before the body ever scrolled.
 
 ### Cache busting
 
-Changed js/css referenced from `game.html` are at `?v=478`. New precache
-entries in `sw.js`: `css/fit-guard.css`, `css/readability.css`,
-`js/fit-audit.js`.
+Changed js/css referenced from `game.html` carry `?v=` stamps from the build
+that last touched them (478–486). New precache entries in `sw.js`:
+`css/fit-guard.css`, `css/readability.css`, `js/fit-audit.js`, `js/update-gate.js`.
 
 ---
 

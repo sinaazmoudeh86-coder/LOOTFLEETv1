@@ -150,6 +150,9 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 #portrait-canvas{width:240px;height:190px;display:block;margin:0 auto;}
 #char-power{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
 #char-power b{color:var(--gold);font-family:var(--font-display);}
+.hero-xp-chip{display:inline-block;margin-left:7px;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#2f9e4f;background:rgba(124,224,160,.14);border:1px solid rgba(124,224,160,.45);vertical-align:1px;}
+.hero-xp-chip.capped{color:#a06a10;background:rgba(242,178,75,.16);border-color:rgba(242,178,75,.55);}
+.hero-xp-chip.zero{color:var(--muted);background:rgba(143,163,189,.1);border-color:rgba(143,163,189,.35);}
 .equip-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px;}
 .equip-slot{display:flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px;cursor:pointer;min-height:50px;}
 .equip-slot:active{transform:scale(.98);}

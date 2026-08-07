@@ -161,14 +161,25 @@
   }
 
   // The master geometric difficulty/reward multiplier for a dungeon.
-  // D1 = 1, and every dungeon is ~1.18x the previous. Kept gentle on purpose:
-  // because ENEMY hp/damage and ITEM power both ride this same curve, the
-  // per-zone balance is identical to a steeper curve — but absolute numbers
-  // grow far slower, so reaching a "trillion" of anything is a long journey.
+  // REBALANCE (Aug 2026): pure 1.18^zone spun out of control — zone 400 accounts
+  // hit 1e29 HP/damage, numbers no human reads and float maths near its ceiling.
+  // The curve now TAPERS: identical through zone 100 (early/mid game untouched),
+  // then +2%/zone to 300 and +1%/zone beyond. Ultimate endgame lands in the
+  // billions–trillions. Because ENEMY hp/damage and ITEM power both ride this one
+  // function, per-zone balance is bit-for-bit identical — only magnitudes shrink.
+  // XP is deliberately NOT on this curve (see enemyXp) so leveling pace is
+  // unchanged. LEGACY curve kept for the scaleVer-4 save migration.
   const SCALE_BASE = 1.18, OLD_SCALE_BASE = 1.55;  // OLD kept for save migration
+  const S100 = Math.pow(SCALE_BASE, 99);           // ≈1.31e7 — the taper anchor
+  const S300 = S100 * Math.pow(1.02, 200);         // ≈6.9e8
   function dungeonScale(dungeon) {
-    return Math.pow(SCALE_BASE, dungeon - 1);
+    const z = Math.max(1, dungeon);
+    if (z <= 100) return Math.pow(SCALE_BASE, z - 1);
+    if (z <= 300) return S100 * Math.pow(1.02, z - 100);
+    return S300 * Math.pow(1.01, z - 300);
   }
+  // the retired un-tapered curve — migration maths only, never balance
+  function dungeonScaleLegacy(dungeon) { return Math.pow(SCALE_BASE, Math.max(1, dungeon) - 1); }
 
   // Enemy max HP for a dungeon.
   // Enemy max HP for a dungeon. Tuned HIGH on purpose: combat is about
@@ -214,7 +225,10 @@
     // XP curve deliberately FLAT vs zone depth — deep-zone / over-level kills
     // were paying out far too much. exp 0.82 → 0.42 crushes the high end while
     // leaving early zones roughly intact.
-    return Math.floor(11 * Math.pow(dungeonScale(dungeon), 0.42) + 9);
+    // XP rides the LEGACY curve on purpose: xpToNext() is unchanged, so putting
+    // XP on the tapered combat curve would silently freeze leveling past ~z100.
+    // XP is not an HP/damage readout — the Aug 2026 rescale does not apply.
+    return Math.floor(11 * Math.pow(dungeonScaleLegacy(dungeon), 0.42) + 9);
   }
 
   // Gold granted for a kill.
@@ -780,7 +794,7 @@
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
     SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
-    xpToNext, dungeonEnemyLevel, dungeonScale, enemyHp, enemyDamage, enemyXp, enemyGold,
+    xpToNext, dungeonEnemyLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
     levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,
     ascRarityCap, ascTopBoost, TOP_TIER,

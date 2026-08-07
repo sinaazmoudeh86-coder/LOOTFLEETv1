@@ -963,10 +963,11 @@ Deno.serve(async (req) => {
       // Who holds the three casino holds, what the house took today, and what 1%
       // of it is worth. Read live rather than from war_events so the owners are
       // current even on a report where nothing changed hands.
-      const [cits, pool] = await Promise.all([
+      const [cits, pool, terr] = await Promise.all([
         db.from('casino_citadels').select('id,name,owner_name,shield_until').order('id'),
         db.from('casino_day_losses').select('*')
           .eq('day', new Date().toISOString().slice(0, 10)).maybeSingle(),
+        db.from('territory').select('tile_id,owner_name,cooldown_until').in('tile_id', ['CC1','CC2','CC3']),
       ]);
       {
         const p: any = pool.data || {};
@@ -978,17 +979,21 @@ Deno.serve(async (req) => {
           Number(p.iron) ? `◆ ${fmt(Number(p.iron))}` : '',
           Number(p.plasma) ? `✦ ${fmt(Number(p.plasma))}` : '',
         ].filter(Boolean).join(' · ') || 'nothing yet today';
+        const holders = new Map<string, any>();
+        for (const t of (terr.data ?? [])) holders.set(String(t.tile_id), t);
         const rows = (cits.data ?? []).map((c: any) => {
-          const sh = c.shield_until ? Math.floor((new Date(c.shield_until).getTime() - Date.now()) / 1000) : 0;
-          if (!c.owner_name) return `⬜ **${c.name}** — *unclaimed, free to take*`;
-          return `${sh > 0 ? '🛡' : '🔓'} **${c.name}** — **${c.owner_name}**` +
+          const t = holders.get(String(c.tile_id)) || {};
+          c.owner_name = t.owner_name || null;
+          const sh = t.cooldown_until ? Math.floor((new Date(t.cooldown_until).getTime() - Date.now()) / 1000) : 0;
+          if (!c.owner_name) return `⬜ **${c.name}** `+`(${c.share_pct}% · Lv ${c.req_lv})` + ' — *unclaimed, undefended*';
+          return `${sh > 0 ? '🛡' : '🔓'} **${c.name}** `+`(${c.share_pct}%)` + ` — **${c.owner_name}**` +
             (sh > 0 ? ` · shielded <t:${Math.floor(Date.now() / 1000 + sh)}:R>` : ' · **attackable now**');
         });
         const held = (cits.data ?? []).filter((c: any) => c.owner_name).length;
         fields.push({
           name: `🎰  THE HOUSE CITADELS — ${held} of 3 held`,
           value: `The house took **${took}** today from **${fmt(Number(p.hands) || 0)}** hands across **${fmt(Number(p.players) || 0)}** pilots.\n` +
-            `Each hold pays its owner **1%** at midnight UTC` +
+            `Holds are sieged like Void spires. Each pays its owner **its own share** at midnight UTC` +
             (Number(p.gold) || Number(p.credits)
               ? ` — currently **$ ${cut(p.gold)}** + **◈ ${cut(p.credits)}** each.\n`
               : '.\n') +

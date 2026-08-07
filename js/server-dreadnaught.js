@@ -81,6 +81,12 @@
     return _th[n - 1];
   }
   function stageInfo(total) {
+    // GUARD — total must be finite. threshold() overflows to Infinity near stage
+    // 906, and 'Infinity >= Infinity' is true, so an Infinity total makes this
+    // loop spin forever while the memo array grows one entry per iteration: a
+    // frozen tab that swells until the browser kills it. That is a login crash
+    // when the panel renders a poisoned save total.
+    if (!isFinite(total) || total < 0) total = 0;
     let s = 1; while (total >= threshold(s)) s++;
     const floor = s > 1 ? threshold(s - 1) : 0;
     return { stage: s, floor, need: threshold(s), into: total - floor, span: threshold(s) - floor };

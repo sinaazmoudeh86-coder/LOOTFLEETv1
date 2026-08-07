@@ -489,6 +489,9 @@
     s.fleetSize = esc.length;
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
     s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
+    // never emit a non-finite stat — one Infinity here poisons hp, dps, offline
+    // sim lethality and the published score all at once
+    for (const k in s) if (typeof s[k] === 'number' && !isFinite(s[k])) s[k] = (k === 'maxHp' || k === 'health') ? 100 : 1;
     return s;
   }
 
@@ -708,6 +711,7 @@
     };
   }
   function gainXp(amount) {
+    if (!isFinite(amount) || amount <= 0) return;   // a NaN here corrupts xp forever
     amount *= xpFleetInfo().mult;   // all sources, combined, clamped to +1000%
     state.xp += amount;
     // LEVEL CAP — Lv 150, +50 per Ascension Star. At the cap XP is not banked at
@@ -1878,7 +1882,7 @@
       rt.towT -= dt;
       if (rt.towT <= 0) {
         rt.towT = 0;
-        if (state.currentDungeon >= 1) { respawnAt(0); if (window.UI) window.UI.siegeEvent('towhome', { voidzone: !!rt._towVoid }); rt._towVoid = false; }
+        if (state.currentDungeon >= 1) { respawnAt(0); if (window.UI) window.UI.siegeEvent('towhome', { voidzone: !!rt._towVoid, casino: !!rt._towCasino }); rt._towVoid = false; rt._towCasino = false; }
       }
     }
     if (rt.superBossAlive && rt.boss && !rt.boss.dying && Math.random() < 0.6) {
@@ -3393,6 +3397,49 @@
     });
     return out;
   })();
+  // ==========================================================================
+  // THE HOUSE CITADELS — three casino holds, fought over exactly like Void spires.
+  //
+  // These are REAL TILES, not a bespoke ownership flag. They are marked
+  // `void: true` deliberately so they inherit the entire proven siege loop with no
+  // duplicated logic: strict level gate, resource entry toll, a Warden clone fleet
+  // that must actually be beaten, the scaled wave count, capture-on-win via
+  // plainTake, the 24-hour attack shield, abandonment, and territory sync (so the
+  // server sees the holder and the daily payout can pay them).
+  //
+  // `casino: true` is the only extra: it marks which share of the house's daily
+  // losses the hold pays (1% / 2% / 3%) and keeps them out of the Void Zone board.
+  //
+  // They pay NO hourly resource income — rate 0. The reward is the house cut, and
+  // giving them a second income stream on top would make them strictly better than
+  // a Void spire at the same level.
+  // ==========================================================================
+  const CASINO_TILES = (() => {
+    const spec = [
+      { id: 'CC1', lv: 100, share: 1, name: 'The Blackjack Hold' },
+      { id: 'CC2', lv: 300, share: 2, name: 'The Roulette Spire' },
+      { id: 'CC3', lv: 500, share: 3, name: 'The Craps Bastion' },
+    ];
+    const out = {};
+    spec.forEach((s) => {
+      out[s.id] = { id: s.id, void: true, casino: true, casinoShare: s.share,
+        vtier: s.lv, ring: 25, level: s.lv, diff: Math.round(s.lv * 1.5),
+        name: s.name, resource: 'plasma', rate: 0,
+        home: false, boss: false, citadel: false, deep: false };
+    });
+    return out;
+  })();
+  const CASINO_IDS = Object.keys(CASINO_TILES);
+  const casinoShareOf = (k) => ((CASINO_TILES[k] || {}).casinoShare || 0);
+  // Ownership of a hold, read from the ONE authority every other tile uses.
+  function casinoHolds() {
+    return CASINO_IDS.map((k) => {
+      const t = CASINO_TILES[k];
+      return { id: k, name: t.name, share: t.casinoShare, req_lv: t.vtier,
+               mine: isOwned(k), rival: rivalOf(k) || null,
+               shield_left: tileCooldownLeft(k) | 0 };
+    });
+  }
   const VOID_ENTRY = (t) => { const m = 1000 * (t.vtier / 200); return { fuel: Math.ceil(40 * m), iron: Math.ceil(25 * m), plasma: Math.ceil(15 * m) }; };
   // VOID ZONE battle dressing — attacking mobs wear REAL hull sprites, and the
   // tile's citadel looms at world center (pure set dressing, not an entity).
@@ -3444,7 +3491,7 @@
       ctx.globalAlpha = 1;
     }
   }
-  function sysAt(k) { return VOID_TILES[k] || GX.tileAt(k); }
+  function sysAt(k) { return VOID_TILES[k] || CASINO_TILES[k] || GX.tileAt(k); }
   // ==========================================================================
   // THE KAEVITH INCURSION — the alien-held ~20% of My Galaxy (GX.isInvaded).
   // Invaded tiles keep the normal conquest pipeline (ownership, citadels,
@@ -4261,7 +4308,8 @@
     rt.nodes = [];                                   // stop further escort spawns
     if (rt.archer) rt.archer.invuln = 6;             // the defender may still be firing
     if (k) { if (!state.tileCd) state.tileCd = {}; state.tileCd[k] = Date.now() + 15 * 60 * 1000; }
-    rt._towVoid = !!(tile && tile.void);             // tow back to the right screen
+    rt._towVoid = !!(tile && tile.void && !tile.casino);  // tow back to the right screen
+    rt._towCasino = !!(tile && tile.casino);              // a House Citadel → the casino floor
     rt.towT = 3.0;
     burst(rt.archer.x, rt.archer.y, '#8fb7d9', 30, { speed: 200, life: 0.9 });
     pushFeed('The defence held on ' + ((tile || {}).name || 'the tile') + ' — you were pushed out');
@@ -4334,7 +4382,8 @@
     rt.waves = null;
     rt.nodes = [];
     rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9;
-    rt._towVoid = !!tile.void;   // route the post-capture tow back to the right screen
+    rt._towVoid = !!(tile.void && !tile.casino);   // route the post-capture tow back to the right screen
+    rt._towCasino = !!tile.casino;                 // a House Citadel → the casino floor
     if (tile.void) bumpLife('voidTiles', 1);          // WARDEN OF THE VOID badge
     rt.towT = 3.0;
     burst(rt.archer.x, rt.archer.y, '#5bc06b', 40, { speed: 240, life: 1.0, glow: true });
@@ -5082,13 +5131,34 @@
   function adoptSave(obj) {
     if (!obj || obj === state) return;
     try {
-      Object.assign(state, JSON.parse(JSON.stringify(obj)));
+      Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave();
       refreshStats();
       if (rt.archer && rt.stats) rt.archer.hp = Math.min(rt.archer.hp || rt.stats.maxHp, rt.stats.maxHp);
       if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
     } catch (e) {}
   }
-  function load() { try { const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); return true; } catch (e) { return false; } }
+  // SAVE REPAIR (Aug 2026, the FrostSkull login crash). At his stat magnitude
+  // (~2.3e29 fleet power) compounded maths runs within a few multiplies of the
+  // float ceiling (1.8e308); past it a field becomes Infinity, a JSON round-trip
+  // turns Infinity into null, and null/NaN then poisons every += it touches.
+  // Every boot loop is bounded for FINITE input — non-finite is the one class of
+  // value with no cap anywhere, so it is repaired here, at the door.
+  function sanitizeSave() {
+    let fixed = 0; const seen = new Set();
+    (function walk(o, depth) {
+      if (!o || typeof o !== 'object' || depth > 8 || seen.has(o)) return;
+      seen.add(o);
+      for (const k in o) {
+        const v = o[k];
+        if (typeof v === 'number') { if (!isFinite(v)) { o[k] = 0; fixed++; } }
+        else if (v && typeof v === 'object') walk(v, depth + 1);
+      }
+    })(state, 0);
+    state.level = Math.max(1, state.level | 0 || 1);
+    if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
+    return fixed;
+  }
+  function load() { try { try { sessionStorage.setItem('lf_boot', 'load-save'); } catch (e2) {} const obj = window.ACCOUNT ? window.ACCOUNT.load() : JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (!obj) return false; Object.assign(state, JSON.parse(JSON.stringify(obj))); sanitizeSave(); return true; } catch (e) { return false; } }
 
   // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
@@ -5321,6 +5391,63 @@
         } catch (e) {} }, 1800);
       }
     }
+    // ---- ONE-TIME RESCALE v4 (Aug 2026): taper migration -----------------------
+    // dungeonScale now tapers past zone 100 (see config-v2.js), so gear generated
+    // on the old pure-exponential curve carries stats up to ~1e17\u00d7 too large for
+    // the new economy. This maps every old-curve value onto the new curve while
+    // preserving what actually matters: the player's ROLL (variance vs the
+    // formula) and their WEALTH measured in kills-at-their-depth.
+    //
+    // Built against the failure modes of the retired v3 rescale, in order:
+    //   \u00b7 RE-DERIVED, never divided \u2014 each stat is recomputed from the item's own
+    //     zone + rarity on the new curve, so nothing can collapse to "+1".
+    //   \u00b7 SCALE-DETECTED, so a lost stamp cannot crush twice: values already at
+    //     new-curve magnitude are skipped outright.
+    //   \u00b7 Zone \u2264100 gear is untouched \u2014 the curves are identical there.
+    //   \u00b7 Percent stats are untouched \u2014 they never rode the curve.
+    if (loaded && state.scaleVer !== 4) {
+      let rescaled = 0;
+      const FLAT4 = ['attackDamage', 'health'];
+      const remap = (it) => {
+        if (!it || !it.stats || (it.dungeon || 1) <= 100) return;
+        const rar = C.RARITY[it.rarity || 0]; if (!rar) return;
+        const sNew = C.dungeonScale(it.dungeon), sOld = C.dungeonScaleLegacy(it.dungeon);
+        FLAT4.forEach((k) => {
+          const cur = it.stats[k]; if (cur == null) return;
+          const def = C.STATS[k]; if (!def) return;
+          const expNew = def.base * sNew * rar.mult;
+          if (cur <= expNew * 2) return;              // already new-scale \u2014 double-run guard
+          const variance = Math.max(0.5, Math.min(1.5, cur / (def.base * sOld * rar.mult)));
+          it.stats[k] = Math.max(1, Math.round(expNew * variance));
+          rescaled++;
+        });
+      };
+      Object.keys(state.equipped || {}).forEach((k) => remap(state.equipped[k]));
+      (state.inventory || []).forEach(remap);
+      Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => remap(fit[k])); });
+      // WEALTH \u2014 gold/salvage scale by the income ratio at the save's own depth,
+      // which preserves purchasing power in kills exactly: a hoard worth 2e9
+      // kills of farming before is worth 2e9 kills after. Ceiling-guarded so a
+      // re-run (or an already-sane save) is a no-op.
+      const hz = Math.max(1, state.highestDungeonReached | 0);
+      if (hz > 100) {
+        const rGold = Math.pow(C.dungeonScale(hz) / C.dungeonScaleLegacy(hz), 0.7);
+        const rDmg = C.dungeonScale(hz) / C.dungeonScaleLegacy(hz);
+        if ((state.gold || 0) > 1e18) state.gold = Math.floor(state.gold * rGold);
+        if ((state.salvage || 0) > 1e18) state.salvage = Math.floor(state.salvage * rGold);
+        // damage-denominated records: citadel garrison scores + season boss totals
+        const reScore = (o, k) => { if (o && (o[k] || 0) > 1e15) o[k] = Math.floor(o[k] * rDmg); };
+        Object.keys(state.citadels || {}).forEach((id) => reScore(state.citadels[id], 'score'));
+        Object.keys(state.rivalCitadels || {}).forEach((id) => reScore(state.rivalCitadels[id], 'score'));
+        if (state.sdread) { reScore(state.sdread, 'total'); reScore(state.sdread, 'bestDay'); }
+      }
+      state.scaleVer = 4;
+      if (rescaled) {
+        refreshStats(); save();
+        try { console.warn('[LOOTFLEET] scale v4: ' + rescaled + ' stat(s) mapped onto the tapered curve'); } catch (e) {}
+        setTimeout(() => { try { window.UI && window.UI.unlockToast && window.UI.unlockToast('\u2696 Galaxy-wide rebalance \u2014 your gear kept its roll, the numbers got readable'); } catch (e) {} }, 1800);
+      }
+    }
     // ---- ONE-TIME crit nerf migration: compress item crit onto the new ladder ----
     if (state.critVer !== 4) {
       const capCrit = (it) => { if (it && it.stats && it.stats.critChance != null) it.stats.critChance = Math.min(it.stats.critChance, Math.round((0.005 + (it.rarity || 0) * 0.01) * 1180) / 1000, 1); };
@@ -5344,15 +5471,30 @@
       if (loaded) save();
     }
 
+    // ---- boot breadcrumbs (account-specific crash diagnosis) -----------------
+    // Written to sessionStorage so a frozen/OOM-killed boot — which throws no
+    // exception — still names its last phase on the NEXT load. The repair count
+    // from sanitizeSave() rides along.
+    const bootMark = (ph) => { try { sessionStorage.setItem('lf_boot', ph); } catch (e) {} };
+    try {
+      const prev = sessionStorage.getItem('lf_boot');
+      if (prev && prev !== 'alive') {
+        console.warn('[LOOTFLEET] previous boot never finished — it died during: ' + prev + '. Send this line with a bug report.');
+        window.__lfBootDiedAt = prev;
+      }
+    } catch (e) {}
+    bootMark('stats');
     refreshStats();
     rt.archer.hp = rt.stats.maxHp;
     rt.archer.x = rt.worldW / 2; rt.archer.y = rt.worldH / 2;
     spawnDrones();
+    bootMark('nodes');
     buildNodes();
     rt.nodes.forEach((n, i) => { n.respawnT = 0.2 + i * 0.2; });
     rt.bossInit = rt.bossTimer = 600 + Math.random() * 300; rt.bossAlive = false; rt.boss = null; rt.lastBoss = -600;
 
     const awaySince = state.lastSave || Date.now();
+    bootMark('offline-sim');
     let offline = loaded ? computeOffline() : null;
     // Hourly income from held systems. This return value was thrown away at
     // both call sites — the player earned it and was never shown a digit.
@@ -5363,8 +5505,11 @@
     if (rt.archer) { rt.archer.dead = false; rt.archer.killer = null; }
     resetZone();
 
+    bootMark('ui');
     if (window.UI) { window.UI.init(GAME); window.UI.refreshAll(); }
+    bootMark('return-brief');
     if (loaded) reportReturn(awaySince, offline, awayTiles);
+    bootMark('territory');
     initTerritory(); // load + subscribe to the shared cross-account turf war
 
     setInterval(autosave, 8000);
@@ -5377,6 +5522,11 @@
     window.addEventListener('beforeunload', save);
 
     rt.running = true; rt.last = performance.now();
+    bootMark('first-frame');
+    // 'alive' only after the sim has actually survived a few seconds of frames —
+    // a boot that dies in its first combat updates (the save-specific case) still
+    // reports 'first-frame' rather than a false clean bill.
+    setTimeout(() => { try { sessionStorage.setItem('lf_boot', 'alive'); } catch (e) {} }, 5000);
     requestAnimationFrame(loop);
     setInterval(() => { if (rt.running && !window.__sessionKicked) { const now = performance.now(); if (now - rt.last > 120) step(now); } }, 1000/30);
   }
@@ -5574,6 +5724,9 @@
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
     // Kaevith Incursion
     inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => XEN_PITY, xenSplit,
+    // House Citadels (casino holds — real tiles, sieged like Void spires)
+    casinoHolds, casinoIds: () => CASINO_IDS.slice(), casinoShareOf,
+    casinoTotalShare: () => CASINO_IDS.reduce((a, k) => a + casinoShareOf(k), 0),
     // Ember Choir (Zone Grind incursion)
     isEmberZone, emberTierFor, emberChance, emberBeaconBonus, isEmberBossPending,
     emberKeys: () => EMB_KEYS.slice(), emberFound: () => state.embFound || 0, emberMinZone: () => EMB_MIN_ZONE,

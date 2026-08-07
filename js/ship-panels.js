@@ -22,7 +22,12 @@
   const G = () => window.GAME;
   const num = (n) => { try { return G().formatNum(n); } catch (e) { return String(Math.round(n || 0)); } };
   const pct = (m) => Math.round((m - 1) * 1000) / 10;
-  const safe = (fn, d) => { try { const v = fn(); return (v == null || isNaN(v)) ? d : v; } catch (e) { return d; } };
+  // isNaN() only applies to NUMBERS — isNaN(object) coerces to NaN and is true,
+  // so the old guard silently threw away every OBJECT result: resourceRates()
+  // (the "empire income shows nothing despite tiles" bug), MOON.totalRates(),
+  // DREAD.combatMods() and xpFleetInfo() were all being replaced by their
+  // fallbacks on every single call.
+  const safe = (fn, d) => { try { const v = fn(); return (v == null || (typeof v === 'number' && isNaN(v))) ? d : v; } catch (e) { return d; } };
 
   // ---- 1. MULTIPLIERS ---------------------------------------------------------
   function bonuses() {
@@ -34,14 +39,39 @@
     // re-multiplying the chain here: this pill used to compute its own product,
     // which is how it drifted from what gainXp() actually applied. One source of
     // truth, and when the +1000% fleet ceiling is clipping, say so.
-    const xi = safe(() => (G().xpFleetInfo ? G().xpFleetInfo() : null), null);
-    if (xi && xi.pct > 0) {
+    // NOT safe(): its isNaN() guard coerces an OBJECT to NaN and throws the whole
+    // result away — xpFleetInfo returns an object, so safe() returned null on
+    // every account and the pill never rendered. Plain try/catch.
+    let xi = null; try { xi = G().xpFleetInfo ? G().xpFleetInfo() : null; } catch (e) {}
+    // ALWAYS visible — even at +0%. Hiding the pill at zero read as a missing
+    // feature ("where is my exp bonus?"), and a zero is itself information: none
+    // of your XP sources are switched on.
+    if (xi) {
       out.push({
-        ic: '✦', n: 'XP Gain', v: '+' + xi.pct + '%', c: '#7ce0a0',
+        ic: '✦', n: 'XP Gain', v: '+' + xi.pct + '%', c: xi.pct > 0 ? '#7ce0a0' : '#8fa3bd',
         capped: xi.capped, rawPct: xi.rawPct, cap: xi.cap,
         tip: xi.capped
           ? 'Fleet XP is capped at +' + xi.cap + '%. Your sources stack to +' + xi.rawPct.toLocaleString() + '%, so ' + (xi.rawPct - xi.cap).toLocaleString() + '% is going to waste — swapping an XP source for damage or loot costs you nothing right now.'
-          : 'Every XP source combined. The fleet ceiling is +' + xi.cap + '%.',
+          : xi.pct > 0
+            ? 'Every XP source combined. The fleet ceiling is +' + xi.cap + '%.'
+            : 'No XP sources active. Pro (2×), VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls all raise this — ceiling +' + xi.cap + '%.',
+      });
+    }
+
+    // LOOT — right next to XP, same always-on treatment. Two account-wide
+    // halves: DROP CHANCE (Salvage Doctrine) and LOOT QUALITY (Pilot Tree
+    // Treasure Sense nodes). Zone/tile quality bonuses are location-based and
+    // deliberately not counted here.
+    {
+      const drop = safe(() => (window.PASCEND ? PASCEND.mult('loot') : 1), 1);
+      const qual = safe(() => (window.DREAD && DREAD.mult ? DREAD.mult('lootQuality') : 1), 1);
+      const dPct = pct(drop), qPct = pct(qual);
+      out.push({
+        ic: '❖', n: 'Loot Quality', v: '+' + Math.round(qPct + dPct) + '%',
+        c: (qPct + dPct) > 0 ? '#7ce0a0' : '#8fa3bd',
+        tip: (qPct + dPct) > 0
+          ? 'Drop chance +' + Math.round(dPct) + '% (Salvage Doctrine) · roll quality +' + Math.round(qPct) + '% (Pilot Tree). Zone bonuses (×2 quality tiles, deep space) stack on top where you fly.'
+          : 'No loot sources active. The Salvage Doctrine ascension perk raises drop chance; Pilot Tree Treasure Sense nodes raise roll quality.',
       });
     }
 

@@ -16,32 +16,49 @@
 --  makes that exactly-once.
 -- =============================================================================
 
--- ---- the three holds --------------------------------------------------------
+-- ---- the three holds -------------------------------------------------------
+-- OWNERSHIP IS NOT STORED HERE. The holds are REAL TILES (CC1/CC2/CC3) fought over
+-- exactly like Void spires, so the authority on who holds one is `territory` — the
+-- same table that records every other captured tile, written by claim_tile() when a
+-- siege is won. Keeping a second owner column here would let the two disagree, and
+-- would let a client take a hold without fighting for it.
+--
+-- This table therefore holds only what the tile does not: the share of the day's
+-- losses each hold pays, and the payout bookkeeping.
 create table if not exists public.casino_citadels (
-  id            int primary key check (id between 1 and 3),
+  tile_id       text primary key,          -- 'CC1' | 'CC2' | 'CC3'
   name          text not null,
-  -- SHARE OF THE DAILY POOL, in percent. Deliberately unequal: 1 / 2 / 3 so the
-  -- three holds are not interchangeable and the Craps Bastion is the one worth
-  -- starting a war over. 6% of the day's losses leaves the house in total.
   share_pct     numeric not null default 1,
-  -- LEVEL GATE, same shape as the Void Zone's tiered spires. Paired with the
-  -- share ladder so the richest hold is also the deepest: 1%@100, 2%@300, 3%@500.
   req_lv        int not null default 100,
-  owner         uuid references auth.users(id) on delete set null,
-  owner_name    text,
-  shield_until  timestamptz,          -- 24h attack shield, same rule as void spires
-  claimed_at    timestamptz,
   last_paid_day date
 );
-insert into public.casino_citadels (id, name, share_pct, req_lv) values
-  (1, 'The Blackjack Hold', 1, 100), (2, 'The Roulette Spire', 2, 300), (3, 'The Craps Bastion', 3, 500)
-on conflict (id) do nothing;
--- existing installs: add the columns and backfill both ladders
-alter table public.casino_citadels add column if not exists share_pct numeric not null default 1;
-alter table public.casino_citadels add column if not exists req_lv int not null default 100;
-update public.casino_citadels set share_pct = id where share_pct is distinct from id;
-update public.casino_citadels set req_lv = (case id when 1 then 100 when 2 then 300 else 500 end)
- where req_lv is distinct from (case id when 1 then 100 when 2 then 300 else 500 end);
+insert into public.casino_citadels (tile_id, name, share_pct, req_lv) values
+  ('CC1', 'The Blackjack Hold', 1, 100),
+  ('CC2', 'The Roulette Spire', 2, 300),
+  ('CC3', 'The Craps Bastion',  3, 500)
+on conflict (tile_id) do update
+  set name = excluded.name, share_pct = excluded.share_pct, req_lv = excluded.req_lv;
+
+-- Migration off the earlier one-click-ownership design, if it was ever applied.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema='public' and table_name='casino_citadels' and column_name='owner') then
+    alter table public.casino_citadels drop column owner;
+  end if;
+  if exists (select 1 from information_schema.columns
+              where table_schema='public' and table_name='casino_citadels' and column_name='owner_name') then
+    alter table public.casino_citadels drop column owner_name;
+  end if;
+  if exists (select 1 from information_schema.columns
+              where table_schema='public' and table_name='casino_citadels' and column_name='shield_until') then
+    alter table public.casino_citadels drop column shield_until;
+  end if;
+end $$;
+-- the claim/abandon RPCs are gone: a hold changes hands only by winning a siege
+drop function if exists public.casino_citadel_claim(int, text, int);
+drop function if exists public.casino_citadel_claim(int, text);
+drop function if exists public.casino_citadel_abandon(int);
 
 alter table public.casino_citadels enable row level security;
 drop policy if exists casino_citadels_read on public.casino_citadels;
@@ -75,7 +92,7 @@ create table if not exists public.casino_payouts (
   id         bigserial primary key,
   user_id    uuid not null references auth.users(id) on delete cascade,
   day        date not null,
-  citadel    int  not null,
+  citadel    text not null,           -- tile id: 'CC1' | 'CC2' | 'CC3'
   citadel_nm text not null,
   share_pct  numeric not null default 1,
   gold       numeric not null default 0,
@@ -92,6 +109,15 @@ alter table public.casino_payouts enable row level security;
 drop policy if exists casino_payouts_own on public.casino_payouts;
 create policy casino_payouts_own on public.casino_payouts for select using (auth.uid() = user_id);
 alter table public.casino_payouts add column if not exists share_pct numeric not null default 1;
+-- the earlier design keyed payouts by an int citadel id; widen it to the tile id
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema='public' and table_name='casino_payouts'
+                and column_name='citadel' and data_type <> 'text') then
+    alter table public.casino_payouts alter column citadel type text using citadel::text;
+  end if;
+end $$;
 
 -- ---- report my losses -------------------------------------------------------
 -- Called by the client with the DELTA it has not yet reported. Values are
@@ -120,81 +146,56 @@ end; $$;
 grant execute on function public.casino_report_loss(numeric,numeric,numeric,numeric,numeric,int) to authenticated;
 
 -- ---- board state ------------------------------------------------------------
+-- The client reads ownership locally from its own tile state; this returns the
+-- MONEY side plus a server view of the holders (used by the Discord report).
 create or replace function public.casino_citadel_state()
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid(); cits jsonb; pool jsonb;
+declare cits jsonb; pool jsonb;
 begin
   select coalesce(jsonb_agg(jsonb_build_object(
-    'id', id, 'name', name, 'share_pct', share_pct, 'req_lv', req_lv,
-    'owner_name', owner_name,
-    'mine', (owner is not null and owner = me),
-    'held', owner is not null,
-    'shield_left', greatest(0, floor(extract(epoch from (shield_until - now()))))::int
-  ) order by id), '[]'::jsonb) into cits from public.casino_citadels;
-  select to_jsonb(t) into pool from (
+    'tile_id', c.tile_id, 'name', c.name, 'share_pct', c.share_pct, 'req_lv', c.req_lv,
+    'owner_name', t.owner_name,
+    'shield_left', greatest(0, floor(extract(epoch from (t.cooldown_until - now()))))::int
+  ) order by c.tile_id), '[]'::jsonb) into cits
+    from public.casino_citadels c
+    left join public.territory t on t.tile_id = c.tile_id;
+  select to_jsonb(x) into pool from (
     select gold, credits, fuel, iron, plasma, hands, players
-    from public.casino_day_losses where day = (now() at time zone 'utc')::date) t;
+    from public.casino_day_losses where day = (now() at time zone 'utc')::date) x;
   return jsonb_build_object('citadels', cits, 'pool', coalesce(pool, '{}'::jsonb),
                             'total_pct', (select sum(share_pct) from public.casino_citadels));
 end; $$;
 grant execute on function public.casino_citadel_state() to authenticated;
 
--- ---- claim / take a hold ----------------------------------------------------
--- Unowned: claim it. Held by someone else: only once their 24h shield has run
--- out. Taking one always re-arms the shield for the new holder.
-create or replace function public.casino_citadel_claim(p_id int, p_name text, p_level int default 0)
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid(); row public.casino_citadels; held int;
-begin
-  if me is null then raise exception 'not authenticated'; end if;
-  select * into row from public.casino_citadels where id = p_id for update;
-  if row.id is null then raise exception 'no such citadel'; end if;
-  if coalesce(p_level,0) < row.req_lv then
-    raise exception 'requires level %', row.req_lv; end if;
-  if row.owner = me then raise exception 'you already hold this citadel'; end if;
-  if row.owner is not null and row.shield_until is not null and row.shield_until > now()
-    then raise exception 'shielded'; end if;
-  -- one hold per pilot: three citadels in one pair of hands is not a turf war
-  select count(*) into held from public.casino_citadels where owner = me;
-  if held >= 1 then raise exception 'you already hold a house citadel'; end if;
-  update public.casino_citadels
-     set owner = me, owner_name = left(coalesce(p_name,'Operator'),24),
-         shield_until = now() + interval '24 hours', claimed_at = now()
-   where id = p_id;
-  return jsonb_build_object('ok', true, 'id', p_id, 'name', row.name);
-end; $$;
-grant execute on function public.casino_citadel_claim(int, text, int) to authenticated;
-drop function if exists public.casino_citadel_claim(int, text);
-
-create or replace function public.casino_citadel_abandon(p_id int)
-returns void language plpgsql security definer set search_path = public as $$
-declare me uuid := auth.uid();
-begin
-  update public.casino_citadels set owner = null, owner_name = null, shield_until = null, claimed_at = null
-   where id = p_id and owner = me;
-end; $$;
-grant execute on function public.casino_citadel_abandon(int) to authenticated;
-
 -- ---- the daily payout -------------------------------------------------------
--- Run once a day after midnight UTC (pg_cron). Pays each holder 1% of the
--- PREVIOUS day's pooled losses. Whoever holds the citadel when this runs takes
--- the day — deliberately not pro-rated, because pro-rating rewards sniping the
--- hold seconds before reset.
+-- Runs once a day after midnight UTC (pg_cron). Pays whoever HOLDS THE TILE at that
+-- moment its share (1% / 2% / 3%) of the previous day's pooled losses.
+--
+-- The holder is read from `territory`, i.e. from an actual won siege. Not pro-rated:
+-- pro-rating would reward sniping a hold seconds before reset instead of defending it
+-- all day.
 create or replace function public.casino_daily_payout()
 returns int language plpgsql security definer set search_path = public as $$
-declare d date := ((now() at time zone 'utc')::date - 1); p record; c record; n int := 0; pct numeric;
+declare d date := ((now() at time zone 'utc')::date - 1);
+        p record; c record; n int := 0; pct numeric;
 begin
   select * into p from public.casino_day_losses where day = d;
   if p.day is null then return 0; end if;
-  for c in select * from public.casino_citadels where owner is not null and coalesce(last_paid_day, '1970-01-01') < d loop
-    pct := coalesce(c.share_pct, 1) / 100.0;    -- 1%, 2% or 3% depending on the hold
-    insert into public.casino_payouts(user_id, day, citadel, citadel_nm, share_pct, gold, credits, fuel, iron, plasma, pool_hands)
-    values (c.owner, d, c.id, c.name, coalesce(c.share_pct, 1),
+  for c in
+    select cc.tile_id, cc.name, cc.share_pct, t.owner_id, t.owner_name
+      from public.casino_citadels cc
+      join public.territory t on t.tile_id = cc.tile_id
+     where t.owner_id is not null
+       and coalesce(cc.last_paid_day, '1970-01-01') < d
+  loop
+    pct := coalesce(c.share_pct, 1) / 100.0;
+    insert into public.casino_payouts(user_id, day, citadel, citadel_nm, share_pct,
+                                      gold, credits, fuel, iron, plasma, pool_hands)
+    values (c.owner_id, d, c.tile_id, c.name, coalesce(c.share_pct, 1),
             floor(p.gold * pct), floor(p.credits * pct), floor(p.fuel * pct),
             floor(p.iron * pct), floor(p.plasma * pct), p.hands)
     on conflict (user_id, day, citadel) do nothing;
-    update public.casino_citadels set last_paid_day = d where id = c.id;
-    -- announce it in the war feed so the Discord report picks it up
+    update public.casino_citadels set last_paid_day = d where tile_id = c.tile_id;
     insert into public.war_events(kind, meta) values ('casino', jsonb_build_object(
       'citadel', c.name, 'owner', c.owner_name, 'day', d, 'share_pct', coalesce(c.share_pct, 1),
       'gold', floor(p.gold * pct), 'credits', floor(p.credits * pct),

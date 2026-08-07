@@ -972,7 +972,21 @@
         if (cta) cta.addEventListener('click', openProSheet);
       }
     }
-    el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>';
+    // XP buff — the combined, CAPPED figure from the one source of truth
+    // (GAME.xpFleetInfo), shown right on the power line so the buff is visible
+    // without scrolling to the stat pills.
+    {
+      const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
+      const xpChip = xi
+        ? ' <span class="hero-xp-chip' + (xi.capped ? ' capped' : '') + (xi.pct > 0 ? '' : ' zero') + '" title="' + (xi.capped
+            ? 'Fleet XP is capped at +' + xi.cap + '%. Your sources stack to +' + xi.rawPct.toLocaleString() + '%.'
+            : xi.pct > 0
+              ? 'Every XP source combined \u2014 Pro, VIP, Pilot Tree, ascension perks and Kaevith hulls. Ceiling +' + xi.cap + '%.'
+              : 'No XP sources active \u2014 Pro, VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls all raise this.')
+          + '">\u2726 XP +' + xi.pct + '%' + (xi.capped ? ' \u00b7 CAP' : '') + '</span>'
+        : '';
+      el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>' + xpChip;
+    }
     // equipment — driven by the current ship's actual slot layout
     el['equip-grid'].innerHTML = '';
     G.equipLayout().forEach(({ key, label, icon, item: it }) => {
@@ -2409,7 +2423,7 @@
   ];
   // Display order on screen: the progression ladder, with the two specialist tiers
   // last. (SHIP_CLASSES order is MATCH priority, which is a different thing.)
-  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Carrier', 'Dread', 'Titan', 'Aegis'];
+  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Aegis', 'Carrier', 'Dread', 'Titan'];
 
   function shipRoster() {
     const owned = G.state.ownedShips || {};
@@ -3728,7 +3742,7 @@
     else if (kind === 'citadel') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff9a50'; t.style.fontSize = '22px'; t.innerHTML = '⛴ THE VOID CITADEL<br><span style="font-size:12px;color:#ffd9c4">Burn it down — 75% · 50% · 25% · boom</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2400); }
     else if (kind === 'citadeldown') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d'; t.style.fontSize = '24px'; t.innerHTML = '☀ SUPERNOVA<br><span style="font-size:12px;color:#ffe9b0">Citadel razed — grab the loot!</span>'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 2600); }
     else if (kind === 'citadelhome') { toast('⌂ Siege complete — towed home. Citadel rebuilds in 15 min.', '#9ec5ff'); }
-    else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); showScreen(s && s.voidzone ? 'voidzone' : 'galaxy'); }
+    else if (kind === 'towhome') { toast('⌂ Territory secured — towed back to your hangar', '#9ec5ff'); showScreen(s && s.casino ? 'casino' : s && s.voidzone ? 'voidzone' : 'galaxy'); }
     else if (kind === 'wave') { toast('Wave ' + s.wave + ' / ' + s.total, '#9ec5ff'); }
     else if (kind === 'boss') { const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#e23b4e'; t.style.fontSize = '22px'; t.textContent = '☠ BOSS WAVE'; el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 1700); }
     else if (kind === 'clone') {

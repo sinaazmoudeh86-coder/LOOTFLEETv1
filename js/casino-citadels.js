@@ -33,15 +33,12 @@
     { k: 'iron',    g: '◆', c: '#d0a060', n: 'Iron' },
     { k: 'plasma',  g: '✦', c: '#c07bff', n: 'Plasma' },
   ];
-  const ART = { 1: 'ships/void-cit-1.png', 2: 'ships/void-cit-2.png', 3: 'ships/void-cit-3.png' };
-  // Per-hold level gate, mirroring the Void Zone's tiered spires. Paired with the
-  // share ladder so the richest hold is the deepest one: 1%@100, 2%@300, 3%@500.
-  // The server row is authoritative (casino_citadel_claim re-checks it); these are
-  // for display and for not letting a player waste a tap.
-  const REQ_LV = { 1: 100, 2: 300, 3: 500 };
-  const reqOf = (c) => Number((c && c.req_lv) || REQ_LV[c && c.id] || 100);
-  const UNLOCK_LV = 100;             // shallowest hold — used for the section gate
-  let _st = null, _busy = false, _reportT = 0, _pollT = 0;
+  const ART = { CC1: 'ships/void-cit-1.png', CC2: 'ships/void-cit-2.png', CC3: 'ships/void-cit-3.png' };
+  // Level gates (100 / 300 / 500) and the share ladder (1 / 2 / 3%) live on the
+  // TILE definitions in game-v93.js, and warp() enforces the gate for real. Nothing
+  // is duplicated here.
+  const UNLOCK_LV = 100;             // shallowest hold, for the nav/section hint
+  let _st = null, _reportT = 0, _pollT = 0;
 
   const cdTxt = (s) => {
     s = Math.max(0, s | 0);
@@ -118,25 +115,17 @@
   }
 
   // ---- board ----------------------------------------------------------------
-  // The three holds, as they read before the server has spoken. The board ALWAYS
-  // paints three tiles: an unreachable ledger must look like an unreachable
-  // ledger, not like a missing feature.
-  // The ladder is deliberately unequal — 1 / 2 / 3% — so the three holds are not
-  // interchangeable and the Craps Bastion is the one worth starting a war over.
-  // The server row is authoritative; this only covers the offline board.
-  const FALLBACK = [
-    { id: 1, name: 'The Blackjack Hold', share_pct: 1, req_lv: 100 },
-    { id: 2, name: 'The Roulette Spire', share_pct: 2, req_lv: 300 },
-    { id: 3, name: 'The Craps Bastion',  share_pct: 3, req_lv: 500 },
-  ];
-  const pctOf = (c) => Number((c && c.share_pct) || 1);
-  const offlineState = () => ({ citadels: FALLBACK.map((c) => ({ ...c, owner_name: null, mine: false, held: false, shield_left: 0 })), pool: {}, offline: true });
+  // OWNERSHIP IS NOT STORED HERE. The three holds are real tiles (CC1/CC2/CC3,
+  // defined in game-v93.js), so who holds one, whether it is shielded and whether
+  // it is yours all come from the same authority every other tile uses. This module
+  // only fetches the POOL — the money side.
+  const holds = () => { try { return G().casinoHolds ? G().casinoHolds() : []; } catch (e) { return []; } };
   async function load() {
-    if (!S() || !S().rpc) { _st = offlineState(); return; }
+    if (!S() || !S().rpc) { _st = { pool: {}, offline: true }; return; }
     try {
       const r = await S().rpc('casino_citadel_state');
-      _st = (r && r.citadels && r.citadels.length) ? r : offlineState();
-    } catch (e) { _st = offlineState(); }
+      _st = r ? { pool: (r.pool || {}), offline: false } : { pool: {}, offline: true };
+    } catch (e) { _st = { pool: {}, offline: true }; }
   }
   function poolRow() {
     const p = (_st && _st.pool) || {};
@@ -151,106 +140,110 @@
   }
   function tile(c) {
     const lv = G().state.level | 0;
-    const need = reqOf(c);
-    const gated = lv < need;
-    const sh = c.shield_left | 0;
-    const off = !!(_st && _st.offline);
-    const status = off ? '<span class="ccc-s lock">⋯ LEDGER OFFLINE</span>'
-      : gated ? '<span class="ccc-s lock">🔒 LV ' + need + '</span>'
+    const need = c.req_lv, gated = lv < need, sh = c.shield_left | 0;
+    const status = gated ? '<span class="ccc-s lock">🔒 LV ' + need + '</span>'
       : c.mine ? '<span class="ccc-s own">★ YOURS</span>'
       : sh > 0 ? '<span class="ccc-s shield">🛡 ' + cdTxt(sh) + '</span>'
-      : c.held ? '<span class="ccc-s foe">⚑ ' + esc(c.owner_name || 'Rival') + '</span>'
+      : c.rival ? '<span class="ccc-s foe">⚑ ' + esc(c.rival) + '</span>'
       : '<span class="ccc-s free">UNCLAIMED</span>';
     const p = (_st && _st.pool) || {};
-    const share = pctOf(c);
-    const cut = Math.floor((+p.gold || 0) * share / 100);
-    return '<button class="ccc-tile' + (c.mine ? ' own' : c.held ? ' foe' : '') + (gated || off ? ' gated' : '') + '" data-ccc="' + c.id + '">'
+    const cut = Math.floor((+p.gold || 0) * c.share / 100);
+    return '<button class="ccc-tile' + (c.mine ? ' own' : c.rival ? ' foe' : '') + (gated ? ' gated' : '') + '" data-ccc="' + c.id + '">'
       + '<img class="ccc-art" src="' + ART[c.id] + '" alt="">'
       + '<div class="ccc-n">' + esc(c.name) + '</div>'
-      + '<div class="ccc-pct">' + share + '%<i> \u00b7 LV ' + reqOf(c) + '</i></div>'
+      + '<div class="ccc-pct">' + c.share + '%<i> \u00b7 LV ' + need + '</i></div>'
       + status
-      + '<div class="ccc-cut">' + (off ? 'awaiting the ledger' : cut ? '$ ' + fmt(cut) + ' so far today' : 'no take yet') + '</div>'
+      + '<div class="ccc-cut">' + (cut ? '$ ' + fmt(cut) + ' so far today' : 'no take yet') + '</div>'
       + '</button>';
   }
   function render(host) {
     if (typeof host === 'string') host = $(host);
     if (!host) return;
-    const cits = (_st && _st.citadels) || [];
+    const cits = holds();
+    const total = (() => { try { return G().casinoTotalShare ? G().casinoTotalShare() : 6; } catch (e) { return 6; } })();
     host.innerHTML = '<div class="ccc-wrap">'
       + '<div class="ccc-head"><div class="ccc-h-t">🎰 THE HOUSE CITADELS</div>'
       + '<div class="ccc-h-s">Three holds sit above the floor, paying <b>1%</b>, <b>2%</b> and <b>3%</b> of every pilot\u2019s '
       + 'losses to the house \u2014 gold, resources and <b>LootCoins</b> alike, every day you hold one. '
-      + 'They unlock at <b>Level 100</b>, <b>300</b> and <b>500</b> \u2014 one hold per pilot, so the '
-      + '<b>Craps Bastion</b> is the one worth fighting for. '
-      + 'Capture arms a <b>24-hour shield</b>, exactly like a Void spire.</div></div>'
-      + ((_st && _st.offline) ? '<div class="ccc-off">⋯ Ledger offline \u2014 showing the three holds as unclaimed. Contesting is disabled until the house ledger responds.</div>' : '')
+      + 'They are <b>sieged like Void spires</b>: warp in, break the garrison, hold it against everyone else. '
+      + 'Unlock at <b>Level 100 / 300 / 500</b>, and capture arms a <b>24-hour shield</b>.</div></div>'
+      + ((_st && _st.offline) ? '<div class="ccc-off">\u22ef House ledger unreachable \u2014 holds can still be fought over, but today\u2019s take is unknown until it responds.</div>' : '')
       + poolRow()
-      + '<div class="ccc-board">' + (cits.length ? cits.map(tile).join('') : '<div class="ccc-empty">Connecting to the house ledger\u2026</div>') + '</div>'
+      + '<div class="ccc-board">' + cits.map(tile).join('') + '</div>'
+      + '<div class="ccc-foot">Paid at midnight UTC \u00b7 <b>' + total + '%</b> of the day\u2019s losses leaves the house</div>'
       + '</div>';
-    host.querySelectorAll('[data-ccc]').forEach((b) => b.addEventListener('click', () => open(+b.dataset.ccc, host)));
+    host.querySelectorAll('[data-ccc]').forEach((b) => b.addEventListener('click', () => open(b.dataset.ccc, host)));
   }
+  // The siege sheet. Deliberately the same shape and vocabulary as the Void Zone's
+  // tile sheet: defender intel, entry toll, shield timer, then one action. Taking a
+  // hold WARPS YOU IN — the tile is won in combat by GAME.warp()/captureSystem(),
+  // never by this UI.
   function open(id, host) {
-    const c = ((_st && _st.citadels) || []).find((x) => x.id === id);
+    const c = holds().find((x) => x.id === id);
     if (!c) return;
-    const lv = G().state.level | 0, need = reqOf(c), gated = lv < need, sh = c.shield_left | 0;
+    const g = G(), lv = g.state.level | 0;
+    const need = c.req_lv, gated = lv < need, sh = c.shield_left | 0;
+    const inf = g.tileInfo ? g.tileInfo(id) : null;
+    const cost = g.entryCostFor ? g.entryCostFor(id) : null;
     const p = (_st && _st.pool) || {};
-    const share = pctOf(c);
     const rows = CURS.map((cu) => {
       const pool = +p[cu.k] || 0;
       return '<div class="ccs-row"><span>' + cu.g + ' ' + cu.n + '</span>'
-        + '<b style="color:' + cu.c + '">' + (pool ? fmt(Math.floor(pool * share / 100)) : '0') + '</b></div>';
+        + '<b style="color:' + cu.c + '">' + (pool ? fmt(Math.floor(pool * c.share / 100)) : '0') + '</b></div>';
     }).join('');
+    const toll = cost ? '<div class="ccs-row"><span>\u2694 Entry toll \u00b7 burned on every warp-in</span>'
+      + '<b style="color:#8fc4ff">\u2b22 ' + fmt(cost.fuel || 0) + ' \u00b7 \u25c6 ' + fmt(cost.iron || 0) + ' \u00b7 \u2726 ' + fmt(cost.plasma || 0) + '</b></div>' : '';
+    // defender intel — the rival's published fleet, or your own garrison
+    const def = (inf && inf.defense) || null;
+    const defRow = def ? '<div class="ccs-def"><span class="ccs-k">' + (c.mine ? '\u26e8 YOUR GARRISON' : '\u2694 DEFENDING FLEET \u2014 ' + esc(def.name || def.nm || c.rival || 'Fleet')) + '</span>'
+      + '<div class="ccs-pow"><i>FLEET POWER</i><b>' + fmt(def.score || 0) + '</b></div></div>' : '';
     let act;
-    if (_st && _st.offline) act = '<div class="ccs-block">⋯ The house ledger is unreachable \u2014 the holds cannot be contested until it is back. '
-      + 'Your losses are still being banked locally and will be counted.</div>';
-    else if (gated) act = '<div class="ccs-block">🔒 Requires Level ' + need + ' \u2014 you are Level ' + lv
+    if (gated) act = '<div class="ccs-block">🔒 Requires Level ' + need + ' \u2014 you are Level ' + lv
       + '<div class="ccs-gatebar"><i style="width:' + Math.max(2, Math.min(100, Math.round(lv / need * 100))) + '%"></i></div></div>';
-    else if (c.mine) act = '<button class="ccs-ab" data-ab="' + id + '">⏏ Abandon the hold \u2014 release the daily cut</button>';
-    else if (sh > 0) act = '<div class="ccs-block shield">🛡 Shielded \u2014 attackable in ' + cdTxt(sh) + '</div>';
-    else act = '<button class="ccs-go" data-take="' + id + '">' + (c.held ? '⚔ TAKE THE HOLD' : '⚔ CLAIM THE HOLD') + '</button>';
+    else if (!c.mine && sh > 0) act = '<div class="ccs-block shield">🛡 Attack shield \u2014 openable in ' + cdTxt(sh) + '</div>';
+    else act = '<button class="ccs-go" data-warp="' + id + '">'
+      + (c.mine ? '\u26e8 ENTER YOUR HOLD' : c.rival ? '\u2694 ATTACK \u2014 SIEGE THE HOLD' : '\u2694 CLAIM \u2014 LAUNCH THE SIEGE') + '</button>';
+    const abandon = c.mine ? '<button class="ccs-ab" data-ab="' + id + '">\u23cf Abandon the hold \u2014 release the daily cut</button>' : '';
     const v = S().sheet('<div class="ccs-hero"><img src="' + ART[id] + '" alt="">'
       + '<div class="ccs-t">' + esc(c.name) + '</div>'
-      + '<div class="ccs-holder">' + (c.mine ? '<b style="color:#ffd24d">★ YOU HOLD THIS</b>'
-        : c.held ? '<b style="color:#ff8a96">⚑ ' + esc(c.owner_name || 'Rival') + '</b>'
-        : '<b style="color:#8fa3bd">UNCLAIMED</b>') + '</div></div>'
-      + '<div class="ccs-share">' + share + '% <i>of every pilot\u2019s daily losses \u00b7 unlocks at Level ' + need + '</i></div>'
-      + '<div class="ccs-sec">YOUR CUT IF YOU HOLD IT AT MIDNIGHT UTC \u00b7 ' + share + '% of today\u2019s pool</div>'
-      + '<div class="ccs-rows">' + rows + '</div>'
+      + '<div class="ccs-holder">' + (c.mine ? '<b style="color:#ffd24d">\u2605 YOU HOLD THIS</b>'
+        : c.rival ? '<b style="color:#ff8a96">\u2691 ' + esc(c.rival) + '</b>'
+        : '<b style="color:#8fa3bd">NEUTRAL \u2014 unclaimed</b>') + '</div></div>'
+      + '<div class="ccs-share">' + c.share + '% <i>of every pilot\u2019s daily losses \u00b7 unlocks at Level ' + need + '</i></div>'
+      + defRow
+      + '<div class="ccs-sec">YOUR CUT IF YOU HOLD IT AT MIDNIGHT UTC</div>'
+      + '<div class="ccs-rows">' + rows + toll
       + (sh > 0 ? '<div class="ccs-row"><span>🛡 Shield</span><b style="color:#8fe0ff">' + cdTxt(sh) + ' left</b></div>' : '')
-      + '<div class="ccs-note">Whoever holds the citadel when the day closes takes the whole day. It is not pro-rated \u2014 '
-      + 'that would only reward sniping the hold seconds before reset.</div>'
-      + act + '<button class="ccs-x" data-x>Close</button>');
+      + '</div>'
+      + '<div class="ccs-note">Break the garrison to take the hold \u2014 it is won in combat, not on this screen. '
+      + 'Whoever holds it when the day closes takes the whole day; it is not pro-rated, which would only reward '
+      + 'sniping the hold seconds before reset.</div>'
+      + act + abandon + '<button class="ccs-x" data-x>Close</button>');
     v.querySelector('[data-x]').addEventListener('click', () => v.remove());
-    const take = v.querySelector('[data-take]');
-    if (take) take.addEventListener('click', async () => {
-      if (_busy) return; _busy = true; take.disabled = true; take.textContent = '\u2026';
-      try {
-        await S().rpc('casino_citadel_claim', { p_id: id, p_name: (G().state.pilotName || 'Operator'), p_level: G().state.level | 0 });
-        v.remove(); await load(); render(host);
-        S().toast('🎰 ' + c.name + ' is yours \u2014 shielded for 24h', '#7ce0a0');
-      } catch (e) {
-        const m = (e && e.message) || '';
-        S().toast(/shielded/i.test(m) ? '🛡 Still shielded'
-          : /requires level/i.test(m) ? '🔒 ' + m.replace(/^.*requires level/i, 'Requires Level')
-          : /already hold a house/i.test(m) ? 'You already hold a citadel \u2014 abandon it first'
-          : (m || 'Could not claim'), '#e23b4e');
-        take.disabled = false; take.textContent = '⚔ TAKE THE HOLD';
-      }
-      _busy = false;
+    const go = v.querySelector('[data-warp]');
+    if (go) go.addEventListener('click', () => {
+      const r = g.warp(id);
+      if (r && r.ok) { v.remove(); const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click(); return; }
+      const why = { locked: '🔒 Level gate', cooldown: '🛡 Attack shield active', resources: '\u2726 Not enough resources for the toll',
+                    ally: '\u2b21 Alliance tile \u2014 never attackable', cap: '\u26a0 Empire at capacity \u2014 abandon a system first',
+                    home: 'That tile is neutral' }[r && r.reason] || 'Warp failed';
+      S().toast(why, '#e23b4e');
+      if (r && r.reason === 'resources' && r.cost) S().toast('Toll: \u2b22 ' + fmt(r.cost.fuel || 0) + ' \u00b7 \u25c6 ' + fmt(r.cost.iron || 0) + ' \u00b7 \u2726 ' + fmt(r.cost.plasma || 0), '#8fc4ff');
     });
     const ab = v.querySelector('[data-ab]');
     if (ab) ab.addEventListener('click', () => {
-      S().confirmSheet('Abandon ' + c.name + '?', 'You stop earning the daily 1% immediately and anyone can take the hold.', async () => {
-        try { await S().rpc('casino_citadel_abandon', { p_id: id }); } catch (e) {}
-        v.remove(); await load(); render(host);
+      S().confirmSheet('Abandon ' + c.name + '?', 'You stop earning the daily cut immediately and anyone can siege the hold.', () => {
+        try { const r = g.abandonTile(id); if (r && r.ok === false) { S().toast('Cannot abandon', '#e23b4e'); return; } } catch (e) {}
+        S().toast('\u23cf ' + c.name + ' abandoned \u2014 the house reclaims it', '#8fc4ff');
+        v.remove(); render(host);
       });
     });
   }
 
   // ---- entry ----------------------------------------------------------------
   async function mount(host) {
-    if (!_st) _st = offlineState();
-    render(host);              // three tiles on the first frame, always
+    if (!_st) _st = { pool: {}, offline: true };
+    render(host);              // tiles paint immediately — ownership is local
     await load();
     render(host);
     clearInterval(_pollT);

@@ -92,6 +92,8 @@
   }
 
   // ---- galaxy war reports ------------------------------------------------------
+  // opts.id carries the TILE ID so the report can offer a jump to that hex on
+  // the galaxy map — a report you can act on beats one you have to go hunting for.
   function tileLost(tileName, info, opts) {
     info = info || {}; opts = opts || {};
     const who = info.ownerName || 'An unknown raider';
@@ -101,22 +103,22 @@
       body: who + ' captured your system <b>' + esc(tileName) + '</b>' +
         (opts.razed ? ' and <b>razed your Citadel</b>' : '') +
         '. The tile is shielded — plan your counterattack from My Galaxy.',
-      meta: { kind: 'loss', from: who, tile: tileName, fleetScore: info.fleetScore || 0, fleet: info.defense || null },
+      meta: { kind: 'loss', from: who, tile: tileName, tileId: opts.id || null, fleetScore: info.fleetScore || 0, fleet: info.defense || null },
     });
   }
-  function tileWon(tileName, fromName, razed) {
+  function tileWon(tileName, fromName, razed, tileId) {
     push({
       ic: '✦',
       title: 'System captured — ' + tileName,
       body: (fromName ? 'You took <b>' + esc(tileName) + '</b> from ' + esc(fromName) : 'You captured <b>' + esc(tileName) + '</b>') +
         (razed ? ' — their Citadel is rubble' : '') + '. It produces resources every hour you hold it.',
-      meta: { kind: 'win', tile: tileName },
+      meta: { kind: 'win', tile: tileName, tileId: tileId || null },
     });
   }
-  function raceLost(tileName, who) {
+  function raceLost(tileName, who, tileId) {
     push({ ic: '⏱', title: 'Claim race lost — ' + tileName,
       body: (who ? esc(who) : 'Another operator') + ' sealed the claim on <b>' + esc(tileName) + '</b> seconds before your flag planted. No losses — the galaxy is fast.',
-      meta: { kind: 'race', tile: tileName } });
+      meta: { kind: 'race', tile: tileName, tileId: tileId || null } });
   }
 
   // ---- render -------------------------------------------------------------------
@@ -155,6 +157,14 @@
     if (!meta || !meta.cta || meta.prize) return '';
     return '<button class="ml-cta" data-cta-screen="' + esc(meta.cta.screen) + '">' + esc(meta.cta.label) + '</button>';
   }
+  // ◎ VIEW ON MAP — every galaxy report about a specific hex gets one. Opens My
+  // Galaxy, flies the camera to the tile, flashes it, and opens its panel.
+  function mapBtn(meta) {
+    if (!meta || !meta.tileId) return '';
+    const label = meta.kind === 'loss' ? '◎ SHOW ME — PLAN THE COUNTERATTACK'
+      : meta.kind === 'race' ? '◎ VIEW THE SYSTEM' : '◎ VIEW ON MAP';
+    return '<button class="ml-map" data-map-tile="' + esc(meta.tileId) + '">' + label + '</button>';
+  }
   const ago = (t) => { const s = (Date.now() - t) / 1000; if (s < 90) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; };
   function render() {
     const body = $('mail-body'); if (!body) return;
@@ -175,7 +185,7 @@
           '<div class="ml-r-head"><span class="ml-ic">' + m.ic + '</span>' +
           '<div class="ml-r-m"><b>' + m.title + labelChip(m.meta) + '</b><span>' + ago(m.t) + '</span></div>' +
           (m.read ? '' : '<i class="ml-dot"></i>') + '<span class="ml-chev">' + (open ? '▾' : '▸') + '</span></div>' +
-          (open ? '<div class="ml-r-body"><p>' + m.body + '</p>' + fleetCard(m.meta) + prizeBtn(m) + ctaBtn(m.meta) + '</div>' : '') +
+          (open ? '<div class="ml-r-body"><p>' + m.body + '</p>' + fleetCard(m.meta) + prizeBtn(m) + mapBtn(m.meta) + ctaBtn(m.meta) + '</div>' : '') +
           '</div>';
       }).join('');
     }
@@ -185,6 +195,11 @@
       _openId = _openId === id ? null : id;
       if (m && !m.read) { m.read = true; G().save(); badge(); }
       render();
+    }));
+    body.querySelectorAll('[data-map-tile]').forEach((b2) => b2.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = b2.getAttribute('data-map-tile');
+      try { if (window.UI && window.UI.focusGalaxyTile) window.UI.focusGalaxyTile(id); } catch (e2) {}
     }));
     body.querySelectorAll('[data-claim-mail]').forEach((btn) => btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -249,6 +264,12 @@
   .ml-f-esc img{ width:38px; height:26px; object-fit:contain; background:#0a0f18; border:1px solid #1d2a40; border-radius:6px; padding:2px; }
   .ml-cta{ display:block; width:100%; margin-top:10px; font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.06em; color:#0b1220; background:linear-gradient(180deg,#ffd24d,#e8960f); border:none; border-radius:10px; padding:11px; cursor:pointer; box-shadow:0 4px 14px -6px rgba(242,178,75,.7); }
   .ml-cta:active{ transform:scale(.97); }
+  /* ◎ VIEW ON MAP — jumps to the hex this report is about */
+  .ml-map{ display:block; width:100%; margin-top:9px; padding:11px; border-radius:10px; cursor:pointer;
+    font-family:'Orbitron',sans-serif; font-weight:800; font-size:11.5px; letter-spacing:.06em; color:#dbeaff;
+    background:linear-gradient(180deg,rgba(47,109,216,.34),rgba(21,48,94,.36));
+    border:1px solid rgba(95,168,255,.7); box-shadow:0 0 16px -6px rgba(95,168,255,.8); }
+  .ml-map:active{ transform:scale(.97); }
   .store-cat.has-n::after{ content:attr(data-n); position:absolute; top:2px; right:calc(50% - 22px); min-width:14px; height:14px; padding:0 3px; border-radius:8px; background:#ff5a7a; color:#fff; font-size:9px; font-weight:800; line-height:14px; box-shadow:0 0 6px rgba(255,90,122,.6); }
     /* mail action buttons — blue glow, unmistakably tappable */
   .ml-act{ color:#8fc4ff !important; border:1px solid rgba(95,168,255,.65) !important; background:linear-gradient(180deg,rgba(47,109,216,.30),rgba(21,48,94,.34)) !important;

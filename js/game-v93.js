@@ -3845,7 +3845,25 @@
   }
 
   let _vzArenaImg = null;
-  function isOwned(k) { return !!state.ownedSystems[k]; }
+  // OWNERSHIP IS SERVER-AUTHORITATIVE. `state.ownedSystems` is a local mirror;
+  // when the shared map carries a row for this tile owned by SOMEONE ELSE, that
+  // row wins and the stale local flag is dropped on the spot. Without this a
+  // client that missed a sync kept believing it held a tile another player had
+  // taken — the map drew it as "defending", offered Abandon, AND offered Attack
+  // on the same system. Never trust the local flag alone.
+  function isOwned(k) {
+    if (!state.ownedSystems[k]) return false;
+    const real = rt.realTiles && rt.realTiles[k];
+    if (real && real.ownerId) {
+      const my = realMyUid();
+      if (my && real.ownerId !== my) {
+        delete state.ownedSystems[k];
+        if (state.citadels && state.citadels[k]) delete state.citadels[k];
+        return false;
+      }
+    }
+    return true;
+  }
   const turfOn = () => !!(window.TERRITORY && window.TERRITORY.enabled());
   // GLOBAL NPC layer — when the shared turf war is live, simulated rivals are a
   // PURE FUNCTION of (tile, UTC day): every player sees the exact same NPC
@@ -3929,6 +3947,7 @@
       cooldown: tileCooldownLeft(k),
       myCitadel: hasMyCitadel(k) && isOwned(k), rivalCitadelScore: rivalCitadelScore(k), defense: rivalDefense(k),
       lootQ: (t.deep ? GX.DEEP_MULT.loot : 1),
+      cit: citadelRankOf(k),
       resMult: (t.deep ? GX.DEEP_MULT.resource : 1),
       locked: t.level > state.level + 10 && !isOwned(k),
     });
@@ -3976,7 +3995,7 @@
       if (hadCit) delete state.citadels[id];
       if (!state.tileCd) state.tileCd = {};
       state.tileCd[id] = Date.now() + 24 * 3600 * 1000;
-      try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, { ownerName: name, fleetScore: rivalCitadelScore(id) || 0, defense: null }, { razed: hadCit }); } catch (e) {}
+      try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, { ownerName: name, fleetScore: rivalCitadelScore(id) || 0, defense: null }, { razed: hadCit, id: id }); } catch (e) {}
       return { kind: 'lost', name, tile: id, razed: hadCit };
     }
     return null;
@@ -4018,7 +4037,7 @@
       else if (state.ownedSystems[id]) {
         delete state.ownedSystems[id];
         // lost while away — file a war report with the conqueror's fleet intel
-        try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]) }); } catch (e) {}   // sysAt: void tiles mail with real names too
+        try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]), id: id }); } catch (e) {}   // sysAt: void tiles mail with real names too
         if (state.citadels && state.citadels[id]) delete state.citadels[id];
       }
       if (state.rivalTiles) delete state.rivalTiles[id]; // a real owner overrides any simulated one
@@ -4029,14 +4048,14 @@
     const myUid = realMyUid();
     if (ev.deleted) { delete rt.realTiles[ev.tileId]; }
     else {
-      rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil, citadel: !!ev.citadel, fleetScore: ev.fleetScore || 0, defense: ev.defense || null };
+      rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil, citadel: !!ev.citadel, citadelLv: ev.citadelLv | 0, fleetScore: ev.fleetScore || 0, defense: ev.defense || null };
       accrueResources();   // settle before ownership flips either way
       if (myUid && ev.ownerId === myUid) { state.ownedSystems[ev.tileId] = true; }
       else if (state.ownedSystems[ev.tileId]) {
         delete state.ownedSystems[ev.tileId];
         const tn = (sysAt(ev.tileId) || {}).name || ev.tileId;   // sysAt: void tiles included
         pushFeed(ev.ownerName + ' captured your ' + tn, true);
-        try { if (window.MAIL) window.MAIL.tileLost(tn, rt.realTiles[ev.tileId], { razed: !!(state.citadels && state.citadels[ev.tileId]) }); } catch (e) {}
+        try { if (window.MAIL) window.MAIL.tileLost(tn, rt.realTiles[ev.tileId], { razed: !!(state.citadels && state.citadels[ev.tileId]), id: ev.tileId }); } catch (e) {}
         if (state.citadels && state.citadels[ev.tileId]) delete state.citadels[ev.tileId];
         if (window.UI) window.UI.galaxyContestToast(ev.ownerName, tn);
       }
@@ -4456,7 +4475,7 @@
     state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + 24 * 3600 * 1000);
     if (state.rivalTiles) delete state.rivalTiles[k];
     pushFeed(fromRival ? ('You took ' + tile.name + ' from ' + fromRival) : ('You captured ' + tile.name));
-    try { if (window.MAIL) window.MAIL.tileWon(tile.name, fromRival, razing); } catch (e) {}
+    try { if (window.MAIL) window.MAIL.tileWon(tile.name, fromRival, razing, k); } catch (e) {}
     // REAL turf war: stake the claim on the shared server (server-authoritative,
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
@@ -4471,7 +4490,7 @@
           delete state.ownedSystems[k];
           if (state.citadels && state.citadels[k]) delete state.citadels[k];   // drop any just-granted citadel too — no ghost fortress on a lost race
           pushFeed('Beaten to ' + tile.name + ' — another operator sealed the claim first', true);
-          try { if (window.MAIL) window.MAIL.raceLost(tile.name, (rt.realTiles[k] || {}).ownerName); } catch (e) {}
+          try { if (window.MAIL) window.MAIL.raceLost(tile.name, (rt.realTiles[k] || {}).ownerName, k); } catch (e) {}
           if (window.UI) window.UI.unlockToast('⚔ Race lost — ' + tile.name + ' was claimed seconds before you');
           save();
         }
@@ -4535,6 +4554,71 @@
   function atTileCap() { return tileCount() >= tileCap(); }
   // legacy alias — older screens still read citadelCap()
   function citadelCap() { return tileCap(); }
+  // CITADEL RANK ON A TILE — one answer for every case the UI has to draw:
+  // yours, a rival's, or an unclaimed natural fortress. Returns null when the
+  // tile has no citadel at all.
+  //   kind  'mine' | 'rival' | 'natural'
+  //   lv    1..5 (0 = a fortress whose rank we cannot see — rival on an old row)
+  //   mult  resource multiplier this rank is worth
+  //   def   % defence bonus the rank grants its holder
+  function citadelRankOf(id) {
+    const t = sysAt(id); if (!t) return null;
+    const CMAX = CITADEL_LV_MAX;
+    if (isOwned(id) && hasMyCitadel(id)) {
+      const lv = Math.max(1, citadelLevel(id));
+      return { kind: 'mine', lv, max: CMAX, mult: CITADEL_MULT * lv, def: Math.round((citadelDefenseMult(lv) - 1) * 100), natural: !!t.citadel };
+    }
+    if (isOwned(id) && t.citadel) {
+      return { kind: 'natural', owned: true, lv: 0, max: CMAX, mult: GX.CITADEL_RATE_MULT || 1000, def: 0, natural: true };
+    }
+    const real = rt.realTiles && rt.realTiles[id];
+    const my = realMyUid();
+    if (real && real.citadel && !(my && real.ownerId === my)) {
+      const lv = Math.max(0, real.citadelLv | 0);
+      return { kind: 'rival', lv, max: CMAX, owner: real.ownerName || 'a rival',
+        mult: lv ? CITADEL_MULT * lv : 0, def: lv ? Math.round((citadelDefenseMult(lv) - 1) * 100) : 0, natural: !!t.citadel };
+    }
+    if (!isOwned(id) && state.rivalCitadels && state.rivalCitadels[id] != null) {
+      const rc = state.rivalCitadels[id];
+      const lv = Math.max(0, (rc && rc.lv) | 0);
+      return { kind: 'rival', lv, max: CMAX, owner: rivalOf(id) || 'a rival',
+        mult: lv ? CITADEL_MULT * lv : 0, def: lv ? Math.round((citadelDefenseMult(lv) - 1) * 100) : 0, natural: !!t.citadel };
+    }
+    if (t.citadel) return { kind: 'natural', owned: false, lv: 0, max: CMAX, mult: GX.CITADEL_RATE_MULT || 1000, def: 0, natural: true };
+    return null;
+  }
+
+  // Every system you hold, richest first — backs the My Systems pill in My
+  // Galaxy. Revenue is per-hour in the same units resourceRates() reports.
+  function ownedSystemList() {
+    const out = [];
+    Object.keys(state.ownedSystems || {}).forEach((id) => {
+      if (!isOwned(id)) return;                     // drops stale local flags
+      const t = sysAt(id); if (!t) return;
+      const lv = citadelLevel(id);
+      const natural = !!t.citadel;
+      let rate = 0, res = t.resource || 'fuel', pays = null;
+      if (t.void) {
+        const vr = t.rate * 25;
+        rate = vr; res = 'all';
+        pays = { fuel: vr, iron: vr, plasma: vr, gold: vr * 1000 };
+      } else {
+        rate = t.rate * (t.deep ? GX.DEEP_MULT.resource : 1) * (lv ? CITADEL_MULT * lv : 1) * 25;
+        pays = { [res]: rate };
+      }
+      out.push({
+        id, name: t.name || id, ring: t.ring | 0, level: t.level | 0,
+        home: !!t.home, deep: !!t.deep, voidTile: !!t.void, xen: !!t.xen,
+        citadelLv: lv, naturalCitadel: natural,
+        resource: res, rate: Math.round(rate), pays,
+        active: state.currentSystem === id,
+        cooldown: tileCooldownLeft(id),
+      });
+    });
+    out.sort((a, b) => (b.voidTile - a.voidTile) || (b.rate - a.rate));
+    return out;
+  }
+
   // ABANDON — walk away from a tile you own: ownership, its citadel and its
   // production all release; the tile goes neutral (server claim released too).
   function abandonTile(id) {
@@ -5886,8 +5970,9 @@
     emberRate: () => EMB_RATE, emberCaps: () => EMB_CAP,
     xpFleetInfo,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
-    citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
+    citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip, citadelRankOf,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
+    ownedSystemList,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,
     getStats: () => rt.stats, getDps: () => rt.dps, score, freeze, adoptSave,

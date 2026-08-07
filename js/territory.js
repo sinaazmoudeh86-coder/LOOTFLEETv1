@@ -47,16 +47,37 @@
   }
 
   // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil, citadel, fleetScore, defense } }
+  // PAGED. PostgREST caps every select at 1000 rows and says nothing about it.
+  // Once `territory` outgrew 1000 rows each client received a DIFFERENT partial
+  // map: tiles past the cap read as unowned, so two players could both hold the
+  // same system, each seeing themselves as the owner ("I can attack it but it
+  // says I'm defending it"). Never select this table without a range walk.
   async function loadAll() {
     const cl = client(); if (!cl) return {};
-    const toMap = (data) => { const map = {}; (data || []).forEach((r) => { map[r.tile_id] = { ownerId: r.owner_id, ownerName: r.owner_name, cooldownUntil: r.cooldown_until, citadel: !!r.citadel, fleetScore: r.fleet_score || 0, defense: r.defense || null }; }); return map; };
-    try {
-      let { data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score,defense');
-      if (error) { ({ data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score')); }
-      if (error) { ({ data, error } = await cl.from('territory').select('tile_id,owner_id,owner_name,cooldown_until')); }
-      if (error || !data) return {};
-      return toMap(data);
-    } catch (e) { return {}; }
+    const PAGE = 1000;
+    const cols = [
+      'tile_id,owner_id,owner_name,cooldown_until,citadel,citadel_lv,fleet_score,defense',
+      'tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score,defense',
+      'tile_id,owner_id,owner_name,cooldown_until,citadel,fleet_score',
+      'tile_id,owner_id,owner_name,cooldown_until',
+    ];
+    for (const sel of cols) {
+      const map = {};
+      let ok = true;
+      try {
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await cl.from('territory').select(sel)
+            .order('tile_id', { ascending: true }).range(from, from + PAGE - 1);
+          if (error) { ok = false; break; }
+          (data || []).forEach((r) => {
+            map[r.tile_id] = { ownerId: r.owner_id, ownerName: r.owner_name, cooldownUntil: r.cooldown_until, citadel: !!r.citadel, citadelLv: r.citadel_lv | 0, fleetScore: r.fleet_score || 0, defense: r.defense || null };
+          });
+          if (!data || data.length < PAGE) break;
+        }
+      } catch (e) { ok = false; }
+      if (ok) return map;   // this column set worked — older schemas fall through
+    }
+    return {};
   }
 
   // Claim/contest a tile through the server-authoritative RPC. Atomic: when
@@ -112,6 +133,7 @@
             ownerName: payload.new ? payload.new.owner_name : null,
             cooldownUntil: payload.new ? payload.new.cooldown_until : null,
             citadel: payload.new ? !!payload.new.citadel : false,
+            citadelLv: payload.new ? (payload.new.citadel_lv | 0) : 0,
             fleetScore: payload.new ? (payload.new.fleet_score || 0) : 0,
             defense: payload.new ? (payload.new.defense || null) : null,
             deleted: !payload.new,

@@ -1490,16 +1490,103 @@
       </div>
       <div class="gx-hud" id="gx-ringlab"></div>
     </div>`;
-    html += `<div class="gx-legend"><span class="gxl gxl-cit ${(G.atTileCap && G.atTileCap()) ? 'gxl-full' : ''}" style="font-weight:800">◈ ${(G.tileCount ? G.tileCount() : 0)}/${(G.tileCap ? G.tileCap() : 50)} Systems${(G.atTileCap && G.atTileCap()) ? ' · FULL' : ''}</span><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl"><i style="background:#7a2ac4"></i>◈ Kaevith</span><span class="gxl"><i style="background:#ffbe6e"></i>⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
+    html += `<div class="gx-legend"><button class="gxl gxl-cit gxl-btn ${(G.atTileCap && G.atTileCap()) ? 'gxl-full' : ''}" id="gx-mysys" style="font-weight:800"><span class="gxl-glow"></span>◈ <b>${(G.tileCount ? G.tileCount() : 0)}</b>/${(G.tileCap ? G.tileCap() : 50)} Systems${(G.atTileCap && G.atTileCap()) ? '<em class="gxl-warn">FULL</em>' : ''}<em class="gxl-cta">MANAGE <i>›</i></em></button><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl"><i style="background:#7a2ac4"></i>◈ Kaevith</span><span class="gxl"><i style="background:#ffbe6e"></i>⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
     const xb = document.getElementById('xen-open');
     if (xb) xb.addEventListener('click', () => openXenBriefing());
+    const msb = document.getElementById('gx-mysys');
+    if (msb) msb.addEventListener('click', () => openMySystems());
     bindGalaxyMap();
     drawGalaxyMap();
     clearInterval(_galaxyTimer);
     _galaxyTimer = setInterval(() => { if (screen === 'galaxy') drawGalaxyMap(); else clearInterval(_galaxyTimer); }, 1000);
     maybeAnnounceXen();
   }
+  // ==========================================================================
+  // MY SYSTEMS — every hold you own: revenue, citadel rank, one-tap abandon.
+  // Opened from the ◈ N/M Systems pill on the My Galaxy legend.
+  // ==========================================================================
+  const MS_RES = { gold: ['$', '#e6b566'], fuel: ['⬢', '#5fd1ff'], iron: ['◆', '#c3cede'], plasma: ['✦', '#b57bff'] };
+  function mySystemsHtml() {
+    const list = (G.ownedSystemList ? G.ownedSystemList() : []);
+    const cap = G.tileCap ? G.tileCap() : 50;
+    const cits = list.filter((s) => s.citadelLv > 0 || s.naturalCitadel).length;
+    const tot = {};
+    list.forEach((s) => { for (const k in s.pays) tot[k] = (tot[k] || 0) + s.pays[k]; });
+    const totTxt = Object.keys(MS_RES).filter((k) => tot[k] > 0)
+      .map((k) => `<span style="color:${MS_RES[k][1]}">${MS_RES[k][0]} ${G.formatNum(Math.round(tot[k]))}</span>`).join('') || '<span class="ms-none">nothing yet</span>';
+
+    let h = `<div class="ms-top"><div class="ms-top-l"><b>${list.length}</b><span>/ ${cap} systems</span></div>`
+      + `<div class="ms-top-l"><b style="color:#ffd24d">${cits}</b><span>citadels</span></div></div>`
+      + `<div class="ms-tot"><span class="ms-tot-h">TOTAL PER HOUR</span><div class="ms-tot-v">${totTxt}</div></div>`;
+
+    if (!list.length) {
+      return h + '<div class="ms-empty">You hold nothing yet.<span>Claim a system in <b>My Galaxy</b> and it starts producing immediately — online or off.</span></div>';
+    }
+    h += '<div class="ms-list">' + list.map((s) => {
+      const pay = Object.keys(s.pays).filter((k) => MS_RES[k] && s.pays[k] > 0)
+        .map((k) => `<span class="ms-c" style="--pc:${MS_RES[k][1]}">${MS_RES[k][0]} ${G.formatNum(Math.round(s.pays[k]))}</span>`).join('');
+      const tags = [];
+      if (s.home) tags.push('<em class="ms-tag home">HOME</em>');
+      if (s.voidTile) tags.push('<em class="ms-tag void">VOID</em>');
+      if (s.xen) tags.push('<em class="ms-tag xen">KAEVITH</em>');
+      if (s.deep) tags.push('<em class="ms-tag deep">DEEP</em>');
+      if (s.active) tags.push('<em class="ms-tag on">HERE</em>');
+      const cit = s.citadelLv > 0
+        ? `<span class="ms-cit">⛓ Rank ${s.citadelLv}</span>`
+        : s.naturalCitadel ? '<span class="ms-cit nat">⛴ Citadel</span>' : '<span class="ms-cit none">No citadel</span>';
+      return `<div class="ms-row">
+        <div class="ms-n">${s.name}</div>
+        ${s.home ? '<span class="ms-x lock">—</span>' : `<button class="ms-x" data-ms-ab="${s.id}" aria-label="Abandon ${s.name}">✕</button>`}
+        <div class="ms-s"><span>Ring ${s.ring}</span><span>Lv ${s.level}</span>${cit}${tags.join('')}</div>
+        <div class="ms-pay">${pay}<span class="ms-per">/hr</span></div>
+      </div>`;
+    }).join('') + '</div>'
+      + '<div class="ms-note">Abandoning releases the system, its citadel and all of its production. It goes neutral immediately and anyone can take it.</div>';
+    return h;
+  }
+  function openMySystems() {
+    const sheet = showSheet('<div class="sheet-head">◈ MY SYSTEMS</div><div class="sheet-body ms-sheet" id="ms-body">'
+      + mySystemsHtml()
+      + '<div class="sheet-actions"><button class="btn" data-x>Close</button></div></div>');
+    const rewire = () => {
+      sheet.querySelectorAll('[data-ms-ab]').forEach((b) => b.addEventListener('click', () => {
+        const id = b.getAttribute('data-ms-ab');
+        const row = (G.ownedSystemList ? G.ownedSystemList() : []).find((s) => s.id === id);
+        confirmAbandon(id, row ? row.name : id, () => {
+          const body = document.getElementById('ms-body');
+          if (!body) return;
+          body.innerHTML = mySystemsHtml() + '<div class="sheet-actions"><button class="btn" data-x>Close</button></div>';
+          body.querySelector('[data-x]').addEventListener('click', closeSheet);
+          rewire();
+        });
+      }));
+    };
+    rewire();
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+  }
+  // Abandon confirmation — destructive, so it always asks first.
+  function confirmAbandon(id, name, after) {
+    const c = showSheet(`<div class="sheet-head" style="color:var(--bad)">✕ ABANDON SYSTEM</div><div class="sheet-body">
+      <p>Release <b>${name || id}</b>?</p>
+      <p style="font-size:12px">Its citadel and all of its hourly production are lost. The system goes <b>neutral immediately</b> — any pilot can claim it, and taking it back means fighting for it again.</p>
+      <div class="sheet-actions"><button class="btn" data-no>Keep it</button><button class="btn danger" data-yes>Abandon</button></div></div>`);
+    c.querySelector('[data-no]').addEventListener('click', () => { closeSheet(); if (after) setTimeout(() => openMySystems(), 60); });
+    c.querySelector('[data-yes]').addEventListener('click', () => {
+      const r = G.abandonTile ? G.abandonTile(id) : { ok: false };
+      closeSheet();
+      if (r && r.ok) {
+        toast('✕ ' + (name || id) + ' released', '#8fa3bd');
+        refreshAll();
+        if (screen === 'galaxy') renderGalaxy();
+        setTimeout(() => openMySystems(), 80);
+      } else {
+        toast(r && r.reason === 'home' ? 'Your home citadel can never be abandoned' : 'Could not release that system', '#e23b4e');
+        setTimeout(() => openMySystems(), 80);
+      }
+    });
+  }
+
   function bindGalaxyMap() {
     const cv = document.getElementById('gx-canvas'); if (!cv) return;
     _gxCv = cv; _gxBake = null;   // fresh render = fresh bake (data may have changed)
@@ -1544,6 +1631,30 @@
     }));
   }
   function zoomGalaxy(f) { gxCam.z = Math.max(0.16, Math.min(2.6, gxCam.z * f)); drawGalaxyMap(); }
+  // ◎ FOCUS A TILE — called from a mail war report. Opens My Galaxy, glides the
+  // camera onto the hex, pings it, then opens its panel so the next tap is the
+  // action (attack / deploy) rather than a hunt across 1,900 tiles.
+  let _gxPing = null;
+  function focusGalaxyTile(id, opts) {
+    if (!id) return;
+    opts = opts || {};
+    const c = GM.parseId ? GM.parseId(id) : (() => { const p = String(id).split(','); return { q: +p[0], r: +p[1] }; })();
+    if (!c || !isFinite(c.q) || !isFinite(c.r)) {   // VOID / CC ids have no hex coords
+      showScreen('galaxy');
+      if (window.VOIDZ && /^VZ/.test(String(id))) { setTimeout(() => showScreen('voidzone'), 120); return; }
+      setTimeout(() => openTileAction(id), 160);
+      return;
+    }
+    const p = GM.pixel(c.q, c.r, GX_HEX);
+    showScreen('galaxy');
+    setTimeout(() => {
+      gxCam.x = p.x; gxCam.y = p.y;
+      gxCam.z = Math.max(gxCam.z, 1.15);
+      _gxPing = { id, until: Date.now() + 2600 };
+      drawGalaxyMap(true);
+      if (opts.open !== false) setTimeout(() => openTileAction(id), 240);
+    }, 90);
+  }
   // PERF (Jul 2026): panning repainted ~1,900 hexes + glows on every pointermove
   // — molasses on iPad. The world now bakes into an offscreen canvas with a
   // 220px margin; panning is ONE blit. Rebake on zoom/data/margin-exit, and at
@@ -1572,6 +1683,29 @@
     ctx.clearRect(0, 0, cv._w, cv._h);
     const ox = (b.cx - gxCam.x) * gxCam.z - M, oy = (b.cy - gxCam.y) * gxCam.z - M;
     ctx.drawImage(b.cv, 0, 0, b.cv.width, b.cv.height, ox, oy, b._w, b._h);
+    // ◎ TILE PING — an expanding ring over a tile we were sent to from mail.
+    // Composited over the bake (never into it) so it costs no re-bake, and it
+    // self-animates for its lifetime instead of waiting on the 1s idle redraw.
+    if (_gxPing) {
+      const left = _gxPing.until - Date.now();
+      if (left <= 0) { _gxPing = null; }
+      else {
+        const c = GM.parseId(_gxPing.id);
+        if (c) {
+          const p = GM.pixel(c.q, c.r, GX_HEX);
+          const sx = cv._w / 2 + (p.x - gxCam.x) * gxCam.z, sy = cv._h / 2 + (p.y - gxCam.y) * gxCam.z;
+          const cycle = (2600 - left) % 900 / 900;
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,210,77,' + (0.95 * (1 - cycle)).toFixed(3) + ')';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(sx, sy, (GX_HEX * 0.9 + cycle * GX_HEX * 2.2) * gxCam.z, 0, Math.PI * 2); ctx.stroke();
+          ctx.strokeStyle = 'rgba(255,210,77,.9)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(sx, sy, GX_HEX * 0.86 * gxCam.z, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
+        if (!_gxRaf) _gxRaf = requestAnimationFrame(() => { _gxRaf = 0; drawGalaxyMap(); });
+      }
+    }
   }
   function gxPaintWorld(cv) {
     const ctx = cv.getContext('2d');
@@ -1953,7 +2087,32 @@
         '<button class="btn gold" data-build-cit="' + id + '" ' + (can && af ? '' : 'disabled') + ' style="width:100%">Build Citadel</button>' +
       '</div>';
     }
+    // —— CITADEL RANK BANNER —— the loudest thing in the sheet. A fortress and
+    // its RANK change every number below it (output ×10/rank, defence +25%/rank,
+    // 100× warp cost), and the rank used to appear nowhere at all on a rival's
+    // tile. Big numeral, five pips, one line on what the rank buys.
+    const cr = t.cit;
+    let citHero = '';
+    if (cr) {
+      const known = cr.lv > 0;
+      const kindTxt = cr.kind === 'mine' ? 'YOUR CITADEL' : cr.kind === 'rival' ? 'ENEMY CITADEL' : cr.owned ? 'NATURAL CITADEL · YOURS' : 'UNCLAIMED FORTRESS';
+      const pips = Array.from({ length: cr.max }, (_, i) =>
+        `<i class="${known && i < cr.lv ? 'on' : ''}"></i>`).join('');
+      const meta = cr.kind === 'natural'
+        ? `Pays <b>×${G.formatNum(cr.mult)}</b> a resource field · fortress included with the tile`
+        : known
+          ? `Output <b>×${cr.mult}</b> · defence <b>+${cr.def}%</b>${cr.kind === 'rival' ? ' for ' + cr.owner : ''}`
+          : `Rank unknown — <b>${cr.owner || 'the holder'}</b> has not reported it. Expect Rank 1–${cr.max}.`;
+      citHero = `<div class="cit-hero ${cr.kind}">
+        <div class="ch-badge"><span class="ch-ic">⛓</span><span class="ch-lv">${known ? cr.lv : '?'}</span><span class="ch-of">/ ${cr.max}</span></div>
+        <div class="ch-m"><div class="ch-k">${kindTxt}</div>
+          <div class="ch-t">${known ? 'RANK ' + cr.lv : 'RANK UNKNOWN'}</div>
+          <div class="ch-pips">${pips}</div>
+          <div class="ch-s">${meta}</div></div>
+      </div>`;
+    }
     const sheet = showSheet(`<div class="sheet-head">${t.rival ? 'Contest' : t.owned ? 'Your Tile' : 'Claim'} · ${t.name}</div><div class="sheet-body">
+      ${citHero}
       <div class="tile-brief">
         <div class="tb-cell cost${!ecAfford ? ' bad' : ''}"><div class="tb-k">WARP COST</div><div class="tb-v">${ecBrief}</div></div>
         <div class="tb-cell${t.deep ? ' warn' : ''}"><div class="tb-k">GARRISON</div><div class="tb-v">Zone Lv ${t.diff}</div></div>
@@ -3967,5 +4126,5 @@
     return v + s;
   }
 
-  window.UI = { openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
+  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
 })();

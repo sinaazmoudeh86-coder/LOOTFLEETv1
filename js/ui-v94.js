@@ -972,18 +972,16 @@
         if (cta) cta.addEventListener('click', openProSheet);
       }
     }
-    // XP buff — the combined, CAPPED figure from the one source of truth
-    // (GAME.xpFleetInfo), shown right on the power line so the buff is visible
-    // without scrolling to the stat pills.
+    // XP rate — from the one source of truth (GAME.xpFleetInfo): base 100%
+    // (200% on Pro) + every bonus as a flat % of base, summed then multiplied.
+    // Shown as the TOTAL rate (100% = normal). No cap.
     {
       const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
       const xpChip = xi
-        ? ' <span class="hero-xp-chip' + (xi.capped ? ' capped' : '') + (xi.pct > 0 ? '' : ' zero') + '" title="' + (xi.capped
-            ? 'Fleet XP is capped at +' + xi.cap + '%. Your sources stack to +' + xi.rawPct.toLocaleString() + '%.'
-            : xi.pct > 0
-              ? 'Every XP source combined \u2014 Pro, VIP, Pilot Tree, ascension perks and Kaevith hulls. Ceiling +' + xi.cap + '%.'
-              : 'No XP sources active \u2014 Pro, VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls all raise this.')
-          + '">\u2726 XP +' + xi.pct + '%' + (xi.capped ? ' \u00b7 CAP' : '') + '</span>'
+        ? ' <span class="hero-xp-chip' + (xi.buffPct > 0 ? '' : ' zero') + '" title="' + (xi.buffPct > 0
+            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (doubled by Pro)' : '') + ' + ' + xi.buffPct + '% of base in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. No cap.'
+            : 'Base XP rate \u2014 no bonuses active. VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of base.')
+          + '">\u2726 XP ' + xi.pct + '%</span>'
         : '';
       el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>' + xpChip;
     }
@@ -3607,8 +3605,6 @@
     const lo = GM.XEN ? Math.round(GM.XEN.minChance * 100) : 1;
     const hi = GM.XEN ? Math.round(GM.XEN.maxChance * 100) : 10;
     const bonus = G.xenXpBonus ? G.xenXpBonus() : 0;
-    const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
-    const xpCap = xi ? xi.cap : 1000, xpRaw = xi ? xi.rawPct : 0, xpOver = !!(xi && xi.capped);
     const sheet = showSheet(`<div class="sheet-head">◈ THE KAEVITH INCURSION</div><div class="sheet-body xen-sheet">
       <div class="xen-hero">
         <div class="xh-tag">LIVE EVENT · MY GALAXY</div>
@@ -3619,13 +3615,12 @@
         <div class="xs-row"><span class="xs-n">1</span><div><b>The map is unchanged.</b> Zone ownership, citadels, shields and cooldowns all work exactly as before. The Kaevith hold no territory — they garrison it.</div></div>
         <div class="xs-row"><span class="xs-n">2</span><div><b>They hit harder.</b> Attack an invaded zone and every hostile flies a Kaevith hull: <b>+35% hull and +22% damage</b> over that ring's normal garrison, and the zone boss is a Kaevith command ship.</div></div>
         <div class="xs-row"><span class="xs-n">3</span><div><b>Clear it for a chance to earn their ship technology.</b> <b>${lo}%</b> on ring 1, rising to <b>${hi}%</b> at the rim — the deeper the zone, the better the odds <i>and</i> the bigger the hull. You're told the result at the end of every void-zone battle.</div></div>
-        <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>, and the five hulls stack to <b>+250%</b> on their own. Your fleet's XP bonus from <b>all</b> sources combined is capped at <b>+${xpCap}%</b>${xpOver ? ` — you are already <b>past it</b> at +${xpRaw.toLocaleString()}%, so more XP is wasted` : ''}.</div></div>
+        <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>, and the five hulls stack to <b>+250%</b> on their own. Every bonus is a flat % of your <b>base XP rate</b> — bonuses add together, then multiply the base. <b>No cap.</b></div></div>
       </div>
       <div class="lo-sect">The five hulls · entry → Dreadnaught</div>
       <div class="xen-note-rare">Two chassis are common. The <b>Glaive</b> and <b>Harbinger</b> are <b>5× rarer</b>, and the <b>Sovereign</b> is <b>10× rarer</b> again — scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>; deeper rings tilt them toward the top hulls.</div>
       <div class="xen-roster">${xenRoster(GM.RINGS || 25)}</div>
       <div class="xen-now"><span>Your resonance field right now</span><b>${bonus ? '+' + bonus + '% XP per kill' : 'none — no Kaevith hull in the fleet'}</b></div>
-      ${xpOver ? `<div class="xen-note-rare" style="border-color:rgba(242,178,75,.4);background:rgba(242,178,75,.07);color:#b9a98c">⚠ <b style="color:#ffcf7a">You are over the fleet XP cap.</b> Your sources stack to <b style="color:#ffcf7a">+${xpRaw.toLocaleString()}%</b> against a ceiling of <b style="color:#ffcf7a">+${xpCap}%</b> — the difference is doing nothing. Fly a Kaevith hull for its <b style="color:#ffcf7a">stats</b> rather than its XP, or swap one out for damage or loot at no cost.</div>` : ''}
       <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>◈ Hunt a void zone</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     sheet.querySelector('[data-ok]').addEventListener('click', closeSheet);

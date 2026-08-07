@@ -1251,7 +1251,10 @@
     injectCSS();
     setInterval(() => { if (document.hidden) return; try { updateHud(); } catch (e) {} }, 1000);
   }
-  window.HOMECIT = { render, updateHud, openHowTo, engineTick, engineRender, onDeath };
+  window.HOMECIT = { render, updateHud, openHowTo, engineTick, engineRender, onDeath,
+    // read-only hourly production for Empire Income (ship-panels.js)
+    totalRates: () => { try { const s = hc(); if (!s || (s.wave | 0) < 1) return null; return { rates: rates(s), wave: s.wave | 0, damaged: damaged(s) }; } catch (e) { return null; } },
+  };
 
   function injectCSS() {
     if ($('homecit-css')) return;

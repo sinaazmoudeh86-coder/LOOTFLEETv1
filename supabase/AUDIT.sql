@@ -16,8 +16,8 @@ with
 want_tables(item) as (values
   ('saves'),('save_conflicts'),('leaderboard'),('wallets'),('territory'),
   ('sdread_scores'),('sim_config'),('sim_pilots'),('purchases'),
-  ('alliances'),('alliance_members'),('alliance_chat'),
-  ('notify_prefs'),('rank_awards'),('war_events'),('sessions')
+  ('alliances'),('alliance_members'),('alliance_feed'),('alliance_requests'),
+  ('notify_prefs'),('rank_awards'),('war_events'),('active_sessions')
 ),
 t as (
   select 'TABLE' as area, w.item,

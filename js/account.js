@@ -81,7 +81,18 @@
     if (!s) return 0;
     let hull = 0; try { const sl = s.shipLevels || {}; for (const k in sl) hull += sl[k] || 0; } catch (e) {}
     let asc = 0; try { const a = s.ascension || {}; for (const sh in a) { const mods = a[sh]; for (const m in mods) { const md = mods[m] || {}; asc += (md.t | 0) * 250 + (md.s | 0) * 50 + Math.max(0, (md.l | 0) - 1) * 10; } } } catch (e) {}
-    return (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600
+    // PILOT ASCENSION STARS DOMINATE EVERYTHING ELSE (Aug 2026 — the "105 DDc
+    // gold came back after I ascended and relogged" bug). An ascension resets
+    // level to 1 and gold to 0, so a freshly-ascended save WEIGHS LESS than the
+    // pre-ascension copy on every other signal — and mergeSaves' progression
+    // -first rule then restored the old copy wholesale on the next login,
+    // handing back the gold and undoing the ascension. Stars are strictly
+    // monotonic (only ascending changes them), so one star must outrank any
+    // amount of gold, level or zone. Same term fixes the best-ever vault, which
+    // otherwise kept offering the pre-ascension save as the "heaviest" copy.
+    const stars = (s.pasc && (s.pasc.stars | 0)) || 0;
+    return stars * 5e6
+      + (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600
       + Math.log10(1 + Math.max(0, s.gold || 0)) * 7200
       + Math.max(s.highestDungeonReached | 0, s.highestUnlocked | 0) * 1800
       + hull * 900 + asc * 60;
@@ -285,7 +296,15 @@
     // comparable weight (within ×1.3), i.e. devices genuinely taking turns.
     const wl = saveWeight(local), wc = saveWeight(cloud);
     let base, other;
-    if (wl > wc * 1.3) { base = local; other = cloud; }
+    // ASCENSION STARS ARE THE TIEBREAK ABOVE ALL ELSE. They only ever increase,
+    // so the copy with more stars is unambiguously the later timeline — no
+    // weight or timestamp comparison may override it. Without this, the copy
+    // saved seconds BEFORE an ascension (rich, high level) beat the ascended
+    // one and the whole reset was rolled back on the next login.
+    const sl = (local.pasc && (local.pasc.stars | 0)) || 0;
+    const sc = (cloud.pasc && (cloud.pasc.stars | 0)) || 0;
+    if (sl !== sc) { base = sl > sc ? local : cloud; other = base === local ? cloud : local; }
+    else if (wl > wc * 1.3) { base = local; other = cloud; }
     else if (wc > wl * 1.3) { base = cloud; other = local; }
     else { base = (cloud.lastSave || 0) >= (local.lastSave || 0) ? cloud : local; other = base === cloud ? local : cloud; }
     base.proUntil = Math.max(base.proUntil || 0, other.proUntil || 0);
@@ -312,6 +331,12 @@
     }
     base.lifetimeMissions = Math.max(base.lifetimeMissions | 0, other.lifetimeMissions | 0);
     base.vipPts = Math.max(base.vipPts | 0, other.vipPts | 0);   // ⚜ VIP points never regress
+    // ASCENSION RECORD never regresses either — but ONLY the record, never the
+    // run it reset (gold, level, inventory stay with whichever copy is base).
+    if (other.pasc && base.pasc) {
+      base.pasc.stars = Math.max(base.pasc.stars | 0, other.pasc.stars | 0);
+      base.pasc.pts = Math.max(base.pasc.pts | 0, other.pasc.pts | 0);
+    } else if (other.pasc && !base.pasc) base.pasc = other.pasc;
     // lifetime tallies exist on both timelines — keep the larger of each
     base.totalKills = Math.max(base.totalKills || 0, other.totalKills || 0);
     base.playTime = Math.max(base.playTime || 0, other.playTime || 0);

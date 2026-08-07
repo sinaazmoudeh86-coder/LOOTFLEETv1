@@ -134,7 +134,15 @@
   }
 
   // ---- tree state ----------------------------------------------------------
-  function nodes() { const s = G() && G().state; return (s && s.pilot && s.pilot.nodes) || {}; }
+  function nodes() {
+    const s = G() && G().state; if (!s) return {};
+    // SELF-HEAL — pilot ascension (or a stale save) can leave state.pilot null;
+    // without the origin seed the tree canvas drew ZERO tiles until a relog.
+    if (!s.pilot) s.pilot = { nodes: { '0,0': 1 } };
+    if (!s.pilot.nodes) s.pilot.nodes = { '0,0': 1 };
+    if (!s.pilot.nodes['0,0']) s.pilot.nodes['0,0'] = 1;
+    return s.pilot.nodes;
+  }
   function isUnlocked(k) { return !!nodes()[k]; }
   function unlockedKeys() { return Object.keys(nodes()); }
   function neighbors(q, r) { return DIRS.map((d) => [q + d[0], r + d[1]]); }
@@ -809,6 +817,8 @@
     combatMods, mult, dmgVs, tick, render, onHuntCleared,
     // ui
     renderPilot, renderHunt, updateHud, deploy,
+    // cache control — game-v93 calls this after an ascension wipes the tree
+    refresh: () => { _aggDirty = true; },
     // helpers / debug
     pilotScore, canHunt, levelForTier, _dbg: { nodeDef, ensureAgg, unlock },
   };

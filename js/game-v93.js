@@ -161,6 +161,9 @@
     // their standing in it.
     'sdread', 'season', 'shipParts',
     'startWeek', 'name', 'sellTier', 'keepUpgrades', 'autoEquipAlways', 'auto', 'gameSpeed',
+    // LOOT FILTERS ARE SETTINGS, NOT PROGRESS — sell-on-pickup and the pickup
+    // floor used to silently reset to defaults on every ascension.
+    'autoSellTier', 'pickupFilter',
     'deathExplained', 'joystick', 'fs',
     // ONBOARDING IS A CAREER FACT, NOT RUN PROGRESS. An ascended pilot has
     // already been taught the game; wiping these replayed the whole tutorial
@@ -300,7 +303,11 @@
     state.fleet = null; state.drones = 0;   // wing disbanded — re-form it as slots unlock
     state.ascension = keepAsc;             // SHIP ASCENSION KEPT — module tiers & stars ride across
     state.forge = {};                      // Starforge hardpoint tempers reset
-    state.pilot = null;                    // PILOT TREE wiped — every node re-earned
+    // PILOT TREE wiped — every node re-earned. Seed the origin core NOW: leaving
+    // this null meant zero tiles rendered on the tree until the next full reload
+    // (boot is the only other place the seed was planted).
+    state.pilot = { nodes: { '0,0': 1 } };
+    if (window.DREAD && window.DREAD.refresh) { try { window.DREAD.refresh(); } catch (e) {} }   // drop the cached bonus aggregate — it still held pre-ascension node buffs
     state.dreadCores = 0;                  // ◇ CORES are run currency, not an entitlement: they
                                            // buy the Pilot Tree, so they reset with it
     state.beaconUntil = 0;
@@ -680,20 +687,20 @@
     const fraction = C.xpToNext(state.level) / XP_KILLS_PER_LEVEL * appropriate;
     return Math.max(flat, Math.floor(fraction));
   }
-  // ---- FLEET XP MULTIPLIER ---------------------------------------------------
-  // Every XP source in the game stacks MULTIPLICATIVELY, and there are seven of
-  // them. Left uncapped a full Kaevith fleet on Pro with maxed perks runs into
-  // five figures of bonus, which flattens the level curve into nothing.
-  //
-  // Aug 2026: ONE ceiling, +1000% (×11), applied to the COMBINED multiplier — not
-  // per source. Sources are collected here rather than multiplied inline so the
-  // UI can show the real breakdown and say plainly when the cap is clipping it.
-  const XP_FLEET_CAP_PCT = 1000;
+  // ---- FLEET XP RATE ----------------------------------------------------------
+  // Aug 2026 rework: XP bonuses no longer compound off each other. There is ONE
+  // base rate — 100%, or 200% on LootFleet Pro — and every bonus is a flat % OF
+  // THAT BASE. Bonuses ADD together, then scale the base:
+  //     total = base × (1 + Σ bonuses / 100)
+  // e.g. base 100% + VIP 2% + Neural Uplink 200% + Godshard 100% → 402% rate.
+  // On Pro the same bonuses pay double, because they multiply a 200% base.
+  // NO CAP: additive stacking grows linearly (a 7% Pilot Tree node adds exactly
+  // 7% of base), so the old runaway compounding is gone by construction.
   function xpSources() {
     const safe = (fn) => { try { const v = fn(); return isFinite(v) && v > 0 ? v : 1; } catch (e) { return 1; } };
     const out = [];
-    const add = (n, m) => { if (m > 1.0001) out.push({ n, m }); };
-    add('LootFleet Pro', isPro() ? 2 : 1);
+    // Each hook reports a multiplier (1 + pct/100); unwrap it to its flat %.
+    const add = (n, m) => { const pct = Math.round((m - 1) * 1000) / 10; if (pct > 0.01) out.push({ n, pct }); };
     add('VIP', safe(() => (window.VIP ? window.VIP.mult('xp') : 1)));
     add('Pilot Tree', safe(() => (window.DREAD && window.DREAD.mult ? window.DREAD.mult('xpGain') : 1)));
     add('Neural Uplink', safe(() => (window.PASCEND ? window.PASCEND.mult('xp') : 1)));
@@ -701,25 +708,19 @@
     add('Kaevith Resonance', safe(() => xenXpMult()));
     return out;
   }
-  // { pct, rawPct, cap, capped, mult, sources } — pct/mult are what actually
-  // applies; rawPct is what the sources add up to before the ceiling.
+  // { basePct, buffPct, pct, mult, sources, pro } — pct is the TOTAL rate
+  // (100 = normal, no bonuses). buffPct is the summed bonus % applied to base.
   function xpFleetInfo() {
     const src = xpSources();
-    const raw = src.reduce((a, s) => a * s.m, 1);
-    const capMult = 1 + XP_FLEET_CAP_PCT / 100;
-    const mult = Math.min(capMult, raw);
-    return {
-      sources: src,
-      rawPct: Math.round((raw - 1) * 100),
-      pct: Math.round((mult - 1) * 100),
-      cap: XP_FLEET_CAP_PCT,
-      capped: raw > capMult * 1.0001,
-      mult,
-    };
+    const pro = isPro();
+    const basePct = pro ? 200 : 100;
+    const buffPct = Math.round(src.reduce((a, s) => a + s.pct, 0) * 10) / 10;
+    const pct = Math.round(basePct * (1 + buffPct / 100) * 10) / 10;
+    return { sources: src, pro, basePct, buffPct, pct, mult: pct / 100 };
   }
   function gainXp(amount) {
     if (!isFinite(amount) || amount <= 0) return;   // a NaN here corrupts xp forever
-    amount *= xpFleetInfo().mult;   // all sources, combined, clamped to +1000%
+    amount *= xpFleetInfo().mult;   // base × (1 + summed bonuses)
     state.xp += amount;
     // LEVEL CAP — Lv 150, +50 per Ascension Star. At the cap XP is not banked at
     // all (no phantom bar that fills into nothing): the run is over, and the only
@@ -5471,27 +5472,17 @@
       Object.keys(state.equipped || {}).forEach((k) => repairItem(state.equipped[k]));
       (state.inventory || []).forEach(repairItem);
       Object.keys(state.fittings || {}).forEach((sk) => { const fit = state.fittings[sk]; if (fit) Object.keys(fit).forEach((k) => repairItem(fit[k])); });
-      // GOLD — unrecoverable by formula (it was floored to 0), but the local
-      // rescue snapshots still hold the pre-crush balance. Take the best.
-      let goldBack = 0;
-      if (state.goldRepairVer !== 1) {
-        try {
-          const u = window.ACCOUNT && window.ACCOUNT.uid ? window.ACCOUNT.uid() : null;
-          if (u) ['lf-best::', 'lf-backup::'].forEach((p) => {
-            const raw = localStorage.getItem(p + u); if (!raw) return;
-            const g = ((JSON.parse(raw) || {}).gold) || 0;
-            if (g > goldBack) goldBack = g;
-          });
-        } catch (e) {}
-        if (goldBack > (state.gold || 0)) { const d = goldBack - (state.gold || 0); state.gold = goldBack; goldBack = d; } else goldBack = 0;
-        state.goldRepairVer = 1;
-      }
-      if (fixedItems || goldBack) {
+      // GOLD RESCUE — REMOVED (Aug 2026). It read the lf-best/lf-backup local
+      // snapshots and "restored" the larger balance whenever goldRepairVer was
+      // unset. Pilot Ascension deliberately zeroes gold AND resets that stamp,
+      // so the next load handed every ascended pilot their entire pre-ascension
+      // hoard back (the "105 DDc after ascending" bug). The crush incident it
+      // patched is long migrated; nothing may resurrect gold from snapshots.
+      if (fixedItems) {
         refreshStats(); save();
         setTimeout(() => { try {
           window.UI && window.UI.unlockToast && window.UI.unlockToast(
-            '✔ Loadout restored — ' + (fixedItems ? fixedItems + ' crushed stat' + (fixedItems > 1 ? 's' : '') + ' rebuilt' : '') +
-            (fixedItems && goldBack ? ' · ' : '') + (goldBack ? formatNum(goldBack) + ' gold recovered' : ''));
+            '✔ Loadout restored — ' + fixedItems + ' crushed stat' + (fixedItems > 1 ? 's' : '') + ' rebuilt');
         } catch (e) {} }, 1800);
       }
     }
@@ -5893,7 +5884,7 @@
     isEmberZone, emberTierFor, emberChance, emberBeaconBonus, isEmberBossPending,
     emberKeys: () => EMB_KEYS.slice(), emberFound: () => state.embFound || 0, emberMinZone: () => EMB_MIN_ZONE,
     emberRate: () => EMB_RATE, emberCaps: () => EMB_CAP,
-    xpFleetInfo, xpFleetCap: () => XP_FLEET_CAP_PCT,
+    xpFleetInfo,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip,
     resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,

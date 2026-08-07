@@ -3,13 +3,29 @@
 Push the **contents of this folder** to the repo root Vercel serves.
 Supersedes v215. Service worker cache is `lootfleet-v478`.
 
-**Headline:** the XP-rate rework (additive bonuses, no cap), the post-ascension
-gold-dupe fix, the global layout clip guard, and a Discord feed that no longer
-spams — and now talks trash.
+**Headline:** the XP-rate rework (additive bonuses, no cap), the REAL fix for
+post-ascension gold coming back, the global layout clip guard, and a Discord
+feed that no longer spams — and now talks trash.
 
 ---
 
-## ⚠ THREE STAMPS MUST AGREE — verified for this folder. Re-check before every push.
+## ⚠ 0. THE FOLDER MUST MATCH THE SOURCE. Check this FIRST.
+
+The first v216 push shipped **v215 code stamped as build 478**: the folder was
+seeded by copying the previous release, and the copy overwrote the patched
+`js/` files. Every fix appeared live-but-broken. Before any push, confirm every
+file `game.html` references is identical to the project copy — not just that the
+build stamps agree.
+
+```bash
+# from the repo root, after copying the folder in
+grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
+# spot-check two fixes that only exist in v216:
+grep -c "GOLD RESCUE — REMOVED" js/game-v93.js   # must be 1
+grep -c "stars \* 5e6" js/account.js             # must be 1
+```
+
+## ⚠ THREE STAMPS MUST AGREE — verified for this folder.
 
 | Stamp | File | Build 478 |
 |---|---|---|
@@ -25,15 +41,26 @@ grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-
 
 ## Step 1 — redeploy the Discord Edge Function (REQUIRED — this is the spam fix)
 
-Supabase → **Edge Functions** → **discord-feed** → **Code** → paste
-**`supabase/functions/discord-feed/index.ts`** → **Deploy**.
+Supabase → **Edge Functions** → **discord-feed** → **Code** → select-all,
+delete, paste **`supabase/functions/discord-feed/index.ts`** → **Deploy**, and
+wait for the confirmation (navigating away cancels it).
 
-Why it is not optional this time: PostgREST silently caps every select at
-**1000 rows**. The feed's `feed_seen` cursor table outgrew that, so the tiles
-that fell off the truncated read were re-announced as brand new **every 2
-minutes, forever** — the "Wolfe claimed Solo α-3" wall. The new build pages all
-reads, dedupes + chunks + verifies the cursor write (a failed write now returns
-a red row in `net._http_response` instead of silently spamming).
+**Verify it actually deployed** — the running build now stamps its own version:
+
+```sql
+select status, content from net._http_response order by created desc limit 3;
+```
+
+Must show `{"ok":true,"ver":216,...}`. **No `ver` field means the old build is
+still running** — that is how the first attempt silently failed.
+
+Why it is not optional: PostgREST silently caps every select at **1000 rows**.
+The feed's `feed_seen` cursor table outgrew that, so tiles that fell off the
+truncated read were re-announced as brand new **every 2 minutes, forever** — the
+"Wolfe claimed Solo α-3" wall. Those were never fake players; they were echoes
+of real one-time claims. The new build pages all reads, and dedupes + chunks +
+verifies the cursor write (a failed write now returns a red row in
+`net._http_response` instead of silently spamming).
 
 Also in this build: the **trash-talk engine** — takeovers, repels, throne
 changes, spire seizures, land grabs and big bets open with a randomized quip
@@ -75,14 +102,31 @@ compounding into nonsense. New model in `gainXp`/`xpFleetInfo`:
   (100% = normal) with the per-source breakdown in the tooltip. All cap copy
   removed.
 
-### POST-ASCENSION "105 DDc GOLD" — cause found and deleted
+### POST-ASCENSION GOLD CAME BACK — the actual cause (cloud save merge)
 
-The old gold-crush *rescue migration* read the `lf-best`/`lf-backup` local
-snapshots and restored the larger balance whenever its `goldRepairVer` stamp
-was unset. Pilot Ascension zeroes gold AND resets that stamp — so the next load
-handed every ascended pilot their entire pre-ascension hoard back. The whole
-gold-recovery block is removed (the item-stat repair it shipped with remains).
-Nothing may resurrect gold from snapshots.
+Two separate paths could restore a pre-ascension balance. Both are closed.
+
+**1. The save merge (the dominant one).** `saveWeight()` in `account.js` ranks a
+save by gold, level, zone, kills and hull upgrades — but **not by Pilot
+Ascension stars**. An ascension resets level to 1 and gold to 0, so the
+freshly-ascended save weighs FAR less than the copy saved seconds earlier. On
+the next login `mergeSaves()` applied its progression-first rule, judged the
+pre-ascension cloud copy "more progressed", and restored it wholesale — gold,
+level, inventory, the lot. Exactly "105 DDc gold again after ascending and
+relogging", and it was silently rolling back whole ascensions too.
+
+Fixed at both levels: ascension stars are now a **dominant term in
+`saveWeight`** (5e6 per star, so one star outranks any amount of gold — this
+also stops the best-ever vault offering the pre-ascension save as "heaviest"),
+and `mergeSaves` now takes **more stars wins, unconditionally** as the first
+tiebreak, above weight and timestamps. Stars only ever increase, so the
+higher-star copy is unambiguously the later timeline. `pasc.stars`/`pts`
+themselves are also merged monotonically.
+
+**2. The old gold-crush rescue migration.** It read the `lf-best`/`lf-backup`
+local snapshots and restored the larger balance whenever its `goldRepairVer`
+stamp was unset — and ascension resets that stamp. Whole block removed (the
+item-stat repair it shipped with remains).
 
 ### PILOT TREE — no more relog to see the tiles
 

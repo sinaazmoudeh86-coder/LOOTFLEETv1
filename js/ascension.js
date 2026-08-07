@@ -454,9 +454,10 @@
   .asc-btn.row.alt{ color:#dfe9f5; background:color-mix(in srgb,var(--tc) 12%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 60%,transparent); box-shadow:none; }
   .asc-btn.row.alt .ab-n{ color:var(--tc); }
   .asc-btn.row .ab-cost em{ text-shadow:0 1px 2px rgba(0,0,0,.45); }
-  .asc-btn.row .ab-cost em.short{ opacity:.45; text-decoration:line-through; }
+  .asc-btn.row .ab-cost em.short{ color:#ff6b78 !important; font-weight:800; }
   .asc-btn:active{ transform:scale(.97); }
-  .asc-btn:disabled{ opacity:.38; cursor:default; }
+  .asc-btn.row:disabled{ opacity:1; cursor:default; color:#9db0c3; background:color-mix(in srgb,var(--tc) 8%,#0b1119); border:1px solid color-mix(in srgb,var(--tc) 35%,#223245); box-shadow:none; }
+  .asc-btn.row:disabled .ab-n{ color:var(--tc); opacity:.75; }
   .asc-fail-note{ margin-top:6px; text-align:center; font-size:8.5px; color:#66798d; letter-spacing:.04em; }
 
   /* overlay */

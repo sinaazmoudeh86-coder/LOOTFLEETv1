@@ -34,27 +34,23 @@
     const s = (G() || {}).state || {};
     const out = [];
 
-    // XP — the most stacked stat in the game and the least visible. Read the
-    // combined, CAPPED figure straight from GAME.xpFleetInfo() rather than
-    // re-multiplying the chain here: this pill used to compute its own product,
-    // which is how it drifted from what gainXp() actually applied. One source of
-    // truth, and when the +1000% fleet ceiling is clipping, say so.
+    // XP — read straight from GAME.xpFleetInfo(): ONE base rate (100%, or 200%
+    // on Pro), and every bonus is a flat % of that base — summed, then
+    // multiplied in. No cap. Shown as the TOTAL rate (100% = normal).
     // NOT safe(): its isNaN() guard coerces an OBJECT to NaN and throws the whole
     // result away — xpFleetInfo returns an object, so safe() returned null on
     // every account and the pill never rendered. Plain try/catch.
     let xi = null; try { xi = G().xpFleetInfo ? G().xpFleetInfo() : null; } catch (e) {}
-    // ALWAYS visible — even at +0%. Hiding the pill at zero read as a missing
-    // feature ("where is my exp bonus?"), and a zero is itself information: none
-    // of your XP sources are switched on.
+    // ALWAYS visible — even at base. Hiding the pill read as a missing feature,
+    // and the base rate is itself information: none of your bonuses are on.
     if (xi) {
+      const brk = (xi.sources || []).map((s) => s.n + ' +' + s.pct + '%').join(' · ');
       out.push({
-        ic: '✦', n: 'XP Gain', v: '+' + xi.pct + '%', c: xi.pct > 0 ? '#7ce0a0' : '#8fa3bd',
-        capped: xi.capped, rawPct: xi.rawPct, cap: xi.cap,
-        tip: xi.capped
-          ? 'Fleet XP is capped at +' + xi.cap + '%. Your sources stack to +' + xi.rawPct.toLocaleString() + '%, so ' + (xi.rawPct - xi.cap).toLocaleString() + '% is going to waste — swapping an XP source for damage or loot costs you nothing right now.'
-          : xi.pct > 0
-            ? 'Every XP source combined. The fleet ceiling is +' + xi.cap + '%.'
-            : 'No XP sources active. Pro (2×), VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls all raise this — ceiling +' + xi.cap + '%.',
+        ic: '✦', n: 'XP Rate', v: xi.pct + '%', c: xi.buffPct > 0 ? '#7ce0a0' : '#8fa3bd',
+        tip: 'Base ' + xi.basePct + '%' + (xi.pro ? ' (doubled by LootFleet Pro)' : '')
+          + (xi.buffPct > 0
+            ? ' + bonuses ' + xi.buffPct + '% of base (' + brk + '). Bonuses add together, then multiply the base — no cap.'
+            : '. No bonuses active — VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of this base.'),
       });
     }
 
@@ -106,18 +102,9 @@
     const b = bonuses();
     if (!b.length) return '';
     return '<div class="sp-pills">' + b.map((x) =>
-      '<span class="sp-pill' + (x.capped ? ' capped' : '') + '" style="--c:' + x.c + '"'
+      '<span class="sp-pill" style="--c:' + x.c + '"'
       + (x.tip ? ' title="' + String(x.tip).replace(/"/g, '&quot;') + '"' : '') + '>'
-      + '<i>' + x.ic + '</i>' + x.n + '<b>' + x.v + '</b>'
-      + (x.capped ? '<em class="sp-cap">CAP</em>' : '') + '</span>').join('') + '</div>'
-      // Spell the cap out in full underneath — a `title` alone is invisible on a
-      // phone, and this is exactly the case where a player is losing value and
-      // has no way to know it.
-      + (b.some((x) => x.capped)
-        ? '<div class="sp-capnote">\u26a0 <b>Fleet XP is capped at +' + (b.find((x) => x.capped).cap) + '%.</b> '
-          + 'Your sources stack to <b>+' + b.find((x) => x.capped).rawPct.toLocaleString() + '%</b> \u2014 everything past the cap is wasted. '
-          + 'Trade an XP source for damage, gold or loot and you lose nothing.</div>'
-        : '');
+      + '<i>' + x.ic + '</i>' + x.n + '<b>' + x.v + '</b></span>').join('') + '</div>';
   }
 
   // ---- 2. INCOME ---------------------------------------------------------------
@@ -171,6 +158,16 @@
       const n = safe(() => ((G().state.moon || {}).moons || []).length, 0);
       src.push({ n: 'Moon Colony', sub: n + ' colon' + (n === 1 ? 'y' : 'ies') + ' · mines run offline', ic: '🌑', c: '#8fb0c8', r: moon });
     }
+
+    // HOME CITADEL — wave-defense infrastructure; produces hourly into its silo.
+    const hcit = safe(() => (window.HOMECIT && HOMECIT.totalRates ? HOMECIT.totalRates() : null), null);
+    if (hcit && hcit.rates && CUR.some((c) => (hcit.rates[c.k] || 0) > 0)) {
+      src.push({
+        n: 'Home Citadel',
+        sub: 'Wave ' + hcit.wave + ' defended · ' + (hcit.damaged ? '⚠ damaged — production paused' : 'stores at the citadel, collect there'),
+        ic: '🏰', c: '#ffd24d', r: hcit.rates,
+      });
+    }
     return src;
   }
 
@@ -201,8 +198,10 @@
   }
 
   // ---- mount -------------------------------------------------------------------
-  // Called from renderHero. Both blocks are rebuilt in place each time, so they
-  // can never accumulate duplicates across re-renders.
+  // Called from renderHero — which refreshAll() re-runs on every combat tick
+  // while the screen is open. Rebuilding identical innerHTML each tick made the
+  // whole block flicker during a zone grind, so both hosts now write ONLY when
+  // their rendered HTML actually changed.
   function mount() {
     try {
       const list = document.getElementById('stat-list');
@@ -215,12 +214,14 @@
         pills.id = 'sp-pills-host';
         list.parentNode.insertBefore(pills, list);
       }
-      pills.innerHTML = bonusHtml();
+      const ph = bonusHtml();
+      if (pills._lastHtml !== ph) { pills._lastHtml = ph; pills.innerHTML = ph; }
 
       let inc = document.getElementById('sp-inc-host');
-      if (!inc) { inc = document.createElement('div'); inc.id = 'sp-inc-host'; }
-      host.appendChild(inc);                 // always last in the scroll
-      inc.innerHTML = incomeHtml();
+      if (!inc) { inc = document.createElement('div'); inc.id = 'sp-inc-host'; host.appendChild(inc); }
+      else if (inc.parentNode !== host || inc.nextSibling) host.appendChild(inc);   // keep last in the scroll
+      const ih = incomeHtml();
+      if (inc._lastHtml !== ih) { inc._lastHtml = ih; inc.innerHTML = ih; }
     } catch (e) {}
   }
 
@@ -233,13 +234,6 @@
     font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11.5px;letter-spacing:.02em;color:#c3cede;white-space:nowrap}
   .sp-pill i{font-style:normal;color:var(--c);font-size:12px}
   .sp-pill b{color:var(--c);font-weight:800}
-  .sp-pill.capped{border-color:rgba(242,178,75,.6);background:rgba(242,178,75,.12)}
-  .sp-pill.capped b{color:#ffcf7a}
-  .sp-cap{font-style:normal;font-family:'Orbitron',sans-serif;font-size:8px;font-weight:900;letter-spacing:.1em;
-    color:#1c1004;background:linear-gradient(90deg,#ffd24d,#f2a93c);border-radius:5px;padding:2px 4px;margin-left:1px}
-  .sp-capnote{margin-top:7px;padding:8px 10px;border-radius:10px;border:1px solid rgba(242,178,75,.34);
-    background:rgba(242,178,75,.07);font-family:'Rajdhani',sans-serif;font-size:11.5px;line-height:1.5;color:#b9a98c;text-wrap:pretty}
-  .sp-capnote b{color:#ffcf7a;font-weight:800}
   #sp-inc-host{margin:14px 0 4px}
   .sp-inc{border:1px solid rgba(95,168,255,.3);border-radius:15px;overflow:hidden;
     background:linear-gradient(180deg,rgba(95,168,255,.09),rgba(95,168,255,.02))}

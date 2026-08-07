@@ -35,6 +35,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
+// Version marker — echoed in every response and the bootstrap message, so a
+// deploy is verifiable from the cron log:
+//   select content from net._http_response order by created desc limit 3;
+// must show {"ok":true,"ver":216,...}. If ver is missing, the old build runs.
+const FEED_VER = 216;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -80,6 +85,85 @@ const XEN_HULLS: Record<string, { name: string; cls: string; xp: number; tier: n
 };
 // A fifth of the galaxy is alien-held; mirrors XEN.share in js/galaxy.js.
 const XEN_SHARE = 0.20;
+
+// ---- 🎙️ TRASH-TALK ENGINE ---------------------------------------------------
+// Flavor lines + meme GIFs for the loud events. Picks are DETERMINISTIC (hashed
+// from the event's own ids) so a retried tick re-posts the identical joke
+// instead of flip-flopping. GIFs are plain public Giphy media URLs — swap or
+// extend the lists freely; if a URL ever dies Discord just renders the embed
+// without the image and the post still lands.
+const GIF = (id: string) => `https://media.giphy.com/media/${id}/giphy.gif`;
+const GIFS: Record<string, string[]> = {
+  owned:   ['15BuyagtKucHm', '3o7qDSOvfaCO9b3MlO', '4vQZcC96dTfG', 'd0NnEG1WnnXqg', 'DfbpTbQ9TvSX6', '93lNrr6jBuVK6a910g', 'KL7I5MXrcvezC', 'DWdNrMPdddZ19EfWFD', 'Yuve5SrNAtDp3lpNzr'].map(GIF),
+  victory: ['jbUspndg5yz8UfVs8R', 'K3RxMSrERT8iI', 'uTuLngvL9p0Xe', 'Gf3fU0qPtI6uk', 'rhaIsgMSRHaUg', 'l4pTmPgIgWEzf86zu'].map(GIF),
+  fine:    ['NTur7XlVDUdqM', 'QMHoU66sBXqqLqYvGO', 'l2QEgWxqxI2WJCXpC', 'tZyxxR4lUIRnTgIzl9', 'UKF08uKqWch0Y'].map(GIF),
+};
+function seedHash(s: string): number { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+const pickBy = <T>(seed: string, arr: T[]): T => arr[seedHash(seed) % arr.length];
+// 1 = a GIF on every loud event; raise to 2/3 if the channel wants fewer.
+const GIF_EVERY = 1;
+const gifFor = (kind: keyof typeof GIFS, seed: string) =>
+  GIFS[kind] && GIFS[kind].length && seedHash('gif:' + seed) % GIF_EVERY === 0 ? pickBy(seed, GIFS[kind]) : null;
+
+// {a} attacker · {d} defender · {s} system · {n} count
+const QUIPS: Record<string, string[]> = {
+  steal: [
+    "💀 {a} just OWNED {d} and yoinked {s}! 🏴‍☠️",
+    "🚨 BREAKING: {a} sent {d} home in an escape pod — {s} under new management 📉",
+    "🔥 {a} turned {d}'s defense into confetti. {s} secured 🎉",
+    "😬 {d} had ONE job. {a} took {s} anyway.",
+    "🧾 {a} just repossessed {s}. {d}'s deposit? Not coming back.",
+    "⚡ {a} speedran {d}'s garrison and walked off with {s} like it was free samples 🛒",
+    "🪦 RIP {d}'s hold on {s} — {a} didn't even slow down.",
+    "📦 {a} to {d}: 'I'll take THAT.' {s} boxed up and shipped 🚚",
+  ],
+  stealCit: [
+    "🏰💥 {a} just OWNED {d} and took the {s} citadel! GG go next 🫡",
+    "🏰 {a} kicked the gates in — {d}'s citadel at {s} flies a new flag now 🏳️",
+    "😱 {d}'s 'impenetrable' citadel at {s}? {a} walked in like they owned the place. They do now.",
+    "🔨 {a} vs {d}'s citadel at {s}: the citadel lost. Badly.",
+  ],
+  repel: [
+    "🧱 {d} said NOT TODAY — {a} bounced off {s} like a bird off a window 🐦💥",
+    "🛡️ {a} knocked on {s}. {d} answered. {a} left. 🚪",
+    "😤 {d} held {s} — {a} is in the replay booth wondering what happened 📼",
+    "🥊 {a} swung at {d}'s {s}… and hit nothing but shield. Swing and a miss ⚾",
+    "🍿 {a} spent 60 whole seconds at {s} and left with zero souvenirs — {d} holds.",
+  ],
+  throne: [
+    "👑 {a} just DETHRONED {d}. Awkward. 😬",
+    "👑 New king detected: {a}. {d} has been moved to 'former royalty' 📉",
+    "🪑 {a} pulled the chair out from under {d} — rank #1 has a new owner 👑",
+  ],
+  void: [
+    "🌌 {a} RIPPED {s} out of {d}'s hands — apex real estate, new landlord 🏦",
+    "🌌 {a} evicted {d} from {s}. No notice. No refund. 📜",
+  ],
+  voidClaim: [
+    "🌌 {a} planted a flag on {s} — free apex spire? Not anymore 🚩",
+  ],
+  top10: [
+    "📈 {a} elbowed into the top 10 — somebody down there is sweating 💦",
+    "🚀 {a} just crashed the top-10 party. Security was not consulted.",
+  ],
+  grab: [
+    "🚩 {a} is playing Monopoly with real star systems — {n} claimed in one sweep 🎲",
+    "🗺️ {a} woke up and chose expansion: {n} systems annexed before breakfast ☕",
+  ],
+  bigbetWin: [
+    "🎰 {a} bet the shipyard and WON. The house is crying 😭",
+    "🤑 {a} just made the casino personally uncomfortable.",
+  ],
+  bigbetLose: [
+    "🎰 {a} donated generously to the house. Very charitable 🫡",
+    "📉 {a} tested their luck. Luck said no. 💸",
+  ],
+};
+function quip(kind: string, seed: string, vars: Record<string, string | number>): string {
+  let t = pickBy(seed, QUIPS[kind] || ['']);
+  for (const k in vars) t = t.split('{' + k + '}').join(String(vars[k]));
+  return t;
+}
 
 // SITUATION REPORT cadence. The function itself runs every 2 minutes to diff
 // events; the report is a digest posted on its own 3-hour clock, gated by a
@@ -232,10 +316,10 @@ Deno.serve(async (req) => {
   const now = new Date().toISOString();
 
   const [lb, sd, al, seenRows] = await Promise.all([
-    db.from('leaderboard').select('user_id,name,power,level,zone,kills,asc_stars'),
+    selectAll(db, 'leaderboard', 'user_id,name,power,level,zone,kills,asc_stars', ['user_id']),
     db.from('sdread_scores').select('user_id,name,season,stage,total'),
     db.from('alliances').select('id,name,tag,boss_n,boss_hp,boss_max,xp'),
-    db.from('feed_seen').select('kind,ref,data'),
+    selectAll(db, 'feed_seen', 'kind,ref,data', ['kind', 'ref']),
   ]);
 
   // war_events arrives with war-events.sql; the feed runs fine without it.
@@ -244,10 +328,10 @@ Deno.serve(async (req) => {
   if (war.error) war = { data: [], error: null } as typeof war;
 
   // citadel_lv arrives with territory-citadel-lv.sql; fall back until it is run.
-  let terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,citadel_lv,cooldown_until');
+  let terr = await selectAll(db, 'territory', 'tile_id,owner_id,owner_name,citadel,citadel_lv,cooldown_until', ['tile_id']);
   let hasLv = !terr.error;
   if (terr.error) {
-    terr = await db.from('territory').select('tile_id,owner_id,owner_name,citadel,cooldown_until');
+    terr = await selectAll(db, 'territory', 'tile_id,owner_id,owner_name,citadel,cooldown_until', ['tile_id']);
     hasLv = false;
   }
 
@@ -332,7 +416,7 @@ Deno.serve(async (req) => {
           color: COLOR.top10,
           author: { name: '▲  TOP TEN' },
           title: `${p.name} broke into rank #${i + 1}`,
-          description: `-# ${fmt(cur.power)} power`,
+          description: quip('top10', 'top10:' + p.user_id, { a: '**' + p.name + '**' }) + `\n-# ${fmt(cur.power)} power`,
         },
       });
     }
@@ -376,6 +460,8 @@ Deno.serve(async (req) => {
       updated_at: now,
     });
     if (!bootstrap && was?.name && was.name !== leader.name) {
+      const tseed = 'throne:' + leader.name + ':' + was.name;
+      const tg = gifFor('victory', tseed);
       events.push({
         kind: 'throne',
         line: `**${leader.name}** took rank #1`,
@@ -383,7 +469,9 @@ Deno.serve(async (req) => {
           color: COLOR.throne,
           author: { name: '♛  THE THRONE' },
           title: `${leader.name} is now rank #1`,
-          description: `Passed **${was.name}**.\n\n**power** \`${fmt(Number(leader.power))}\`  ·  **zone** \`${leader.zone}\``,
+          description: quip('throne', tseed, { a: '**' + leader.name + '**', d: '**' + was.name + '**' }) +
+            `\n\n**power** \`${fmt(Number(leader.power))}\`  ·  **zone** \`${leader.zone}\``,
+          ...(tg ? { image: { url: tg } } : {}),
         },
       });
     }
@@ -478,6 +566,8 @@ Deno.serve(async (req) => {
       return;
     }
     const took = kind === 'taken';
+    const vseed = 'void:' + id + ':' + held + ':' + (from || '');
+    const vg = gifFor('victory', vseed);
     voidEvents.push({
       kind: 'void',
       line: `**${held}** ${took ? 'seized' : 'claimed'} ${v.name}`,
@@ -487,19 +577,21 @@ Deno.serve(async (req) => {
         title: `${crown ? '👑' : '⚔️'}  ${NAME} ${took ? 'HAS FALLEN' : 'IS TAKEN'}`,
         description:
           (took
-            ? `**${held}** tore the spire from **${from || 'its holder'}**.`
-            : `**${held}** broke the siege and planted a flag on virgin void.`) +
+            ? quip('void', vseed, { a: '**' + held + '**', d: '**' + (from || 'its holder') + '**', s: v.name })
+            : quip('voidClaim', vseed, { a: '**' + held + '**', s: v.name })) +
           `\n\n> 🌀 **Lv ${v.tier}**  ⚡ ${crown ? 'The apex hold beyond the rim' : 'Apex territory'}\n` +
           `> 💰 Pays **all four currencies**, every hour\n` +
           `> 🏰 Citadel included — no builds, no upgrades\n\n` +
           (crown
             ? '-# 🔥 Seven spires exist. This is the one that matters. — 24h shield now up.'
             : '-# 🛡️ 24h attack shield is up. Then it is open again.'),
+        ...(vg ? { image: { url: vg } } : {}),
       },
     });
   }
 
   for (const t of tiles) {
+    if (live.has(t.tile_id)) continue;   // duplicate row — one snapshot, one event
     live.add(t.tile_id);
     const was = seen.get(`tile:${t.tile_id}`);
     const lv = hasLv ? (Number(t.citadel_lv) || 0) : (t.citadel ? 1 : 0);
@@ -522,7 +614,7 @@ Deno.serve(async (req) => {
       if (!t.owner_id) continue;
       if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'claimed', held); continue; }
       tileEvents.push({
-        kind: 'claim', actor: held,
+        kind: 'claim', actor: held, sys,
         line: `**${held}** claimed ${sys}`,
         embed: {
           color: COLOR.claim,
@@ -540,6 +632,9 @@ Deno.serve(async (req) => {
       if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'taken', held, was.name); continue; }
       const razed = was.lv > 0 && cur.lv === 0;
       const foe = was.name || 'THE HOLDER';
+      const sseed = 'steal:' + t.tile_id + ':' + cur.owner + ':' + (was.owner || '');
+      const jab = quip(razed || was.lv > 0 || cur.lv > 0 ? 'stealCit' : 'steal', sseed, { a: '**' + held + '**', d: '**' + foe + '**', s: sys });
+      const sg = gifFor('owned', sseed);
       tileEvents.push({
         kind: 'steal', actor: held, sys,
         line: `**${held}** took ${sys} from **${foe}**`,
@@ -548,18 +643,19 @@ Deno.serve(async (req) => {
           author: { name: `\u2694\uFE0F  BATTLE FOR ${sys.toUpperCase()}` },
           title: `\u{1F3C6} ${card(held, foe, up(held) + ' TAKES IT')}`,
           description:
-            `\u{1F525} **${held}** broke the hold and planted their flag.\n\n` +
+            jab + '\n\n' +
             (razed
               ? '> \u{1F4A5} **Citadel razed** — nothing left standing.\n'
               : cur.lv > 0
                 ? `> \u{1F3F0} **Rank ${cur.lv} Citadel** taken intact — under a new flag.\n`
                 : `> \u{1F6F0}\uFE0F No fortress here — open ground, and it changed hands.\n`) +
             '-# \u{1F6E1}\uFE0F 24h shield now up.',
+          ...(sg ? { image: { url: sg } } : {}),
         },
       });
     } else if (!was.owner && cur.owner) {
       tileEvents.push({
-        kind: 'claim', actor: held,
+        kind: 'claim', actor: held, sys,
         line: `**${held}** claimed ${sys}`,
         embed: {
           color: COLOR.claim,
@@ -571,7 +667,7 @@ Deno.serve(async (req) => {
     } else if (was.owner && !cur.owner) {
       if (VOID[t.tile_id]) { voidEvent(t.tile_id, 'lost', held, was.name); continue; }
       tileEvents.push({
-        kind: 'lost', actor: was.name || 'someone',
+        kind: 'lost', actor: was.name || 'someone', sys,
         line: `${sys} went neutral`,
         embed: {
           color: COLOR.lost,
@@ -647,7 +743,7 @@ Deno.serve(async (req) => {
     if (bootstrap || misses !== 2 || !was.owner) continue;
     const sys = tileName(id);
     tileEvents.push({
-      kind: 'lost', actor: was.name || 'someone',
+      kind: 'lost', actor: was.name || 'someone', sys,
       line: `${sys} was released`,
       embed: {
         color: COLOR.lost,
@@ -680,7 +776,8 @@ Deno.serve(async (req) => {
         color: COLOR.steal,
         author: { name: '\u2691  LAND GRAB' },
         title: `${up(actor)} SWEPT ${rest.length} SYSTEMS`,
-        description: '-# ' + rest.slice(0, 5).map((e) => e.sys || '').filter(Boolean).join(' · ') +
+        description: quip('grab', 'grab:' + actor + ':' + rest.length, { a: '**' + actor + '**', n: rest.length }) +
+          '\n-# ' + rest.slice(0, 5).map((e) => e.sys || '').filter(Boolean).join(' · ') +
           (rest.length > 5 ? ` · +${rest.length - 5} more` : ''),
       },
     });
@@ -736,6 +833,7 @@ Deno.serve(async (req) => {
         const outcome = push
           ? `pushed — stake returned`
           : won ? `**won ${cu.g} ${fmt(net)}**` : `**lost ${cu.g} ${fmt(Math.abs(net))}**`;
+        const jab = push ? '' : quip(won ? 'bigbetWin' : 'bigbetLose', 'bet:' + id, { a: '**' + who + '**' });
         events.push({
           kind: 'bigbet', sys: '',
           line: `**${who}** staked ${cu.g} ${fmt(stake)} on ${m.game || 'the tables'} and ${push ? 'pushed' : won ? 'won' : 'lost'}`,
@@ -743,7 +841,7 @@ Deno.serve(async (req) => {
             color: tier === 'colossal' ? COLOR.whale : COLOR.bigbet,
             author: { name: tier === 'colossal' ? '🐋  WHALE AT THE TABLE' : tier === 'huge' ? '🎰  HIGH ROLLER' : '🎰  HIGH STAKES' },
             title: `${who} — ${m.game || 'the tables'}`,
-            description: `Staked **${cu.g} ${fmt(stake)}** ${cu.n} and ${outcome}.` +
+            description: (jab ? jab + '\n' : '') + `Staked **${cu.g} ${fmt(stake)}** ${cu.n} and ${outcome}.` +
               (won ? '' : push ? '' : `\n-# The house keeps it — **1%** goes to the three citadel holders at midnight UTC.`),
             fields: [
               { name: 'STAKE', value: `${cu.g} ${fmt(stake)}`, inline: true },
@@ -760,6 +858,8 @@ Deno.serve(async (req) => {
       const isVoid = !!VOID[w.tile_id || ''];
       const def = String(w.target_name || 'THE HOLDER');
       const atk = String(w.actor_name || 'AN ATTACKER');
+      const rseed = 'repel:' + id;
+      const rg = gifFor('fine', rseed);
       events.push({
         kind: 'repel', sys,
         line: `**${def}** repelled **${atk}**`,
@@ -768,12 +868,13 @@ Deno.serve(async (req) => {
           author: { name: `\u{1F6E1}\uFE0F  ${isVoid ? 'SIEGE OF' : 'BATTLE FOR'} ${sys.toUpperCase()}` },
           title: `\u{1F6E1}\uFE0F ${card(def, atk, up(def) + ' HOLDS')}`,
           description:
-            `\u23F1\uFE0F **${atk}** ran the clock out — 60 seconds, no breach.\n\n` +
+            quip('repel', rseed, { a: '**' + atk + '**', d: '**' + def + '**', s: sys }) + '\n\n' +
             (lv > 0
               ? `> \u{1F3F0} The **Rank ${lv} Citadel** never fell.\n`
               : '> \u2694\uFE0F The garrison outlasted them.\n') +
             (isVoid ? '> \u{1F300} An apex spire stays where it is.\n' : '') +
             '-# \u{1F6E1}\uFE0F Shielded against them for 15 minutes.',
+          ...(rg ? { image: { url: rg } } : {}),
         },
       });
     }
@@ -798,6 +899,8 @@ Deno.serve(async (req) => {
           : `# ◈ ALIEN SHIP TECHNOLOGY RECOVERED\n-# ${who} tore a Kaevith hull out of the void.`,
         embeds: [{
           color: apex ? COLOR.crown : COLOR.xen,
+          thumbnail: { url: 'https://lootfleet.com/ships/ship-' + String(m.ship || '') + '.png' },
+          ...(apex ? { image: { url: pickBy('hull:' + w.id, GIFS.victory) } } : {}),
           author: { name: apex ? '👑  KAEVITH V · GODSHARD' : `◈  KAEVITH ${['', 'I', 'II', 'III', 'IV', 'V'][h.tier]} · RECOVERED` },
           title: `${apex ? '👑' : '◈'}  ${up(who)}  ⚔  THE KAEVITH\u2003— ${h.name.toUpperCase()} EARNED`,
           description:
@@ -1035,16 +1138,16 @@ Deno.serve(async (req) => {
   // ---- publish ---------------------------------------------------------------
   if (bootstrap) {
     snap.push({ kind: '_meta', ref: 'bootstrap', data: { at: Date.now() }, updated_at: now });
-    await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
+    await saveSeen(db, snap);
     await post({
-      content: '## ⚡  FLEET DISPATCH IS LIVE\n-# Ascensions, rank changes, deep-zone breaks, Season Dread records and Armada kills will appear here as they happen.',
+      content: '## ⚡  FLEET DISPATCH IS LIVE\n-# v' + FEED_VER + ' · Ascensions, rank changes, deep-zone breaks, Season Dread records and Armada kills will appear here as they happen.',
     });
-    return json({ ok: true, bootstrap: true, tracked: snap.length });
+    return json({ ok: true, ver: FEED_VER, bootstrap: true, tracked: snap.length });
   }
 
   if (!events.length && !voidEvents.length) {
-    await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
-    return json({ ok: true, events: 0 });
+    await saveSeen(db, snap);
+    return json({ ok: true, ver: FEED_VER, events: 0 });
   }
 
   // Void spires get their own message with a full-width header, so they can
@@ -1064,8 +1167,8 @@ Deno.serve(async (req) => {
   }
 
   if (!events.length) {
-    await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
-    return json({ ok: true, events: voidEvents.length, void: voidEvents.length });
+    await saveSeen(db, snap);
+    return json({ ok: true, ver: FEED_VER, events: voidEvents.length, void: voidEvents.length });
   }
 
   events.sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
@@ -1079,10 +1182,44 @@ Deno.serve(async (req) => {
   }
 
   await post({ content, embeds: stamped, allowed_mentions: { parse: [] } });
-  await db.from('feed_seen').upsert(snap, { onConflict: 'kind,ref' });
+  await saveSeen(db, snap);
 
-  return json({ ok: true, events: events.length + voidEvents.length, posted: shown.length, void: voidEvents.length });
+  return json({ ok: true, ver: FEED_VER, events: events.length + voidEvents.length, posted: shown.length, void: voidEvents.length });
 });
+
+// PostgREST caps every select at 1000 rows, SILENTLY. That cap is how this feed
+// melted down: once feed_seen grew past 1000 rows, the cursor read came back
+// truncated, the tiles that fell off the page looked brand new every tick, and
+// the channel got the same "SYSTEM CLAIMED" cards every 2 minutes forever.
+// EVERY full-table read goes through this pager — ordered by PK so pages are
+// stable — and returns the complete table no matter how big it grows.
+async function selectAll(db: any, table: string, cols: string, orderCols: string[]) {
+  const PAGE = 1000;
+  const out: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = db.from(table).select(cols);
+    for (const c of orderCols) q = q.order(c, { ascending: true });
+    const { data, error } = await q.range(from, from + PAGE - 1);
+    if (error) return { data: out, error };
+    out.push(...(data ?? []));
+    if (!data || data.length < PAGE) return { data: out, error: null };
+  }
+}
+
+// The cursor write is the feed's memory — if it fails SILENTLY, every event
+// re-posts forever. Dedupe by (kind,ref) first (a duplicate pair aborts the
+// whole upsert statement in Postgres), chunk it (the snapshot is one row per
+// pilot + tile and grows without bound), and THROW on error so a failed write
+// shows up red in net._http_response instead of spamming the channel.
+async function saveSeen(db: any, snap: any[]) {
+  const byKey = new Map<string, any>();
+  for (const r of snap) byKey.set(`${r.kind}:${r.ref}`, r);
+  const rows = [...byKey.values()];
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await db.from('feed_seen').upsert(rows.slice(i, i + 500), { onConflict: 'kind,ref' });
+    if (error) throw new Error('feed_seen upsert: ' + error.message);
+  }
+}
 
 async function post(body: Record<string, unknown>) {
   const res = await fetch(WEBHOOK, {

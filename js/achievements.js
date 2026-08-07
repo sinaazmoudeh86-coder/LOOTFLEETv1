@@ -176,6 +176,15 @@
       '<div class="mh-s"><b>1,000 badges</b> across 15 career chains · 10 grades: <b>Bronze → Titan</b></div>' +
       '<div class="mh-s">The full ladder is a multi-year voyage — the Titan Sina waits at the end.</div>' +
       '</div><div class="mh-ring" style="--p:' + (claimedN / TOTAL * 360) + 'deg"><span>' + claimedN + '<i>/1000</i></span></div></div>';
+    // COLLECT ALL — one tap claims every earned badge across all 15 chains.
+    {
+      let allReady = 0, allLc = 0;
+      CHAINS.forEach((ch) => {
+        const c = Math.min(ch.n, a.claimed[ch.id] || 0), e = rankEarned(ch);
+        if (e > c) { allReady += e - c; for (let r = c + 1; r <= e; r++) allLc += GRADES[gradeIdx(ch, r)].lc; }
+      });
+      if (allReady) out += '<button class="msn-claimall" data-ach-all="1">✓ COLLECT ALL BADGES <i>' + allReady + '</i> · +' + fmt(allLc) + ' ◉</button>';
+    }
     out += sinaBanner();
     // badge shelf — the highest claimed badge of each chain
     const shelf = [];
@@ -205,6 +214,28 @@
     return out;
   }
   function bind(body) {
+    const claimAll = body.querySelector('[data-ach-all]');
+    if (claimAll) claimAll.addEventListener('click', () => {
+      const a = ensure(); const G = Gm();
+      let n = 0, lc = 0, top = null;
+      CHAINS.forEach((ch) => {
+        const c = Math.min(ch.n, a.claimed[ch.id] || 0), e = rankEarned(ch);
+        if (e <= c) return;
+        for (let r = c + 1; r <= e; r++) lc += GRADES[gradeIdx(ch, r)].lc;
+        n += e - c; a.claimed[ch.id] = e; top = gradeOf(ch, e);
+      });
+      if (!n) return;
+      if (G.addCredits) G.addCredits(lc); else G.state.credits = (G.state.credits || 0) + lc;
+      G.save();
+      const tl = document.getElementById('toast-layer');
+      if (tl) {
+        const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = (top && top.col) || '#7ce0a0';
+        t.innerHTML = '⬡ ' + n + ' BADGE' + (n > 1 ? 'S' : '') + ' CLAIMED<br><span style="font-size:13px">+' + fmt(lc) + ' ◉ LootCoins</span>';
+        tl.appendChild(t); setTimeout(() => t.remove(), 3400);
+      }
+      if (window.UI) window.UI.refreshAll();
+      if (window.MISSIONS) { window.MISSIONS.render(); window.MISSIONS.syncBadge(); }
+    });
     body.querySelectorAll('[data-ach]').forEach((b) => b.addEventListener('click', () => {
       const ch = CHAINS.find((c) => c.id === b.dataset.ach); if (!ch) return;
       const a = ensure(); const c = Math.min(ch.n, a.claimed[ch.id] || 0);

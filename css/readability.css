@@ -144,6 +144,94 @@
 .sts-callout{ font-size:11px !important; }
 .st-cd{ font-size:11px !important; }
 
+/* ===== AUG 2026 LEGIBILITY PASS — player-reported small text ===== */
+/* ---- moon colony (bigger throughout) ---- */
+.mn-title{ font-size:15px !important; }
+.mn-stats{ font-size:11.5px !important; }
+.mn-stats span i{ font-size:9px !important; }
+.mn-buff,.mn-perm{ font-size:12px !important; }
+.mn-c-rows{ font-size:15px !important; }
+.mn-c-btn{ font-size:12.5px !important; }
+.mn-c-full{ font-size:11.5px !important; }
+.mn-c-rate{ font-size:12px !important; }
+.mn-c-t{ font-size:11px !important; }
+.mn-sec-n{ font-size:13px !important; }
+.mn-sec-s{ font-size:11px !important; }
+.mn-slot{ font-size:11.5px !important; }
+.mn-b-n{ font-size:14px !important; }
+.mn-b-lv{ font-size:12.5px !important; }
+.mn-b-tier{ font-size:11px !important; }
+.mn-b-d{ font-size:13px !important; line-height:1.45 !important; }
+.mn-b-cost{ font-size:13px !important; }
+.mn-b-max{ font-size:12.5px !important; }
+.mn-b-off{ font-size:10.5px !important; }
+.mn-mtab{ font-size:11.5px !important; }
+.mn-raid{ font-size:11.5px !important; }
+.mn-dmgtag{ font-size:11px !important; }
+.mn-logbtn{ font-size:10px !important; }
+.mn-log-t{ font-size:10.5px !important; }
+.mn-log-r{ font-size:12px !important; }
+.mn-pick-m b{ font-size:13px !important; }
+.mn-pick-m i{ font-size:12px !important; }
+.mn-pick-m em{ font-size:12px !important; }
+.mn-sheet-t{ font-size:13px !important; }
+.mn-sheet-cat{ font-size:12px !important; }
+.mn-sheet-x{ font-size:13px !important; }
+.mn-start-t{ font-size:12.5px !important; }
+/* ---- skills (bigger throughout) ---- */
+.skill-top .pts{ font-size:16px !important; }
+.sk-tab .skt-name{ font-size:13.5px !important; }
+.sk-tab .skt-sub{ font-size:11.5px !important; }
+.sk-brief{ font-size:13px !important; line-height:1.5 !important; }
+.sk-tot-h{ font-size:10px !important; }
+.sk-tot-none{ font-size:12px !important; }
+.sk-chip{ font-size:12px !important; }
+.sk-chip b{ font-size:12.5px !important; }
+.skt-hn{ font-size:13.5px !important; }
+.skt-cost{ font-size:10.5px !important; }
+.skt-status{ font-size:10.5px !important; }
+.skt-ct{ font-size:11.5px !important; }
+.skt-locked{ font-size:12px !important; }
+.sk-more{ font-size:11.5px !important; }
+.skill-node .sn-name{ font-size:13.5px !important; }
+.sn-desc{ font-size:12.5px !important; line-height:1.45 !important; }
+.sn-now,.sn-next{ font-size:13px !important; }
+.sn-lab{ font-size:11.5px !important; }
+.sn-rk,.sn-per{ font-size:11px !important; }
+.skb-p{ font-size:12.5px !important; line-height:1.5 !important; }
+.skb-note{ font-size:11px !important; }
+/* ---- prism mining (miner desc/speed + zone/lv/today lines) ---- */
+.pm-hero-lab{ font-size:11px !important; }
+.pm-run-t{ font-size:14px !important; }
+.pm-run-s{ font-size:12.5px !important; }
+.pm-note{ font-size:12.5px !important; }
+.pm-lab{ font-size:11px !important; }
+.pm-lab-r{ font-size:11.5px !important; }
+.pm-mrow-n{ font-size:14.5px !important; }
+.pm-have{ font-size:12px !important; }
+.pm-mrow-d{ font-size:12.5px !important; line-height:1.45 !important; }
+.pm-field-n{ font-size:15px !important; }
+.pm-field-s{ font-size:12.5px !important; }
+.pm-lock{ font-size:12px !important; }
+.pm-core-d{ font-size:12.5px !important; }
+.pm-ref-n{ font-size:14px !important; }
+.pm-ref-lv{ font-size:11px !important; }
+.pm-ref-d{ font-size:12.5px !important; }
+.pm-ref-max{ font-size:12px !important; }
+/* ---- count badges (skill points · dread hunt · voidmaw · missions · bag ·
+   shipworks) — bigger digits, dead-centred in the circle ---- */
+.badge,#cmd-dread-badge,#cmd-sdread-badge,.sw-tab-badge,.msn-td{
+  min-width:19px !important; height:19px !important; padding:0 5px !important;
+  border-radius:10px !important; font-size:11.5px !important; font-weight:800 !important;
+  line-height:19px !important; text-align:center !important; box-sizing:border-box !important;
+}
+#cmd-dread-badge{ align-items:center !important; justify-content:center !important; line-height:1 !important; }
+/* ---- progress rings (mission boards · badges board) — count centred, bigger ---- */
+.mh-ring{ width:64px !important; height:64px !important; }
+.mh-ring::before{ inset:6px !important; }
+.mh-ring span{ display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; line-height:1 !important; font-size:17px !important; text-align:center !important; }
+.mh-ring span i{ font-size:10px !important; margin-top:2px !important; }
+
 /* ===== WALLET MINIMAL (Jul 2026) — top bar out of pills: glyph + value only,
    tabular numbers, no boxes. Beats fx-aaa's !important pill skin. ===== */
 .wallet{ gap:13px !important; }

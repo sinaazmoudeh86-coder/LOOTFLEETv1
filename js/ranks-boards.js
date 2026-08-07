@@ -169,8 +169,11 @@
     // and contested, so nobody holds hundreds of systems.
     const tiles = Math.min(60, Math.floor((career / 42) * (0.45 + r() * 1.1)));
     const citadels = tiles > 2 ? Math.floor(tiles * (0.1 + r() * 0.28)) : 0;
-    // hourly revenue scales with tiles, with citadels paying an order more
-    const rev = tiles ? Math.round((tiles * 1.8e4 + citadels * 3.1e5) * Math.pow(1.028, lv) * (0.7 + r() * 0.8)) : 0;
+    // hourly revenue on the same scale as the real metric (tileRevenue →
+    // resourceRates units): ~150-400 units per plain tile, citadels 10×, with a
+    // mild depth factor for long careers — NOT the old ×1.028^level exponential,
+    // which put veteran sims at 1e12/hr while real players sat at 1e4.
+    const rev = tiles ? Math.round((tiles * 9 + citadels * 80) * 25 * (1 + career / 350) * (0.7 + r() * 0.8)) : 0;
 
     // HANGAR — hulls unlock roughly every 12 levels, capped at the roster size.
     // SIM_HULL_CAP is derived from CONFIG.SHIPS rather than hardcoded: the literal
@@ -304,19 +307,18 @@
     return q;
   }
 
-  // Total hourly output of everything you hold. Mirrors the Galaxy screen's own
-  // sum so the two never disagree.
+  // Total hourly output of everything you hold. Delegates to the SAME function
+  // the Galaxy screen and Empire Income use (GAME.resourceRates), so the board
+  // can never disagree with them. The old inline copy multiplied citadels by
+  // 1000×lv (real: 10×lv) and skipped the ×25 galaxy yield, deep-space and Void
+  // handling — fortress players ranked on numbers ~100× their real income.
+  // Gold (Void spires pay it at 1000× resource scale) is normalised back to
+  // resource units so one spire doesn't swamp the whole figure.
   function tileRevenue() {
     try {
-      const g = G(), s = g.state, own = s.ownedSystems || {};
-      let total = 0;
-      for (const id in own) {
-        const t = g.sysAt ? g.sysAt(id) : null;
-        if (!t) continue;
-        const c = (s.citadels || {})[id];
-        total += (t.rate || 0) * (c ? (1000 * (c.lv || 1)) : 1);
-      }
-      return Math.round(total);
+      const g = G(), r = g.resourceRates ? g.resourceRates() : null;
+      if (!r) return 0;
+      return Math.round((r.fuel || 0) + (r.iron || 0) + (r.plasma || 0) + (r.gold || 0) / 1000);
     } catch (e) { return 0; }
   }
 

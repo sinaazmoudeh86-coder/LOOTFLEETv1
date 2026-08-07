@@ -144,10 +144,28 @@
     renderOverview(ov);
     setStatus('Live · ' + new Date().toLocaleTimeString());
 
-    // the rest load independently — a failure in one doesn't blank the others
-    rpc('admin_traffic', { p_pw: pw, p_days: 30 }).then(renderTraffic).catch(function () {});
-    rpc('admin_users', { p_pw: pw, p_limit: 200, p_offset: 0 }).then(renderUsers).catch(function () {});
-    rpc('admin_purchases', { p_pw: pw, p_limit: 100 }).then(renderPurchases).catch(function () {});
+    // The rest load independently — a failure in one doesn't blank the others.
+    // These used to swallow errors into an empty catch, so a broken RPC rendered
+    // as "No players yet." — indistinguishable from a genuinely empty table. The
+    // ambiguous-user_id fault in admin_users() sat hidden behind that for weeks.
+    rpc('admin_traffic',   { p_pw: pw, p_days: 30 }).then(renderTraffic).catch(panelFail(null, 0, 'traffic'));
+    rpc('admin_users',     { p_pw: pw, p_limit: 200, p_offset: 0 }).then(renderUsers).catch(panelFail('admUsersBody', 8, 'users'));
+    rpc('admin_purchases', { p_pw: pw, p_limit: 100 }).then(renderPurchases).catch(panelFail('admOrdersBody', 5, 'purchases'));
+  }
+
+  // Surface a failed panel in its own table body instead of leaving the empty
+  // state up. Returns a .catch handler.
+  function panelFail(bodyId, cols, label) {
+    return function (err) {
+      var msg = (err && (err.message || err.hint)) || 'request failed';
+      console.error('[ADMIN] ' + label + ':', err);
+      var el = bodyId ? $(bodyId) : null;
+      if (el) {
+        el.innerHTML = '<tr><td colspan="' + cols + '" class="adm-empty" style="color:var(--c-mythic)">'
+          + esc(label.toUpperCase()) + ' failed to load — ' + esc(msg) + '</td></tr>';
+      }
+      setStatus('Partial · ' + label + ' failed', true);
+    };
   }
 
   function setStatus(msg, isErr) {

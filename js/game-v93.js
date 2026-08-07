@@ -4071,7 +4071,12 @@
     if (isAllyTile(k)) return { ok: false, reason: 'ally' };   // same alliance — never attackable
     if (tile.home) return { ok: false, reason: 'home' };       // the Home Citadel is neutral
     const owned = isOwned(k);
-    if (tile.void && !owned && state.level < tile.vtier) return { ok: false, reason: 'locked' };   // VOID: strict gates, no +10 grace
+    // VOID: strict gates, no +10 grace — and the gate holds for tiles YOU OWN.
+    // Ascension keeps your territory but resets your level, so an owned Lv-300
+    // spire + a fresh Lv-5 pilot was a free high-level XP farm: warp in, kill
+    // one garrison hulk, jump levels. You keep the income; you fight it again
+    // only once you have re-earned the level.
+    if (tile.void && state.level < tile.vtier) return { ok: false, reason: 'locked', ownGate: owned };
     // EMPIRE AT CAPACITY — refuse the trip rather than let a pilot fight a siege
     // they can't be paid for. Entering a tile you already hold is always fine.
     if (!owned && atTileCap()) return { ok: false, reason: 'tilecap', cap: tileCap() };

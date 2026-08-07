@@ -3911,6 +3911,17 @@
         ${bs ? `<div class="en-live">Your beacon: <b>${bs.cd}s</b> recharge · <b>${bs.life}s</b> window · <b>×${bs.mult}</b> swarm</div>` : ''}
         ${eb.capped ? '<div class="en-cap">⚠ One or more bonuses are at their ceiling — the extra is doing nothing.</div>' : ''}
       </div>` : '<div class="emb-now empty">No Choir hull in your fleet — your beacon is running on the Defense tree and ascension perks alone.</div>'}
+      <div class="lo-sect">Where they sing next</div>
+      <div class="emb-next">${(() => {
+        const hi = G.state.highestUnlocked || 1, out = [];
+        for (let z = 10; z <= hi + 900 && out.length < 12; z++) {
+          if (!(G.isEmberZone && G.isEmberZone(z))) continue;
+          const t = G.emberTierFor ? G.emberTierFor(z) : 1;
+          out.push('<span class="emb-nz ' + (z <= hi ? 'open' : 'deep') + '">Z' + z + ' <i>' + ['I','II','III','IV','V'][t - 1] + '</i></span>');
+        }
+        return out.join('');
+      })()}</div>
+      <div class="emb-next-note">…and on forever — one zone in ${rate}, at every depth. Dimmed zones are past your current front line.</div>
       <div class="lo-sect">The five hulls · ${have}/5 recovered</div>
       <div class="emb-roster">${embRoster()}</div>
       <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>✦ Find a Choir zone</button></div></div>`);

@@ -24,10 +24,11 @@
   function tileCard(id) {
     const g = G(), inf = g.tileInfo(id); if (!inf) return '';
     const lvl = g.state.level | 0;
-    const gated = lvl < inf.vtier && !inf.owned;
+    const gated = lvl < inf.vtier;   // holds even for YOUR tiles — ascension resets level, not the gate
     const cls = inf.owned ? 'own' : inf.rival ? 'foe' : 'free';
     const cd = inf.cooldown | 0;
-    const status = gated ? '<span class="vzc lock">🔒 LOCKED</span>'
+    const status = gated && inf.owned ? '<span class="vzc lock">★ YOURS · 🔒 LV ' + inf.vtier + '</span>'
+      : gated ? '<span class="vzc lock">🔒 LOCKED</span>'
       : cd > 0 ? '<span class="vzc shield">🛡 ' + cdTxt(cd) + '</span>'
       : inf.owned ? '<span class="vzc ok">★ YOURS</span>'
       : inf.rival ? '<span class="vzc foe">⚑ ' + esc(inf.rival) + '</span>'
@@ -44,7 +45,7 @@
   function openTile(id) {
     const g = G(), inf = g.tileInfo(id); if (!inf || !S()) return;
     const lvl = g.state.level | 0;
-    const gated = lvl < inf.vtier && !inf.owned;
+    const gated = lvl < inf.vtier;   // holds even for YOUR tiles — ascension resets level, not the gate
     const cd = inf.cooldown | 0;
     const vr = Math.round(inf.rate * 25);
     const cost = g.entryCostFor(id) || {};
@@ -65,7 +66,8 @@
       : inf.rival ? 'Break <b>' + vw + ' waves</b>, defeat the defender\u2019s clone fleet, then take their hold — the citadel and tile flip to you intact.'
       : 'Clear the <b>' + vw + '-wave siege</b> and the citadel is yours — included with the tile, no builds, no upgrades.';
     let act;
-    if (gated) act = '<div class="vzs-blocked">🔒 Requires Level ' + inf.vtier + ' — you are Level ' + lvl + '</div>';
+    if (gated) act = '<div class="vzs-blocked">🔒 Requires Level ' + inf.vtier + ' — you are Level ' + lvl
+      + (inf.owned ? '<div style="margin-top:5px;font-size:10.5px;color:#8d7b62">Still yours — income keeps flowing. Ascension reset your level, not your claim; re-earn Level ' + inf.vtier + ' to fly here again.</div>' : '') + '</div>';
     else if (!inf.owned && cd > 0) act = '<div class="vzs-blocked" style="color:#8fe0ff;border-color:rgba(95,209,255,.45)">🛡 Attack shield — openable in ' + cdTxt(cd) + '</div>';
     else act = '<button class="vzs-go" data-vzwarp="' + id + '">' + (inf.owned ? '⛨ ENTER YOUR TILE' : inf.rival ? '⚔ ATTACK — SIEGE THE HOLD' : '⚔ CLAIM — LAUNCH THE SIEGE') + '</button>';
     const abandon = inf.owned ? '<button class="vzs-abandon" data-vzab="' + id + '">⏏ Abandon tile — release the citadel & income</button>' : '';

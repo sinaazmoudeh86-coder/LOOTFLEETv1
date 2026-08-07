@@ -36,9 +36,9 @@
     // crate produces them below the required star count — the gate is the
     // Ascension itself, which is what makes prestige feel like real access
     // rather than a stat bump. `ascReq` = Ascension Stars needed.
-    { key: 'ascendant', name: 'Ascendant', color: '#5cffbe', glow: 'rgba(92,255,190,1)',    minStats: 6, maxStats: 7, mult: 68.0,  weight: 8e-7,  particles: 34, ascReq: 1 },
-    { key: 'celestial', name: 'Celestial', color: '#5b7cff', glow: 'rgba(91,124,255,1)',    minStats: 7, maxStats: 7, mult: 92.0,  weight: 1.2e-7, particles: 38, ascReq: 12 },
-    { key: 'paragon',   name: 'Paragon',   color: '#ffffff', glow: 'rgba(255,255,255,1)',   minStats: 7, maxStats: 8, mult: 125.0, weight: 2e-8, particles: 44, ascReq: 25, prismatic: true },
+    { key: 'ascendant', name: 'Ascendant', color: '#5cffbe', glow: 'rgba(92,255,190,1)',    minStats: 6, maxStats: 6, mult: 68.0,  weight: 8e-7,  particles: 34, ascReq: 1 },
+    { key: 'celestial', name: 'Celestial', color: '#5b7cff', glow: 'rgba(91,124,255,1)',    minStats: 6, maxStats: 6, mult: 92.0,  weight: 1.2e-7, particles: 38, ascReq: 12 },
+    { key: 'paragon',   name: 'Paragon',   color: '#ffffff', glow: 'rgba(255,255,255,1)',   minStats: 6, maxStats: 6, mult: 125.0, weight: 2e-8, particles: 44, ascReq: 25, prismatic: true },
   ];
   // Post-mythic tiers (Ancient and beyond) are ~10× rarer across the board.
   // NOTE: weights above are PRE-multiplier — the ×0.1 below is applied to tier 6+.

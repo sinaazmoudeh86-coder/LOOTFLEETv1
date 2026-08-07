@@ -219,14 +219,17 @@
     const ilvl = C.dungeonEnemyLevel(dungeon);
 
     // ---- normal stats (from the 6 core stats) ----
-    const nStats = rar.minStats + ((Math.random() * (rar.maxStats - rar.minStats + 1)) | 0);
-    const pool = [...C.STAT_KEYS];
+    // CLAMPED TO THE POOL (Aug 2026 — THE crash wave). Celestial/Paragon declare
+    // 7–8 stats but there are only SIX core stats, and this loop picked DISTINCT
+    // keys — so the first top-tier drop spun this while-loop forever and froze
+    // the tab on the spot (combat, or the OFFLINE SIM AT BOOT, which is why some
+    // players couldn't even load in). The tier's power lives in rar.mult; the
+    // stat count now honestly caps at the pool.
+    const nStats = Math.min(C.STAT_KEYS.length, rar.minStats + ((Math.random() * (rar.maxStats - rar.minStats + 1)) | 0));
     const chosen = [];
     chosen.push(slot.primary[(Math.random() * slot.primary.length) | 0]);
-    while (chosen.length < nStats) {
-      const pick = pool[(Math.random() * pool.length) | 0];
-      if (!chosen.includes(pick)) chosen.push(pick);
-    }
+    const rest = C.STAT_KEYS.filter((k) => k !== chosen[0]);
+    while (chosen.length < nStats && rest.length) chosen.push(rest.splice((Math.random() * rest.length) | 0, 1)[0]);
     const stats = {};
     chosen.forEach((statKey) => {
       const def = C.STATS[statKey];

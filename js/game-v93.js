@@ -3678,11 +3678,27 @@
     h ^= h >>> 13; h = (h * 0xc2b2ae35) | 0; h ^= h >>> 16;
     return (h < 0 ? -h : h);
   }
+  // DROUGHT-BREAKER (Aug 2026). The raw hash left droughts of 50\u201380 zones with no
+  // Choir (58\u2192141 was the reported one). The natural picks all stay, and after
+  // EMB_RATE zones without one, the next eligible zone sings too \u2014 deterministic,
+  // memoized, identical for every account. Max gap is now \u226430ish; realised rate
+  // ~1-in-20 across 1200 zones.
+  const _embZones = [];
+  function _embBuild(upto) {
+    let z = _embZones.length ? _embZones[_embZones.length - 1] + 1 : EMB_MIN_ZONE;
+    upto = Math.min(upto, 100000);
+    for (; z <= upto; z++) {
+      if (isCitadelZone && isCitadelZone(z)) continue;
+      const last = _embZones.length ? _embZones[_embZones.length - 1] : EMB_MIN_ZONE - 1;
+      if (embHash(z) % EMB_RATE === 0 || z - last >= EMB_RATE) _embZones.push(z);
+    }
+  }
   function isEmberZone(z) {
     const d = z | 0;
     if (d < EMB_MIN_ZONE) return false;
     if (isCitadelZone && isCitadelZone(d)) return false;   // don't clobber a siege objective
-    return embHash(d) % EMB_RATE === 0;
+    _embBuild(d);
+    return _embZones.indexOf(d) !== -1;
   }
   // Which Choir hull garrisons a given zone: deeper zones field bigger ones.
   // Anchored to the zone (not random) so the tooltip can name it before you go.

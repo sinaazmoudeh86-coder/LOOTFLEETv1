@@ -1,274 +1,148 @@
-# Loot Fleet — deploy v215 · build 437
+# Loot Fleet — deploy v216 · build 478
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v214. Service worker cache is `lootfleet-v437`.
+Supersedes v215. Service worker cache is `lootfleet-v478`.
 
-**Headline:** THE KAEVITH INCURSION — a galaxy-wide event, five earnable alien
-hulls, a 3-hourly Discord situation report, and a performance pass.
+**Headline:** the XP-rate rework (additive bonuses, no cap), the post-ascension
+gold-dupe fix, the global layout clip guard, and a Discord feed that no longer
+spams — and now talks trash.
 
 ---
 
-## ⚠ THREE STAMPS MUST AGREE. Check before every push.
+## ⚠ THREE STAMPS MUST AGREE — verified for this folder. Re-check before every push.
 
-The update gate locks a client out when `version.json` reports a build **higher
-than the client's own `window.LF_BUILD`**. Bumping `version.json` without bumping
-the client constant locks out **every player**, and "Update now" cannot fix it —
-the reload serves the same client, which still reports the old number.
-
-| Stamp | File | Build 437 |
+| Stamp | File | Build 478 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `437` |
-| Update beacon | `version.json` → `build` | `437` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v437` |
+| Client constant | `game.html` → `window.LF_BUILD` | `478` |
+| Update beacon | `version.json` → `build` | `478` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v478` |
 
 ```bash
 grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
 ```
 
-All three must print the same number. **This bit us on this release** — the first
-push had `version.json` at 437 and `LF_BUILD` at 421, which locked every player
-out of login until the client constant was corrected.
-
-If it happens again, the fastest recovery is to re-push `version.json` with the
-OLD build number — that reopens login immediately — then fix the client stamp and
-push again.
-
 ---
 
-## Step 1 — run the SQL
-
-Supabase → **SQL Editor** → **New query** → paste **`supabase/xen-hull.sql`** → **Run**.
-
-Installs `log_xen_hull()`, the RPC that announces an earned Kaevith hull to
-Discord. Without it the hulls still drop and still work — they just never get
-announced.
-
-The grant is resolved client-side inside battle resolution (the roll is part of
-the fight), so the client has to report it, and a reported achievement is
-forgeable from devtools. The RPC is built like `log_repelled()`:
-
-- identity comes from `auth.uid()`, never the payload
-- the ship key is validated against a fixed five-key list
-- **idempotent per (pilot, hull)** — each of the five can only ever announce once
-  per account, so a replayed or scripted call posts nothing
-
-**Verify** — must return one row:
-
-```sql
-select oid::regprocedure from pg_proc
- where proname = 'log_xen_hull' and pronamespace = 'public'::regnamespace;
-```
-
-Safe to re-run.
-
-## Step 2 — redeploy the Discord Edge Function
+## Step 1 — redeploy the Discord Edge Function (REQUIRED — this is the spam fix)
 
 Supabase → **Edge Functions** → **discord-feed** → **Code** → paste
 **`supabase/functions/discord-feed/index.ts`** → **Deploy**.
 
-This one is overdue: the function has been running the pre-v214 build. The new
-code adds the hull announcement and the 3-hourly report.
+Why it is not optional this time: PostgREST silently caps every select at
+**1000 rows**. The feed's `feed_seen` cursor table outgrew that, so the tiles
+that fell off the truncated read were re-announced as brand new **every 2
+minutes, forever** — the "Wolfe claimed Solo α-3" wall. The new build pages all
+reads, dedupes + chunks + verifies the cursor write (a failed write now returns
+a red row in `net._http_response` instead of silently spamming).
 
-**Cron success proves nothing** — `net.http_post` returns immediately, so a green
-cron row only means the request was sent. Verify by watching the channel for the
-`🏆 SINA ⚔ FROSTY — SINA TAKES IT` headline format, then wait for the next
-`📡 FLEET SITUATION REPORT`.
+Also in this build: the **trash-talk engine** — takeovers, repels, throne
+changes, spire seizures, land grabs and big bets open with a randomized quip
+(deterministic per event, so a retried tick posts the identical joke), and the
+loud ones carry a meme GIF. Tuning lives at the top of the file: `QUIPS` (add
+lines), `GIFS` (paste any direct GIF URL), `GIF_EVERY` (1 = GIF on every loud
+event; 2–3 to calm it). A dead GIF URL renders as a card without an image —
+never blocks the post. Kaevith hull cards now pull ship art from
+`https://lootfleet.com/ships/…`.
 
-No new cron job is needed. Both features ride the existing 2-minute tick; the
-report gates itself on a timestamp in `feed_seen`, so its clock survives redeploys.
+No SQL changes and no new cron this release.
 
-## Step 3 — push the site
+## Step 2 — push the site
 
 Folder contents to the repo root, commit, let Vercel build.
 
-## Step 4 — hard-reload once
+## Step 3 — hard-reload once
 
-`Cmd/Ctrl + Shift + R`. Cache name changed, so the old bundle is evicted on first
-load.
+`Cmd/Ctrl + Shift + R`. Cache name changed, so the old bundle is evicted on
+first load.
 
 ---
 
 ## What shipped
 
-### THE KAEVITH INCURSION
+### XP RATE REWORK — additive, uncapped, legible
 
-Roughly **one zone in five** in My Galaxy is held by an alien fleet. Invaded zones
-render as purple voids with a `◈` mark, a legend entry, and a tappable event
-banner above the map. A briefing popup opens once per day on entering My Galaxy.
+Old: every XP source multiplied every other (×1.02 VIP × ×3.0 Neural Uplink ⇒
+"+206%"), clamped at +1000%, with the ship-ascension and Kaevith multipliers
+compounding into nonsense. New model in `gainXp`/`xpFleetInfo`:
 
-**Which zones are invaded is deterministic** — rolled from a fixed event seed keyed
-on tile coordinates, from its own RNG stream so no existing tile property shifts.
-Every account sees the same invaded map with no server round-trip. The set never
-grows, respawns, or rerolls, and the flag survives capture (a zone you own stays
-invaded, which is what keeps the hunting grounds available).
+- **One base rate**: 100%, or **200% on LootFleet Pro**.
+- **Every bonus is a flat % of that base** — VIP, Pilot Tree XP nodes, Neural
+  Uplink, Combat Computer, Kaevith Resonance — summed, then multiplied in:
+  `total = base × (1 + Σ bonuses/100)`.
+- **No cap.** Additive stacking grows linearly, so a 7% Pilot Tree node adds
+  exactly 7% of base — deep Pilot Tree builds finally have a reason to buy XP.
+- UI (hero chip, My Ship pill, Kaevith briefing) shows the TOTAL rate
+  (100% = normal) with the per-source breakdown in the tooltip. All cap copy
+  removed.
 
-**Ownership logic is untouched.** Claims, citadels, shields, cooldowns, empire cap
-— all unchanged. The invasion only changes who garrisons a tile.
+### POST-ASCENSION "105 DDc GOLD" — cause found and deleted
 
-**Combat.** Every hostile in an invaded zone flies a Kaevith hull at **+35% hull
-and +22% damage** over that ring's normal garrison, and the zone boss becomes a
-Kaevith Warden (Overseer if super). Larger hulls appear as rings deepen.
+The old gold-crush *rescue migration* read the `lf-best`/`lf-backup` local
+snapshots and restored the larger balance whenever its `goldRepairVer` stamp
+was unset. Pilot Ascension zeroes gold AND resets that stamp — so the next load
+handed every ascended pilot their entire pre-ascension hoard back. The whole
+gold-recovery block is removed (the item-stat repair it shipped with remains).
+Nothing may resurrect gold from snapshots.
 
-**Earning a hull.** Clearing an invaded zone rolls **1% on ring 1 → 10% at the
-rim**, on a sqrt curve so mid-rings aren't dead, weighted toward bigger hulls in
-deeper rings. Never sold, never blueprinted. The end-of-battle popup reports the
-result either way — win, miss (with the exact percentage that zone rolled), or
-"you already hold all five".
+### PILOT TREE — no more relog to see the tiles
 
-There is a hidden floor after a long dry streak. It is deliberately not surfaced
-anywhere — no popup, HUD, briefing line or Discord mention — because a visible
-guarantee turns the event into a checklist players grind to a known number. There
-is a comment at the constant explaining this; please don't helpfully expose it.
+Ascension left `state.pilot = null`; the origin seed only existed in the boot
+path, so the tree canvas drew zero tiles until a full reload. The reset now
+seeds `{'0,0':1}` immediately, `nodes()` self-heals, and the cached bonus
+aggregate is dropped on ascension (it was still applying pre-ascension node
+buffs until relog).
 
-**The five hulls**, entry → Dreadnaught:
+### GLOBAL LAYOUT CLIP GUARD (`css/fit-guard.css` + `js/fit-audit.js`)
 
-| Hull | Class | Fleet XP |
-|---|---|---|
-| Kaevith Splinter | Frigate | +10% |
-| Kaevith Shard | Cruiser | +25% |
-| Kaevith Glaive | Battleship | +45% |
-| Kaevith Sovereign | Carrier | +70% |
-| Kaevith Godshard | Dreadnaught | +100% |
+Root cause of "text/art cut off" (Voidmaw arena, FIGHT button, grand-prize
+copy): screen bodies are flex columns inside a fixed-height shell, and flex
+children default to `flex-shrink:1` — short viewports crushed fixed-height
+cards into their own `overflow:hidden` before the body ever scrolled.
 
-The XP bonus is the point: any Kaevith hull in the fleet — flagship **or** escort —
-raises XP on **every kill the whole fleet makes**. Bonuses add, capped at +100%,
-applied inside `gainXp` so every XP source benefits. The Godshard sits just under
-Dread Omega on raw stats; it is not a power-creep hull.
+- `fit-guard.css`: children of `.scr-body`/`.sheet-body` never shrink — short
+  windows scroll. Deliberate fill panes (Pilot tree canvas) opt out by
+  declaring their own flex. Images can't spill sideways; long tokens wrap.
+- `fit-audit.js`: opt-in clip auditor — open with `?fitaudit` (or
+  `FITAUDIT.on()` in console); clipped boxes get red outlines + a counter chip
+  with a console table. QA every new screen at 360×640 and a short landscape
+  window. Zero cost while off.
 
-### Discord — 3-hourly situation report
+### Balance / fixes
 
-One message every three hours: top 5 Fleet Power, top 5 Territory, Voidmaw Season
-standing with the deepest run, all seven Void spires with holder and shield state
-(as relative timestamps, so each reader sees their own timezone), Incursion
-status with a per-hull recovery count, and what moved in the last three hours.
+- **Ship crit mods** compressed to a sane ladder (top end: Titan Sina 95%,
+  Aeternum 90%, Dread Omega 85% … Godshard/Vhorn 50%) — crit chance is capped
+  at 100% in `computeStats`, so the old 330–660% values were pure waste.
+- **Territory ranks board** now reads the same `resourceRates()` the Galaxy
+  screen uses (the old inline copy multiplied citadels 1000×lv vs the real
+  10×lv and skipped the ×25 yield); sim rivals' derived revenue rescaled to the
+  same units (was ×1.028^level ⇒ 1e12/hr fantasy numbers).
+- **Empire Income** gains the **Home Citadel** row (wave, hourly rates, damaged
+  state) and no longer flickers during a zone grind (hosts rebuild only when
+  their HTML actually changed).
+- **Badges**: COLLECT ALL button claims every earned badge across all 15 chains
+  in one tap (summed LootCoins, one toast).
+- **Sell-on-pickup + pickup floor survive ascension** (added to ASC_KEEP).
+- **Ship Ascension**: unaffordable costs are now readable — disabled buttons
+  keep full contrast and the short resource turns red instead of a 38%-opacity
+  strikethrough.
+- **Legibility pass** (readability.css): Moon Colony, Skills, Prism Mining
+  (miner descriptions, mining speed, zone/lv/today lines) all up 1.5–2.5px;
+  count badges (skill points, dread hunt, voidmaw, missions, bag) are bigger
+  and dead-centred; mission/badge progress rings enlarged with the count
+  properly centred.
 
-The "what moved" section is fed by a rolling buffer — every event the feed
-announces appends its own summary line and the report drains it — so the digest
-can never disagree with what was actually posted.
+### Cache busting
 
-### Discord — hull announcements
-
-Earning a hull gets its own message, never batched: top priority in the embed
-queue, a tier bar, the fleet-XP figure, and a scarcity line ("the **FIRST** ever
-recovered", or "the 3rd ever"). The Godshard gets a distinct crown header.
-
-### Natural citadels rendered differently on different accounts
-
-Not a terrain bug — the seeded layout was always identical everywhere. The
-fortress **artwork** was gated on per-account state:
-
-```js
-const myCit  = owned && G.hasMyCitadel(id);        // YOUR save
-const rivCit = !myCit && G.rivalCitadelScore(id);  // server claim
-```
-
-`captureSystem()` writes a `state.citadels` entry only for **void** tiles, never
-natural ones. So after you took a natural citadel neither branch held for you —
-you saw a bare hex — while every other account read your published claim (which
-does carry `citadel: true`) and saw a full red fortress. Same coordinate, two
-different maps.
-
-The fortress now draws from `t.citadel`, which is seeded terrain. Ownership only
-picks the tint: **blue** yours · **red** rival or ally · **amber** unclaimed (new,
-and in the legend). The `⛴` glyph is gone — the art carries that meaning, and on a
-26px hex it was a third centred mark stacked on the sprite and the level label.
-
-Natural citadels deliberately still get **no** `state.citadels` entry:
-`resourceRates()` multiplies by 10 per rank for any tile that has one, and the
-×1000 is already baked into `t.rate`, so an entry would hand out 10× income.
-
-### Citadel value was misreported
-
-Three separate bugs behind "the ×1000 isn't real after I own it":
-
-1. **`rivalDefense()` returned a garrison for tiles you own.** The uid guard was
-   `!(myUid && real.ownerId === myUid)` — when TERRITORY is offline `myUid` is
-   null, so the guard passed for your own tile. The sheet's `else if (t.defense)`
-   branch runs *before* the owned-citadel branch, so the fortress panel stating
-   the ×1000 output was replaced by an enemy-garrison card. Now guarded on
-   `isOwned(id)` first.
-2. **The ×1000 comparand was implicit.** A normal tile is
-   `base × rarity × typeMult` (combat ×0.4 / resource ×1 / boss ×1.5); the citadel
-   branch drops `typeMult`, so ×1000 is true against a *resource-grade* tile, not
-   the combat tile that was there. Now stated in code and in the UI copy
-   ("×1000 vs a resource field").
-3. **The income panel reported "0 citadels"** for a natural citadel you had just
-   conquered, because it counted only `state.citadels`. Now counts `t.citadel` too.
-
-### Hangar ladder — bots owned impossible fleets
-
-Sim hull counts were capped at a hardcoded **48**. The roster has 37 hulls, five
-of which are Kaevith event drops, so **32** are obtainable. `SIM_HULL_CAP` is now
-derived from `CONFIG.SHIPS` at load, excluding `alienTech`, so it cannot drift
-again. Bots are excluded from the Kaevith hulls on purpose — crediting them would
-overstate the ceiling and imply they play an event they take no part in. A Lv 2000
-★30 sim now reads 32 hulls.
-
-### Tile sheet — the primary action was below the fold
-
-`.sheet-actions` was the last child *inside* the scrolling `.sheet-body`, so on
-any tall sheet Attack and Close scrolled off. Now sticky against the bottom of the
-scrollport, with a soft fade and a hairline cue. Fixed at the primitive, so every
-sheet in the game benefits.
-
-Warp cost and garrison level moved into a compact grid directly under the sheet
-head, with a third full-width cell that surfaces whatever is blocking you (empire
-full, shield countdown, level lock, or the hull odds). The button now has context
-without a swipe.
-
-### Performance
-
-- **Galaxy map** — the invasion veil was building two radial gradients per invaded
-  tile per bake (~80–160 gradient objects per rebake, ~2/s idle). Now two
-  pre-baked sprites blitted with `drawImage`, four phase frames for the shimmer,
-  zero per-tile allocation. The bloom stays a separate unclipped additive blit so
-  it still spills past hex edges and pools across adjacent invaded tiles — that
-  bleed is what makes the invasion read as one field instead of separate cells.
-- **Combat loop** — `nearbyEnemies()` was `filter().sort().slice()` per shot
-  (multishot calls it repeatedly per frame): two array allocations and an
-  O(n log n) sort over every living enemy to keep the closest 2–4. Now a single
-  pass into a fixed n-slot buffer, identical output. Same for the per-frame
-  `enemies.filter(...).length` zero-tests and the DPS window's `filter+reduce`.
-- **Autosave** — the 8-second tick JSON-serialised the whole state unconditionally,
-  including while idle on a menu. Now compares a cheap signature of the volatile
-  fields first. Not a dirty flag: combat mutates xp/gold/kills every frame without
-  calling `save()`, so a flag would have lost progress. While the game is actually
-  running `playTime` advances every second, so it saves exactly as often as before.
-- **15 background timers** now early-return on `document.hidden` — they were doing
-  DOM work every 250ms–2.5s in backgrounded tabs.
-
-### Canvas path-state fix
-
-`ctx.beginPath()` in the fortress glow replaced the hex path with a radius-44.2
-circle. The current path is **not** part of canvas drawing state, so the block's
-`save()`/`restore()` never restored the hex — the prismatic `stroke()` was
-outlining that circle, a rainbow ring ~1.8× tile radius bleeding over all six
-neighbours. The 6-point loop is now `gxHexPath()`, re-called immediately before
-the stroke. This also fixes the pre-existing case on player-built citadels.
+Changed js/css referenced from `game.html` are at `?v=478`. New precache
+entries in `sw.js`: `css/fit-guard.css`, `css/readability.css`,
+`js/fit-audit.js`.
 
 ---
 
-## Fixed in this folder, not a code change
+## Still open (carried from v215)
 
-`js/rank-rewards.js` and `js/discord-reward.js` are referenced by `game.html` but
-were **not present in v214** — they have been 404ing in production since that
-release. Both are included here.
-
-Worth a look at why: if they were dropped by a selective copy, anything else added
-to `game.html` between releases is at the same risk. A `game.html`-refs-vs-folder
-check before each push would catch it.
-
----
-
-## Still open
-
-- **The Stripe webhook is still not deployed.** Live payment links take money with
-  nothing recording or fulfilling it. Unrelated to this release, still the most
-  serious open item.
+- **The Stripe webhook is still not deployed.** Live payment links take money
+  with nothing recording or fulfilling it. Still the most serious open item.
 - Check last-deployed dates on the other Edge Functions: `stripe-webhook`,
   `digest-build`, `notify-unsub`, `iap-validate`, `delete-account`.
-- Watch sim-held territory — `sim_behave` has no ceiling:
-  ```sql
-  select count(*) from public.territory where owner_id is null;
-  ```
-- Confirm `lf-daily-ranks` succeeded at 00:05.
+- Confirm `lf-daily-ranks` succeeded at 00:05, and watch sim-held territory.

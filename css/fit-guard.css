@@ -1,0 +1,23 @@
+/* =============================================================================
+   fit-guard.css — GLOBAL CLIP GUARD (Aug 2026). Loads after every other sheet.
+   -----------------------------------------------------------------------------
+   ROOT CAUSE this kills: .screen is a fixed-height flex column and .scr-body
+   scrolls. When a module body (#sdread-body, #ascend-body, …) is ITSELF a flex
+   column, its children are flex items with default flex-shrink:1 — so on any
+   window shorter than the content (landscape phones, split-screen tablets,
+   short desktop windows) the browser CRUSHES fixed-height cards to fit BEFORE
+   the body ever scrolls. Every overflow:hidden card then clips its own art and
+   copy (the Voidmaw arena/boss, FIGHT button, grand-prize text).
+
+   THE CONTRACT: children of a scrolling body NEVER shrink — a short viewport
+   scrolls instead of crushing. Deliberately-flexing fill panes (e.g. the Pilot
+   tree canvas, .pl-treewrap{flex:1 1 auto}) opt out automatically: module
+   styles are injected AFTER this sheet, so an explicit flex declaration wins
+   the equal-specificity tie. These rules are intentionally NOT !important.
+   ========================================================================== */
+.scr-body > *, .sheet-body > *{ flex-shrink:0; }
+/* media can never spill out of its cell sideways */
+.scr-body img, .sheet-body img{ max-width:100%; }
+/* long tokens (pilot names, huge formatted numbers) wrap instead of clipping;
+   break-word only fires when a word genuinely exceeds its box */
+.scr-body, .sheet-body{ overflow-wrap:break-word; }

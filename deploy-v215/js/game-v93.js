@@ -1237,7 +1237,7 @@
     // drawn in two render passes: the tab froze, swelled and was OOM-killed.
     // Past the cap the DAMAGE already landed (chainDamage runs first) — only the
     // decoration is skipped, and at 60+ live bolts the screen is already white.
-    if (rt.bolts.length > 66) return;
+    if (rt.bolts.length > (window.__lfPlayRecovery ? 12 : 66)) return;
     const dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
     const n = Math.max(5, Math.floor(dist / 34));
     const pts = [[x1, y1]];
@@ -2046,7 +2046,7 @@
     // particles + floats (hard caps to bound per-frame draw cost)
     for (const p of rt.particles) p.update(dt); rt.particles = rt.particles.filter((p) => !p.dead);
     // storm bolts fade fast; flash decays
-    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); if (rt.bolts.length > 80) rt.bolts.splice(0, rt.bolts.length - 80); }
+    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); const _bc = window.__lfPlayRecovery ? 16 : 80; if (rt.bolts.length > _bc) rt.bolts.splice(0, rt.bolts.length - _bc); }
     if (rt.stormFlash > 0) rt.stormFlash -= dt;
     if (rt.particles.length > 320) rt.particles.splice(0, rt.particles.length - 320);
     for (const f of rt.floats) f.update(dt); rt.floats = rt.floats.filter((f) => !f.dead);
@@ -5486,7 +5486,15 @@
     const bootMark = (ph) => { try { sessionStorage.setItem('lf_boot', ph); } catch (e) {} };
     try {
       const prev = sessionStorage.getItem('lf_boot');
-      if (prev && prev !== 'alive') {
+      if (prev === 'alive') {
+        // Last session reached play and died WITHOUT a clean exit — a mid-combat
+        // freeze/OOM. This is the reload-loop case: boot is fine, so no safe boot
+        // fires, the game auto-resumes the same combat and dies again seconds
+        // later — which players report as “the site won’t load”. Enter PLAY
+        // RECOVERY: hard-trim visual effects this session so the killer effect
+        // cannot re-balloon before the player can react.
+        window.__lfPlayRecovery = true;
+      } else if (prev && prev !== 'clean-exit') {
         console.warn('[LOOTFLEET] previous boot never finished — it died during: ' + prev + '. Send this line with a bug report.');
         window.__lfBootDiedAt = prev;
         // SAFE BOOT — arms automatically so the affected account can get in
@@ -5495,11 +5503,19 @@
         window.__lfSafeBoot = true;
       }
     } catch (e) {}
-    if (window.__lfSafeBoot) {
+    // a reload or navigation is NOT a crash — mark it clean so recovery only
+    // ever arms on a genuine freeze/OOM kill
+    window.addEventListener('pagehide', () => { try { sessionStorage.setItem('lf_boot', 'clean-exit'); } catch (e) {} });
+    if (window.__lfSafeBoot || window.__lfPlayRecovery) {
       try {
+        let lastPlay = '';
+        try { lastPlay = localStorage.getItem('lf_play') || ''; } catch (e) {}
         const bar = document.createElement('div');
         bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#2a1508;color:#ffcf7a;border-bottom:1px solid #7a4a12;font:700 12px/1.45 system-ui;padding:8px 12px;text-align:center';
-        bar.innerHTML = '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.';
+        bar.innerHTML = (window.__lfPlayRecovery
+          ? '⚠ RECOVERY MODE — your last session froze mid-combat. Heavy visual effects are trimmed for this session. Screenshot this and report it.'
+          : '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.')
+          + (lastPlay ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + lastPlay.replace(/[<>]/g, '') + '</div>' : '');
         const x = document.createElement('button');
         x.textContent = '×'; x.style.cssText = 'margin-left:10px;background:none;border:none;color:#ffcf7a;font-size:15px;cursor:pointer';
         x.onclick = () => bar.remove(); bar.appendChild(x);
@@ -5552,14 +5568,14 @@
     // sessionStorage; after a freeze-kill the NEXT load prints the last sample,
     // naming exactly what was ballooning when the tab died.
     try {
-      const prevPlay = sessionStorage.getItem('lf_play');
-      if (prevPlay && window.__lfBootDiedAt !== undefined) console.warn('[LOOTFLEET] last session sample before the crash: ' + prevPlay);
+      const prevPlay = localStorage.getItem('lf_play');
+      if (prevPlay && (window.__lfPlayRecovery || window.__lfBootDiedAt !== undefined)) console.warn('[LOOTFLEET] last sample before the crash: ' + prevPlay);
       else if (prevPlay) console.info('[LOOTFLEET] last session sample: ' + prevPlay);
     } catch (e) {}
     setInterval(() => {
       try {
         const mem = (performance && performance.memory) ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '?';
-        sessionStorage.setItem('lf_play', JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
+        localStorage.setItem('lf_play', JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
           en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
           ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem }));
       } catch (e) {}

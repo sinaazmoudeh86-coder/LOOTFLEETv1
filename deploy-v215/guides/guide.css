@@ -1,0 +1,63 @@
+/* guides/guide.css — shared frame for all Loot Fleet guide pages */
+:root{
+  --void:#05070d; --navy:#0c111b; --panel:#131a28; --line:#27324a;
+  --text:#dfe9ff; --muted:#8a97ab; --gold:#f2b24b; --cyan:#5fd1ff; --blue:#5b9cff;
+  --good:#5bc06b; --bad:#e23b4e;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--void);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:17px;line-height:1.7;}
+a{color:var(--cyan);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.wrap{max-width:780px;margin:0 auto;padding:0 22px;}
+/* top nav */
+.gnav{position:sticky;top:0;z-index:10;background:rgba(5,7,13,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+.gnav-in{max-width:980px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.wm{font-family:'Orbitron',sans-serif;font-weight:900;font-size:16px;letter-spacing:.08em;}
+.wm .l{color:var(--gold);} .wm .f{color:var(--cyan);}
+.gnav a.play{background:linear-gradient(90deg,#f2b24b,#e09a2e);color:#1d1304;font-weight:800;font-size:13px;
+  padding:8px 16px;border-radius:99px;letter-spacing:.03em;white-space:nowrap;flex:none;}
+.gnav a.play:hover{text-decoration:none;filter:brightness(1.08);}
+/* article */
+.crumb{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:26px 0 10px;text-transform:uppercase;}
+h1{font-family:'Orbitron',sans-serif;font-size:clamp(26px,5vw,38px);font-weight:900;line-height:1.2;letter-spacing:.02em;margin-bottom:12px;}
+.standfirst{font-size:18px;color:#b9c4d8;margin-bottom:8px;}
+.byline{font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:30px;}
+article h2{font-family:'Orbitron',sans-serif;font-size:21px;font-weight:700;letter-spacing:.02em;margin:38px 0 12px;color:#fff;}
+article h3{font-size:17px;font-weight:700;margin:24px 0 8px;color:var(--gold);}
+article p{margin-bottom:14px;color:#c4cede;}
+article ul,article ol{margin:0 0 16px 22px;color:#c4cede;}
+article li{margin-bottom:7px;}
+article b,article strong{color:var(--text);}
+article table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:14.5px;}
+article th{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+article td{padding:8px 10px;border-bottom:1px solid #1a2334;}
+.tip{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:10px;
+  padding:13px 16px;margin:18px 0;font-size:15px;}
+.tip b{color:var(--cyan);}
+/* CTA blocks */
+.cta{background:linear-gradient(115deg,rgba(242,178,75,.14),rgba(95,209,255,.08) 60%,var(--panel));
+  border:1px solid rgba(242,178,75,.45);border-radius:14px;padding:22px;margin:30px 0;text-align:center;}
+.cta .h{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:800;margin-bottom:6px;}
+.cta p{font-size:14px;color:var(--muted);margin-bottom:14px;}
+.cta a{display:inline-block;background:linear-gradient(90deg,#f2b24b,#e09a2e);color:#1d1304;font-weight:800;
+  font-size:15px;padding:12px 26px;border-radius:99px;letter-spacing:.03em;}
+.cta a:hover{text-decoration:none;filter:brightness(1.08);}
+.cta .sub{display:block;margin-top:9px;font-size:11.5px;color:var(--muted);}
+/* hub cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:26px 0;}
+.gcard{display:block;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;color:var(--text);}
+.gcard:hover{text-decoration:none;border-color:var(--gold);transform:translateY(-2px);transition:.15s;}
+.gcard .k{font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;}
+.gcard h3{font-family:'Orbitron',sans-serif;font-size:16px;margin:7px 0 8px;color:#fff;line-height:1.35;}
+.gcard p{font-size:13.5px;color:var(--muted);line-height:1.55;}
+.gcard .more{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:700;color:var(--cyan);}
+/* related */
+.related{margin:40px 0 20px;}
+.related h2{margin-top:0;}
+/* footer */
+footer{border-top:1px solid var(--line);margin-top:50px;}
+.gfoot{max-width:980px;margin:0 auto;padding:24px 22px;display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;
+  justify-content:space-between;font-size:12.5px;color:var(--muted);}
+.gfoot a{color:var(--muted);}
+img.inline-ship{width:90px;float:right;margin:0 0 10px 14px;filter:drop-shadow(0 8px 18px rgba(0,0,0,.6));}

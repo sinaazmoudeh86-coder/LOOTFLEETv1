@@ -1,0 +1,129 @@
+/* =============================================================================
+   ember-choir.css — THE EMBER CHOIR (Zone Grind incursion)
+   ---------------------------------------------------------------------------
+   Sister palette to kaevith.css. Kaevith is void-purple; the Choir is obsidian
+   and molten gold, so the two events are never mistaken for each other at a
+   glance even though they share the same UI shapes.
+   Palette: husk #17110b / #241a10 · seam #ffb347 · core #ffd98a · ash #a89272
+   ============================================================================= */
+
+/* ---- zone list: the CHOIR encounter type ---------------------------------- */
+.z-bon.emb{ color:#ffcf7a; border-color:rgba(255,179,71,.45); background:rgba(255,179,71,.1); }
+.z-etag{ font-family:'Orbitron',sans-serif; font-size:8px; font-weight:900; letter-spacing:.12em;
+  color:#1a1108; background:linear-gradient(90deg,#ffd98a,#ff9f2e); border:1px solid rgba(255,179,71,.6);
+  border-radius:5px; padding:2px 5px; vertical-align:1px; white-space:nowrap; }
+.zone-row.embzone{ border-color:rgba(255,179,71,.42); }
+.zone-row.embzone::after{ content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:radial-gradient(120% 100% at 0% 50%, rgba(255,179,71,.09), transparent 62%); }
+.z-orb.emb{ box-shadow:0 0 0 2px rgba(255,179,71,.5), 0 0 16px -2px rgba(255,179,71,.7); }
+
+/* ---- the entry banner ----------------------------------------------------- */
+.emb-banner{ display:flex; align-items:center; gap:11px; width:100%; margin:0 0 10px; padding:10px 12px;
+  border-radius:14px; cursor:pointer; text-align:left; position:relative; overflow:hidden;
+  border:1px solid rgba(255,179,71,.34);
+  background:linear-gradient(100deg,#241a10 0%,#191207 55%,#0e0a06 100%); }
+.emb-banner::before{ content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(90% 140% at 12% 50%, rgba(255,179,71,.16), transparent 60%); }
+.emb-banner > *{ position:relative; }
+.eb-glyph{ flex:none; width:34px; height:34px; border-radius:11px; display:grid; place-items:center; font-size:17px;
+  color:#1a1108; background:radial-gradient(80% 80% at 50% 25%,#ffd98a,#e08a12);
+  box-shadow:0 0 16px -3px rgba(255,179,71,.9); }
+.eb-txt{ flex:1; min-width:0; }
+.eb-txt b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:11.5px;
+  letter-spacing:.08em; color:#ffe0ad; }
+.eb-txt i{ display:block; font-style:normal; font-size:10.5px; line-height:1.4; color:#a89272; margin-top:2px; }
+.eb-cta{ flex:none; font-family:'Orbitron',sans-serif; font-weight:900; font-size:9.5px; letter-spacing:.08em;
+  color:#1a1108; background:linear-gradient(90deg,#ffd98a,#ff9f2e); border-radius:8px; padding:5px 9px; white-space:nowrap; }
+
+/* ---- briefing sheet ------------------------------------------------------- */
+.emb-sheet .lo-sect{ color:#ffcf7a; }
+.emb-hero{ position:relative; overflow:hidden; border-radius:16px; padding:18px 14px 14px; text-align:center;
+  border:1px solid rgba(255,179,71,.3); margin-bottom:12px;
+  background:radial-gradient(120% 90% at 50% 0%, rgba(255,179,71,.14), transparent 62%), linear-gradient(180deg,#1b1409,#0c0805); }
+.emb-hero-art{ height:112px; max-width:70%; object-fit:contain; margin-bottom:6px;
+  filter:drop-shadow(0 0 26px rgba(255,179,71,.7)) drop-shadow(0 8px 20px rgba(0,0,0,.7));
+  animation:embFloat 5s ease-in-out infinite; }
+@keyframes embFloat{ 0%,100%{ transform:translateY(3px); } 50%{ transform:translateY(-6px); } }
+@media (prefers-reduced-motion:reduce){ .emb-hero-art{ animation:none; } }
+.eh-tag{ display:inline-block; font-family:'Orbitron',sans-serif; font-weight:900; font-size:8.5px; letter-spacing:.14em;
+  color:#1a1108; background:linear-gradient(90deg,#ffd98a,#ff9f2e); border-radius:9px; padding:3px 9px; }
+.eh-t{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:19px; letter-spacing:.05em; color:#fff;
+  text-shadow:0 0 20px rgba(255,179,71,.8); margin:7px 0 5px; }
+.eh-s{ font-size:12px; line-height:1.55; color:#b39c7d; text-wrap:pretty; max-width:330px; margin:0 auto; }
+.eh-s b{ color:#ffd98a; }
+
+.emb-steps{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+.es-row{ display:flex; gap:10px; align-items:flex-start; padding:9px 11px; border-radius:12px;
+  background:rgba(255,179,71,.05); border:1px solid rgba(255,179,71,.18);
+  font-size:12px; line-height:1.5; color:#b39c7d; text-wrap:pretty; }
+.es-row b{ color:#ffe0ad; }
+.es-row .es-hl{ color:#1a1108; background:linear-gradient(90deg,#ffd98a,#ff9f2e); border-radius:4px; padding:0 4px; }
+.es-n{ flex:none; width:20px; height:20px; border-radius:7px; display:grid; place-items:center; margin-top:1px;
+  font-family:'Orbitron',sans-serif; font-weight:900; font-size:10px; color:#1a1108;
+  background:linear-gradient(180deg,#ffd98a,#e08a12); }
+
+.emb-now{ border-radius:13px; padding:11px 12px; margin-bottom:12px;
+  border:1px solid rgba(255,179,71,.32); background:rgba(255,179,71,.06); }
+.emb-now.empty{ font-size:11.5px; line-height:1.5; color:#8d7b62; border-style:dashed; text-wrap:pretty; }
+.en-h{ font-family:'Orbitron',sans-serif; font-size:8.5px; font-weight:900; letter-spacing:.13em; color:#a89272; margin-bottom:8px; }
+.en-grid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+.en-c{ text-align:center; border-radius:10px; padding:7px 4px; background:rgba(10,7,4,.6); border:1px solid rgba(255,179,71,.22); }
+.en-c b{ display:block; font-family:'Orbitron',sans-serif; font-size:14px; font-weight:900; color:#ffd98a;
+  text-shadow:0 0 12px rgba(255,179,71,.6); font-variant-numeric:tabular-nums; }
+.en-c span{ display:block; font-size:8.5px; font-weight:700; letter-spacing:.05em; color:#8d7b62; margin-top:3px; }
+.en-live{ margin-top:8px; font-size:11px; color:#a89272; }
+.en-live b{ color:#ffd98a; font-variant-numeric:tabular-nums; }
+.en-cap{ margin-top:7px; font-size:11px; line-height:1.45; color:#ffb0a0; }
+
+.emb-roster{ display:flex; flex-direction:column; gap:6px; margin-bottom:13px; }
+.er-row{ display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:12px;
+  background:rgba(255,179,71,.05); border:1px solid rgba(255,179,71,.2); }
+.er-row.have{ background:rgba(255,179,71,.14); border-color:rgba(255,179,71,.5); }
+.er-row img{ width:42px; height:42px; object-fit:contain; flex:none;
+  filter:drop-shadow(0 0 9px rgba(255,179,71,.6)); }
+.er-m{ flex:1; min-width:0; }
+.er-n{ font-size:12.5px; font-weight:800; color:#ffe0ad; }
+.er-n i{ font-style:normal; font-size:10.5px; font-weight:800; letter-spacing:.06em; color:#8ff2c4; margin-left:5px; }
+.er-c{ font-size:10.5px; color:#8d7b62; margin-top:1px; }
+.er-c b{ color:#c9b391; }
+.er-b{ display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.erb{ font-size:9px; font-weight:800; letter-spacing:.02em; border-radius:6px; padding:2px 5px; white-space:nowrap;
+  font-variant-numeric:tabular-nums; border:1px solid transparent; }
+.erb.cd{ color:#9fd6ff; background:rgba(95,168,255,.13); border-color:rgba(95,168,255,.35); }
+.erb.life{ color:#ffd98a; background:rgba(255,179,71,.13); border-color:rgba(255,179,71,.35); }
+.erb.size{ color:#ff9a8a; background:rgba(255,120,90,.13); border-color:rgba(255,120,90,.35); }
+.erb.loot{ color:#8ff2c4; background:rgba(124,224,160,.13); border-color:rgba(124,224,160,.35); }
+
+/* ---- recovery / miss popup ------------------------------------------------ */
+.emb-veil{ position:fixed; inset:0; z-index:420; display:grid; place-items:center; padding:20px;
+  background:rgba(6,4,2,.84); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  animation:embVeilIn .2s ease; }
+@keyframes embVeilIn{ from{ opacity:0; } to{ opacity:1; } }
+.embres{ width:100%; max-width:330px; text-align:center; border-radius:18px; padding:20px 17px;
+  border:1px solid rgba(255,179,71,.44); box-shadow:0 26px 70px rgba(0,0,0,.7);
+  background:radial-gradient(120% 80% at 50% 0%, rgba(255,179,71,.16), transparent 60%), linear-gradient(180deg,#1b1409,#0b0704);
+  animation:embResIn .34s cubic-bezier(.22,1,.36,1); }
+@keyframes embResIn{ from{ transform:translateY(14px) scale(.97); opacity:0; } to{ transform:none; opacity:1; } }
+.embres.miss{ border-color:rgba(120,104,80,.5); }
+.embres-tag{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:9px; letter-spacing:.14em; color:#ffcf7a; }
+.embres.miss .embres-tag{ color:#8d7b62; }
+.embres-art{ height:132px; max-width:82%; object-fit:contain; margin:10px 0 4px;
+  filter:drop-shadow(0 0 30px rgba(255,179,71,.85)) drop-shadow(0 10px 22px rgba(0,0,0,.7)); }
+.embres-g{ font-size:44px; color:#5c5040; margin:14px 0 6px; }
+.embres-t{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:17px; letter-spacing:.03em; color:#fff;
+  text-shadow:0 0 18px rgba(255,179,71,.8); }
+.embres-t2{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:14px; color:#c9b391; }
+.embres-c{ font-size:11px; font-weight:700; letter-spacing:.06em; color:#a89272; margin-top:4px; }
+.embres-c2{ font-size:12px; line-height:1.55; color:#a89272; margin-top:9px; text-wrap:pretty; }
+.embres-c2 b{ color:#ffd98a; }
+.embres-b{ display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-top:12px; }
+.embres-note{ margin-top:12px; font-size:11.5px; line-height:1.5; color:#a89272; text-wrap:pretty; }
+.embres-note b{ color:#ffd98a; }
+.embres-x{ width:100%; margin-top:15px; border:none; border-radius:11px; padding:13px; cursor:pointer;
+  font-family:'Orbitron',sans-serif; font-weight:900; font-size:11px; letter-spacing:.1em;
+  color:#1a1108; background:linear-gradient(180deg,#ffd98a,#e8960f); }
+.embres-x:active{ transform:scale(.98); }
+.embres.miss .embres-x{ color:#c9b391; background:rgba(255,255,255,.06); border:1px solid #3a3226; }
+
+/* ---- hangar: the Choir acquisition chip ---------------------------------- */
+.bp-chip.emb{ border-color:rgba(255,179,71,.55) !important; color:#ffd98a !important; }

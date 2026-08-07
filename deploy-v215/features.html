@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#05070d">
+<title>Loot Fleet — Features in Motion</title>
+<meta name="description" content="See every Loot Fleet system in motion — infinite loot, fleet evolution, galaxy conquest, daily missions, moon colonies, Fleet Rank PvP raids, idle farming and more, each running live on a phone.">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/features.css">
+</head>
+<body>
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+<rect width="100" height="100" fill="#0a0f1b"/>
+<rect x="40" y="22" width="20" height="40" rx="4" fill="#141d2b" stroke="#f2b24b" stroke-width="1.4"/>
+<circle cx="50" cy="42" r="6" fill="#f2b24b"/>
+<text x="50" y="82" font-family="Orbitron,sans-serif" font-size="11" font-weight="900" fill="#f2b24b" text-anchor="middle">LF</text>
+</svg>
+</template>
+<div class="space-bg"></div>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="index.html#top">
+      <span class="wm"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
+    </a>
+    <div class="nav-cta">
+      <a class="nav-link on" href="features.html">Features</a>
+      <a class="nav-link" href="index.html#how">How it works</a>
+      <a class="nav-link" href="guides.html">Guides</a>
+      <a class="btn btn-primary btn-sm" href="game.html">Play Free</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <!-- INTRO -->
+  <section class="f-hero">
+    <div class="wrap">
+      <span class="eyebrow"><span class="pip"></span>30 systems · One living game</span>
+      <h1 class="f-title"><span class="g">Every mechanic,</span> <span class="a">in motion.</span></h1>
+      <p class="f-sub">No screenshots. No mockups. All thirty systems below run live on a phone, right here — the same attract battle that powers the homepage, tuned to show off one feature at a time. Ranked by what hooks a new pilot first.</p>
+    </div>
+  </section>
+
+  <!-- RANKED INDEX -->
+  <section class="f-indexwrap">
+    <div class="wrap">
+      <div class="f-index-head">The complete feature set, ranked</div>
+      <nav class="f-index" id="f-index"></nav>
+    </div>
+  </section>
+
+  <div class="wrap f-rows" id="f-rows">
+
+    <!-- 1 · INFINITE LOOT -->
+    <section class="f-row" id="loot" style="--acc:#f2b24b;--accGlow:rgba(242,178,75,.42)">
+      <div class="f-copy reveal">
+        <div class="f-cat"><span class="n">01</span><span class="ln"></span>Endgame chase</div>
+        <h2>Loot that never stops dropping</h2>
+        <p class="f-lead">Every kill can cough up an upgrade. Gear rolls across eleven glowing rarities and six slots, with rare affixes like life-steal and multi-shot — and a loot magnet that vacuums the whole haul straight into your hull.</p>
+        <ul class="f-mech">
+          <li><span class="mi">◆</span><div><div class="mt">Eleven rarities</div><div class="md">Common climbs all the way to Primordial — each tier brighter, rarer, and meaner than the last.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Six gear slots</div><div class="md">Hull, shield, reactor and three weapon mounts, every one hot-swappable mid-run.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Auto-magnet pickup</div><div class="md">Drops arc out, then snap to your ship. Nothing on the field is ever left behind.</div></div></li>
+        </ul>
+        <div class="f-stats">
+          <div class="f-stat"><div class="v">11</div><div class="l">Rarities</div></div>
+          <div class="f-stat"><div class="v">6</div><div class="l">Gear slots</div></div>
+          <div class="f-stat"><div class="v">&#8734;</div><div class="l">Scaling</div></div>
+        </div>
+        <a class="f-cta" href="game.html">Start farming <span class="ar">&#8594;</span></a>
+      </div>
+      <div class="f-media reveal">
+        <div class="device" data-device>
+          <div class="screen">
+            <div class="scr-hud">
+              <div class="hud-row"><div class="hud-badge">28</div><div class="hud-pow"><div class="l">&#9889; HERO POWER</div><div class="v" data-hud="pow">6.4B</div></div><div class="hud-coin">&#9678; 10K</div></div>
+              <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+            </div>
+            <div class="scr-arena"><canvas data-sim="loot" data-accent="#f2b24b"></canvas></div>
+            <div class="scr-nav"><span>Battle</span><span>Galaxy</span><span class="on">Loot</span><span>Hangar</span><span>Rank</span></div>
+          </div>
+        </div>
+        <div class="f-cap"><span class="lv"></span>Live · loot magnet + rarity drops</div>
+      </div>
+    </section>
+
+    <!-- 2 · EVOLVE YOUR FLEET -->
+    <section class="f-row rev" id="evolve" style="--acc:#b87bff;--accGlow:rgba(184,123,255,.42)">
+      <div class="f-media reveal">
+        <div class="device" data-device>
+          <div class="screen">
+            <div class="scr-hud">
+              <div class="hud-row"><div class="hud-badge">28</div><div class="hud-pow"><div class="l">&#9881; HULL POWER</div><div class="v" data-hud="pow">1.8B</div></div><div class="hud-coin">&#9678; 10K</div></div>
+              <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+            </div>
+            <div class="scr-arena"><canvas data-sim="evolve" data-accent="#b87bff"></canvas></div>
+            <div class="scr-nav"><span>Battle</span><span>Galaxy</span><span>Loot</span><span class="on">Hangar</span><span>Rank</span></div>
+          </div>
+        </div>
+        <div class="f-cap"><span class="lv"></span>Live · blueprint &#8594; hull evolution</div>
+      </div>
+      <div class="f-copy reveal">
+        <div class="f-cat"><span class="n">02</span><span class="ln"></span>Progression</div>
+        <h2>From scrappy frigate to titan carrier</h2>
+        <p class="f-lead">Beat zone bosses for blueprints, bank the shards, and watch a single hull evolve through ten classes — each one bigger, with new weapons, heavier plating, and more drone bays bolted on.</p>
+        <ul class="f-mech">
+          <li><span class="mi">◆</span><div><div class="mt">Ten hull classes</div><div class="md">A clean upgrade ladder from nimble Frigate to galaxy-dominating Titan Carrier.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Blueprint crafting</div><div class="md">Bosses drop the schematics; complete a set and the evolution fires instantly.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Every hull plays different</div><div class="md">More mounts, more drones, more raw power at every single tier you reach.</div></div></li>
+        </ul>
+        <div class="f-stats">
+          <div class="f-stat"><div class="v">10</div><div class="l">Hull classes</div></div>
+          <div class="f-stat"><div class="v">1</div><div class="l">Evolving fleet</div></div>
+        </div>
+        <a class="f-cta" href="game.html">Build your fleet <span class="ar">&#8594;</span></a>
+      </div>
+    </section>
+
+    <!-- 3 · CONQUER THE GALAXY -->
+    <section class="f-row" id="galaxy" style="--acc:#5fd1ff;--accGlow:rgba(95,209,255,.42)">
+      <div class="f-copy reveal">
+        <div class="f-cat"><span class="n">03</span><span class="ln"></span>Conquest</div>
+        <h2>Take the map, hold the map</h2>
+        <p class="f-lead">Warp an infinite hex galaxy, siege enemy systems in ten-wave battles, and plant your flag. Every system you hold pumps out fuel, iron, and plasma on the hour — even while you sleep.</p>
+        <ul class="f-mech">
+          <li><span class="mi">◆</span><div><div class="mt">Infinite hex map</div><div class="md">Thousands of systems spiralling outward with no edge to the frontier.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Ten-wave sieges</div><div class="md">Clear the defenders, flip the system, and lock it into your growing territory.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Hourly tribute</div><div class="md">Held systems generate fuel, iron, and plasma around the clock, automatically.</div></div></li>
+        </ul>
+        <div class="f-stats">
+          <div class="f-stat"><div class="v">1,950</div><div class="l">Tiles</div></div>
+          <div class="f-stat"><div class="v">3</div><div class="l">Resources</div></div>
+        </div>
+        <a class="f-cta" href="game.html">Claim the galaxy <span class="ar">&#8594;</span></a>
+      </div>
+      <div class="f-media reveal">
+        <div class="device" data-device>
+          <div class="screen">
+            <div class="scr-hud">
+              <div class="hud-row"><div class="hud-badge">28</div><div class="hud-pow"><div class="l">&#9670; SYSTEMS HELD</div><div class="v" data-hud="pow">1 SYS</div></div><div class="hud-coin">&#9678; 10K</div></div>
+              <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+            </div>
+            <div class="scr-arena"><canvas data-sim="galaxy" data-accent="#5fd1ff"></canvas></div>
+            <div class="scr-nav"><span>Battle</span><span class="on">Galaxy</span><span>Loot</span><span>Hangar</span><span>Rank</span></div>
+          </div>
+        </div>
+        <div class="f-cap"><span class="lv"></span>Live · siege &amp; territory capture</div>
+      </div>
+    </section>
+
+    <!-- 4 · IDLE & AFK -->
+    <section class="f-row rev" id="idle" style="--acc:#46d27a;--accGlow:rgba(70,210,122,.40)">
+      <div class="f-media reveal">
+        <div class="device" data-device>
+          <div class="screen">
+            <div class="scr-hud">
+              <div class="hud-row"><div class="hud-badge">28</div><div class="hud-pow"><div class="l">&#9201; OFFLINE HAUL</div><div class="v" data-hud="pow">0</div></div><div class="hud-coin">&#9678; 10K</div></div>
+              <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+            </div>
+            <div class="scr-arena"><canvas data-sim="idle" data-accent="#46d27a"></canvas></div>
+            <div class="scr-nav"><span class="on">Battle</span><span>Galaxy</span><span>Loot</span><span>Hangar</span><span>Rank</span></div>
+          </div>
+        </div>
+        <div class="f-cap"><span class="lv"></span>Live · auto-farm while away</div>
+      </div>
+      <div class="f-copy reveal">
+        <div class="f-cat"><span class="n">04</span><span class="ln"></span>Idle engine</div>
+        <h2>Your fleet farms while you're gone</h2>
+        <p class="f-lead">Close the tab and the autopilot keeps fighting. Kills, loot, and XP bank up the entire time you're away — then a single tap collects the whole offline haul the moment you return.</p>
+        <ul class="f-mech">
+          <li><span class="mi">◆</span><div><div class="mt">True offline progress</div><div class="md">Earnings accrue with the game closed — generously capped, never gated behind ads.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Autopilot combat</div><div class="md">The operator targets, fires, and dodges on its own at up to 10&#215; speed.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Welcome-back chest</div><div class="md">Every return drops a fat lump sum of loot and currency, ready to claim.</div></div></li>
+        </ul>
+        <div class="f-stats">
+          <div class="f-stat"><div class="v">24/7</div><div class="l">Farming</div></div>
+          <div class="f-stat"><div class="v">10&#215;</div><div class="l">Sim speed</div></div>
+        </div>
+        <a class="f-cta" href="game.html">Go idle <span class="ar">&#8594;</span></a>
+      </div>
+    </section>
+
+    <!-- 5 · SKILL TREES -->
+    <section class="f-row" id="skills" style="--acc:#f2b24b;--accGlow:rgba(242,178,75,.40)">
+      <div class="f-copy reveal">
+        <div class="f-cat"><span class="n">05</span><span class="ln"></span>Build crafting</div>
+        <h2>Three branches, one signature build</h2>
+        <p class="f-lead">Spend every level across Offense, Defense, and Tactics. Mix the branches freely, chase the capstones that reshape how your fleet fights, and respec any time the meta shifts under you.</p>
+        <ul class="f-mech">
+          <li><span class="mi">◆</span><div><div class="mt">Three deep trees</div><div class="md">Offense, Defense, and Tactics — each with its own identity and payoff.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Build-defining capstones</div><div class="md">Endgame nodes that bend the rules, not just bump a number up by ten percent.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Free respec</div><div class="md">Repaint your whole build whenever you want to try a fresh direction.</div></div></li>
+        </ul>
+        <div class="f-stats">
+          <div class="f-stat"><div class="v">3</div><div class="l">Branches</div></div>
+          <div class="f-stat"><div class="v">15+</div><div class="l">Nodes</div></div>
+        </div>
+        <a class="f-cta" href="game.html">Plan a build <span class="ar">&#8594;</span></a>
+      </div>
+      <div class="f-media reveal">
+        <div class="device" data-device>
+          <div class="screen">
+            <div class="scr-hud">
+              <div class="hud-row"><div class="hud-badge">28</div><div class="hud-pow"><div class="l">&#10022; SKILL POINTS</div><div class="v" data-hud="pow">0 PTS</div></div><div class="hud-coin">&#9678; 10K</div></div>
+              <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+            </div>
+            <div class="scr-arena"><canvas data-sim="skills" data-accent="#f2b24b"></canvas></div>
+            <div class="scr-nav"><span>Battle</span><span>Galaxy</span><span>Loot</span><span class="on">Hangar</span><span>Rank</span></div>
+          </div>
+        </div>
+        <div class="f-cap"><span class="lv"></span>Live · branches lighting up</div>
+      </div>
+    </section>
+
+    <!-- 6 · WEEKLY HEATS -->
+    <section class="f-row rev" id="heats" style="--acc:#ffa838;--accGlow:rgba(255,168,56,.42)">
+      <div class="f-media reveal">
+        <div class="device" data-device>
+          <div class="screen">
+            <div class="scr-hud">
+              <div class="hud-row"><div class="hud-badge">28</div><div class="hud-pow"><div class="l">&#9819; HEAT RANK</div><div class="v" data-hud="pow">#14</div></div><div class="hud-coin">&#9678; 10K</div></div>
+              <div class="hud-bars"><div class="bar"><i class="xp"></i></div><div class="bar"><i class="hp"></i></div></div>
+            </div>
+            <div class="scr-arena"><canvas data-sim="heats" data-accent="#ffa838"></canvas></div>
+            <div class="scr-nav"><span>Battle</span><span>Galaxy</span><span>Loot</span><span>Hangar</span><span class="on">Rank</span></div>
+          </div>
+        </div>
+        <div class="f-cap"><span class="lv"></span>Live · climbing to #1</div>
+      </div>
+      <div class="f-copy reveal">
+        <div class="f-cat"><span class="n">06</span><span class="ln"></span>Competition</div>
+        <h2>Climb a leaderboard that's actually fair</h2>
+        <p class="f-lead">Every account is sorted into a weekly heat against operators who started the same week you did. No whales, no veterans with a year's head start — just a level race to the top of your bracket, reset every seven days.</p>
+        <ul class="f-mech">
+          <li><span class="mi">◆</span><div><div class="mt">Fair brackets</div><div class="md">You only ever race players on the exact same timeline as you.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Live re-ranking</div><div class="md">Your position shifts in real time as your Hero Power climbs.</div></div></li>
+          <li><span class="mi">◆</span><div><div class="mt">Weekly reset</div><div class="md">Fresh heat, fresh shot at the number-one spot every single week.</div></div></li>
+        </ul>
+        <div class="f-stats">
+          <div class="f-stat"><div class="v">#1</div><div class="l">The target</div></div>
+          <div class="f-stat"><div class="v">7-Day</div><div class="l">Reset</div></div>
+        </div>
+        <a class="f-cta" href="game.html">Enter the heat <span class="ar">&#8594;</span></a>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- CLOSING CTA -->
+  <section style="padding:8px 0 0;">
+    <div class="wrap">
+      <div class="cta-band">
+        <h2>Thirty systems. One free game.</h2>
+        <p>Every mechanic you just watched is live right now in your browser — no download, no paywall. Jump in as a guest or save your fleet to an account.</p>
+        <div class="cta-actions">
+          <a class="btn btn-primary" href="game.html">&#9656; Launch Loot Fleet</a>
+          <a class="btn btn-ghost" href="index.html#top">Back to home</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <a class="brand" href="index.html#top" style="font-size:13px;">
+      <img class="brand-mark" src="logo.png" alt="" style="width:24px;height:24px;">
+      <span class="wm" style="font-size:13px;"><span class="wm-l">LOOT</span><span class="wm-f">FLEET</span></span>
+    </a>
+    <div class="foot-links">
+      <a href="game.html">Play</a>
+      <a href="features.html">Features</a>
+      <a href="index.html#how">How it works</a>
+      <a href="guides.html">Guides</a>
+      <a href="brand.html">Brand</a>
+    </div>
+    <div>&copy; <span id="yr"></span> Loot Fleet · lootfleet.com</div>
+  </div>
+</footer>
+
+<script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
+<!-- scene library on fresh paths (the serve layer path-caches old JS; new filenames force a clean fetch) -->
+<script src="js/lf-ships.b6.js"></script>
+<script src="js/lf-core.b7.js"></script>
+<script src="js/lf-s1.b6.js"></script>
+<script src="js/lf-s2.b6.js"></script>
+<script src="js/lf-arena.b6.js"></script>
+<script src="js/lf-map.b6.js"></script>
+<script src="js/lf-ui.b6.js"></script>
+<!-- build the 25 ranked rows, then the engine auto-finds every canvas -->
+<script src="js/lf-data.b6.js"></script>
+<script src="js/lf-tweaks.b6.js"></script>
+<script src="js/config.live.js?v=418"></script>
+<script src="js/analytics.js?v=418"></script>
+</body>
+</html>

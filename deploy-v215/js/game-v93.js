@@ -1230,6 +1230,14 @@
   }
   // jagged polyline with 1-2 branch forks — stored on rt.bolts, drawn in draw()
   function pushBolt(x1, y1, x2, y2, scale) {
+    // HARD CAP (Aug 2026, the Zone-800 freeze). rt.bolts was the ONE combat array
+    // with no ceiling — only a lifetime filter. Storm Conduit gear pushes a main
+    // bolt + 2 forks per PROC, and at endgame proc rates (90%+ crit, multishot,
+    // 5× game speed) thousands of multi-point polylines were alive at once, each
+    // drawn in two render passes: the tab froze, swelled and was OOM-killed.
+    // Past the cap the DAMAGE already landed (chainDamage runs first) — only the
+    // decoration is skipped, and at 60+ live bolts the screen is already white.
+    if (rt.bolts.length > 66) return;
     const dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
     const n = Math.max(5, Math.floor(dist / 34));
     const pts = [[x1, y1]];
@@ -2038,7 +2046,7 @@
     // particles + floats (hard caps to bound per-frame draw cost)
     for (const p of rt.particles) p.update(dt); rt.particles = rt.particles.filter((p) => !p.dead);
     // storm bolts fade fast; flash decays
-    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); }
+    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); if (rt.bolts.length > 80) rt.bolts.splice(0, rt.bolts.length - 80); }
     if (rt.stormFlash > 0) rt.stormFlash -= dt;
     if (rt.particles.length > 320) rt.particles.splice(0, rt.particles.length - 320);
     for (const f of rt.floats) f.update(dt); rt.floats = rt.floats.filter((f) => !f.dead);
@@ -5539,6 +5547,23 @@
 
     rt.running = true; rt.last = performance.now();
     bootMark('first-frame');
+    // PLAY WATCHDOG — forensics for mid-combat freezes (the class of crash the
+    // boot breadcrumbs can't see). Every 10s, snapshot the live array sizes into
+    // sessionStorage; after a freeze-kill the NEXT load prints the last sample,
+    // naming exactly what was ballooning when the tab died.
+    try {
+      const prevPlay = sessionStorage.getItem('lf_play');
+      if (prevPlay && window.__lfBootDiedAt !== undefined) console.warn('[LOOTFLEET] last session sample before the crash: ' + prevPlay);
+      else if (prevPlay) console.info('[LOOTFLEET] last session sample: ' + prevPlay);
+    } catch (e) {}
+    setInterval(() => {
+      try {
+        const mem = (performance && performance.memory) ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '?';
+        sessionStorage.setItem('lf_play', JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
+          en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
+          ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem }));
+      } catch (e) {}
+    }, 10000);
     // 'alive' only after the sim has actually survived a few seconds of frames —
     // a boot that dies in its first combat updates (the save-specific case) still
     // reports 'first-frame' rather than a false clean bill.

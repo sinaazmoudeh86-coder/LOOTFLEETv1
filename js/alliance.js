@@ -378,9 +378,10 @@
       try { window.ALBOSS.start({
         bossN: a2.boss_n | 0, bossHp: Number(a2.boss_hp), bossMax: Number(a2.boss_max),
         onDone: async (res) => {
-          // REAL damage from the arena run (Monolith bonus already applied; the server
-          // clamps at power × 50 — the same rate ALBOSS normalizes to, so the ⚔ meter
-          // the player watched fill is what lands). The SERVER owns the mark and the
+          // REAL damage from the arena run (Monolith bonus already applied). There is
+          // NO server cap any more — the arena boss hull IS the mark's remaining hull
+          // and raw combat damage is what lands, so the ⚔ meter the player watched
+          // fill is exactly what transmits. The SERVER still owns the mark and the
           // kill; the client never advances Mk on its own.
           const dmg = Math.max(1, Math.round(res.dmg || 1));
           try {

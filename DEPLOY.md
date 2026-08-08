@@ -1,7 +1,7 @@
-# Loot Fleet — deploy v216 · build 486
+# Loot Fleet — deploy v216 · build 498
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v215. Service worker cache is `lootfleet-v486`.
+Supersedes v215. Service worker cache is `lootfleet-v498`.
 
 **Headline:** the XP-rate rework (additive bonuses, no cap), the REAL fix for
 post-ascension gold coming back, the global layout clip guard, and a Discord
@@ -27,12 +27,12 @@ grep -c "stars \* 5e6" js/account.js             # must be 1
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 486 |
+| Stamp | File | Build 498 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `486` |
-| Update beacon | `version.json` → `build` | `486` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v486` |
-| Project root beacon | root `version.json` (source tree) | `486` |
+| Client constant | `game.html` → `window.LF_BUILD` | `498` |
+| Update beacon | `version.json` → `build` | `498` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v498` |
+| Project root beacon | root `version.json` (source tree) | `498` |
 
 The fourth is easy to miss and now matters more than ever: the root beacon
 drifted nine builds behind, and the in-session update gate compares
@@ -92,6 +92,310 @@ first load.
 ---
 
 ## What shipped
+
+### ⚡ 10× SPEED KEPT BEING REVOKED — `js/game-v93.js`, `js/account.js` (build 498)
+
+"After a while it stops working and resorts to 5×." Three separate holes, all from
+`secretSpeed` being treated as a **setting** rather than the one-time entitlement it is.
+`purchases`, `proUntil` and `credits` are all handled correctly; this bare boolean was
+missed by every one of them.
+
+**1. Ascension wiped it — `KEEP` list.** `secretSpeed` was not in the carry-over list, so
+every ascension revoked the Mothership easter-egg unlock. Added.
+
+**2. A stale cloud save wiped it — `mergeSaves()`.** The union covers `purchases`,
+`ownedShips` and `blueprints`, but `secretSpeed` is not a key inside any of them, so a
+cloud copy predating the unlock erased it on login — the same class of bug as the
+"Pro/credits gone the next day" fix that comment describes. Now OR-ed across both copies.
+
+**3. `sanitizeSave()` demoted it and gave no way back.** The old two-liner skipped anything
+sitting at exactly 5, then dropped an unentitled 10 to 1 — and because the HUD hides the 10×
+pill when `secretSpeed` is false, the highest tier a Pro player could still see and tap was
+5×. That is exactly the reported symptom. Each tier is now validated against its own
+entitlement, 10× tested first, and an earned 10× is never touched. Nine-case table verified:
+10× survives with or without Pro, 5× still drops on a lapsed subscription, 4× still needs its
+LootCoin unlock, out-of-range values still fall back to 1×.
+
+**Players who already lost it are not auto-granted.** Owning the Mothership does not prove the
+easter egg — it is also a 100,000-LootCoin purchase — so granting on that basis would hand the
+secret tier to people who bought a ship. Re-triggering the easter egg restores it (`gotSpeed`
+re-arms whenever `secretSpeed` is false), and from this build it stays.
+
+
+### ◈ KAEVITH SOVEREIGN — 5× RARER — `js/game-v93.js`, `js/ui-v94.js` (build 497)
+
+`XEN_BASE_W[3]` **0.901 → 0.17509**. Solved for the share ratio rather than divided:
+dividing the weight shrinks the denominator too, so the other hulls would absorb the freed
+probability and the realised factor would land near 3×, not 5×. Measured:
+
+| ring | before | after | factor |
+|---|---|---|---|
+| 25 (rim) | 3.520% | 0.704% | **5.00×** |
+| 13 | 2.563% | 0.509% | 5.04× |
+| 1 | 1.160% | 0.228% | 5.10× |
+
+New rim split: 45.18 / 48.57 / 4.70 / **0.70** / 0.86%. The Sovereign is now the scarcest
+hull in the line, below the Godshard. The overall chance of *a* hull dropping is unchanged —
+this only moves which hull a winning roll pays.
+
+**The tooltips had the hull names wrong.** Both prose blocks read "the Glaive and **Harbinger**
+are 5× rarer, and the **Sovereign** is 10× rarer" — but the Kaevith line is Glaive (xen3),
+Sovereign (xen4), Godshard (xen5). Harbinger is a Dread-class hull and is not in this table at
+all, so the note was describing the Sovereign's rarity while pointing at the Godshard. Corrected
+in the void-tech briefing and the post-zone result sheet, and `XEN_RARITY_NOTE.xen4` is now
+`25× rarer`. The roster's per-hull percentages were always read live from `xenSplit()`, so those
+were correct throughout and update themselves.
+
+
+### 🔧 BUILD 495 FOLLOW-UPS — both mechanisms now actually do what they claim (build 496)
+
+**1. The Pro offer's "never mid-combat" guarantee was not implemented — `js/pro-offer.js`.**
+`inCombat()` queried `.nav-btn.on[data-screen]`, but the live class is `active` (set in
+`showScreen`). It therefore always returned false: the offer could pop **during a run**, and
+`_queued`/`flush()` plus the drain hook in `showScreen()` were dead code because nothing ever
+queued. One-word selector fix; the promise in the module docstring now holds.
+
+**2. The XP century steepening did not widen the per-level gap — `js/config-v2.js`.**
+The first pass used 1.2–2.8% per level and was cancelled almost exactly by the decaying
+linear term `(120 + 120*level)`, whose own ratio falls from 1.0196 at L50 to 1.0066 at L150.
+Measured result: **L150 came out at 1.1308× per level, BELOW L50's 1.1318×** — 140→141 still
+felt like 40→41, precisely what the comment claimed to have fixed.
+
+Rates are now set against the measured ratio `xpToNext(l+1)/xpToNext(l)`:
+
+| | L50 | L150 | L250 | L350 | L450 | L550 |
+|---|---|---|---|---|---|---|
+| gap per level | 1.132 | **1.168** | **1.176** | **1.186** | **1.196** | **1.207** |
+
+Pre-100 is untouched; each century is now about a point wider than the last.
+
+The flat `[1,2,3,6,10,10]` band pass was **removed** in the same step — it was a blunt version
+of the same idea, and keeping both stacked two band taxes on each other. Net effect at L150 is
+roughly 2.6× the old requirement, not the 6 orders of magnitude that leaving both in would have
+produced. Level caps are 150 + 50/star, so the 100s band is where most pilots live and the deep
+bands are gated behind ascension stars.
+
+
+### 📈 CENTURY CURVES — XP GAP AND DIFFICULTY BOTH STEEPEN PER 100 — `js/config-v2.js` (build 495)
+
+**XP.** The band walls were STEPS: the curve jumped once at each century line and then
+climbed at the same 1.11/level it used at level 3, so the gap between neighbouring levels
+barely widened inside a century — 140→141 felt like 40→41 with a bigger number on it.
+Every level above 100 now compounds an extra per-level rate, and the rate itself steps up
+each century: **+1.2%/level in the 100s, +1.6% in the 200s, +2.0% in the 300s, +2.4% in
+the 400s, +2.8% past 500.** Levels 1–99 are byte-for-byte unchanged.
+
+**Difficulty.** `dungeonScale()` tapers past zone 100 and both enemy ramps flattened around
+zone 81–91, so deep zones were getting *easier* relative to a levelling fleet. Enemy HP and
+damage now take a century multiplier — **HP ×1.4 / ×1.8 / ×2.2 / ×2.6 / ×3.0** and
+**damage ×1.25 / ×1.5 / ×1.75 / ×2.0 / ×2.25** per 100-zone band.
+
+Applied to the enemy ramps only, never to `dungeonScale` itself: item power rides that
+curve, and rescaling it would desync every item already rolled — that is exactly what the
+scaleVer-4 migration exists to repair, and it is not a thing to trigger twice.
+
+### ★ CONTEXTUAL PRO OFFER — `js/pro-offer.js` (new)
+
+A hero sheet that appears where Pro would have just helped, and nowhere else. The restraint
+is the feature:
+
+- never for members, never below level 10, **never mid-combat** (a trigger that fires during
+  a run is queued and shown at the next quiet screen, so it cannot cost you a fight)
+- **each trigger fires at most once for the life of the account** — the offer is an argument,
+  not a nag
+- a 20 h global cooldown on top, so two triggers in one session can't double up
+- dismissals compound: two brush-offs → 3-day cooldown, four → a week. Saying no makes it
+  quieter.
+
+Four triggers, each naming the benefit the player just wanted: **empire at tile cap**,
+**Dreadnaught tier spent for the week**, **a level-up past 100** (where the new curve bites),
+and **a 6h+ offline return**. There is deliberately no speed trigger — tapping the locked 5×
+tier already opens the Pro sheet, and answering a question beats interrupting.
+
+All figures render from `PRO_PERKS`, so the sheet cannot drift from the product.
+
+
+### 🔍 BUFF AUDIT — three dead buffs found and wired (build 494)
+
+Traced every buff source to its consumption site: Pro (`PRO_PERKS`), Pilot Tree
+(`DREAD.combatMods`/`mult`/`dmgVs`), ascension perks (`PASCEND.mult`, `beaconMods`),
+VIP, ship `mods`, and the beacon. Three were not doing what they claimed.
+
+**1. Elite Damage did nothing against elites — `js/game-v93.js`.** `resolveHit()` gated the
+Pilot Tree call on `e.isBoss`, but `dmgVs()` adds `eliteDamage` for
+`isSuper/isDread/isCitadel/isClone`. So the bonus only applied when the target was *also* a
+boss: **Apex Predator (+16/+16) and every Elite Damage node were inert against
+dreadnaughts, citadels and clone fleets** — the exact targets they name. Both the tree and
+the ascension perk now gate on the same elite set.
+
+**2. Pro's Dreadnaught attempt did not exist — `js/dreadnaught.js`.** `dreadAttempts: 1` was
+declared in `PRO_PERKS` and sold on the purchase sheet, but nothing read it. It is now a
+real extra hunt per tier per week (`DREAD.proAttempt`), consumed only when the tier was
+genuinely locked, refreshed with the weekly reset. Copy corrected from "+1 attempt every
+day" — the hunt is weekly per tier, so the old line was wrong twice over.
+
+**3. Gold Find pill counted a bonus the kill path never pays — `js/ship-panels.js`.** VIP's
+gold perk is empire-side by design (AFK, Home Citadel waves, events) and is not applied to
+kills, but the pill multiplied it into the kill rate. Gold Find is now kill sources only
+(Pilot Tree × Prize Courts × Pro — the tree's `goldFind` was missing entirely), with VIP
+split out as its own **Empire Gold** row stating where it applies.
+
+Verified correct, no change needed: `dmgReduce`/`regen` from the tree (folded at
+`computeStats` L469–470), `rangePct` (L502), `xpGain`, `lootQuality`, `pickupRadius`,
+all four beacon perks, Wing Tactics, Bastion Command, Deep Core Drills, Fortune Lattice,
+and ship `mods`.
+
+
+### 🩺 SAFE BOOT OFF — `js/game-v93.js` (build 493)
+
+The build is stable, so the degrade-and-warn path is retired. `SAFE_BOOT` is a `const`
+at the top of the boot sequence, currently `false`:
+
+- `__lfSafeBoot` never arms, so the offline sim, return brief and v4 gear remap always run
+- the SAFE BOOT banner is gone, as is the "your last session ended with an error" banner
+- a stale `lf_boot` breadcrumb is cleared at boot, so a marker left by a long-dead session
+  can't greet a returning player with a warning about a crash that wasn't theirs
+
+Kept: the boot breadcrumbs themselves, the console line naming the dying phase, the JS
+error capture, and PLAY RECOVERY (the mid-combat freeze path) — that one is a real
+reload-loop guard, not a warning. Flip `SAFE_BOOT` to `true` to restore the old behaviour.
+
+
+### ⚡ EVERY PRO SURFACE NOW READS `PRO_PERKS` — `js/ui-v94.js`, `js/payments-v91.js` (build 492)
+
+Build 488 raised Pro to 5× XP but four user-facing surfaces still had **2× typed as a
+literal**, so the HUD chip sold 2× XP while the purchase sheet three taps away sold 5× —
+and the post-purchase receipt understated what the player had just paid for:
+
+- HUD Pro chip + its tooltip (`syncProCta`)
+- the pro-offer upsell card (`po-desc`)
+- both receipt labels in `payments-v91.js`
+
+All four now read `GAME.proMods().perks` at render time, so changing a value in
+`PRO_PERKS` updates every surface at once. This was the third report of the same
+pill-vs-engine drift this session; the table is now the single source for all of them.
+
+
+### ⬡ THE LOOTCOINS PAGE STOPPED CLAIMING SOMETHING FALSE — `js/ui-v94.js` (build 491)
+
+The store hero read "Cosmetics & convenience — never power". LootCoins buy the Carrier,
+Mothership, Oblivion and event hulls (`LC_SHIP_OFFERS`), Black Market cosmic and
+primordial gear rolls, the permanent 4× battle speed tier, and `credits` are a line item
+in every Dread-class hull's build cost. That is power, and a store that denies what a
+player can plainly see on the buy screen costs more trust than it saves.
+
+The hero now reads "Hulls, gear & cosmetics — a shortcut, not a secret tier", above a
+WHAT THEY BUY block listing all five categories, and a plain statement that some of it is
+power — with the honest boundary that nothing is locked behind payment and every buff is
+readable in Hangar ▸ My Ship. The stale header comment in `payments-v91.js` is corrected.
+
+**Brand doc still carries the old rule.** `brand.html` lists "cosmetics only — never power"
+as a house rule and a launch-checklist item. I left it alone — it is your brand voice to
+change, not mine. Worth a decision before launch assets go out.
+
+
+### 🛡 THE PENDING TILE SHIELD CAN NO LONGER OUTLIVE THE VISIT — `js/game-v93.js` (build 490)
+
+Build 488 deferred the 24 h stamp to first blood, but only `goSafeHangar()` cleared the
+pending record — and **Bail and Dock both route through `selectDungeon(0)`**, which never
+touched it. So the retreat looked fixed, and then the shield landed on the player's next
+kill anywhere in the game, on a tile they had already left. Worse than the original bug,
+because the stamp was decoupled from the action that caused it.
+
+Fixed on both sides: `selectDungeon()` clears `rt._pendShield` alongside the siblings it
+already resets, and `commitTileShield()` now refuses to stamp unless `state.currentSystem`
+still equals the pending tile — so any exit path added later is safe by default.
+
+
+### ✦ THE NEW PRO PERKS NOW REACH THE STATS PANEL — `js/ship-panels.js` (build 489)
+
+Same class of bug the Boss Damage pill had: Pro's 2× gold and +50% drop chance were
+multiplied into the kill path but never read by `bonuses()`, so Gold Find understated a
+subscriber's real rate by half and Loot Quality omitted the drop bonus entirely — while
+the Pro pill's own tooltip advertised both. Both pills now fold in `GAME.proMods()` and
+name Pro in the breakdown. `beaconCdCut` and `tiles` were already consistent (read live
+through `beaconStats()` and `tileCap()`).
+
+
+### ⚠ RUN THIS SQL — `supabase/alliance-boss-repair.sql` (build 488)
+
+**The alliance raid needs a database migration this release.** Report: "did 2
+hits and health is still full."
+
+Two files defined `alliance_attack()` and `_al_boss_hp()`. `alliance-boss-setladder.sql`
+carries the current design (fixed hull `1e6 × 4^(mark-1)`, no per-attack cap);
+`social.sql` still carried the old power-anchored pair — a **5e13 hull floor** and a
+per-attack clamp of `leaderboard power × 25`. Whichever ran last won, so re-applying
+the omnibus silently reinstalled the old behaviour. The client spawns an arena boss
+whose hull literally IS `boss_hp` and transmits raw combat damage, so it fought a
+1e6 boss while the server held a 50-trillion one and then clamped the damage on top.
+
+`social.sql` is corrected in this build so it can no longer regress. Run
+`alliance-boss-repair.sql` once to fix a database that already drifted — it also
+rebases every live alliance onto the ladder, preserving the fraction already burned.
+
+### ★ LOOTFLEET PRO IS NOW A FIVE-SYSTEM SUBSCRIPTION — `js/game-v93.js`, `js/ui-v94.js`
+
+XP goes **2× → 5×** on the base rate, and Pro stops being an XP-and-speed perk.
+One `PRO_PERKS` table in `game-v93.js` feeds every hook and the purchase sheet, so
+the sell copy and the game cannot disagree:
+
+| Perk | Value |
+|---|---|
+| Experience | **5×** base rate (was 2×) |
+| Battle speed | exclusive 5× tier |
+| Gold | 2× per kill |
+| Loot | +50% drop chance |
+| Beacon | −25% recharge |
+| Empire | +10 tile cap |
+| Dreadnaught hunt | +1 attempt daily |
+
+Because every other XP bonus is a flat % of base, the 5× multiplies all of them.
+
+### ⏱ BOSS TIMER MATCHES THE SPAWN AT 4× / 5× — `js/game-v93.js`
+
+`update()` is handed `dt` already multiplied by `gameSpeed`, so the boss meter counts
+SIM seconds while the HUD printed them as wall-clock: at 5× a "300" burned down in 60
+real seconds. `getBossInfo()` now divides by the live speed. It also accounts for the
+300-sim-second floor since the last boss, which it ignored entirely — the meter could
+sit at 0:00 with no boss spawning. It now reports whichever gate clears last.
+
+### 🛡 RETREATING NO LONGER BURNS A TILE'S 24 H SHIELD — `js/game-v93.js`
+
+`warp()` stamped `state.tileCd[k]` on warp-**in**, so entering a contested tile and
+bailing to the hangar shielded it for a day without a shot fired (My Galaxy and Void
+spires alike). The stamp is now pending on `rt._pendShield` and committed by
+`commitTileShield()` on the first kill. `goSafeHangar()` clears it.
+
+### ⚔ NO MORE FIGHTING YOUR OWN CLONE FLEET — `js/game-v93.js`
+
+The ordinary-tile level gate read `!owned && tile.level > state.level + 10`, leaving
+exactly the hole the Void gate above it was written to close: ascension keeps your
+territory but resets your level, so an owned Lv-300 system and a fresh Lv-5 pilot meant
+warping into a zone garrisoned by your own clone fleet for free high-level XP. The gate
+now applies to owned tiles too — you keep the tile and its income, and fight on it again
+once you have re-earned the level.
+
+### ◈ DREAD-CLASS PRICING + THE LOOTCOIN MARK — `js/config-v2.js`, `js/ui-v94.js`
+
+`megaCostHTML()` drew LootCoins as a plain orange disc (`◉`) that matched nothing else
+in the game; it now uses the real hex-coin SVG like every other price. Dread hull
+LootCoin costs cut 10× — 350k/450k/550k/650k/775k/900k → **35k/45k/55k/65k/78k/92k**,
+all under 100,000. Other currencies unchanged.
+
+
+### ☠ BOSS DAMAGE PILL COUNTED ONLY HALF THE BUFF — `js/ship-panels.js` (build 487)
+
+Hangar ▸ My Ship read `DREAD.combatMods().bossDamage` and nothing else, so the
+pill showed the **Pilot Tree** contribution alone. The Siege Protocols ascension
+perk (`PASCEND.mult('boss')`, 12%/rank) was missing from the readout even though
+`resolveHit()` has always applied it. A pilot with +66% tree and 25 ranks of Siege
+Protocols saw `+66%` on a build that was really hitting for far more.
+
+Combat was never wrong — only the display. The pill now folds both sources and
+reports the effective figure the engine uses (the two multiply), with a tooltip
+breaking out each half.
+
 
 ### ↻ LIVE UPDATE ENFORCEMENT — `js/update-gate.js` (build 486, operator note)
 

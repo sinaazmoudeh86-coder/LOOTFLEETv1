@@ -146,12 +146,49 @@
   // steps up another ×12 (was ×5), AND the per-100 surcharge escalates: ×20
   // past 100, ×60 past 200, ×180 past 300… (×3 per band). Levels past 100 are
   // meant to be EARNED — each century is a whole new career.
+  //
+  // CENTURY STEEPENING (Aug 2026). The walls above are STEPS — they jump once at
+  // each century line and then the curve climbs at the same 1.11/level it used at
+  // level 3. So the gap between consecutive levels barely widened inside a
+  // century, and 140→141 felt like 40→41 with a bigger number on it. Every level
+  // ABOVE 100 now compounds an extra per-level rate, and that rate itself steps up
+  // each century, so the gap between neighbouring levels keeps opening the deeper
+  // you go. Levels 1–99 are untouched — the early game is not the problem.
+  //
+  // THE RATES ARE MEASURED, NOT GUESSED. The first pass used 1.2%–2.8% and did
+  // nothing: the linear term (120 + 120*level) decays as level grows — its own
+  // ratio falls from 1.0196 at L50 to 1.0066 at L150 — and it ate the whole
+  // increment. L150 came out at 1.1308× per level, BELOW L50's 1.1318×. These
+  // values are set against the real ratio xpToNext(l+1)/xpToNext(l):
+  //
+  //     L50 (pre-100, unchanged) 1.132   L150 1.168   L250 1.176
+  //     L350 1.186                       L450 1.196   L550 1.206
+  //
+  // Each century's gap is now genuinely wider than the last — about a point of
+  // growth per century — which is the whole point. The flat [1,2,3,6,10,10] band
+  // pass below is REMOVED in the same step: it was a blunt version of this, and
+  // keeping both stacked two band taxes on top of each other. Level caps are
+  // 150 + 50/star, so the 100s band is where most pilots live and the deep bands
+  // are already gated behind ascension stars.
+  const LVL_STEEP = [0, 0.045, 0.055, 0.065, 0.075, 0.085];   // extra growth PER LEVEL, by century
+  function centuryGrowth(level) {
+    if (level < 100) return 1;
+    let m = 1;
+    const top = Math.min(5, Math.floor(level / 100));
+    for (let b = 1; b <= top; b++) {
+      const from = b * 100;
+      const to = b === 5 ? level : Math.min(level, (b + 1) * 100 - 1);
+      m *= Math.pow(1 + LVL_STEEP[b], Math.max(0, to - from + 1));
+    }
+    return m;
+  }
   function xpToNext(level) {
     const band = Math.min(5, Math.floor(level / 100)); // ×1, ×12, ×144, ×1728, …
     let xp = (120 + 120 * level) * Math.pow(1.11, level - 1) * Math.pow(12, band);
     xp *= 3;                      // global 3× leveling cost
     if (level >= 100) xp *= 20 * Math.pow(3, band - 1);   // 20× past 100, 60× past 200, 180× past 300…
-    xp *= [1, 2, 3, 6, 10, 10][band];   // Jul 2026 band-difficulty pass: 100s ×2, 200s ×3, 300s ×6, 400s+ ×10
+    xp *= centuryGrowth(level);         // Aug 2026: the gap widens EVERY level past 100
+                                        // (supersedes the old flat [1,2,3,6,10,10] band pass)
     return Math.floor(xp);
   }
 
@@ -182,6 +219,22 @@
   function dungeonScaleLegacy(dungeon) { return Math.pow(SCALE_BASE, Math.max(1, dungeon) - 1); }
 
   // Enemy max HP for a dungeon.
+  // ---- CENTURY DIFFICULTY BANDS (Aug 2026) ---------------------------------
+  // dungeonScale() TAPERS past zone 100 (+2%/zone, then +1%) to keep the numbers
+  // readable, and both enemy ramps below used to FLATTEN around zone 81–91. The
+  // combined effect was that deep zones got easier relative to a levelling fleet
+  // — exactly backwards. These multipliers step the enemy up once per century so
+  // each 100-zone band is a real difficulty tier.
+  //
+  // Applied to the enemy RAMPS only, never to dungeonScale itself: item power
+  // rides that curve and rescaling it would desync every item already rolled
+  // (that is what the scaleVer-4 migration exists to repair — not a thing to
+  // trigger twice). HP leads, damage follows at a gentler rate so depth is a
+  // grind-and-survive problem rather than a one-shot wall.
+  const HP_BAND  = [1, 1.40, 1.80, 2.20, 2.60, 3.00];
+  const DMG_BAND = [1, 1.25, 1.50, 1.75, 2.00, 2.25];
+  const century = (zone) => Math.min(5, Math.floor(Math.max(1, zone) / 100));
+
   // Enemy max HP for a dungeon. Tuned HIGH on purpose: combat is about
   // GRINDING units down over several volleys, not one-shotting the screen —
   // an on-level enemy should soak a good handful of hits before breaking.
@@ -198,6 +251,7 @@
     } else {
       ramp = 1 + Math.min(1.5, (dungeon - 31) * 0.025); // 1 → 2.5× by zone ~91
     }
+    ramp *= HP_BAND[century(dungeon)];                  // century tier on top
     return Math.max(10, Math.floor((320 * dungeonScale(dungeon) + 38) * ramp));
   }
 
@@ -217,6 +271,7 @@
     } else {
       ramp = 1 + Math.min(0.5, (dungeon - 31) * 0.01); // 1 → 1.5× by zone ~81
     }
+    ramp *= DMG_BAND[century(dungeon)];                 // century tier on top
     return Math.max(1, Math.floor((2.1 * dungeonScale(dungeon) + 1) * ramp));
   }
 
@@ -509,32 +564,32 @@
       mods:{ hpPct:1040, dmgPct:585, multiShot:156, critChance:60, critDamage:455, moveSpeed:98, atkSpeedPct:195, rangePct:312, lifeSteal:5.8 },
       tag:'DREAD-CLASS I', dreadAura:true, reqLevel:100,
       desc:'First of the recovered Dreadnaughts — already a tier beyond the Oblivion Final. Bought with a mix of every currency.',
-      megaCost:{ gold:5e9, fuel:60e6, iron:40e6, plasma:25e6, prism:4000, credits:350000, dreadCores:6 } },
+      megaCost:{ gold:5e9, fuel:60e6, iron:40e6, plasma:25e6, prism:4000, credits:35000, dreadCores:6 } },
     { key:'dread2', name:'Dread Sovereign', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:52,
       mods:{ hpPct:1280, dmgPct:720, multiShot:192, critChance:65, critDamage:560, moveSpeed:120, atkSpeedPct:240, rangePct:384, lifeSteal:7 },
       tag:'DREAD-CLASS II', dreadAura:true, reqLevel:120,
       desc:'A command Dreadnaught bristling with hardpoints. Strictly superior to the Reaver.',
-      megaCost:{ gold:10e9, fuel:120e6, iron:80e6, plasma:50e6, prism:8000, credits:450000, dreadCores:12 } },
+      megaCost:{ gold:10e9, fuel:120e6, iron:80e6, plasma:50e6, prism:8000, credits:45000, dreadCores:12 } },
     { key:'dread3', name:'Dread Leviathan', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:60,
       mods:{ hpPct:1560, dmgPct:878, multiShot:234, critChance:70, critDamage:683, moveSpeed:146, atkSpeedPct:293, rangePct:468, lifeSteal:8.6 },
       tag:'DREAD-CLASS III', dreadAura:true, reqLevel:140,
       desc:'A leviathan-scale hull whose reactor output dwarfs the lesser Dreads.',
-      megaCost:{ gold:15e9, fuel:180e6, iron:120e6, plasma:75e6, prism:12000, credits:550000, dreadCores:18 } },
+      megaCost:{ gold:15e9, fuel:180e6, iron:120e6, plasma:75e6, prism:12000, credits:55000, dreadCores:18 } },
     { key:'dread4', name:'Dread Harbinger', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:72,
       mods:{ hpPct:1880, dmgPct:1058, multiShot:282, critChance:75, critDamage:823, moveSpeed:176, atkSpeedPct:353, rangePct:564, lifeSteal:10.4 },
       tag:'DREAD-CLASS IV', dreadAura:true, reqLevel:160,
       desc:'A harbinger of the apex Dreads — overwhelming firepower across 72 drone bays.',
-      megaCost:{ gold:20e9, fuel:240e6, iron:160e6, plasma:100e6, prism:16000, credits:650000, dreadCores:24 } },
+      megaCost:{ gold:20e9, fuel:240e6, iron:160e6, plasma:100e6, prism:16000, credits:65000, dreadCores:24 } },
     { key:'dread5', name:'Dread Tyrant', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:84,
       mods:{ hpPct:2240, dmgPct:1260, multiShot:336, critChance:80, critDamage:980, moveSpeed:210, atkSpeedPct:420, rangePct:672, lifeSteal:12.4 },
       tag:'DREAD-CLASS V', dreadAura:true, reqLevel:180,
       desc:'A tyrant hull that rewrites the battlefield — second only to the Omega.',
-      megaCost:{ gold:30e9, fuel:360e6, iron:240e6, plasma:150e6, prism:24000, credits:775000, dreadCores:36 } },
+      megaCost:{ gold:30e9, fuel:360e6, iron:240e6, plasma:150e6, prism:24000, credits:78000, dreadCores:36 } },
     { key:'dread6', name:'Dread Omega', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:96,
       mods:{ hpPct:2640, dmgPct:1485, multiShot:396, critChance:85, critDamage:1155, moveSpeed:248, atkSpeedPct:495, rangePct:792, lifeSteal:14.6 },
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
-      megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:900000, dreadCores:60 } },
+      megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:92000, dreadCores:60 } },
     // ---- KAEVITH ALIEN TECHNOLOGY · THE INCURSION EVENT ---------------------
     // Five recovered hulls, never sold and never blueprinted: the ONLY way to
     // get one is to clear an invaded zone in My Galaxy and win the salvage roll

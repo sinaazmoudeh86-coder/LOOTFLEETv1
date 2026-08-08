@@ -1,7 +1,9 @@
 /* =============================================================================
    payments.js — Star Collector LOOTCOINS (premium micro-transaction currency)
    ---------------------------------------------------------------------------
-   LootCoins buy cosmetics only — never power. This module defines the packs
+   LootCoins buy hulls, Black Market gear, the 4× speed tier and cosmetics —
+   they ARE partly power, and the store copy says so plainly (the old "cosmetics
+   only, never power" line was simply false). This module defines the packs
    and the checkout hand-off. SAFE BY DEFAULT: until real payment links are
    configured, checkout is disabled and the UI says so.
 
@@ -244,7 +246,7 @@
       const G = window.GAME;
       if (G && G.state) { G.state.proUntil = Math.max(G.state.proUntil || 0, Date.now()) + 31 * 864e5; G.save(); try { window.ACCOUNT && window.ACCOUNT.flushNow && window.ACCOUNT.flushNow(); } catch (e) {} if (window.UI) window.UI.refreshAll(); }
       vgrant(1000, 'LootFleet Pro');
-      _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
+      _result(true, { label: _proLabel() });
     } else {
       _result(false, p ? { credits: p.credits } : {});
     }
@@ -286,6 +288,15 @@
   }
   function _getPending() { try { return JSON.parse(localStorage.getItem(PENDING_KEY)); } catch (e) { return null; } }
   function _clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) {} }
+  // The post-purchase receipt is the worst place to understate what was bought,
+  // so build the label from the engine's PRO_PERKS rather than a literal.
+  function _proLabel() {
+    try {
+      const k = window.GAME && window.GAME.proMods ? window.GAME.proMods().perks : null;
+      if (k) return 'LootFleet Pro — ' + k.xpMult + '× XP · ' + k.speed + '× speed · ' + k.gold + '× gold · +50% loot · +' + k.tiles + ' tiles';
+    } catch (e) {}
+    return 'LootFleet Pro';
+  }
   function _result(ok, info) { if (window.UI && window.UI.purchaseResult) window.UI.purchaseResult(ok, info); }
   // no-confirmation watchdog: if a checkout was started and nothing delivered
   // within the watch window (while the tab is visible), show the sorry screen
@@ -343,7 +354,7 @@
           G.state.proUntil = t; changed = true;
           vgrant(1000, 'LootFleet Pro');
           const p = _getPending(); if (p && p.sku === 'pro_monthly') _clearPending();
-          _result(true, { label: 'LootFleet Pro — 5× speed + 2× XP' });
+          _result(true, { label: _proLabel() });
         }
       }
       if (changed) { G.save(); try { window.ACCOUNT && window.ACCOUNT.flushNow && window.ACCOUNT.flushNow(); } catch (e) {} if (window.UI) window.UI.refreshAll(); }

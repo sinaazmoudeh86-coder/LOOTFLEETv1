@@ -218,7 +218,19 @@
   function weekIndex() { return Math.floor((Date.now() - EPOCH) / WEEK_MS); }
   function weekResetMs() { return EPOCH + (weekIndex() + 1) * WEEK_MS - Date.now(); }
   function lockOf(t) { try { return G().state.dreadLock || {}; } catch (e) { return {}; } }
-  function isLocked(t) { return lockOf(t)[t] === weekIndex(); }
+  // ---- LOOTFLEET PRO: one extra hunt per tier, per week ---------------------
+  // PRO_PERKS.dreadAttempts was declared and SOLD on the purchase sheet but
+  // never implemented — subscribers were paying for an attempt that did not
+  // exist. It is a real second run at each tier now, refreshed weekly with the
+  // rest of the hunt, consumed only when the tier was genuinely locked.
+  function proFree() {
+    const st = G().state;
+    if (!st.dreadProFree || st.dreadProFree.week !== weekIndex()) st.dreadProFree = { week: weekIndex(), used: {} };
+    return st.dreadProFree;
+  }
+  function isPro() { try { return !!(G().isPro && G().isPro()); } catch (e) { return false; } }
+  function proAttempt(t) { return isPro() && !proFree().used[t]; }
+  function isLocked(t) { return lockOf(t)[t] === weekIndex() && !proAttempt(t); }
   function canHunt(t) { return lvl() >= levelForTier(t) && !isLocked(t); }
 
   // ---- PURCHASED RESPAWNS -------------------------------------------------
@@ -246,8 +258,12 @@
   function deploy(t) {
     if (lvl() < UNLOCK_LEVEL) { toast('Dreadnaught Hunt unlocks at Level ' + UNLOCK_LEVEL); return; }
     if (lvl() < levelForTier(t)) { toast('Reach Level ' + levelForTier(t) + ' to challenge this Dreadnaught'); return; }
-    if (isLocked(t)) { toast('This Dreadnaught is on weekly cooldown'); return; }
+    if (isLocked(t)) { toast('This Dreadnaught is on weekly cooldown'); try { window.PROOFFER && PROOFFER.maybe('dreadlock'); } catch (e) {} return; }
     closeAllSheets();
+    // Burn the Pro extra BEFORE the lock is re-stamped, so it is spent only on a
+    // tier that was actually used up this week.
+    const _wasLocked = lockOf(t)[t] === weekIndex();
+    if (_wasLocked && proAttempt(t)) proFree().used[t] = 1;
     try { G().startDreadHunt(t); } catch (e) { return; }
     // ONE HUNT PER TIER PER WEEK — the attempt is CONSUMED ON LAUNCH, win or
     // lose. Bailing mid-hunt no longer refunds it (that loophole let players
@@ -814,7 +830,7 @@
 
   window.DREAD = {
     // engine hooks
-    combatMods, mult, dmgVs, tick, render, onHuntCleared,
+    combatMods, mult, dmgVs, tick, render, onHuntCleared, proAttempt,
     // ui
     renderPilot, renderHunt, updateHud, deploy,
     // cache control — game-v93 calls this after an ascension wipes the tree

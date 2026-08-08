@@ -34,7 +34,7 @@
     const s = (G() || {}).state || {};
     const out = [];
 
-    // XP — read straight from GAME.xpFleetInfo(): ONE base rate (100%, or 200%
+    // XP — read straight from GAME.xpFleetInfo(): ONE base rate (100%, or 500%
     // on Pro), and every bonus is a flat % of that base — summed, then
     // multiplied in. No cap. Shown as the TOTAL rate (100% = normal).
     // NOT safe(): its isNaN() guard coerces an OBJECT to NaN and throws the whole
@@ -47,38 +47,80 @@
       const brk = (xi.sources || []).map((s) => s.n + ' +' + s.pct + '%').join(' · ');
       out.push({
         ic: '✦', n: 'XP Rate', v: xi.pct + '%', c: xi.buffPct > 0 ? '#7ce0a0' : '#8fa3bd',
-        tip: 'Base ' + xi.basePct + '%' + (xi.pro ? ' (doubled by LootFleet Pro)' : '')
+        tip: 'Base ' + xi.basePct + '%' + (xi.pro ? ' (5× by LootFleet Pro)' : '')
           + (xi.buffPct > 0
             ? ' + bonuses ' + xi.buffPct + '% of base (' + brk + '). Bonuses add together, then multiply the base — no cap.'
             : '. No bonuses active — VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of this base.'),
       });
     }
 
-    // LOOT — right next to XP, same always-on treatment. Two account-wide
-    // halves: DROP CHANCE (Salvage Doctrine) and LOOT QUALITY (Pilot Tree
+    // LOOT — right next to XP, same always-on treatment. THREE account-wide
+    // sources: DROP CHANCE (Salvage Doctrine + Pro), and LOOT QUALITY (Pilot Tree
     // Treasure Sense nodes). Zone/tile quality bonuses are location-based and
-    // deliberately not counted here.
+    // deliberately not counted here. Pro's +50% drop chance is multiplied into
+    // C.dropChance() in the kill path, so it has to appear here or this pill
+    // contradicts the Pro pill three rows down.
     {
-      const drop = safe(() => (window.PASCEND ? PASCEND.mult('loot') : 1), 1);
+      const pm = safe(() => (G().proMods ? G().proMods() : null), null) || { on: false, gold: 1, loot: 1 };
+      const drop = safe(() => (window.PASCEND ? PASCEND.mult('loot') : 1), 1) * (pm.loot || 1);
       const qual = safe(() => (window.DREAD && DREAD.mult ? DREAD.mult('lootQuality') : 1), 1);
       const dPct = pct(drop), qPct = pct(qual);
+      const src = [];
+      if (pct(safe(() => (window.PASCEND ? PASCEND.mult('loot') : 1), 1)) > 0) src.push('Salvage Doctrine');
+      if (pm.on) src.push('Pro');
       out.push({
         ic: '❖', n: 'Loot Quality', v: '+' + Math.round(qPct + dPct) + '%',
         c: (qPct + dPct) > 0 ? '#7ce0a0' : '#8fa3bd',
         tip: (qPct + dPct) > 0
-          ? 'Drop chance +' + Math.round(dPct) + '% (Salvage Doctrine) · roll quality +' + Math.round(qPct) + '% (Pilot Tree). Zone bonuses (×2 quality tiles, deep space) stack on top where you fly.'
+          ? 'Drop chance +' + Math.round(dPct) + '%' + (src.length ? ' (' + src.join(' × ') + ')' : '') + ' · roll quality +' + Math.round(qPct) + '% (Pilot Tree). Zone bonuses (×2 quality tiles, deep space) stack on top where you fly.'
           : 'No loot sources active. The Salvage Doctrine ascension perk raises drop chance; Pilot Tree Treasure Sense nodes raise roll quality.',
       });
     }
 
-    // Damage against the things that matter
+    // Damage against the things that matter. TWO sources, and the pill used to
+    // show only one: the Pilot Tree (DREAD.combatMods) and the Siege Protocols
+    // ascension perk (PASCEND.mult('boss')). Combat multiplies them together
+    // — resolveHit() applies dmgVs() and then the perk — so the pill reports
+    // the same effective figure the engine uses, not just the tree half.
     const cm = safe(() => (window.DREAD && DREAD.combatMods ? DREAD.combatMods() : {}), {});
-    if (cm.bossDamage > 0)  out.push({ ic: '☠', n: 'Boss Damage',  v: '+' + Math.round(cm.bossDamage) + '%',  c: '#ff8a96' });
-    if (cm.eliteDamage > 0) out.push({ ic: '◈', n: 'Elite Damage', v: '+' + Math.round(cm.eliteDamage) + '%', c: '#ffb4bb' });
+    const treeBoss = cm.bossDamage || 0;
+    const ascBoss = pct(safe(() => (window.PASCEND ? PASCEND.mult('boss') : 1), 1));
+    if (treeBoss > 0 || ascBoss > 0) {
+      const eff = Math.round(((1 + treeBoss / 100) * (1 + ascBoss / 100) - 1) * 100);
+      const parts = [];
+      if (treeBoss > 0) parts.push('Pilot Tree +' + Math.round(treeBoss) + '%');
+      if (ascBoss > 0) parts.push('Siege Protocols +' + Math.round(ascBoss) + '%');
+      out.push({
+        ic: '☠', n: 'Boss Damage', v: '+' + eff + '%', c: '#ff8a96',
+        tip: parts.join(' × ') + ' — the two sources multiply, so your effective damage vs bosses, dreadnaughts, citadels and clone fleets is ×'
+          + (Math.round((1 + treeBoss / 100) * (1 + ascBoss / 100) * 100) / 100) + '.',
+      });
+    }
+    if (cm.eliteDamage > 0) out.push({
+      ic: '◈', n: 'Elite Damage', v: '+' + Math.round(cm.eliteDamage) + '%', c: '#ffb4bb',
+      tip: 'Pilot Tree elite bonus, added on top of Boss Damage against dreadnaughts, super bosses, citadels and clone fleets.',
+    });
 
-    const gold = safe(() => (window.VIP ? VIP.mult('gold') : 1), 1)
-               * safe(() => (window.PASCEND ? PASCEND.mult('gold') : 1), 1);
-    if (gold > 1.001) out.push({ ic: '$', n: 'Gold Find', v: '+' + pct(gold) + '%', c: '#e6b566' });
+    // GOLD — kill gold only. VIP's gold perk is deliberately EMPIRE-side (AFK,
+    // waves, events) and is NOT applied to kills, so folding it in here — as this
+    // pill used to — promised a rate the kill path never paid.
+    {
+      const ascG = safe(() => (window.PASCEND ? PASCEND.mult('gold') : 1), 1);
+      const proG = safe(() => (G().proMods ? G().proMods().gold : 1), 1) || 1;
+      const treeG = safe(() => (window.DREAD && DREAD.mult ? DREAD.mult('goldFind') : 1), 1);
+      const gold = ascG * proG * treeG;
+      if (gold > 1.001) {
+        const parts = [];
+        if (treeG > 1.001) parts.push('Pilot Tree +' + pct(treeG) + '%');
+        if (ascG > 1.001) parts.push('Prize Courts +' + pct(ascG) + '%');
+        if (proG > 1.001) parts.push('Pro ×' + proG);
+        out.push({ ic: '$', n: 'Gold Find', v: '+' + pct(gold) + '%', c: '#e6b566',
+          tip: parts.join(' × ') + ' — every kill pays ×' + (Math.round(gold * 100) / 100) + ' the base.' });
+      }
+      const vipG = safe(() => (window.VIP ? VIP.mult('gold') : 1), 1);
+      if (vipG > 1.001) out.push({ ic: '⬡', n: 'Empire Gold', v: '+' + pct(vipG) + '%', c: '#e6b566',
+        tip: 'VIP gold bonus — applies to empire income, Home Citadel waves and events. It does not affect gold from kills.' });
+    }
 
     const afk = safe(() => (window.VIP ? VIP.mult('afk') : 1), 1);
     if (afk > 1.001) out.push({ ic: '◷', n: 'Offline Rate', v: '+' + pct(afk) + '%', c: '#8fb0c8' });
@@ -90,7 +132,10 @@
     const vip = safe(() => (window.VIP ? VIP.level() | 0 : 0), 0);
     if (vip > 0) out.push({ ic: '♛', n: 'VIP', v: 'Level ' + vip, c: '#b57bff' });
 
-    if (safe(() => (G().isPro && G().isPro()), false)) out.push({ ic: '⚡', n: 'Pro', v: '5× speed', c: '#5fd1ff' });
+    if (safe(() => (G().isPro && G().isPro()), false)) out.push({
+      ic: '⚡', n: 'Pro', v: 'Active', c: '#5fd1ff',
+      tip: 'LootFleet Pro — 5× XP base rate · exclusive 5× battle speed · 2× gold per kill · +50% loot drop chance · beacon recharges 25% faster · +10 galaxy tiles · +1 Dreadnaught hunt per tier each week.',
+    });
 
     const badges = (s.badgeRanks | 0) || (s.achClaimed | 0) || 0;
     if (badges > 0) out.push({ ic: '⬡', n: 'Badges', v: num(badges) + ' / 1,000', c: '#9fd6ff' });

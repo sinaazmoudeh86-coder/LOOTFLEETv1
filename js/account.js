@@ -308,6 +308,14 @@
     else if (wc > wl * 1.3) { base = cloud; other = local; }
     else { base = (cloud.lastSave || 0) >= (local.lastSave || 0) ? cloud : local; other = base === cloud ? local : cloud; }
     base.proUntil = Math.max(base.proUntil || 0, other.proUntil || 0);
+    // 10× BATTLE SPEED IS AN ENTITLEMENT, NOT A SETTING. `secretSpeed` is a bare
+    // boolean rather than a key inside `purchases`, so it was missed by the union
+    // below and a stale cloud copy from before the Mothership easter egg would
+    // erase it — the same class of bug as "Pro/credits gone the next day". Once
+    // it is false, sanitizeSave() demotes gameSpeed off 10× and the tier pill
+    // disappears from the HUD, which is what players report as "it stopped
+    // working and dropped me to 5×". Union it: earned once, earned for good.
+    base.secretSpeed = !!(base.secretSpeed || other.secretSpeed);
     ['purchases', 'ownedShips', 'blueprints'].forEach((k) => {
       if (!other[k]) return;
       base[k] = base[k] || {};

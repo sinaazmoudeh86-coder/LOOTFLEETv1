@@ -249,22 +249,21 @@ begin
     select min(id) from (select id from public.alliance_feed where alliance_id = aid order by id desc limit 80) keep);
 end; $$;
 
--- fresh boss HP: anchored to the ALLIANCE's real strength, EXPONENTIAL in the
--- mark — every level is ×1.55 the last. The ×200 anchor means one MAX attack
--- (25× a member's power) is ~1/8 of Mk-1: a level is a genuine group grind,
--- never the one-shot it used to be when the anchor matched the damage cap.
--- anchor_min lets a caller floor the anchor to the LIVE attacker power so a
--- stale/low leaderboard sum can't collapse the boss to the hard floor.
+-- BOSS HULL — a FIXED LADDER, not a power anchor (Aug 2026, see
+-- alliance-boss-setladder.sql for the full rationale):
+--
+--     hull(mark) = 1e6 × 4 ^ (mark - 1)
+--
+-- This file used to carry a power-anchored body with a 5e13 FLOOR, and re-running
+-- the omnibus silently reinstalled it over the migration — Mk-1 came back as 50
+-- trillion hull while the client spawned an arena boss of 1e6. That is the
+-- "alliance boss isn't counting damage" report: full bar after several runs.
+-- aid and anchor_min are ignored; the signature is kept so call sites still bind.
 drop function if exists public._al_boss_hp(uuid, int);
+drop function if exists public._al_boss_hp(uuid, int, numeric);
 create or replace function public._al_boss_hp(aid uuid, n int, anchor_min numeric default 0)
-returns numeric language sql security definer set search_path = public as $$
-  select greatest(5e13,
-    greatest(
-      coalesce((select sum(l.power)::numeric from public.alliance_members m
-        join public.leaderboard l on l.user_id = m.user_id where m.alliance_id = aid), 0),
-      greatest(coalesce(anchor_min, 0), 0)
-    ) * 200)
-    * power(1.55::numeric, greatest(0, n - 1));
+returns numeric language sql immutable set search_path = public as $$
+  select 1e6::numeric * power(4.0::numeric, greatest(0, n - 1));
 $$;
 
 -- ARMADA WEEK — integer week index breaking SUNDAY 00:00 America/Chicago
@@ -559,14 +558,12 @@ begin
   maxa := case when coalesce(p_vip,false) then 3 else 2 end;
   select attacks into att from public.alliance_members where user_id = me;
   if att >= maxa then raise exception 'no attacks left today'; end if;
-  select coalesce(power,0)::numeric into pw from public.leaderboard where user_id = me;
-  -- damage clamp stays on the SERVER leaderboard power (never client-supplied) — fair.
-  dmg := least(greatest(coalesce(p_dmg,0), 0), greatest(pw, 1) * 25);
+  -- NO PER-RUN CAP. The arena boss hull IS the mark's hull and the client sends
+  -- RAW combat damage, so clamping here made every raid read as a no-op. The
+  -- fixed ×4 ladder is what limits how far one pilot can carry the alliance.
+  pw := 0; anch := 0;
+  dmg := greatest(coalesce(p_dmg, 0), 0);
   tot := dmg;
-  -- the boss anchor MAY use the client's live power to RAISE (never lower) the
-  -- pool, self-healing a stale leaderboard sum. Safe: it can only make the
-  -- boss harder — it never touches the damage clamp above.
-  anch := greatest(coalesce(pw,0), coalesce(p_pow,0));
   update public.alliance_members set attacks = attacks + 1, contrib = contrib + 5 where user_id = me;
   wk := public._al_bweek();
   select boss_hp, boss_max, boss_n, boss_week into hp, bmax, n, bw from public.alliances where id = aid for update;

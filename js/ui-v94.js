@@ -144,6 +144,8 @@
     const sc = (name && name !== 'battle') ? $('screen-' + name) : null;
     if (name !== 'battle' && !sc) return;
     screen = name;
+    // A Pro offer that fired mid-combat waits here for a quiet screen.
+    if (name !== 'battle') { try { window.PROOFFER && PROOFFER.flush(); } catch (e) {} }
     document.querySelectorAll('.screen.overlay').forEach((s) => s.classList.remove('active'));
     if (sc) sc.classList.add('active');
     const navName = (name === 'hero' || name === 'social' || name === 'mail') ? 'store' : name;
@@ -364,8 +366,12 @@
     const pro = !!(G.isPro && G.isPro());
     b.classList.toggle('is-pro', pro);
     const sub = document.getElementById('hud-pro-sub');
-    if (sub) sub.textContent = pro ? 'ACTIVE · MEMBER' : '5× SPEED · 2× XP';
-    b.title = pro ? 'LootFleet Pro — active · manage' : 'LootFleet Pro — 5× speed · 2× XP';
+    // Read the multipliers from the ENGINE, never a retyped literal — build 488
+    // raised XP to 5× and these two strings kept selling 2× on the HUD while the
+    // purchase sheet three taps away sold 5×.
+    const pk = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, speed: 5 };
+    if (sub) sub.textContent = pro ? 'ACTIVE · MEMBER' : pk.speed + '× SPEED · ' + pk.xpMult + '× XP';
+    b.title = pro ? 'LootFleet Pro — active · manage' : 'LootFleet Pro — ' + pk.speed + '× speed · ' + pk.xpMult + '× XP · ' + pk.gold + '× gold · +' + Math.round((pk.loot - 1) * 100) + '% loot';
   }
   function refreshAll() {
     if (!_inited) return;
@@ -588,8 +594,14 @@
       <div class="ip-stat"><span class="ip-sname">Duration</span><span class="v">Monthly · auto-renews</span></div>
       <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">$19.99 / month</span></div>
       <div class="lo-sect" style="margin-top:10px">What you get</div>
+      <div class="ip-stat"><span class="ip-sname">✨ Experience</span><span class="v">5× XP on every kill, account-wide</span></div>
       <div class="ip-stat"><span class="ip-sname">⚡ Battle speed</span><span class="v">Exclusive 5× tier — Pro only</span></div>
-      <div class="ip-stat"><span class="ip-sname">✨ Experience</span><span class="v">2× XP on every kill, account-wide</span></div>
+      <div class="ip-stat"><span class="ip-sname">$ Gold</span><span class="v">2× gold from every kill</span></div>
+      <div class="ip-stat"><span class="ip-sname">❖ Loot</span><span class="v">+50% drop chance on every wreck</span></div>
+      <div class="ip-stat"><span class="ip-sname">◉ Beacon</span><span class="v">Recharges 25% faster</span></div>
+      <div class="ip-stat"><span class="ip-sname">⬡ Empire</span><span class="v">+10 galaxy tiles you can hold</span></div>
+      <div class="ip-stat"><span class="ip-sname">☠ Dreadnaught hunt</span><span class="v">+1 hunt per tier, every week</span></div>
+      <p style="font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:8px">Every XP bonus you already own — VIP, Pilot Tree, Neural Uplink, Kaevith hulls — is a percentage of your base rate, so Pro multiplies all of them at once.</p>
       <p style="font-size:10.5px;line-height:1.55;color:var(--muted);margin-top:10px">Payment is charged to your account at confirmation of purchase. The subscription renews automatically each month at $19.99 unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your account settings.</p>
       <p style="font-size:11px;margin-top:8px"><a href="privacy.html" target="_blank" rel="noopener" style="color:#5fa8ff">Privacy Policy</a> · <a href="terms.html" target="_blank" rel="noopener" style="color:#5fa8ff">Terms of Use</a></p>
       ${pro ? `<p style="font-size:11px;color:#7ce0a0;margin-top:8px">✓ Active — renews ${new Date(G.state.proUntil).toLocaleDateString()}</p>` : ''}
@@ -965,9 +977,10 @@
       const pb = $('pro-banner');
       if (pb) {
         const pro = G.isPro && G.isPro();
+        const ppk = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, speed: 5, gold: 2 };
         pb.innerHTML = pro
           ? ''
-          : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">⚡ Exclusive 5× battle speed · ✨ 2× XP on every kill</div><button class="po-buy">$19.99 / month — Go Pro</button></div></div>`;
+          : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">✨ ${ppk.xpMult}× XP · ⚡ exclusive ${ppk.speed}× speed · $ ${ppk.gold}× gold · +5 more</div><button class="po-buy">$19.99 / month — Go Pro</button></div></div>`;
         const cta = pb.querySelector('#pro-offer-cta');
         if (cta) cta.addEventListener('click', openProSheet);
       }
@@ -979,7 +992,7 @@
       const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
       const xpChip = xi
         ? ' <span class="hero-xp-chip' + (xi.buffPct > 0 ? '' : ' zero') + '" title="' + (xi.buffPct > 0
-            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (doubled by Pro)' : '') + ' + ' + xi.buffPct + '% of base in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. No cap.'
+            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (5× by Pro)' : '') + ' + ' + xi.buffPct + '% of base in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. No cap.'
             : 'Base XP rate \u2014 no bonuses active. VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of base.')
           + '">\u2726 XP ' + xi.pct + '%</span>'
         : '';
@@ -2430,7 +2443,10 @@
     const add = (col, gly, v) => { if (v) row.push('<span class="mega-c"><span style="color:' + col + '">' + gly + '</span> ' + G.formatNum(v) + '</span>'); };
     add('#f2a93c', '$', c.gold); add('#5bc0ff', '⬢', c.fuel); add('#d0a060', '◆', c.iron);
     add('#c07bff', '✦', c.plasma); add('#ff3a3a', '◈', c.prism);
-    if (c.credits) row.push('<span class="mega-c"><span style="color:#f2a93c">◉</span> ' + c.credits.toLocaleString() + '</span>');
+    // LootCoins must wear the REAL coin mark here too. This row used to draw a
+    // plain orange disc (◉), which reads as "some resource" and matches nothing
+    // else in the game — every other price uses the hex-coin SVG.
+    if (c.credits) row.push('<span class="mega-c">' + (window.lootCoinSVG ? lootCoinSVG(13) : LC_ICON) + ' ' + c.credits.toLocaleString() + '</span>');
     add('#ff5a6a', '◇', c.dreadCores);
     return '<span class="mega-cost' + (big ? ' big' : '') + '">' + row.join('') + '</span>';
   }
@@ -3196,8 +3212,19 @@
         <i class="lch-sp s1"></i><i class="lch-sp s2"></i><i class="lch-sp s3"></i><i class="lch-sp s4"></i><i class="lch-sp s5"></i>
         ${heroCoin}
         <div class="lch-title">LOOTCOINS</div>
-        <div class="lch-sub">Cosmetics &amp; convenience — never power</div>
+        <div class="lch-sub">Hulls, gear &amp; cosmetics — a shortcut, not a secret tier</div>
         <div class="lch-shine"></div>
+      </div>
+      <div style="border:1px solid var(--line-2,#37475f);border-radius:11px;padding:10px 12px;margin-bottom:10px;background:rgba(255,207,122,.05)">
+        <div style="font-size:11px;letter-spacing:.08em;color:#ffcf7a;font-weight:700;margin-bottom:7px">WHAT THEY BUY</div>
+        <div style="display:grid;gap:5px;font-size:11.5px;line-height:1.45;color:#cbd6e6">
+          <div>⛴ <b>Hulls</b> — Carrier, Mothership, Oblivion and event ships</div>
+          <div>◈ <b>Black Market</b> — cosmic &amp; primordial gear rolls</div>
+          <div>☠ <b>Dread-class</b> — part of every Dread hull's price</div>
+          <div>⚡ <b>4× battle speed</b> — permanent, one purchase</div>
+          <div>✦ <b>Skins &amp; auras</b> — pure cosmetic</div>
+        </div>
+        <p style="font-size:10.5px;line-height:1.5;color:var(--muted);margin:8px 0 0">Some of that is power, and we would rather say so than pretend otherwise. What LootCoins do not buy is a stat no one else can reach — nothing here is locked behind payment, and every buff you own is listed in Hangar ▸ My Ship where anyone can read it.</p>
       </div>
       <p style="margin-bottom:9px;font-size:11.5px;color:var(--muted);line-height:1.5">Checkout remembers your payment method — repeat purchases are one tap.</p>
       ${rows}
@@ -3743,7 +3770,10 @@
   // Relative scarcity, stated plainly. The roll's per-hull weights live in
   // game-v93 (XEN_BASE_W); xenSplit() reports the real shares so this roster
   // shows what the table actually does instead of a hand-written guess.
-  const XEN_RARITY_NOTE = { xen3: '5× rarer', xen4: '5× rarer', xen5: '10× rarer' };
+  // The roster prints the REAL share from xenSplit(), so these labels are only the
+  // headline. xen4 was '5× rarer' until the Aug 2026 Sovereign pass took it another
+  // 5× down — it is now the rarest hull in the line.
+  const XEN_RARITY_NOTE = { xen3: '5× rarer', xen4: '25× rarer', xen5: '10× rarer' };
   function xenRoster(ring) {
     const split = G.xenSplit ? G.xenSplit(ring || 1) : null;
     return XEN_SHIPS.map((k, i) => {
@@ -3779,7 +3809,7 @@
         <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>, and the five hulls stack to <b>+250%</b> on their own. Every bonus is a flat % of your <b>base XP rate</b> — bonuses add together, then multiply the base. <b>No cap.</b></div></div>
       </div>
       <div class="lo-sect">The five hulls · entry → Dreadnaught</div>
-      <div class="xen-note-rare">Two chassis are common. The <b>Glaive</b> and <b>Harbinger</b> are <b>5× rarer</b>, and the <b>Sovereign</b> is <b>10× rarer</b> again — scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>; deeper rings tilt them toward the top hulls.</div>
+      <div class="xen-note-rare">Two chassis are common. The <b>Glaive</b> is <b>5× rarer</b>, the <b>Godshard</b> <b>10× rarer</b>, and the <b>Sovereign</b> is rarer than either — the scarcest hull in the line. Scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>; deeper rings tilt them toward the top hulls.</div>
       <div class="xen-roster">${xenRoster(GM.RINGS || 25)}</div>
       <div class="xen-now"><span>Your resonance field right now</span><b>${bonus ? '+' + bonus + '% XP per kill' : 'none — no Kaevith hull in the fleet'}</b></div>
       <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>◈ Hunt a void zone</button></div></div>`);
@@ -3820,7 +3850,7 @@
         <div class="xres-c">${r.complete
           ? 'You already hold all five Kaevith hulls — there is nothing left to earn.'
           : 'This zone rolled a <b>' + r.pct + '%</b> chance to earn a hull. The zone is still yours, and the fight still paid gold, XP and loot.'}</div>
-        ${r.complete ? '' : `<div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim. The two entry chassis are the common drops; the Glaive and Harbinger are <b>5× rarer</b> and the Sovereign <b>10× rarer</b> again.</div>`}
+        ${r.complete ? '' : `<div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim. The two entry chassis are the common drops; the <b>Glaive</b> is <b>5× rarer</b>, the <b>Godshard</b> <b>10× rarer</b>, and the <b>Sovereign</b> is the scarcest hull in the line at well under <b>1%</b> of a winning roll.</div>`}
       </div>`}
       <div class="sheet-actions"><button class="btn" data-x>Close</button>${r.won ? '<button class="btn gold" data-fleet>Open Hangar</button>' : '<button class="btn gold" data-galaxy>Find another void zone</button>'}</div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
@@ -4128,5 +4158,5 @@
     return v + s;
   }
 
-  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen };
+  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
 })();

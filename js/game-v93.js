@@ -127,9 +127,13 @@
     'pasc',                                                    // stars, points, perks, history
     // PAID ENTITLEMENTS — anything real money or LootCoins bought is permanent.
     // `purchases` carries the one-time 4× battle-speed unlock (speed4lc) and
-    // `proUntil` carries the LootFleet Pro subscription window, so the Pro badge,
-    // its 5× speed and 2× XP all survive an ascension untouched.
-    'purchases', 'credits', 'proUntil', 'vipPts', 'iap', 'payments', 'redeemedCodes',
+    // `proUntil` carries the LootFleet Pro subscription window, so the Pro badge
+    // and every PRO_PERKS benefit survive an ascension untouched. `secretSpeed`
+    // is the 10× tier from the Mothership easter egg — it was MISSING here, so
+    // every ascension revoked it, sanitizeSave() then demoted gameSpeed off 10×,
+    // and the pill vanished from the HUD leaving 5× as the ceiling. It is a
+    // one-time unlock like the other two: it survives.
+    'purchases', 'credits', 'proUntil', 'vipPts', 'iap', 'payments', 'redeemedCodes', 'secretSpeed',
     // ONE-TIME OFFERS. discordJoin records the 1,000-LC join reward; keeping it
     // here means an ascension (which wipes the fleet to nothing) cannot re-arm
     // the offer and let the same account collect it twice.
@@ -713,7 +717,7 @@
   function xpFleetInfo() {
     const src = xpSources();
     const pro = isPro();
-    const basePct = pro ? 200 : 100;
+    const basePct = pro ? 100 * PRO_PERKS.xpMult : 100;
     const buffPct = Math.round(src.reduce((a, s) => a + s.pct, 0) * 10) / 10;
     const pct = Math.round(basePct * (1 + buffPct / 100) * 10) / 10;
     return { sources: src, pro, basePct, buffPct, pct, mult: pct / 100 };
@@ -756,6 +760,9 @@
     if (unlock > state.highestUnlocked) state.highestUnlocked = unlock;
     burst(rt.archer.x, rt.archer.y, '#e6b566', 26, { glow: true, speed: 220, life: 0.9 });
     if (window.UI) { window.UI.onLevelUp(state.level); window.UI.refreshAll(); }
+    // THE CURVE ARGUMENT — only once the centuries actually bite (see xpToNext's
+    // century steepening). Before 100 the pace is fine and the pitch would be a lie.
+    if (state.level >= 100) { try { window.PROOFFER && PROOFFER.maybe('levelgrind'); } catch (e) {} }
     // One-time warning the moment a pilot crosses into the Lv 100 endgame, where a
     // destroyed ship can cost the entire hold.
     if (state.level >= 100 && !state.lv100Warned) {
@@ -856,7 +863,7 @@
     const em = emberBeaconBonus();
     const dCut = Math.min(0.4, r * 0.005);
     // reductions are multiplicative, so no source can ever reach zero
-    const cd = Math.max(30, Math.round(BEACON.cd * (1 - dCut) * (1 - pm.cdCut) * (1 - em.cdCut)));
+    const cd = Math.max(30, Math.round(BEACON.cd * (1 - dCut) * (1 - pm.cdCut) * (1 - em.cdCut) * (1 - proMods().beaconCdCut)));
     let life = Math.round(BEACON.life * (1 + Math.min(1.5, r * 0.019)) * pm.life * (1 + em.life));
     // A DOWNTIME FLOOR. Fully stacked, duration outran the cooldown (506s of swarm
     // on a 72s recharge), so the beacon was permanently on — it stops being a
@@ -1272,9 +1279,15 @@
     if (!e || e.dead) return;
     // PILOT: bonus damage vs bosses / elites (Dreadnaughts & Super Bosses count as both)
     let _dmg = p.damage;
-    if (e.isBoss && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
+    // The gate used to be `e.isBoss &&`, which quietly killed the tree's ELITE
+    // half: dmgVs() adds eliteDamage for isSuper/isDread/isCitadel/isClone, but
+    // it was only ever CALLED on bosses — so Apex Predator and every Elite Damage
+    // node did nothing against dreadnaughts, citadels and clone fleets, the exact
+    // targets they name. Gate on the same set the ascension perk below uses.
+    const _elite = e.isBoss || e.isCitadel || e.isClone || e.isDread || e.isSuper;
+    if (_elite && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
     // ASCENSION: Siege Protocols — bonus damage vs boss-class targets
-    if (window.PASCEND && (e.isBoss || e.isCitadel || e.isClone || e.isDread || e.isSuper)) _dmg *= window.PASCEND.mult('boss');
+    if (window.PASCEND && _elite) _dmg *= window.PASCEND.mult('boss');
     const killed = e.takeDamage(_dmg);
     // FROSTYFROST — cryo tech is FLEET tech: if a FrostyFrost is anywhere in
     // your fleet (flagship OR escort), every player bolt chills the target and
@@ -1402,7 +1415,7 @@
     maybeDropDrone(e);
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
     gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1));
-    state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1) * (window.PASCEND ? window.PASCEND.mult('gold') : 1);   // PILOT: Gold Find · ASCENSION: Prize Courts · BEACON: Wreckfield Tithe
+    state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1) * (window.PASCEND ? window.PASCEND.mult('gold') : 1) * proMods().gold;   // PILOT: Gold Find · ASCENSION: Prize Courts · BEACON: Wreckfield Tithe
     // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
     // iron & plasma are the rare finds (rarer, but a real grind faucet now).
     // Bosses always pay a wreck's worth of all three.
@@ -1475,9 +1488,10 @@
       e.node.enemy = null; e.node.respawnT = (swarm ? 1.2 : RESPAWN_SEC) / (rt.tileRespawnMult || 1);
     }
     if (!rt.bossAlive) rt.bossTimer = Math.max(0, rt.bossTimer - 4);
+    commitTileShield();   // first blood in a contested tile arms its 24 h shield
     // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
     const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
-    if (Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1)) {
+    if (Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
       const _q = _swarmKill ? 1 : lootQ();
       let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
@@ -1604,10 +1618,19 @@
     if (window.UI) window.UI.bossEvent('super');
     return b;
   }
+  // The boss meter counts SIM seconds, and update() is handed dt already
+  // multiplied by gameSpeed — so at 5× a readout of "300" burns down in 60 real
+  // seconds. The countdown now reports the seconds a player actually waits at
+  // the CURRENT speed. Two other gates were invisible: kills strip 4s each, and
+  // spawnBoss() also demands 300 sim-seconds since the last boss — the meter
+  // could sit at 0:00 with no boss in sight. Report whichever gate clears last.
   function getBossInfo() {
     if (rt.bossAlive && rt.boss) return { alive: true, hp: rt.boss.hp, max: rt.boss.maxHp, name: rt.boss.name };
-    const prog = rt.bossInit > 0 ? Math.max(0, Math.min(1, 1 - rt.bossTimer / rt.bossInit)) : 0;
-    return { alive: false, progress: prog, timeLeft: Math.max(0, Math.ceil(rt.bossTimer)) };
+    const sp = Math.max(1, state.gameSpeed | 0);
+    const cdLeft = Math.max(0, 300 - (rt.time - rt.lastBoss));
+    const simLeft = Math.max(rt.bossTimer, cdLeft);
+    const prog = rt.bossInit > 0 ? Math.max(0, Math.min(1, 1 - simLeft / rt.bossInit)) : 0;
+    return { alive: false, progress: prog, timeLeft: Math.max(0, Math.ceil(simLeft / sp)), speed: sp, held: cdLeft > rt.bossTimer };
   }
 
   // --------------------------------------------------------------------------
@@ -3196,6 +3219,7 @@
     rt.sdrun = null;              // …and any Server Dreadnaught event run
     rt.siege = null;
     rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    rt._pendShield = null;        // leaving a contested tile un-arms its pending shield
     reachZone(d);
     // pushing into a new 100-block opens the next block (still level-gated)
     const cap = C.zoneCap(state.highestDungeonReached);
@@ -3285,6 +3309,7 @@
   // Used after every event exit (retreat / timer / death) and every shipwreck.
   function goSafeHangar() {
     try {
+      rt._pendShield = null;   // retreating before first blood leaves the tile unshielded
       rt.siege = null; rt.waves = null;
       rt.enemies = []; rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false;
       rt.awaitingRespawn = false;
@@ -3809,19 +3834,25 @@
   // WHICH hull the roll pays out. The first two are the common Kaevith chassis
   // and their rarity is unchanged; the top three are the prizes.
   //
-  // Aug 2026 rebalance: Glaive and Harbinger are exactly 5× rarer, and the
-  // Sovereign 10× rarer, measured as SHARE OF A WINNING ROLL at the rim. Note
-  // that simply dividing the weights by 5 and 10 does NOT achieve that — it
-  // shrinks the denominator too, so the common hulls absorb the freed
-  // probability and the realised factors come out at only ~3× and ~6×. These
-  // values are solved for the intended share ratio instead (rim shares: 43.9 /
-  // 47.2 / 4.57 / 3.52 / 0.83%). Low rings land slightly rarer still (~6.9× /
-  // ~13.8×), which is the right direction: the rim is where you hunt.
+  // Aug 2026 rebalance: Glaive 5× rarer and Godshard 10× rarer, measured as SHARE
+  // OF A WINNING ROLL at the rim. Note that simply dividing the weights does NOT
+  // achieve that — it shrinks the denominator too, so the common hulls absorb the
+  // freed probability and the realised factor comes out at only ~3× or ~6×. These
+  // values are solved for the intended share ratio instead.
+  //
+  // SOVEREIGN PASS (Aug 2026): xen4 is another 5× rarer again — rim share 3.52%
+  // → 0.704%, solved the same way (weight 0.901 → 0.17509 so the OTHER four keep
+  // their probability). That makes the Sovereign the rarest hull in the line,
+  // below even the Godshard, which is the intent: it is the prize.
+  //
+  // Rim shares now: 45.18 / 48.56 / 4.70 / 0.704 / 0.855%.
+  // Low rings land rarer still (Sovereign ~0.228% at ring 1), which is the right
+  // direction — the rim is where you hunt.
   //
   // The OVERALL chance of any hull dropping is untouched — this only changes
   // WHICH hull you get. xenSplit() feeds the same numbers to the event tooltips
   // so the briefing can never drift from the table.
-  const XEN_BASE_W = [50, 25, 1.576, 0.901, 0.169];
+  const XEN_BASE_W = [50, 25, 1.576, 0.17509, 0.169];
   // Per-hull share of a winning roll at a given ring, for the event tooltips.
   // Mirrors the pool build in xenTechRoll exactly — including which hulls are
   // already owned and therefore out of the pool.
@@ -4127,6 +4158,22 @@
     for (const ck in c) eff[ck] = Math.ceil(c[ck] * disc);
     return eff;
   }
+  // Arms the pending 24 h attack shield set by warp(). Called on the first kill
+  // in the tile — the moment the attack is real. Warping in and leaving without
+  // firing leaves the tile unshielded and freely attackable, by you or anyone.
+  function commitTileShield() {
+    const p = rt._pendShield; if (!p || !p.k) return;
+    // BELT AND BRACES — a pending stamp must never outlive the visit that created
+    // it. Bail and Dock both route through selectDungeon(), not goSafeHangar(), so
+    // a pending shield used to survive the retreat and land on the player's next
+    // kill ANYWHERE, shielding a tile they had already abandoned. selectDungeon()
+    // now clears it; this check means any future exit path is safe by default.
+    if (state.currentSystem !== p.k) { rt._pendShield = null; return; }
+    rt._pendShield = null;
+    if (!state.tileCd) state.tileCd = {};
+    state.tileCd[p.k] = Math.max(state.tileCd[p.k] || 0, p.until);
+    save();
+  }
   function warp(k) {
     const tile = sysAt(k); if (!tile) return { ok: false, reason: 'invalid' };
     if (isAllyTile(k)) return { ok: false, reason: 'ally' };   // same alliance — never attackable
@@ -4140,8 +4187,14 @@
     if (tile.void && state.level < tile.vtier) return { ok: false, reason: 'locked', ownGate: owned };
     // EMPIRE AT CAPACITY — refuse the trip rather than let a pilot fight a siege
     // they can't be paid for. Entering a tile you already hold is always fine.
-    if (!owned && atTileCap()) return { ok: false, reason: 'tilecap', cap: tileCap() };
-    if (!owned && tile.level > state.level + 10) return { ok: false, reason: 'locked' };
+    if (!owned && atTileCap()) { try { window.PROOFFER && PROOFFER.maybe('tilecap'); } catch (e) {} return { ok: false, reason: 'tilecap', cap: tileCap() }; }
+    // …AND THE SAME GATE ON ORDINARY TILES. This used to be `!owned &&`, which
+    // left the exact hole the Void comment above describes: ascension keeps your
+    // territory but resets your level, so an owned Lv-300 system and a fresh Lv-5
+    // pilot meant warping into a zone garrisoned by your OWN clone fleet — a
+    // pilot fighting themselves for free high-level XP. You keep the tile and its
+    // income; you fight on it again once you have re-earned the level.
+    if (tile.level > state.level + 10) return { ok: false, reason: 'locked', ownGate: owned };
     // contest cooldown blocks EVERY non-owned warp-in (rival, neutral, citadel)
     if (!owned && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
     // ENTRY COST — every warp burns resources; deeper rings are punishing
@@ -4153,10 +4206,15 @@
       state.resources.plasma -= cost.plasma || 0;
     }
     if (!owned && (rivalOf(k) || tile.citadel)) {
-      if (!state.tileCd) state.tileCd = {};
-      // ATTACK SHIELD — attacking an owned tile (or any citadel) seals it for
-      // 24 h: nobody can attack it again, win or lose
-      state.tileCd[k] = Date.now() + 24 * 3600 * 1000;
+      // ATTACK SHIELD — 24 h, so nobody can attack a contested tile again win or
+      // lose. It used to be stamped RIGHT HERE, on warp-in, which meant entering
+      // a tile and immediately bailing to the hangar burned the shield without a
+      // shot fired (reported on both My Galaxy and Void spires). The stamp is now
+      // PENDING until the engagement is genuinely joined — see commitTileShield,
+      // called on the first kill. Retreating before that costs you nothing.
+      rt._pendShield = { k, until: Date.now() + 24 * 3600 * 1000 };
+    } else {
+      rt._pendShield = null;
     }
     enterTile(k);
     save();
@@ -4571,7 +4629,7 @@
   // intent was always a limit on territory. Citadels are now free to raise on any
   // tile you hold, because holding the tile is itself the scarce thing.
   const TILE_MAX = 50;
-  function tileCap() { return TILE_MAX + (window.VIP ? window.VIP.level() * 5 : 0); }
+  function tileCap() { return TILE_MAX + (window.VIP ? window.VIP.level() * 5 : 0) + proMods().tiles; }
   function tileCount() {
     return Object.keys(state.ownedSystems || {}).filter((k) => { const t = sysAt(k); return !(t && t.home); }).length;
   }
@@ -4995,10 +5053,37 @@
   function hasSpeed(sku) { return sku !== 'speed4lc'; }
   function purchase(sku) { state.purchases[sku] = true; save(); if (window.UI) window.UI.refreshAll(); }
   // One-time premium unlock: permanent 4× battle speed for 500 LootCoins.
-  // —— LOOTFLEET PRO —— $20/mo subscription: exclusive 5× speed + 2× XP while
-  // active. proUntil is a timestamp; the Stripe webhook (or manual fulfilment)
+  // —— LOOTFLEET PRO —— $20/mo subscription. Every benefit lives in PRO_PERKS
+  // (xp, speed, gold, loot, beacon, tiles, dread attempts) and every surface —
+  // HUD chip, offer card, purchase sheet, receipt, stat pills — reads that table
+  // rather than a retyped literal. proUntil is a timestamp; the Stripe webhook (or manual fulfilment)
   // extends it each billing cycle. grantPro is the fulfilment hook.
   function isPro() { return (state.proUntil || 0) > Date.now(); }
+  // ---- LOOTFLEET PRO — what the subscription actually does ---------------------
+  // One table, read by every hook and by the purchase sheet, so the sell copy and
+  // the game can never disagree. Pro is deliberately felt across SEVERAL systems
+  // rather than being one big XP number: speed, XP, gold, loot, beacon, empire
+  // size and the Dreadnaught hunt.
+  const PRO_PERKS = {
+    xpMult: 5,        // base XP rate ×5 (every other bonus is still a % of that base)
+    gold: 2,          // ×2 gold from every kill
+    loot: 1.5,        // +50% drop chance
+    beaconCdCut: 0.25,// −25% beacon recharge
+    tiles: 10,        // +10 galaxy tile cap
+    dreadAttempts: 1, // +1 Dreadnaught hunt per tier each week (see DREAD.proAttempt)
+    speed: 5,         // exclusive 5× battle speed tier
+  };
+  function proMods() {
+    const on = isPro();
+    return {
+      on,
+      gold: on ? PRO_PERKS.gold : 1,
+      loot: on ? PRO_PERKS.loot : 1,
+      beaconCdCut: on ? PRO_PERKS.beaconCdCut : 0,
+      tiles: on ? PRO_PERKS.tiles : 0,
+      perks: PRO_PERKS,
+    };
+  }
   function grantPro(days) {
     const base = Math.max(Date.now(), state.proUntil || 0);
     state.proUntil = base + (days || 30) * 86400000;
@@ -5420,6 +5505,9 @@
       capH, cappedOut: rawH > capH + 0.05,
       capBonus: capH - 12,
     };
+    // A LONG absence only. The return brief is already on screen, so the offer
+    // waits for the next screen change rather than stacking two sheets.
+    if (rawH >= 6) { try { setTimeout(() => { window.PROOFFER && PROOFFER.maybe('offline'); }, 1200); } catch (e) {} }
     try {
       if (window.RETURNBRIEF) { window.RETURNBRIEF.show(payload); return; }
     } catch (e) {}
@@ -5509,8 +5597,24 @@
     if (!state.rivalTiles) state.rivalTiles = {};
     if (!state.tileCd) state.tileCd = {};
     if (!state.galaxyFeed) state.galaxyFeed = [];
-    if (state.gameSpeed > 3 && !state.secretSpeed && !(state.gameSpeed === 4 && state.purchases && state.purchases.speed4lc)) { if (state.gameSpeed !== 5) state.gameSpeed = 1; } // 4× needs its LootCoin unlock; 10× the easter egg
-    if (state.gameSpeed === 5 && !isPro()) state.gameSpeed = 1; // Pro lapsed → drop the 5× tier
+    // SPEED-TIER ENTITLEMENT CHECK. Rewritten Aug 2026 — the old two-liner had a
+    // hole: the first clause skipped anything sitting at exactly 5, and the
+    // second demoted a 5 without Pro, but NOTHING re-validated a 10 whose
+    // secretSpeed had gone missing except that same first clause, which then
+    // dropped it to 1 with no way back (the HUD hides the 10× pill when
+    // secretSpeed is false, so the highest tier a Pro player can still see and
+    // tap is 5× — that is the "it resorts to 5×" report). Now each tier is
+    // validated against its OWN entitlement, 10× first, and an earned 10× is
+    // never touched.
+    if (state.gameSpeed === 10) {
+      if (!state.secretSpeed) state.gameSpeed = 1;          // never unlocked, or a tampered save
+    } else if (state.gameSpeed === 5) {
+      if (!isPro()) state.gameSpeed = 1;                    // Pro lapsed → drop the 5× tier
+    } else if (state.gameSpeed === 4) {
+      if (!(state.purchases && state.purchases.speed4lc)) state.gameSpeed = 1;   // 4× needs its LootCoin unlock
+    } else if (!(state.gameSpeed >= 1 && state.gameSpeed <= 3)) {
+      state.gameSpeed = 1;                                  // anything else out of range
+    }
     // ---- COSMETICS + CREDITS (premium currency) ----
     if (!state.cosmetics) state.cosmetics = { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
     if (!state.cosmetics.owned) state.cosmetics.owned = { stock: 1, none: 1 };
@@ -5683,6 +5787,7 @@
     // exception — still names its last phase on the NEXT load. The repair count
     // from sanitizeSave() rides along.
     const bootMark = (ph) => { try { localStorage.setItem('lf_boot', ph); } catch (e) {} };
+    const SAFE_BOOT = false;   // master switch — see the note at the arming site below
     try {
       // read the CAPTURED pre-boot marker — load() has already stamped
       // 'load-save' over the storage slot by the time init runs, which is why
@@ -5699,10 +5804,14 @@
       } else if (prev && prev !== 'clean-exit') {
         console.warn('[LOOTFLEET] previous boot never finished — it died during: ' + prev + '. Send this line with a bug report.');
         window.__lfBootDiedAt = prev;
-        // SAFE BOOT — arms automatically so the affected account can get in
-        // without a console: skip the offline sim, the return brief and the v4
-        // remap this one time, and show a banner naming the dead phase.
-        window.__lfSafeBoot = true;
+        // SAFE BOOT — DISABLED (Aug 2026). The environment is stable, and the
+        // banner was firing off stale `lf_boot` breadcrumbs left in storage by
+        // long-dead sessions, so returning players met a crash warning about a
+        // failure that never happened to them. The breadcrumbs and the console
+        // line above still record the dying phase for diagnostics — only the
+        // player-facing degrade-and-warn behaviour is off. Flip SAFE_BOOT back
+        // to true to restore skipping the offline sim, return brief and v4 remap.
+        if (SAFE_BOOT) window.__lfSafeBoot = true;
       }
     } catch (e) {}
     // a reload or navigation is NOT a crash — mark it clean so recovery only
@@ -5716,7 +5825,11 @@
     } catch (e) {}
     let _prevErr = '';
     try { _prevErr = localStorage.getItem('lf_err') || ''; if (_prevErr) localStorage.removeItem('lf_err'); } catch (e) {}
-    if (window.__lfSafeBoot || window.__lfPlayRecovery || _prevErr) {
+    // Stale crash breadcrumbs from a previous session must not greet a player
+    // with a warning banner in a stable build. Clear the marker so the slot is
+    // fresh for this session's own forensics.
+    if (!SAFE_BOOT) { try { localStorage.removeItem('lf_boot'); } catch (e) {} }
+    if (window.__lfSafeBoot || window.__lfPlayRecovery) {
       let lastPlay = '';
       try { lastPlay = localStorage.getItem('lf_play') || ''; } catch (e) {}
       crashBanner((window.__lfPlayRecovery
@@ -5966,7 +6079,7 @@
     shipLevel, shipUpInfo, upgradeShip, spawnFleetBoss,
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
-    setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, grantPro, respawnAt,
+    setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     lanceState,

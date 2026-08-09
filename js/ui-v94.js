@@ -986,15 +986,18 @@
       }
     }
     // XP rate — from the one source of truth (GAME.xpFleetInfo): base 100%
-    // (200% on Pro) + every bonus as a flat % of base, summed then multiplied.
-    // Shown as the TOTAL rate (100% = normal). No cap.
+    // (500% on Pro) + every bonus as a flat % of base, summed then multiplied,
+    // TOTAL capped at 1000%. The chip flags the cap so the hero screen and the
+    // My Ship pill can never tell different stories.
     {
       const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
       const xpChip = xi
-        ? ' <span class="hero-xp-chip' + (xi.buffPct > 0 ? '' : ' zero') + '" title="' + (xi.buffPct > 0
-            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (5× by Pro)' : '') + ' + ' + xi.buffPct + '% of base in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. No cap.'
-            : 'Base XP rate \u2014 no bonuses active. VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of base.')
-          + '">\u2726 XP ' + xi.pct + '%</span>'
+        ? ' <span class="hero-xp-chip' + (xi.capped ? ' capped' : xi.buffPct > 0 ? '' : ' zero') + '" title="' + (xi.capped
+            ? 'CAPPED — your stack pays ' + xi.rawPct + '%, and the XP rate is capped at ' + xi.cap + '%. More XP bonuses add nothing until something drops off.'
+            : xi.buffPct > 0
+            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (5× by Pro)' : '') + ' + ' + xi.buffPct + '% of base in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. Hard cap ' + xi.cap + '%.'
+            : 'Base XP rate \u2014 no bonuses active. VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of base, up to a ' + xi.cap + '% cap.')
+          + '">\u2726 XP ' + xi.pct + '%' + (xi.capped ? ' · MAX' : '') + '</span>'
         : '';
       el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>' + xpChip;
     }

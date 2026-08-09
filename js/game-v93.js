@@ -698,8 +698,16 @@
   //     total = base × (1 + Σ bonuses / 100)
   // e.g. base 100% + VIP 2% + Neural Uplink 200% + Godshard 100% → 402% rate.
   // On Pro the same bonuses pay double, because they multiply a 200% base.
-  // NO CAP: additive stacking grows linearly (a 7% Pilot Tree node adds exactly
-  // 7% of base), so the old runaway compounding is gone by construction.
+  //
+  // HARD CAP 1000% (Aug 2026). Additive stacking removed the runaway compounding,
+  // but it did not bound the total — a fully-built account could still push the
+  // rate somewhere the level curve was never designed against. The TOTAL rate is
+  // now capped at 1000% (10× normal). The cap applies to the total, not to any
+  // one source, so it is reached from whatever combination the pilot built.
+  // Pro's 500% base counts toward it: a member starts halfway up and has 500
+  // points of bonus headroom, which xpFleetInfo() reports honestly rather than
+  // quietly discarding the overflow.
+  const XP_RATE_CAP = 1000;
   function xpSources() {
     const safe = (fn) => { try { const v = fn(); return isFinite(v) && v > 0 ? v : 1; } catch (e) { return 1; } };
     const out = [];
@@ -712,15 +720,18 @@
     add('Kaevith Resonance', safe(() => xenXpMult()));
     return out;
   }
-  // { basePct, buffPct, pct, mult, sources, pro } — pct is the TOTAL rate
-  // (100 = normal, no bonuses). buffPct is the summed bonus % applied to base.
+  // { basePct, buffPct, pct, rawPct, capped, cap, mult, sources, pro } — pct is
+  // the TOTAL rate actually paid (100 = normal, no bonuses), rawPct is what the
+  // stack would have paid uncapped, and `capped` says the two differ.
   function xpFleetInfo() {
     const src = xpSources();
     const pro = isPro();
     const basePct = pro ? 100 * PRO_PERKS.xpMult : 100;
     const buffPct = Math.round(src.reduce((a, s) => a + s.pct, 0) * 10) / 10;
-    const pct = Math.round(basePct * (1 + buffPct / 100) * 10) / 10;
-    return { sources: src, pro, basePct, buffPct, pct, mult: pct / 100 };
+    const rawPct = Math.round(basePct * (1 + buffPct / 100) * 10) / 10;
+    const pct = Math.min(XP_RATE_CAP, rawPct);
+    return { sources: src, pro, basePct, buffPct, rawPct, pct, capped: rawPct > XP_RATE_CAP,
+             cap: XP_RATE_CAP, headroom: Math.max(0, XP_RATE_CAP - rawPct), mult: pct / 100 };
   }
   function gainXp(amount) {
     if (!isFinite(amount) || amount <= 0) return;   // a NaN here corrupts xp forever
@@ -5954,11 +5965,36 @@
 
   // ---- SHIP HULL UPGRADES — exponential resource cost, +dmg/+hp/+rate per level
   function shipLevel(key) { return (state.shipLevels && state.shipLevels[key]) || 1; }
+  // COST TIER IS DERIVED FROM THE HULL'S OWN POWER (Aug 2026), not its position in
+  // C.SHIPS. Array order is DISPLAY order — event hulls are appended as they ship —
+  // and pricing off the index had drifted into nonsense:
+  //
+  //   Kaevith Splinter  power 20  (weaker than a Cruiser)  cost ×45,500,000
+  //   Cruiser           power 28                            cost ×3.24
+  //   Ember Mote        power 28  (same as a Cruiser)       cost ×860,000,000
+  //   Kaevith Sovereign power 396 (≈ Mothership's 432)      cost ×127,000 the Mothership
+  //
+  // A Kaevith Splinter cost fourteen MILLION times a Cruiser to upgrade while being
+  // the weaker hull. Deriving the tier from power fixes every one of those and
+  // prices any hull added later automatically — there is no list to maintain.
+  //
+  // The fit is calibrated against the mainline progression so tuned hulls barely
+  // move: Battleship 1.02e5 → 1.00e5, Oblivion Final 2.23e9 → 2.15e9, Dread Omega
+  // 7.59e10 → 7.18e10. Only the mispriced outliers change materially.
+  const HULL_POWER_CACHE = {};
+  function hullCostTier(key) {
+    if (HULL_POWER_CACHE[key] != null) return HULL_POWER_CACHE[key];
+    const s = C.SHIP_BY_KEY[key] || {}; const m = s.mods || {};
+    // Same weighting the Ship Score uses in spirit: hull, damage (double, it is
+    // the scarcer stat), multishot and crit damage.
+    const power = (m.hpPct || 0) + (m.dmgPct || 0) * 2 + (m.multiShot || 0) * 3 + (m.critDamage || 0);
+    const tier = Math.max(0, Math.min(34, 5 * Math.log(Math.max(1, power)) - 16));
+    HULL_POWER_CACHE[key] = tier;
+    return tier;
+  }
   function shipUpgradeCost(key) {
     const L = shipLevel(key);
-    // "later" ships = position in the progression order; each later hull costs
-    // exponentially more to upgrade, with steeper per-level growth too.
-    let idx = C.SHIPS.findIndex((s) => s.key === key); if (idx < 0) idx = 0;
+    const idx = hullCostTier(key);
     const tierMul = Math.pow(1.8, idx);
     const goldGrow = 1.95 + idx * 0.06;
     const plasmaGrow = 1.8 + idx * 0.05;

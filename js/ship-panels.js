@@ -35,8 +35,10 @@
     const out = [];
 
     // XP — read straight from GAME.xpFleetInfo(): ONE base rate (100%, or 500%
-    // on Pro), and every bonus is a flat % of that base — summed, then
-    // multiplied in. No cap. Shown as the TOTAL rate (100% = normal).
+    // on Pro), every bonus a flat % of that base — summed, then multiplied in,
+    // and the TOTAL is capped at 1000%. When the stack exceeds the cap the pill
+    // says so and shows what the stack would have paid, because a player who has
+    // built past the ceiling deserves to know the next XP node buys nothing.
     // NOT safe(): its isNaN() guard coerces an OBJECT to NaN and throws the whole
     // result away — xpFleetInfo returns an object, so safe() returned null on
     // every account and the pill never rendered. Plain try/catch.
@@ -44,13 +46,27 @@
     // ALWAYS visible — even at base. Hiding the pill read as a missing feature,
     // and the base rate is itself information: none of your bonuses are on.
     if (xi) {
+      const cap = xi.cap || 1000;
       const brk = (xi.sources || []).map((s) => s.n + ' +' + s.pct + '%').join(' · ');
-      out.push({
-        ic: '✦', n: 'XP Rate', v: xi.pct + '%', c: xi.buffPct > 0 ? '#7ce0a0' : '#8fa3bd',
-        tip: 'Base ' + xi.basePct + '%' + (xi.pro ? ' (5× by LootFleet Pro)' : '')
+      const near = !xi.capped && xi.headroom != null && xi.headroom <= cap * 0.1;
+      let tip;
+      if (xi.capped) {
+        tip = 'CAPPED. Your stack pays ' + xi.rawPct + '%, but the XP rate is capped at '
+          + cap + '% — that is what you are earning. Base ' + xi.basePct + '%'
+          + (xi.pro ? ' (5× by LootFleet Pro)' : '') + ' + bonuses ' + xi.buffPct + '% of base ('
+          + brk + '). Further XP bonuses add nothing until something drops off.';
+      } else {
+        tip = 'Base ' + xi.basePct + '%' + (xi.pro ? ' (5× by LootFleet Pro)' : '')
           + (xi.buffPct > 0
-            ? ' + bonuses ' + xi.buffPct + '% of base (' + brk + '). Bonuses add together, then multiply the base — no cap.'
-            : '. No bonuses active — VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of this base.'),
+            ? ' + bonuses ' + xi.buffPct + '% of base (' + brk + '). Bonuses add together, then multiply the base.'
+            : '. No bonuses active — VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of this base.')
+          + ' Hard cap ' + cap + '%' + (near ? ' — you are within ' + Math.round(xi.headroom) + '% of it.' : '.');
+      }
+      out.push({
+        ic: '✦', n: 'XP Rate',
+        v: xi.pct + '%' + (xi.capped ? ' · MAX' : ''),
+        c: xi.capped ? '#ffd24d' : xi.buffPct > 0 ? '#7ce0a0' : '#8fa3bd',
+        tip,
       });
     }
 

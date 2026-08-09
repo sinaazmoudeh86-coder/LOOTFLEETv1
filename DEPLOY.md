@@ -1,7 +1,7 @@
-# Loot Fleet — deploy v216 · build 498
+# Loot Fleet — deploy v216 · build 501
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v215. Service worker cache is `lootfleet-v498`.
+Supersedes v215. Service worker cache is `lootfleet-v501`.
 
 **Headline:** the XP-rate rework (additive bonuses, no cap), the REAL fix for
 post-ascension gold coming back, the global layout clip guard, and a Discord
@@ -27,12 +27,12 @@ grep -c "stars \* 5e6" js/account.js             # must be 1
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 498 |
+| Stamp | File | Build 501 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `498` |
-| Update beacon | `version.json` → `build` | `498` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v498` |
-| Project root beacon | root `version.json` (source tree) | `498` |
+| Client constant | `game.html` → `window.LF_BUILD` | `501` |
+| Update beacon | `version.json` → `build` | `501` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v501` |
+| Project root beacon | root `version.json` (source tree) | `501` |
 
 The fourth is easy to miss and now matters more than ever: the root beacon
 drifted nine builds behind, and the in-session update gate compares
@@ -92,6 +92,86 @@ first load.
 ---
 
 ## What shipped
+
+### 🔒 BOLT-DOWN PASS (build 501)
+
+Full regression sweep of everything changed this session — 18 checks, all green:
+
+| area | verified |
+|---|---|
+| XP cap | `cap=1000`, `mult` clamps to ≤10, `pct ≤ cap` |
+| Century XP | L50 1.132 → L150 1.168 → L250 1.176 → L350 1.186 (widens every band) |
+| Century difficulty | zone 99→100 HP ×1.65, 199→200 ×1.31 |
+| Hull costs | Sovereign 1.06e7 vs Mothership 1.37e7; Splinter ≤ 2× Cruiser |
+| Sovereign drops | rim share exactly 0.704% |
+| Dread LootCoin | 35k/45k/55k/65k/78k/92k — all under 100k |
+| Pro | `PRO_PERKS` complete, `xpMult=5`, every surface reads it |
+| Pro offer | module loaded, `.nav-btn.active` selector resolves |
+| Boss timer | reports `speed` and the 300s floor |
+| Speed tiers | value always in {1,2,3,4,5,10} |
+
+**Cache-bust gap closed.** `js/config.live.js` and `js/galaxy-box.js` were referenced WITHOUT
+`?v=`, against the project's own contract — players could hold a stale copy of either
+indefinitely. Both now versioned.
+
+Release folder audited: 69 referenced js/css files, **zero stale, zero missing**, root
+`game.html` byte-identical to the release copy, all six build stamps agree.
+
+
+### ⚒ HULL UPGRADE COSTS NOW DERIVE FROM POWER, NOT ARRAY POSITION — `js/game-v93.js` (build 500)
+
+`shipUpgradeCost()` priced a hull off `C.SHIPS.findIndex()`. That array is **display order** —
+event hulls are appended as they ship — so price and power had come completely apart:
+
+| hull | power | old cost ×  | note |
+|---|---|---|---|
+| Cruiser | 28 | ×3.24 | |
+| Kaevith Splinter | 20 | **×45,500,000** | weaker than a Cruiser, 14M× the price |
+| Ember Mote | 28 | **×860,000,000** | identical power to a Cruiser |
+| Mothership | 432 | ×2,080 | |
+| Kaevith Sovereign | 396 | **×265,000,000** | ≈ Mothership power, 127,000× its price |
+
+The tier is now derived from the hull's own mods (`hp + 2×dmg + 3×multishot + critDmg`) on a
+log fit calibrated against the mainline, so tuned hulls barely move and only the outliers change:
+
+- Battleship 1.02e5 → 1.00e5 · Oblivion Final 2.23e9 → 2.15e9 · Dread Omega 7.59e10 → 7.18e10
+- Kaevith Splinter 1.37e11 → **3.00e3** · Sovereign 7.96e11 → **1.06e7** · Godshard 1.43e12 → **1.54e9**
+- Ember line corrected identically (same bug, worse magnitude), Aeternum and Titan Sina brought
+  down to their real power tier
+
+Hulls added in future are priced automatically — there is no list to maintain. Result cached per
+key. **The Ember hulls were fixed alongside Kaevith**: same root cause, and leaving them would
+have recreated the same complaint next week.
+
+### ✦ XP CAP CONFIRMED AT 1000% TOTAL
+
+No change — the build-499 cap is what was wanted. For the record: Pro's 500% base counts toward
+it, so a member needs only **+100% in bonuses** to reach the ceiling versus **+900%** for a free
+pilot. Pro gets there fast but cannot get there on the subscription alone.
+
+
+### ✦ XP RATE CAPPED AT 1000% — `js/game-v93.js`, `js/ship-panels.js`, `js/ui-v94.js` (build 499)
+
+The Aug 2026 additive rework killed runaway *compounding* but left the total unbounded, so a
+fully-built account could still push the rate somewhere the level curve was never designed
+against. `XP_RATE_CAP = 1000` caps the **total** rate (10× normal) — not any single source, so
+it is reached from whatever combination the pilot actually built.
+
+`xpFleetInfo()` now returns `rawPct` (what the stack would pay), `pct` (what is paid),
+`capped`, `cap` and `headroom`, so the UI can be honest instead of silently discarding the
+overflow. Both readouts consume it:
+
+- **My Ship ▸ XP Rate pill** — reads `420%` normally with the full source breakdown and the cap
+  named; at the ceiling it reads **`1000% · MAX`** in gold and the tooltip opens with "CAPPED.
+  Your stack pays 1340%, but the XP rate is capped at 1000% — that is what you are earning…
+  Further XP bonuses add nothing until something drops off." Within 10% of the cap it warns how
+  much headroom is left, so nobody spends a Neural Uplink rank on nothing.
+- **Hero power chip** — same states, reusing the `.hero-xp-chip.capped` gold style already in
+  `style-v2.css` from the previous cap era.
+
+**Pro members are affected most and are told so.** Pro's 500% base counts toward the cap, so a
+member starts halfway up with 500 points of bonus headroom rather than the 1000 a free pilot has.
+
 
 ### ⚡ 10× SPEED KEPT BEING REVOKED — `js/game-v93.js`, `js/account.js` (build 498)
 

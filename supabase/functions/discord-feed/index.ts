@@ -12,7 +12,9 @@
 //
 //  SOURCES
 //    leaderboard     → ascensions, rank #1 changes, zone/level milestones,
-//                      new pilots, top-10 entries
+//                      new pilots, top-10 entries, LEGENDARY NANOCORES
+//                      (legendary only: recovered, slot depth, god rolls;
+//                       a FINISHED 5/5 core gets its own message)
 //    sdread_scores   → Season Dread stage records
 //    alliances       → Armada mark clears, new alliances
 //    war_events      → repelled sieges, daily digest, KAEVITH HULLS EARNED
@@ -38,8 +40,8 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 // Version marker — echoed in every response and the bootstrap message, so a
 // deploy is verifiable from the cron log:
 //   select content from net._http_response order by created desc limit 3;
-// must show {"ok":true,"ver":216,...}. If ver is missing, the old build runs.
-const FEED_VER = 216;
+// must show {"ok":true,"ver":570,...}. If ver is missing, the old build runs.
+const FEED_VER = 570;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -97,6 +99,11 @@ const GIFS: Record<string, string[]> = {
   owned:   ['15BuyagtKucHm', '3o7qDSOvfaCO9b3MlO', '4vQZcC96dTfG', 'd0NnEG1WnnXqg', 'DfbpTbQ9TvSX6', '93lNrr6jBuVK6a910g', 'KL7I5MXrcvezC', 'DWdNrMPdddZ19EfWFD', 'Yuve5SrNAtDp3lpNzr'].map(GIF),
   victory: ['jbUspndg5yz8UfVs8R', 'K3RxMSrERT8iI', 'uTuLngvL9p0Xe', 'Gf3fU0qPtI6uk', 'rhaIsgMSRHaUg', 'l4pTmPgIgWEzf86zu'].map(GIF),
   fine:    ['NTur7XlVDUdqM', 'QMHoU66sBXqqLqYvGO', 'l2QEgWxqxI2WJCXpC', 'tZyxxR4lUIRnTgIzl9', 'UKF08uKqWch0Y'].map(GIF),
+  // NANOCORES — drawn from the same known-good pool so nothing 404s, but split
+  // into three moods: pulling one, finishing one, and the ingot bill for both.
+  nano:    ['3o7qDSOvfaCO9b3MlO', 'Gf3fU0qPtI6uk', 'uTuLngvL9p0Xe', '93lNrr6jBuVK6a910g', 'DfbpTbQ9TvSX6', 'Yuve5SrNAtDp3lpNzr'].map(GIF),
+  maxed:   ['jbUspndg5yz8UfVs8R', 'K3RxMSrERT8iI', 'rhaIsgMSRHaUg', 'l4pTmPgIgWEzf86zu', 'KL7I5MXrcvezC'].map(GIF),
+  ingots:  ['NTur7XlVDUdqM', 'l2QEgWxqxI2WJCXpC', 'QMHoU66sBXqqLqYvGO', 'tZyxxR4lUIRnTgIzl9'].map(GIF),
 };
 function seedHash(s: string): number { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 const pickBy = <T>(seed: string, arr: T[]): T => arr[seedHash(seed) % arr.length];
@@ -171,6 +178,47 @@ const QUIPS: Record<string, string[]> = {
     "📈 {n} shipments and counting: {a} is basically a logistics company with guns.",
     "🧾 {a}: {n} deliveries, zero apologies. The freight union is drafting a thank-you card ✉️",
   ],
+  // ---- NANOCORES · LEGENDARY ONLY ---------------------------------------
+  // Nothing here fires for a Common core. {a} pilot · {n} count · {s} ship
+  nanoFirst: [
+    "◈ {a} pulled a LEGENDARY Nanocore out of a crate — 1.5% odds, and you will be hearing about it for a while 📢",
+    "◈ A Legendary Nanocore for {a}. The other 98.5% of that crate rotation is in shambles 💀",
+    "◈ {a} opened a crate and a Legendary fell out. They are already telling their alliance. Twice. 🔔",
+    "◈ 1.5%. {a} hit it. Everyone else in this channel has opened forty crates and owns a lovely grey rock 🪨",
+    "◈ {a} just found a Legendary core. Not bought. Not traded. FOUND. The crate machine is having a bad day 🎰",
+  ],
+  nanoLegend: [
+    "◈ {a} is holding {n} Legendary Nanocores now. That is not a collection, that is a flex cabinet 🏆",
+    "◈ {n} Legendary cores for {a}. Their Prism Ingot balance has requested privacy 🧾",
+    "◈ {a} hit {n} Legendaries. At some point this stops being luck and starts being a spreadsheet 📊",
+  ],
+  nanoSlots: [
+    "⬢ {a} unlocked slot {n} on a Legendary core — {n} slots, {m} successful upgrades, zero of which were guaranteed 🎲",
+    "⬢ Slot {n} open on a Legendary for {a}. The 20% roll has been beaten again. It is not happy about it 😤",
+    "⬢ {a} pushed a Legendary core to {n} slots. Somewhere a pile of ingots is being quietly mourned 🪦",
+  ],
+  nanoMax: [
+    "🏆 {a} FINISHED a Legendary Nanocore — all 5 slots, 25 successful upgrades. This is the top of the system. There is nothing above it. 👑",
+    "🏆 Five of five on a Legendary for {a}. Twenty-five upgrades landed, and the last five were 20% shots. Absolute machine 🤖",
+    "🏆 {a} maxed a Legendary core. Five slots, five buffs, one very expensive hobby 💎",
+    "🏆 {a} beat the 20% roll five times in a row to close out a Legendary. The Prism Refinery has been asked to sit down 🪑",
+    "🏆 A completed Legendary core for {a}. There is no slot 6. There is no rarity above it. They just have to go outside now 🚪",
+  ],
+  // The ingot bill — the joke that lands on every upgrade post.
+  nanoCost: [
+    "🧾 Somewhere a Prism Refinery is filing for bankruptcy protection.",
+    "🧾 Every failed attempt cost the same as a successful one. Think about that for a second.",
+    "🧾 The ingots are gone. The ingots are never coming back.",
+  ],
+  nanoGod: [
+    "✧ {a} rolled a buff in the TOP 5% of its range on a Legendary core. Locked immediately, obviously 🔒",
+    "✧ God roll for {a} — top 5% of the range on a Legendary. The reroll button has been retired with honours 🎖️",
+    "✧ {a} hit a near-max roll on a Legendary core. Everyone else is rolling again. And again. 🎰",
+  ],
+  nanoGodN: [
+    "✧ {n} god rolls on Legendary cores for {a}. The RNG has filed a complaint 📮",
+    "✧ {a} now has {n} top-5% Legendary rolls. This is what happens when you refuse to stop rerolling 🎰",
+  ],
   cargoClean: [
     "✨ {a} delivered at 100% integrity — not a scratch. The freighter wants to fly with them FOREVER 💅",
     "🧼 A PERFECT delivery from {a}. Raiders touched nothing. Feelings were hurt instead 💔",
@@ -189,7 +237,10 @@ function quip(kind: string, seed: string, vars: Record<string, string | number>)
 const SITREP_MS = 3 * 60 * 60 * 1000;
 
 // Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
-const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'cargo', 'top10',
+// 'nano' was missing from this list, which sorted it to -1 — ahead of Kaevith
+// hulls by accident rather than by intent. It sits where it belongs now:
+// rarer than an ascension, quieter than a Void spire.
+const PRIORITY = ['xen', 'void', 'nano', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'cargo', 'top10',
                   'zone', 'level', 'open', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
@@ -200,6 +251,21 @@ const BURST = 4;
 const ZONE_MARKS  = [10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500];
 const CARGO_MARKS = [10, 25, 50, 100, 250, 500, 1000];   // first delivery gets its own event
 const LEVEL_MARKS = [25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
+// NANOCORES — legendary only. The first Legendary and the first god roll each
+// get their own one-time event; after that it is milestone crossings.
+const NANO_MARKS = [2, 5, 10, 25, 50, 100];
+const NANO_GOD_MARKS = [5, 10, 25, 50];
+const NANO_SLOT_FROM = 3;         // slots 1-2 are routine; 3, 4 and 5 are news
+const NANO_SLOT_MAX = 5;
+const NANO_UPS_PER_SLOT = 5;
+// Balance figures quoted on the cards, mirrored from CFG in js/nanocores.js.
+// Nothing here is computed by the feed — if a number changes there, change it
+// here and the copy stays honest.
+const NANO_LEGEND_ODDS = 1.5;     // % per crate
+const NANO_LAST_STAGE = 20;       // % success on the 5th upgrade of a slot
+const NANO_GOD_PCT = 2;           // ~2% of rolls land in the top 5% of a range
+// Slot 5, stage 5: costBase(1000) × stage(5) × slotMult(2)^4.
+const NANO_TOP_COST = 1000 * NANO_UPS_PER_SLOT * Math.pow(2, NANO_SLOT_MAX - 1);
 
 // Matches the in-game ladder in game-v93.js so Discord and the HUD agree.
 const UNITS = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc',
@@ -334,8 +400,25 @@ Deno.serve(async (req) => {
   const db = createClient(SB_URL, SB_KEY, { auth: { persistSession: false } });
   const now = new Date().toISOString();
 
+  // LEADERBOARD COLUMNS — cargo_* arrives with cargo-ladder.sql, nano_* with
+  // nanocore-ladder.sql. THIS SELECT IS WHY NONE OF IT EVER POSTED: the two
+  // migrations ran, the client published, the diff code was written and
+  // shipped — and the query never asked for the columns. Every read came back
+  // undefined, `Number(undefined) || 0` scored zero on both sides of the diff,
+  // and no cargo or Nanocore milestone could cross. Degrade a column set at a
+  // time so a server that has not run the migrations still gets everything else
+  // instead of a 500.
+  const LB_FULL  = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god';
+  const LB_CARGO = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best';
+  const LB_BASE  = 'user_id,name,power,level,zone,kills,asc_stars';
+
   const [lb, sd, al, seenRows] = await Promise.all([
-    selectAll(db, 'leaderboard', 'user_id,name,power,level,zone,kills,asc_stars', ['user_id']),
+    (async () => {
+      let r = await selectAll(db, 'leaderboard', LB_FULL, ['user_id']);
+      if (r.error) r = await selectAll(db, 'leaderboard', LB_CARGO, ['user_id']);
+      if (r.error) r = await selectAll(db, 'leaderboard', LB_BASE, ['user_id']);
+      return r;
+    })(),
     db.from('sdread_scores').select('user_id,name,season,stage,total'),
     db.from('alliances').select('id,name,tag,boss_n,boss_hp,boss_max,xp'),
     selectAll(db, 'feed_seen', 'kind,ref,data', ['kind', 'ref']),
@@ -369,12 +452,24 @@ Deno.serve(async (req) => {
   // Kaevith hull reports, drained from war_events below. Declared out here
   // because the situation report reads them too.
   const hullEvents: any[] = [];
+  // FINISHED LEGENDARY CORES. A 5/5 core is the end of the deepest progression
+  // in the game — 25 successful upgrades on one item, the last five at 20% —
+  // so like a Kaevith hull it gets its own message and is never batched.
+  const maxCores: { name: string; god: number; legend: number }[] = [];
   const snap: { kind: string; ref: string; data: Record<string, any>; updated_at: string }[] = [];
 
   // ---- leaderboard -----------------------------------------------------------
   const pilots = (lb.data ?? []).slice().sort((a, b) => (b.power ?? 0) - (a.power ?? 0));
   const top10 = new Set(pilots.slice(0, 10).map((p) => p.user_id));
   const leader = pilots[0];
+
+  // NANOCORE SCARCITY — how many accounts hold a Legendary at all, and how many
+  // have finished one. Both rows are already updated by the time this tick runs,
+  // so the pilot who just did it is counted: their card reads "the Nth ever"
+  // the same way a Kaevith hull does, with no extra query.
+  const nanoOf = (p: any, k: string) => Number(p[k]) || 0;
+  const legendHolders = pilots.filter((p) => nanoOf(p, 'nano_legend') > 0).length;
+  const maxHolders = pilots.filter((p) => nanoOf(p, 'nano_slots') >= NANO_SLOT_MAX).length;
 
   for (let i = 0; i < pilots.length; i++) {
     const p = pilots[i];
@@ -387,6 +482,9 @@ Deno.serve(async (req) => {
       asc: Number(p.asc_stars) || 0,
       cargo: Number((p as any).cargo) || 0,
       cargoBest: Number((p as any).cargo_best) || 0,
+      nanoLegend: Number((p as any).nano_legend) || 0,
+      nanoSlots: Number((p as any).nano_slots) || 0,
+      nanoGod: Number((p as any).nano_god) || 0,
       top10: top10.has(p.user_id) ? 1 : 0,
     };
     snap.push({ kind: 'pilot', ref: p.user_id, data: cur, updated_at: now });
@@ -470,10 +568,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // FIRST TICK AFTER THIS UPGRADE. Snapshots written before the feed selected
+    // the cargo and nano columns carry no such keys at all, so a diff against
+    // them reads as "went from nothing to 40 Legendaries just now" — every
+    // pilot who already owns one would get a FIRST LEGENDARY card, every
+    // finished core its own full-width message, all in the same batch. When the
+    // key is absent the value is adopted silently and announcing starts from
+    // the NEXT change. A genuinely new pilot never reaches here (the !was branch
+    // above continues), and their first snapshot writes all the keys.
+    const hadCargo = was.cargo !== undefined;
+    const hadNano = was.nanoLegend !== undefined;
+
     // SPACE CARGO DEFENSE — the fun ones. First delivery is its own moment;
     // after that, milestone crossings; a first-ever PERFECT run (cargo_best
     // hits 100) once per pilot, ever.
-    if (cur.cargo > (was.cargo || 0)) {
+    if (hadCargo && cur.cargo > (was.cargo || 0)) {
       const first = !(was.cargo || 0);
       const mark = first ? null : crossed(was.cargo || 0, cur.cargo, CARGO_MARKS);
       if (first || mark !== null) {
@@ -492,7 +601,85 @@ Deno.serve(async (req) => {
         });
       }
     }
-    if (cur.cargoBest >= 100 && (was.cargoBest || 0) < 100 && (was.cargo || 0) > 0) {
+    // NANOCORES — LEGENDARY ONLY, on purpose. A Common core drops for everyone
+    // on their first crate; announcing those would bury the channel in noise and
+    // devalue the thing worth announcing. Three events, all top-of-scale:
+    // a Legendary recovered, slot depth on one (3, 4, then the full 5), and a
+    // roll landing in the top 5% of its range.
+    if (hadNano && cur.nanoLegend > (was.nanoLegend || 0)) {
+      const first = !(was.nanoLegend || 0);
+      const mark = first ? null : crossed(was.nanoLegend || 0, cur.nanoLegend, NANO_MARKS);
+      if (first || mark !== null) {
+        // A GIF on the first one and nothing on the milestones: the pull is the
+        // moment, the collection count is a scoreboard.
+        const ng = first ? gifFor('nano', 'nc0:' + p.user_id) : null;
+        events.push({
+          kind: 'nano',
+          line: first ? `**${p.name}** pulled their first LEGENDARY Nanocore` : `**${p.name}** holds ${mark} Legendary Nanocores`,
+          embed: {
+            color: 0xf0972a,
+            author: { name: first ? '◈  LEGENDARY NANOCORE' : '◈  LEGENDARY COLLECTION' },
+            title: first ? `${p.name} recovered a Legendary Nanocore` : `${p.name} — ${mark} Legendary Nanocores`,
+            description: (first
+              ? quip('nanoFirst', 'nc0:' + p.user_id, { a: '**' + p.name + '**' })
+              : quip('nanoLegend', 'nc:' + p.user_id + ':' + mark, { a: '**' + p.name + '**', n: mark as number })) +
+              `\n-# Legendary core · **+25% damage · +25% hull · +50% thrust** guaranteed, plus up to **5** extra buff slots` +
+              (first && legendHolders > 0
+                ? (legendHolders === 1
+                  ? `\n-# 🏆 The **FIRST** pilot on this server to recover one. Nobody else has a Legendary core.`
+                  : `\n-# The **${ord(legendHolders)}** pilot to recover one · **${NANO_LEGEND_ODDS}%** a crate`)
+                : `\n-# ${cur.nanoLegend} Legendary recovered lifetime · ${NANO_LEGEND_ODDS}% a crate`),
+            ...(ng ? { image: { url: ng } } : {}),
+          },
+        });
+      }
+    }
+    // SLOT DEPTH. Slots 3 and 4 post here; a FINISHED 5/5 core is too big for
+    // the batch and is queued for its own message below.
+    if (hadNano && cur.nanoSlots > (was.nanoSlots || 0) && cur.nanoSlots >= NANO_SLOT_FROM) {
+      const slots = Math.min(NANO_SLOT_MAX, cur.nanoSlots);
+      if (slots >= NANO_SLOT_MAX) {
+        maxCores.push({ name: p.name, god: cur.nanoGod, legend: cur.nanoLegend });
+      } else {
+        events.push({
+          kind: 'nano',
+          line: `**${p.name}** opened slot ${slots} on a Legendary`,
+          embed: {
+            color: 0xd08a2a,
+            author: { name: '⬢  SLOT UNLOCKED' },
+            title: `${p.name} — ${slots} of 5 slots on a Legendary core`,
+            description: quip('nanoSlots', 'ncs:' + p.user_id + ':' + slots, { a: '**' + p.name + '**', n: slots, m: slots * NANO_UPS_PER_SLOT }) +
+              `\n-# Every slot is **${NANO_UPS_PER_SLOT} successful upgrades**, the last at **${NANO_LAST_STAGE}%** base — ${slots * NANO_UPS_PER_SLOT} landed on this core` +
+              `\n-# Slot ${slots} upgrades cost up to **◈ ${fmt(1000 * NANO_UPS_PER_SLOT * Math.pow(2, slots - 1))}** each attempt, win or lose`,
+          },
+        });
+      }
+    }
+    if (hadNano && cur.nanoGod > (was.nanoGod || 0)) {
+      const firstGod = !(was.nanoGod || 0);
+      const gmark = firstGod ? null : crossed(was.nanoGod || 0, cur.nanoGod, NANO_GOD_MARKS);
+      if (firstGod || gmark !== null) {
+        const gg = firstGod ? gifFor('ingots', 'ncg:' + p.user_id) : null;
+        events.push({
+          kind: 'nano',
+          line: firstGod ? `**${p.name}** landed a god roll on a Legendary core` : `**${p.name}** has ${gmark} Legendary god rolls`,
+          embed: {
+            color: 0xffd450,
+            author: { name: '✧  GOD ROLL' },
+            title: firstGod
+              ? `${p.name} rolled top-5% on a Legendary core`
+              : `${p.name} — ${gmark} top-5% Legendary rolls`,
+            description: (firstGod
+              ? quip('nanoGod', 'ncg:' + p.user_id, { a: '**' + p.name + '**' })
+              : quip('nanoGodN', 'ncg:' + p.user_id + ':' + gmark, { a: '**' + p.name + '**', n: gmark as number })) +
+              `\n-# Buff values are weighted toward the floor — only about **${NANO_GOD_PCT}%** of rolls land in the top 5% of their range` +
+              `\n-# ${cur.nanoGod} god rolls lifetime`,
+            ...(gg ? { image: { url: gg } } : {}),
+          },
+        });
+      }
+    }
+    if (hadCargo && cur.cargoBest >= 100 && (was.cargoBest || 0) < 100 && (was.cargo || 0) > 0) {
       events.push({
         kind: 'cargo',
         line: `**${p.name}** ran a PERFECT delivery`,
@@ -504,6 +691,41 @@ Deno.serve(async (req) => {
         },
       });
     }
+  }
+
+  // ---- A LEGENDARY CORE, FINISHED -------------------------------------------
+  // The deepest single-item progression in the game: 25 successful upgrades on
+  // ONE core, the last five at 20% base, on a core that only drops 1.5% of the
+  // time to begin with. It gets the Kaevith treatment — its own message, full
+  // header, never batched, never collapsed.
+  // Three standalone messages is already a lot for one 2-minute tick; anything
+  // beyond that rides the normal batch as a line rather than its own card.
+  for (const m of maxCores.slice(0, 3)) {
+    const seed = 'ncm:' + m.name + ':' + m.legend;
+    const mg = pickBy(seed, GIFS.maxed);
+    const solo = maxHolders <= 1;
+    await post({
+      content: solo
+        ? `# 🏆 THE FIRST LEGENDARY NANOCORE HAS BEEN FINISHED\n-# ${m.name} took one all the way to 5/5. Nobody else on this server has.`
+        : `# 🏆 A LEGENDARY NANOCORE HAS BEEN FINISHED\n-# ${m.name} took one core all the way. Five slots. Twenty-five upgrades. Nothing above it.`,
+      embeds: [{
+        color: 0xffe1a6,
+        author: { name: '🏆  LEGENDARY CORE COMPLETE · 5 / 5' },
+        title: `🏆  ${up(m.name)}  ⚔  THE ${NANO_LAST_STAGE}% ROLL\u2003— CORE MAXED`,
+        image: { url: mg },
+        description:
+          quip('nanoMax', seed, { a: '**' + m.name + '**' }) + '\n\n' +
+          `> \`▰▰▰▰▰\`  **5 of 5 extra buff slots**\n` +
+          `> ⚡ **+25% damage · +25% hull · +50% thrust** from the core itself\n` +
+          `> 🎲 **${NANO_SLOT_MAX * NANO_UPS_PER_SLOT} successful upgrades** on one core — the last five at **${NANO_LAST_STAGE}%** base\n` +
+          `> ◈ Final-slot attempts cost **${fmt(NANO_TOP_COST)} Prism Ingots** each, win or lose\n\n` +
+          quip('nanoCost', seed, {}) + '\n' +
+          (solo
+            ? '-# 🥇 The **FIRST** finished Legendary core on this server.'
+            : `-# The **${ord(maxHolders)}** pilot to finish one · ${m.god ? `${m.god} god roll${m.god === 1 ? '' : 's'} banked along the way` : 'still hunting a god roll'}`),
+      }],
+      allowed_mentions: { parse: [] },
+    });
   }
 
   // Rank #1 is tracked globally, not per pilot — one row holds the current holder.
@@ -752,40 +974,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // SHIELD EXPIRY — the tile is open to attack again. Announced for any held
-    // tile whose clock just ran out; an unowned tile has nothing to defend.
-    if (was.sh && !cur.sh && cur.owner) {
-      if (VOID[t.tile_id]) {
-        const v = VOID[t.tile_id];
-        voidEvents.push({
-          kind: 'void',
-          line: `${v.name} is open to attack`,
-          embed: {
-            color: COLOR.open,
-            author: { name: `\u{1F513}  ${v.name.toUpperCase()} IS OPEN` },
-            title: `\u{1F513} ${v.name.toUpperCase()} IS NOW AVAILABLE FOR ATTACK`,
-            description:
-              `The shield is down. **${held}** holds it.\n\n` +
-              `> \u{1F300} **Lv ${v.tier}** \u00b7 pays all four currencies, every hour\n` +
-              `> \u{1F3F0} Citadel included with the tile\n\n` +
-              '-# \u26a1 First fleet to break the siege takes everything.',
-          },
-        });
-      } else {
-        tileEvents.push({
-          kind: 'open', actor: held, sys,
-          line: `${sys} is open to attack`,
-          embed: {
-            color: COLOR.open,
-            author: { name: '\u{1F513}  SHIELD DOWN' },
-            title: `\u{1F513} ${sys.toUpperCase()} IS NOW AVAILABLE FOR ATTACK`,
-            description: `**${held}** holds it` +
-              (cur.lv > 0 ? ` behind a **Rank ${cur.lv} Citadel**.` : ', unfortified.') +
-              '\n-# \u2694\ufe0f 60 seconds to break it once you engage.',
-          },
-        });
-      }
-    }
+    // SHIELD EXPIRY IS NOT ANNOUNCED. A "now available to attack" card is a
+    // targeting notice: it tells the whole channel the exact moment a specific
+    // pilot's tile lost its protection, which turns the feed into a raid siren
+    // pointed at whoever is asleep. The shield state is still snapshotted (`sh`)
+    // so the edge is there if it is ever wanted again — nothing posts it.
   }
 
   // A row that vanished is only called abandoned after two consecutive misses —
@@ -1022,6 +1215,9 @@ Deno.serve(async (req) => {
       const h = XEN_HULLS[String((w.meta || {}).ship || '')];
       if (h) fresh.push(`◈ **${w.actor_name}** earned the **${h.name}**`);
     }
+    // Finished cores post their own message, so they never reach `events` —
+    // add them here or the 3-hour digest would omit the loudest thing in it.
+    for (const m of maxCores) fresh.push(`🏆 **${m.name}** finished a Legendary Nanocore (5/5)`);
     const merged = [...buf, ...fresh].slice(-40);
     const due = !bootstrap && last > 0 && Date.now() - last >= SITREP_MS;
 
@@ -1073,29 +1269,23 @@ Deno.serve(async (req) => {
         });
       }
 
-      // ---- Void spires: who holds them, and when the shield drops ----
-      // A spire behind a live shield cannot be attacked at all, so the countdown
-      // IS the schedule players plan around. Discord renders <t:…:R> in each
-      // reader's own timezone, which beats printing a UTC clock nobody converts.
+      // ---- Void spires: who holds them ----
+      // No shield countdowns and no "open now" flags — a public timer on when a
+      // named pilot's spire becomes attackable is a raid schedule, not a report.
       const spireLines: string[] = [];
       for (const id of Object.keys(VOID)) {
         const v = VOID[id];
         const row = tiles.find((t) => t.tile_id === id);
         if (!row || !row.owner_id) {
-          spireLines.push(`🟢 **${v.name}** \`Lv ${v.tier}\` — **UNCLAIMED**, open right now`);
+          spireLines.push(`🟢 **${v.name}** \`Lv ${v.tier}\` — **UNCLAIMED**`);
           continue;
         }
-        const until = row.cooldown_until ? new Date(row.cooldown_until).getTime() : 0;
-        if (until > Date.now()) {
-          spireLines.push(`🛡️ **${v.name}** \`Lv ${v.tier}\` — ${row.owner_name} · opens <t:${Math.floor(until / 1000)}:R>`);
-        } else {
-          spireLines.push(`🔓 **${v.name}** \`Lv ${v.tier}\` — ${row.owner_name} · **OPEN TO ATTACK NOW**`);
-        }
+        spireLines.push(`🌀 **${v.name}** \`Lv ${v.tier}\` — held by **${row.owner_name}**`);
       }
       if (spireLines.length) {
-        const openNow = spireLines.filter((l) => l.startsWith('🔓') || l.startsWith('🟢')).length;
+        const open = spireLines.filter((l) => l.startsWith('🟢')).length;
         fields.push({
-          name: `🌌  THE VOID ZONE — ${openNow} of 7 attackable now`,
+          name: `🌌  THE VOID ZONE — ${7 - open} of 7 held`,
           value: spireLines.join('\n'),
           inline: false,
         });
@@ -1117,6 +1307,32 @@ Deno.serve(async (req) => {
           }).join('\n'),
         inline: false,
       });
+
+      // ---- NANOCORES · the top of the scale -----------------------------
+      // Legendary only, matching the events. Three figures, all read from rows
+      // already in memory: who holds one, who finished one, who is luckiest.
+      {
+        const held = pilots.filter((p) => nanoOf(p, 'nano_legend') > 0);
+        const done = pilots.filter((p) => nanoOf(p, 'nano_slots') >= NANO_SLOT_MAX);
+        const deepest = pilots.reduce((m, p) => Math.max(m, nanoOf(p, 'nano_slots')), 0);
+        const topLeg = pilots.slice()
+          .sort((a, b) => nanoOf(b, 'nano_legend') - nanoOf(a, 'nano_legend'))
+          .filter((p) => nanoOf(p, 'nano_legend') > 0).slice(0, 3);
+        const topGod = pilots.slice()
+          .sort((a, b) => nanoOf(b, 'nano_god') - nanoOf(a, 'nano_god'))
+          .filter((p) => nanoOf(p, 'nano_god') > 0)[0];
+        fields.push({
+          name: `◈  NANOCORES — ${held.length} pilot${held.length === 1 ? '' : 's'} hold a Legendary`,
+          value: `Legendary cores drop at **${NANO_LEGEND_ODDS}%** a crate. Building one out takes **${NANO_SLOT_MAX * NANO_UPS_PER_SLOT} successful upgrades**, the last five at **${NANO_LAST_STAGE}%**.\n` +
+            (topLeg.length
+              ? topLeg.map((p, i) => `${medal[i]} **${p.name}** — \`${nanoOf(p, 'nano_legend')}\` Legendary` +
+                  (nanoOf(p, 'nano_slots') >= NANO_SLOT_MAX ? ' · **5/5 core finished**' : nanoOf(p, 'nano_slots') ? ` · ${nanoOf(p, 'nano_slots')}/5 slots` : '')).join('\n')
+              : '-# Nobody has pulled one yet. The first is going to be loud.') +
+            (topGod ? `\n✧ Best rolls: **${topGod.name}** — \`${nanoOf(topGod, 'nano_god')}\` top-5% buffs` : '') +
+            `\n${done.length ? `🏆 **${done.length}** finished core${done.length === 1 ? '' : 's'} in existence` : `⬜ No finished core yet — deepest build is **${deepest}/5** slots`}`,
+          inline: false,
+        });
+      }
 
       // ---- THE HOUSE CITADELS ----
       // Who holds the three casino holds, what the house took today, and what 1%
@@ -1143,10 +1359,8 @@ Deno.serve(async (req) => {
         const rows = (cits.data ?? []).map((c: any) => {
           const t = holders.get(String(c.tile_id)) || {};
           c.owner_name = t.owner_name || null;
-          const sh = t.cooldown_until ? Math.floor((new Date(t.cooldown_until).getTime() - Date.now()) / 1000) : 0;
-          if (!c.owner_name) return `⬜ **${c.name}** `+`(${c.share_pct}% · Lv ${c.req_lv})` + ' — *unclaimed, undefended*';
-          return `${sh > 0 ? '🛡' : '🔓'} **${c.name}** `+`(${c.share_pct}%)` + ` — **${c.owner_name}**` +
-            (sh > 0 ? ` · shielded <t:${Math.floor(Date.now() / 1000 + sh)}:R>` : ' · **attackable now**');
+          if (!c.owner_name) return `⬜ **${c.name}** ` + `(${c.share_pct}% · Lv ${c.req_lv})` + ' — *unclaimed*';
+          return `🎰 **${c.name}** ` + `(${c.share_pct}%)` + ` — **${c.owner_name}**`;
         });
         const held = (cits.data ?? []).filter((c: any) => c.owner_name).length;
         fields.push({

@@ -71,7 +71,16 @@
     buildSpeedRow();
     el['auto-btn'].addEventListener('click', () => {
       if (screen !== 'battle') return;   // the pill floats over menus too — dead unless the arena is showing
-      G.setAuto(!G.getAuto()); syncAuto();
+      G.setAuto(!G.getAuto());
+      // REMEMBER THE PLAYER'S OWN CHOICE. Turning autopilot off by hand is a
+      // decision, and returning to the arena from any menu used to overwrite it
+      // (see showScreen('battle') below) — so a manual pilot who opened a tab
+      // came back on autopilot. Only a HAND toggle writes this flag; the event
+      // systems that force auto off for their own duration never touch it, so
+      // the post-event restore still works.
+      G.state.autoManual = !G.getAuto();
+      try { G.save(); } catch (e) {}
+      syncAuto();
     });
     // ◉ BEACON — HUMAN-PRESS ONLY. Nothing else calls fireBeacon and autopilot has
     // no path to it: inviting a 20× swarm is a decision, not a behaviour. Zone
@@ -169,8 +178,12 @@
     else if (name === 'pasc') { if (window.PASCEND) window.PASCEND.render(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
     else if (name === 'sdread') { if (window.SDREAD) window.SDREAD.render(); }
-    else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); }
-    else if (name === 'shipworks') { if (window.SHIPWORKS) window.SHIPWORKS.render(); }
+    // CRATES — three crate systems reading as one screen. Each still renders
+    // itself; the hub only marks the shared sub-tab strip in the head.
+    else if (name === 'boxes') { if (window.GBOX) window.GBOX.render(); if (window.CRATES) window.CRATES.sync('boxes'); }
+    else if (name === 'shipworks') { if (window.SHIPWORKS) window.SHIPWORKS.render(); if (window.CRATES) window.CRATES.sync('shipworks'); }
+    else if (name === 'crates') { if (window.CRATES) window.CRATES.render(); }
+    else if (name === 'nano') { if (window.NANOUI) window.NANOUI.render(); }
     else if (name === 'ascend') { if (window.ASCEND) window.ASCEND.render(); }
     else if (name === 'casino') { if (window.CASINO) window.CASINO.render(); }
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
@@ -181,7 +194,7 @@
         const rt = G.rt || {};
         const evt = document.getElementById('app').classList.contains('sd-noauto') ||   // Voidmaw / alliance raid
                     (rt.cgrun && rt.cgrun.active);                                      // cargo escort
-        if (!evt && (G.state.currentDungeon | 0) >= 1 && !G.getAuto()) { G.setAuto(true); syncAuto(); }
+        if (!evt && !G.state.autoManual && (G.state.currentDungeon | 0) >= 1 && !G.getAuto()) { G.setAuto(true); syncAuto(); }
       } catch (e) {}
     }
     syncJoystickVisible();
@@ -760,7 +773,7 @@
       // ignore when the battle canvas isn't the active screen (menus, sheets)
       if (screen !== 'battle') { if (held.size) { held.clear(); sync(); } return; }
       // grabbing the keys takes over from auto-pilot, same as grabbing the stick would
-      if (G.state.auto) { G.setAuto(false); syncAuto(); toast('⌨ Manual flight — WASD / arrows', '#5b9cff'); }
+      if (G.state.auto) { G.setAuto(false); G.state.autoManual = true; try { G.save(); } catch (e) {} syncAuto(); toast('⌨ Manual flight — WASD / arrows', '#5b9cff'); }
       if (!held.has(dir)) { held.add(dir); sync(); }
       e.preventDefault();                       // stop arrow keys scrolling the page
     });
@@ -2826,6 +2839,7 @@
       ${mods?`<div class="ship-mods">${mods}</div>`:''}
       ${upg}
       ${lock}
+      ${window.NANOUI ? window.NANOUI.shipStrip(key) : ''}
     </div>`;
   }
   // ==========================================================================
@@ -3324,8 +3338,8 @@
     let signedIn = false; try { signedIn = !!(window.ACCOUNT && ACCOUNT.current && ACCOUNT.current()); } catch (e) {}
     let html = hangarTabsHTML('board');
 
-    // ---- SEVEN LADDERS -----------------------------------------------------
-    // The power board is unchanged and still the default. The other six re-sort
+    // ---- NINE LADDERS ------------------------------------------------------
+    // The power board is unchanged and still the default. The other eight re-sort
     // the same pool (or read their own table) through RANKBOARDS.
     const RB = window.RANKBOARDS;
     if (!RB) { renderBoardLegacy(html, signedIn); return; }
@@ -3340,7 +3354,7 @@
     if (data.pending) {
       html += `<div class="lbx-note">Loading…</div>`;
     } else if (data.needsSql) {
-      html += `<div class="lbx-note">This ladder is waiting on a database migration.<br><span style="opacity:.7">Until <b>ranks-ladders.sql</b> runs, no real operator has published these figures — so ranking on them would credit records nobody has actually set.</span></div>`;
+      html += `<div class="lbx-note">This ladder is waiting on a database migration.<br><span style="opacity:.7">Until <b>${tab.sql || 'ranks-ladders.sql'}</b> runs, no real operator has published these figures — so ranking on them would credit records nobody has actually set.</span></div>`;
     } else if (data.err) {
       html += `<div class="lbx-note err">This board couldn’t load — ${esc(data.err.message || 'request failed')}</div>`;
     } else if (!data.rows.length) {
@@ -3365,7 +3379,7 @@
         <div class="lb-rank ${p.rank <= 3 ? 'top' : ''}">${p.rank}</div>
         <div class="lb-nm">
           <div class="lb-topline"><span class="lb-name">${p.isMe ? '★ ' : ''}${p.name}</span>${ascBadge(p)}${simChip(p)}
-            ${showFleet ? `<span class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.rows.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</span>` : ''}</div>
+            ${showFleet ? `<span class="lb-fleet">${fleetThumbs(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.rows.length) : []))}</span>` : ''}</div>
           <div class="lb-meta">${tab.meta(p)}</div></div>
         <div class="lb-pow"><span class="pl">${tab.unit}</span>${tab.fmt(tab.metric(p), p)}</div></div>`).join('');
 
@@ -3430,7 +3444,7 @@
         <div class="lb-rank ${p.rank<=3?'top':''}">${p.rank}</div>
         <div class="lb-nm">
           <div class="lb-topline"><span class="lb-name">${p.isMe?'★ ':''}${p.name}</span>${ascBadge(p)}${simChip(p)}
-            <span class="lb-fleet">${(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : [])).map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" title="${C.SHIP_BY_KEY[fk] ? C.SHIP_BY_KEY[fk].name : fk}">`).join('')}</span></div>
+            <span class="lb-fleet">${fleetThumbs(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : []))}</span></div>
           <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div></div>
         <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.power)}</div></div>`).join('');
     const _sc = el['board-body'].scrollTop;
@@ -3867,6 +3881,11 @@
       </div>`;
     }).join('');
   }
+  // Every Kaevith hull recovered — the event is finished for this account.
+  const XEN_KEYS = ['xen1', 'xen2', 'xen3', 'xen4', 'xen5'];
+  function xenAllOwned() {
+    try { const o = G.state.ownedShips || {}; return XEN_KEYS.every((k) => !!o[k]); } catch (e) { return false; }
+  }
   function openXenBriefing() {
     const lo = GM.XEN ? Math.round(GM.XEN.minChance * 100) : 1;
     const hi = GM.XEN ? Math.round(GM.XEN.maxChance * 100) : 10;
@@ -3875,16 +3894,15 @@
       <div class="xen-hero">
         <div class="xh-tag">LIVE EVENT · MY GALAXY</div>
         <div class="xh-t">THE KAEVITH INCURSION</div>
-        <div class="xh-s">A crystalline fleet from outside the rim has taken <b>roughly one zone in five</b>. Invaded zones show as <b>purple voids</b> on the map.</div>
+        <div class="xh-s">One zone in five is alien-held — the <b>purple voids</b> on your map.</div>
       </div>
       <div class="xen-steps">
-        <div class="xs-row"><span class="xs-n">1</span><div><b>The map is unchanged.</b> Zone ownership, citadels, shields and cooldowns all work exactly as before. The Kaevith hold no territory — they garrison it.</div></div>
-        <div class="xs-row"><span class="xs-n">2</span><div><b>They hit harder.</b> Attack an invaded zone and every hostile flies a Kaevith hull: <b>+35% hull and +22% damage</b> over that ring's normal garrison, and the zone boss is a Kaevith command ship.</div></div>
-        <div class="xs-row"><span class="xs-n">3</span><div><b>Clear it for a chance to earn their ship technology.</b> <b>${lo}%</b> on ring 1, rising to <b>${hi}%</b> at the rim — the deeper the zone, the better the odds <i>and</i> the bigger the hull. You're told the result at the end of every void-zone battle.</div></div>
-        <div class="xs-row"><span class="xs-n">4</span><div><b>The reward is XP, fleet-wide.</b> Any Kaevith hull in your fleet — flagship or escort — raises the XP of <b>every kill your whole fleet makes</b>, and the five hulls stack to <b>+250%</b> on their own. Every bonus is a flat % of your <b>base XP rate</b> — bonuses add together, then multiply the base. <b>No cap.</b></div></div>
+        <div class="xs-row"><span class="xs-n">1</span><div><b>They hit harder.</b> <b>+35% hull</b>, <b>+22% damage</b>, and a Kaevith command ship for a boss.</div></div>
+        <div class="xs-row"><span class="xs-n">2</span><div><b>Clear one to earn their tech.</b> <b>${lo}%</b> on ring 1 → <b>${hi}%</b> at the rim. Deeper rings pay better odds and bigger hulls.</div></div>
+        <div class="xs-row"><span class="xs-n">3</span><div><b>The reward is fleet-wide XP.</b> Any Kaevith hull lifts every kill’s XP for the whole fleet. All five stack to <b>+250%</b>, no cap.</div></div>
       </div>
       <div class="lo-sect">The five hulls · entry → Dreadnaught</div>
-      <div class="xen-note-rare">Two chassis are common. The <b>Glaive</b> is <b>5× rarer</b>, the <b>Godshard</b> <b>10× rarer</b>, and the <b>Sovereign</b> is rarer than either — the scarcest hull in the line. Scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>; deeper rings tilt them toward the top hulls.</div>
+      <div class="xen-note-rare">Scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>.</div>
       <div class="xen-roster">${xenRoster(GM.RINGS || 25)}</div>
       <div class="xen-now"><span>Your resonance field right now</span><b>${bonus ? '+' + bonus + '% XP per kill' : 'none — no Kaevith hull in the fleet'}</b></div>
       <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn gold" data-ok>◈ Hunt a void zone</button></div></div>`);
@@ -3895,6 +3913,10 @@
   // Auto-announce on entering My Galaxy — once a day, so it lands as an event
   // rather than a nag. The banner keeps it one tap away the rest of the time.
   function maybeAnnounceXen() {
+    // ALL FIVE HULLS RECOVERED — nothing left to announce. The event is over for
+    // this account, so the daily popup stops for good; the banner stays tappable
+    // for the roster and the resonance total.
+    if (xenAllOwned()) return;
     let seen = null;
     try { seen = localStorage.getItem('lf_xen_seen'); } catch (e) {}
     if (seen === new Date().toDateString()) return;
@@ -3988,6 +4010,18 @@
   // SIM designation — never inferred from a name; comes from the protected
   // is_simulated column via SIMPILOTS.
   function simChip(p) { try { return window.SIMPILOTS ? window.SIMPILOTS.chip(p) : ''; } catch (e) { return ''; } }
+  // FLEET THUMBNAILS on a leaderboard row. A published fleet can name a hull
+  // this build has no art for — a renamed key, an event hull added ahead of its
+  // sprite — and the row then rendered the browser's broken-image glyph in the
+  // flagship slot. Unknown keys are dropped before the tag is written, and a
+  // 404 on a known key removes its own <img> the way every other ship thumbnail
+  // in the game already does.
+  function fleetThumbs(keys) {
+    return (keys || [])
+      .filter((fk) => fk && C.SHIP_BY_KEY[fk])
+      .map((fk) => `<img class="lbf" src="ships/ship-${fk}.png" alt="" loading="lazy" onerror="this.remove()" title="${C.SHIP_BY_KEY[fk].name}">`)
+      .join('');
+  }
   function ascLine(p) {
     const n = ascOf(p);
     if (!n || !window.PASCEND) return '';

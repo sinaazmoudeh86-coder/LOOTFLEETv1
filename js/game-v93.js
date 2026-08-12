@@ -165,6 +165,9 @@
     // (deliveries, best condition, Eternums recovered) on exactly the action that
     // qualifies you for it, and hand back today's spent runs for free.
     'cargo',
+    // NANOCORES — cores, unlocked slots and rolled buffs all survive, exactly
+    // like the Prism Ingots they were bought with.
+    'nano',
     'startWeek', 'name', 'sellTier', 'keepUpgrades', 'autoEquipAlways', 'auto', 'gameSpeed',
     // LOOT FILTERS ARE SETTINGS, NOT PROGRESS — sell-on-pickup and the pickup
     // floor used to silently reset to defaults on every ascension.
@@ -477,29 +480,39 @@
     const sm = ship.mods || {};
     // ASCENSION — per-ship module bonuses (apply while flying that hull)
     const am = (window.ASCEND && window.ASCEND.combatMods) ? window.ASCEND.combatMods(state.ship) : {};
+    // NANOCORES — the ONE core equipped on this hull. Same shape and the same
+    // "only while you fly it" rule as the Ascension modules above; the XP buff is
+    // the exception and rides the fleet-XP pipeline in xpSources() instead.
+    const nc = (window.NANO && window.NANO.combatMods) ? window.NANO.combatMods(state.ship) : {};
     // FLEET: escorts contribute a share of their hull mods to the fleet score
     const fs = { dmgPct:0, hpPct:0, critChance:0, critDamage:0, atkSpeedPct:0, moveSpeed:0, lifeSteal:0, multiShot:0, rangePct:0 };
     const esc = fleetShips();
     esc.forEach((f) => { const fm = f.mods || {}; for (const k in fs) fs[k] += (fm[k] || 0) * C.FLEET.statShare; });
+    // NANOCORES IN THE FLEET — a core equipped on an escort pays at the same
+    // fleet share as that hull's own mods and its stowed fittings. The flagship's
+    // own core (nc, above) pays in full; regen and damage reduction are folded in
+    // at their own capped lines below.
+    const nf = (window.NANO && window.NANO.fleetMods) ? window.NANO.fleetMods(esc) : {};
+    for (const k in fs) if (nf[k]) fs[k] += nf[k] * C.FLEET.statShare;
     // WARDEN ARRAY: fleet-support aura from an equipped support weapon —
     // doubled while flying the Aegis (its whole reason to exist)
     const aura = I.supportAura ? I.supportAura(state.equipped.bow) : null;
     // Warden arrays mount only on the Aegis — inert anywhere else (legacy saves)
     const aMul = ship.cls === 'Aegis' ? 2 : 0;
-    s.regen = Math.min(5, (aura ? aura.regen * aMul : 0) + (pm.regen || 0) + (m.regen || 0));
-    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0) + (m.dmgReduce || 0));
+    s.regen = Math.min(5, (aura ? aura.regen * aMul : 0) + (pm.regen || 0) + (m.regen || 0) + (nc.regen || 0) + (nf.regen || 0) * C.FLEET.statShare);
+    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0) + (m.dmgReduce || 0) + (nc.dmgReduce || 0) + (nf.dmgReduce || 0) * C.FLEET.statShare);
     if (aura) s.multiShot += aura.multiShot * aMul;
     // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
     const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
     const hlDmg = _hl * 10, hlHp = _hl * 12, hlAtk = _hl * 5;
-    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct + hlDmg) / 100);
-    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct + hlHp + (am.hpPct || 0)) / 100);
-    s.critChance += m.critChance + (sm.critChance||0) + fs.critChance;
-    s.critDamage += m.critDamage + (sm.critDamage||0) + fs.critDamage;
-    s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0) + fs.moveSpeed;
+    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct + hlDmg + (nc.dmgPct||0)) / 100);
+    s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct + hlHp + (am.hpPct || 0) + (nc.hpPct||0)) / 100);
+    s.critChance += m.critChance + (sm.critChance||0) + fs.critChance + (nc.critChance||0);
+    s.critDamage += m.critDamage + (sm.critDamage||0) + fs.critDamage + (nc.critDamage||0);
+    s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0) + fs.moveSpeed + (nc.moveSpeed||0);
     s.lifeSteal += m.lifeSteal + (sm.lifeSteal||0) + fs.lifeSteal;
-    s.multiShot += m.multiShot + (sm.multiShot||0) + fs.multiShot;
-    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0)) / 100);
+    s.multiShot += m.multiShot + (sm.multiShot||0) + fs.multiShot + (nc.multiShot||0);
+    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0) + (nc.atkSpeedPct||0)) / 100);
     s.shipLevel = _hl + 1;
     s.critChance = Math.min(100, s.critChance);
     // MEATY FIRE (Jul 2026): past 2.2 shots/s and 200% multishot, extra rate
@@ -679,6 +692,7 @@
     try { if (window.AXIOM) window.AXIOM.sync(); } catch (e) {}
     const prevMax = rt.stats ? rt.stats.maxHp : 0;
     rt.stats = computeStats();
+    rt._xpMT = null;                       // XP stack may have moved — drop the cache
     // APEX COMMANDER badge — peak fleet power ever reached, on the display scale
     try { peakLife('peakPower', score()); } catch (e) {}
     if (rt.archer) {
@@ -732,6 +746,7 @@
     add('VIP', safe(() => (window.VIP ? window.VIP.mult('xp') : 1)));
     add('Pilot Tree', safe(() => (window.DREAD && window.DREAD.mult ? window.DREAD.mult('xpGain') : 1)));
     add('Neural Uplink', safe(() => (window.PASCEND ? window.PASCEND.mult('xp') : 1)));
+    add('Nanocore', safe(() => (window.NANO ? window.NANO.mult('xp') : 1)));
     add('Combat Computer', safe(() => (window.ASCEND && window.ASCEND.xpMult ? window.ASCEND.xpMult() : 1)));
     add('Kaevith Resonance', safe(() => xenXpMult()));
     return out;
@@ -749,9 +764,30 @@
     return { sources: src, pro, basePct, buffPct, rawPct, pct, capped: rawPct > XP_RATE_CAP,
              cap: XP_RATE_CAP, headroom: Math.max(0, XP_RATE_CAP - rawPct), mult: pct / 100 };
   }
+  // XP MULTIPLIER, CACHED — gainXp() runs on EVERY KILL.
+  // The full stack it used to walk per kill — xpSources() building a fresh array
+  // of six source objects behind six closures, NANO.mult('xp') re-walking the
+  // fleet and allocating a mods object per hull, xenXpBonus() rebuilding its key
+  // list with concat+filter and a seen map — came to roughly twenty allocations
+  // PER KILL. At 5× with multishot that is the largest single source of garbage
+  // in the game, and the GC pauses it causes are exactly what a "giga laggy"
+  // report feels like.
+  //
+  // Every input moves only on discrete events, and all of them funnel through
+  // refreshStats(), which nulls the timestamp above for an immediate recompute.
+  // The 0.5s TTL is the safety net for any subsystem that changes an XP source
+  // WITHOUT recomputing stats: the figure is never more than half a second stale,
+  // and the per-kill cost is now one float read.
+  function xpMultCached() {
+    if (rt._xpMT == null || rt.time - rt._xpMT > 0.5 || rt.time < rt._xpMT) {
+      rt._xpMT = rt.time;
+      rt._xpM = xpFleetInfo().mult;
+    }
+    return rt._xpM;
+  }
   function gainXp(amount) {
     if (!isFinite(amount) || amount <= 0) return;   // a NaN here corrupts xp forever
-    amount *= xpFleetInfo().mult;   // base × (1 + summed bonuses)
+    amount *= xpMultCached();   // base × (1 + summed bonuses)
     state.xp += amount;
     // LEVEL CAP — Lv 150, +50 per Ascension Star. At the cap XP is not banked at
     // all (no phantom bar that fills into nothing): the run is over, and the only
@@ -1895,13 +1931,26 @@
     steerArcher(nx * want, ny * want, dt);
     return gap > 0;
   }
+  // AUTOPILOT LOOT SCAN — scratch buffer, squared distance, no allocation.
+  // This ran `rt.ground.filter(... Math.hypot ...)` and so built a NEW array and
+  // took a square root per drop, EVERY sub-step: at 5× with a full 60-drop floor
+  // that is 300 hypots and six throwaway arrays a frame, all to answer "which
+  // drops are outside magnet range". Same answer, zero garbage.
+  const _lootBuf = [];
   function autopilot(dt) {
     const a = rt.archer, s = rt.stats, sp = s.moveSpeedPx;
     // 1) collect any ground loot first (the "pick everything up" promise)
     // distant drops only — anything inside magnet range flies to the ship on
     // its own, so the operator keeps fighting instead of fetching every pickup.
     const magR = MAGNET_RADIUS * (window.DREAD ? window.DREAD.mult('pickupRadius') : 1);
-    const loot = rt.ground.filter((q) => !q.lost && !q.dead && Math.hypot(q.x - a.x, q.y - a.y) > magR);
+    const magR2 = magR * magR;
+    const loot = _lootBuf; loot.length = 0;
+    for (let i = 0; i < rt.ground.length; i++) {
+      const q = rt.ground[i];
+      if (q.lost || q.dead) continue;
+      const dx = q.x - a.x, dy = q.y - a.y;
+      if (dx * dx + dy * dy > magR2) loot.push(q);
+    }
     // ONE TARGET, HELD UNTIL THE MAGNET TAKES IT. The old 25%-closer swap rule
     // re-litigated the choice every tick while the field kept changing under
     // it, and a hand-off could pick a drop directly BEHIND the ship — together
@@ -1988,10 +2037,24 @@
     // choppy. Same wall-clock speed, ~half to a quarter of the work:
     //   1× → 1 step · 4×/5× → 3 steps · 10× → 5 steps (at 60fps) — sub-step
     //   dt stays ≤35ms so motion, trails and homing keep their smooth feel.
+    // LOAD-AWARE SUB-STEPPING. The 35ms sub-step is a smoothness budget, and it
+    // is only affordable while frames are cheap. Once a frame is genuinely
+    // expensive — a 40-hostile cargo run at 5× — six sub-steps per frame turn a
+    // slow frame into a slower one, and the sim starts losing ground against the
+    // wall clock (the mission clock then reads short, which is exactly what was
+    // reported). Under load the budget relaxes to 60ms and the ceiling drops to
+    // three passes: slightly coarser motion, but the sim keeps real time.
+    rt._fdt = rt._fdt ? rt._fdt * 0.9 + dt * 0.1 : dt;
+    const slow = rt._fdt > 0.028;                    // sustained sub-30fps
     const total = dt * Math.max(1, state.gameSpeed | 0);
-    const steps = Math.min(6, Math.max(1, Math.ceil(total / 0.035)));
+    const steps = Math.min(slow ? 3 : 6, Math.max(1, Math.ceil(total / (slow ? 0.06 : 0.035))));
     const sdt = total / steps;
     for (let i = 0; i < steps; i++) { rt.time += sdt; state.playTime += sdt; update(sdt); }
+    // ...and the escort's own tick, once, with the whole frame's sim time.
+    if (rt._cgDt > 0) {
+      const cgd = rt._cgDt; rt._cgDt = 0;
+      if (rt.cgrun && rt.cgrun.active && window.CARGO && window.CARGO.engineTick) { try { window.CARGO.engineTick(cgd, rt); } catch (e) {} }
+    }
     // RENDER GATE — the simulation above always runs (so idle farming, boss
     // timers and offline progress are never starved), but we only PAINT when the
     // canvas is actually on-screen: skip drawing while the tab is hidden or while
@@ -2001,7 +2064,15 @@
     // canvas work entirely. (querySelector here is a cheap selector match — no
     // layout/reflow — so it is fine to run once per frame.)
     if (document.hidden) return;
-    if (document.querySelector('.screen.overlay.active')) {
+    // OVERLAY GATE — cached for ~120ms. The selector match itself is cheap, but it
+    // is a DOM read on the critical path of every single frame; a menu cannot open
+    // and close inside 120ms, so sampling it at ~8Hz is invisible and takes the
+    // read out of the frame budget entirely.
+    if (!rt._ovT || rt.time - rt._ovT > 0.12) {
+      rt._ovT = rt.time;
+      rt._ovOn = !!document.querySelector('.screen.overlay.active');
+    }
+    if (rt._ovOn) {
       // Battle view is hidden behind a menu — skip the expensive canvas paint,
       // but keep the always-visible top HUD (level, XP, HP, gold) live so combat
       // progress still shows on EVERY tab while farming. Cheap throttled DOM
@@ -2241,7 +2312,15 @@
     if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineTick) { try { window.HOMECIT.engineTick(dt, rt); } catch (e) {} }
     // SPACE CARGO DEFENSE — escort mission on the real engine (the cargo hull,
     // its route, raider aggro, void anomalies, arrival & loss).
-    if (rt.cgrun && rt.cgrun.active && window.CARGO && window.CARGO.engineTick) { try { window.CARGO.engineTick(dt, rt); } catch (e) {} }
+    // COALESCED TO ONE CALL PER FRAME. Everything above ticks once per SUB-STEP,
+    // and at 5× the loop takes up to six of them — so the escort's spawn, aggro,
+    // latch, void and ring passes were running six times a frame on top of a
+    // 40-hostile field. That is what cratered the frame rate in the top tier
+    // (players: "giga laggy in the hardest one"), and a sim that cannot keep up
+    // with the wall clock is also why the mission clock read short. Every one of
+    // those passes integrates dt, so accumulating here and flushing once in
+    // step() produces the SAME fight for a sixth of the cost.
+    if (rt.cgrun && rt.cgrun.active) rt._cgDt = (rt._cgDt || 0) + dt;
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
@@ -2530,10 +2609,13 @@
       if (hpPct < 0.3) {
         const sev = (0.3 - hpPct) / 0.3;                       // 0 → 1 as HP falls
         const pa = sev * (0.16 + 0.1 * Math.sin(rt.time * 6));
-        const dg = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.34, w/2, h/2, Math.max(w,h)*0.6);
-        dg.addColorStop(0, 'rgba(255,30,50,0)');
-        dg.addColorStop(1, 'rgba(255,30,50,' + Math.max(0, pa).toFixed(3) + ')');
-        ctx.fillStyle = dg; ctx.fillRect(0, 0, w, h);
+        // The gradient is GEOMETRY, which only changes on resize — it used to be
+        // rebuilt (two colour stops and all) every frame purely to animate its
+        // opacity. Cached per viewport; the breathing rides globalAlpha.
+        ctx.globalAlpha = Math.max(0, pa);
+        ctx.fillStyle = vignette('hp', 0.34, 0.6, '255,30,50');
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
       }
     }
     // SUPERNOVA flash — the citadel's death blooms white across the zone
@@ -2563,10 +2645,10 @@
     // SUPER BOSS: the whole zone pulses red at the edges while one is loose.
     if (rt.superBossAlive) {
       const pa = 0.12 + 0.10 * Math.sin(rt.time * 5);
-      const g = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.28, w/2, h/2, Math.max(w,h)*0.62);
-      g.addColorStop(0, 'rgba(255,42,74,0)');
-      g.addColorStop(1, 'rgba(255,42,74,' + pa.toFixed(3) + ')');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = pa;
+      ctx.fillStyle = vignette('sb', 0.28, 0.62, '255,42,74');
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1;
     }
     drawMinimap(ctx);
     drawPortrait();
@@ -2599,6 +2681,44 @@
     rt.hangarHits = R.drawHangar(ctx, w, h, rt.time, ships, state.ship);
   }
 
+  // ---- CACHED PAINT OBJECTS ------------------------------------------------
+  // Canvas gradients are expensive to build and immutable once built, so any
+  // gradient whose GEOMETRY is fixed belongs in a cache with its opacity driven
+  // by globalAlpha. Keyed by viewport so a resize or rotate rebuilds cleanly.
+  const _vig = {};
+  function vignette(key, inK, outK, rgb) {
+    const { ctx, w, h } = rt;
+    const id = key + '|' + w + 'x' + h;
+    let g = _vig[id];
+    if (!g) {
+      g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * inK, w / 2, h / 2, Math.max(w, h) * outK);
+      g.addColorStop(0, 'rgba(' + rgb + ',0)');
+      g.addColorStop(1, 'rgba(' + rgb + ',1)');
+      for (const k in _vig) if (k.indexOf(key + '|') === 0) delete _vig[k];   // one per key
+      _vig[id] = g;
+    }
+    return g;
+  }
+  // Baked additive core-bloom, one 128px sprite per tier palette. It used to be a
+  // radial gradient built PER DROP PER FRAME — an identical shape rebuilt a dozen
+  // times a frame on a busy floor. Baked once at r=64 and drawn scaled; the fade
+  // rides globalAlpha instead of being burned into the colour stops (which also
+  // fixes a long-standing double-fade: the stops multiplied by fade while the
+  // context alpha was already fade, so the bloom faded quadratically).
+  const _bloom = {};
+  function bloomSprite(key, mid, out) {
+    let c = _bloom[key];
+    if (c) return c;
+    c = document.createElement('canvas'); c.width = c.height = 128;
+    const b = c.getContext('2d');
+    const gr = b.createRadialGradient(64, 64, 1, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,0.5)');
+    gr.addColorStop(0.5, 'rgba(' + mid + ',0.3)');
+    gr.addColorStop(1, 'rgba(' + out + ',0)');
+    b.fillStyle = gr; b.fillRect(0, 0, 128, 128);
+    _bloom[key] = c;
+    return c;
+  }
   function drawGround(ctx) {
     for (const g of rt.ground) {
       const it = g.item;
@@ -2649,11 +2769,10 @@
         const flick = 0.55 + 0.45 * Math.sin(T * 34 + g.bob * 6);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const cgr = ctx.createRadialGradient(cx, cy, 1, cx, cy, (16 + 8 * flick) * sc);
-        cgr.addColorStop(0, 'rgba(255,255,255,' + (0.5 * fade) + ')');
-        cgr.addColorStop(0.5, 'rgba(' + PP.mid + ',' + (0.3 * fade) + ')');
-        cgr.addColorStop(1, 'rgba(' + PP.out + ',0)');
-        ctx.fillStyle = cgr; ctx.beginPath(); ctx.arc(cx, cy, (16 + 8 * flick) * sc, 0, 7); ctx.fill();
+        const br = (16 + 8 * flick) * sc;
+        ctx.globalAlpha = fade;
+        ctx.drawImage(bloomSprite(tier >= 13 ? 'a' : tier >= 12 ? 'r' : 'p', PP.mid, PP.out),
+          cx - br, cy - br, br * 2, br * 2);
         const RC = PP.rings;
         for (let r = 0; r < 2; r++) {
           const k = ((T * 0.85 + r * 0.5) % 1);
@@ -2693,7 +2812,18 @@
       ctx.globalAlpha = 1;
     }
   }
-  function hexToRgba(c, a) { const m = c[0]==='#'? [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)] : c.match(/\d+/g).map(Number); return `rgba(${m[0]},${m[1]},${m[2]},${a})`; }
+  // Memoised colour parse. Called for every Rare+ drop every frame, and the
+  // fallback branch ran a regex + map each time. The parse is cached per colour;
+  // only the alpha string is rebuilt.
+  const _rgbC = {};
+  function hexToRgba(c, a) {
+    let m = _rgbC[c];
+    if (!m) {
+      m = c[0] === '#' ? [parseInt(c.slice(1,3),16), parseInt(c.slice(3,5),16), parseInt(c.slice(5,7),16)] : c.match(/\d+/g).map(Number);
+      _rgbC[c] = m;
+    }
+    return 'rgba(' + m[0] + ',' + m[1] + ',' + m[2] + ',' + a + ')';
+  }
 
   function drawMinimap(ctx) {
     if (state.currentDungeon < 1) return; // no map in the safe staging zone

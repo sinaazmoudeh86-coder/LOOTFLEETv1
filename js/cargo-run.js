@@ -86,6 +86,7 @@
   let run = null;
 
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const perf = () => (window.performance && performance.now ? performance.now() : Date.now());
   const rnd = (a, b) => a + Math.random() * (b - a);
   const toast = (m, c) => { try { window.SOCIAL.toast(m, c || '#8fc4ff'); } catch (e) {} };
   function loadArt(slot, src) {
@@ -152,6 +153,7 @@
       x0: rt.worldW / 2, y0: rt.worldH - 150, y1: 130,
       cargo: { x: rt.worldW / 2, y: rt.worldH - 150, size: CARGO_SIZE[cfg.tier] || 56, dead: false, hitT: 0 },
       voids: [], refs: [], rings: [], sboss: null, ringT: 4, bossRingT: 0, spawnT: 3, uiT: 0, refsT: 0, bossUp: false, warned: {},
+      rate: 0, sWall: null, sSim: 0,
       prevSpeed: (g.state.gameSpeed || 1),
       prevAuto: (g.getAuto ? g.getAuto() : null),
       art: null,
@@ -181,6 +183,21 @@
 
     run.t += dt;
     run.prog = clamp(run.t / RUN_S, 0, 1);
+    // OBSERVED THROUGHPUT — sim seconds actually delivered per real second.
+    // The clock used to divide the remaining sim time by the SPEED SETTING, which
+    // silently assumes the sim keeps up with the wall clock. It does not when the
+    // frame rate drops: the loop clamps a frame to 50ms of real time, so at 5× a
+    // 10fps stretch delivers 2.5 sim seconds per second, not 5 — a run that read
+    // "2:00" took four real minutes. Sampled over 1.5s windows and smoothed, this
+    // is what the readout divides by, so the countdown tracks the clock on the
+    // player's wall even while the field is heavy.
+    const w = perf();
+    if (run.sWall == null) { run.sWall = w; run.sSim = run.t; }
+    else if (w - run.sWall >= 1500) {
+      const inst = (run.t - run.sSim) / ((w - run.sWall) / 1000);
+      run.rate = run.rate ? run.rate * 0.7 + inst * 0.3 : inst;
+      run.sWall = w; run.sSim = run.t;
+    }
 
     // ---- the cargo crawls its lane -----------------------------------------
     const c = run.cargo;
@@ -881,12 +898,15 @@
     const shp = $('cgw-ship'); if (shp) shp.style.left = Math.min(95, pct) + '%';
     const pc = $('cgw-pct'); if (pc) pc.textContent = Math.round(pct) + '%';
     const cd = $('cgw-cd');
-    // THE CLOCK IS REAL TIME AT THE CURRENT SPEED. run.t counts SIM seconds and
-    // update() is handed dt already multiplied by gameSpeed, so at 5× a 600s
-    // mission is 120s of waiting. Report what the player actually waits — the
-    // same treatment getBossInfo() gives the boss timer.
+    // THE CLOCK IS REAL TIME AT THE SPEED THE SIM IS ACTUALLY MANAGING. run.t
+    // counts SIM seconds; dividing by the speed SETTING overstates how fast they
+    // arrive whenever the frame rate is under load, so the divisor is the
+    // measured throughput from engineTick (capped at the setting, which is the
+    // best it can ever do).
     let sp = 1; try { sp = Math.max(1, G().state.gameSpeed | 0); } catch (e) {}
-    if (cd) { cd.textContent = mmss((RUN_S - run.t) / sp); cd.classList.toggle('hot', (RUN_S - run.t) / sp <= 30); }
+    const rate = (run.rate > 0.05) ? Math.min(sp, run.rate) : sp;
+    const left = (RUN_S - run.t) / rate;
+    if (cd) { cd.textContent = mmss(left); cd.classList.toggle('hot', left <= 30); }
     const spc = $('cgw-sp');
     if (spc) { spc.textContent = '\u00d7' + sp; spc.classList.toggle('on', sp > 1); }
     const wv = $('cgw-wave');

@@ -55,6 +55,15 @@
     { id: 'colony', ic: '⛏', name: 'Master Builder',     unit: 'structure levels built',   n: 40,  t: genT(2, 1.17, 40),     v: colonyLevelSum },
     { id: 'level',  ic: '▲', name: 'Ascendant',          unit: 'account level',            n: 20,  t: genT(5, 1.32, 20),     v: () => S().level || 1 },
     { id: 'zone',   ic: '⌬', name: 'Frontier Legend',    unit: 'zones unlocked',           n: 10,  t: genT(3, 1.45, 10),     v: () => S().highestUnlocked || 1 },
+    // ---- NANOCORES · legendary-grade only ------------------------------------
+    // RENDERED (unlike the ENDGAME block below) but flagged `extra` so they sit
+    // OUTSIDE the 1,000-badge Titan Sina count — the capstone stays exactly the
+    // ladder it shipped as. Deliberately no chain for merely opening crates:
+    // every one of these measures the top of the scale, so they track LEGENDARY
+    // cores, the slots unlocked on them, and rolls landing in the top 5%.
+    { id: 'nanoleg', ic: '◈', name: 'Legend Core',        unit: 'Legendary Nanocores recovered',  n: 40, t: genT(1, 1.15, 40), v: () => life('nanoLegend'), extra: true },
+    { id: 'nanoslot',ic: '⬢', name: 'Core Surgeon',       unit: 'extra buff slots unlocked',      n: 40, t: genT(1, 1.14, 40), v: () => life('nanoSlots'),  extra: true },
+    { id: 'nanogod', ic: '✧', name: 'Perfect Resonance',  unit: 'top-5% Legendary buff rolls',    n: 30, t: genT(1, 1.18, 30), v: () => life('nanoGod'),    extra: true },
   ];
   // ---- ENDGAME CHAINS -------------------------------------------------------
   // 500 more badges on the SAME ladder, all counting toward the Titan Sina.
@@ -81,8 +90,12 @@
   // the rendered ladder — folding it in changed the look of the Badges tab, and
   // the original card design read better. Re-enable by pushing ENDGAME into
   // CHAINS here if it ever gets its own screen.
-  const SINA_AT = CHAINS.reduce((a, c) => a + c.n, 0);        // = 1000 — the gate
-  const TOTAL = SINA_AT;
+  // THE CAPSTONE COUNTS THE ORIGINAL LADDER ONLY. Nanocore chains render beside
+  // the rest but carry `extra`, so adding them could never move a 1,000-badge
+  // prize to 1,110 — the gate, its copy and its progress bar are untouched.
+  const SINA_CHAINS = CHAINS.filter((c) => !c.extra);
+  const SINA_AT = SINA_CHAINS.reduce((a, c) => a + c.n, 0);   // = 1000 — the gate
+  const TOTAL = CHAINS.reduce((a, c) => a + c.n, 0);          // every rendered badge
   const gradeIdx = (ch, rank) => Math.min(9, Math.floor((rank - 1) / (ch.n / 10))); // rank is 1-based
   const gradeOf = (ch, rank) => GRADES[gradeIdx(ch, rank)];
 
@@ -101,6 +114,8 @@
     return n;
   }
   const totalClaimed = () => { const a = ensure(); let n = 0; CHAINS.forEach((ch) => { n += Math.min(ch.n, a.claimed[ch.id] || 0); }); return n; };
+  // What the Titan Sina gate reads — original ladder only (see SINA_CHAINS).
+  const sinaClaimed = () => { const a = ensure(); let n = 0; SINA_CHAINS.forEach((ch) => { n += Math.min(ch.n, a.claimed[ch.id] || 0); }); return n; };
   // 1s poll (driven by missions.js tick) — one toast per chain when new ranks land
   function tick() {
     const a = ensure(); let hit = false;
@@ -132,7 +147,7 @@
   function sinaBanner() {
     const a0 = ensure();
     const owned = !!(S().ownedShips && S().ownedShips.titansina) || !!a0.sinaGranted;
-    const have = totalClaimed();
+    const have = sinaClaimed();
     const left = SINA_AT - have;
     const ready = !owned && left <= 0;
     let right;
@@ -155,7 +170,7 @@
     const a = ensure();
     if (a.sinaGranted) return;
     if (S().ownedShips && S().ownedShips.titansina) { a.sinaGranted = true; Gm().save(); return; }
-    if (totalClaimed() < SINA_AT) return;
+    if (sinaClaimed() < SINA_AT) return;
     a.sinaGranted = true;
     if (Gm().grantShip) Gm().grantShip('titansina');
     Gm().save();

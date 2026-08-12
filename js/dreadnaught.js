@@ -29,7 +29,11 @@
   // ---- small utils ----------------------------------------------------------
   function fmt(n) { try { return G().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n) + ''; } }
   function lvl() { try { return (G().state.level | 0) || 1; } catch (e) { return 1; } }
-  function cores() { try { return G().state.dreadCores | 0; } catch (e) { return 0; } }
+  // `| 0` COERCES TO A SIGNED 32-BIT INT, so any balance over ~2.1 billion wraps
+  // NEGATIVE: a vault payout of 1e15 Dread Cores rendered as -1,530,494,976 in the
+  // wallet and read as a negative balance everywhere this is called. Math.floor
+  // has the same intent (whole cores) with no ceiling.
+  function cores() { try { return Math.max(0, Math.floor(G().state.dreadCores || 0)); } catch (e) { return 0; } }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function toast(m, c) { try { if (window.UI && window.UI.unlockToast) window.UI.unlockToast(m); } catch (e) {} }
 

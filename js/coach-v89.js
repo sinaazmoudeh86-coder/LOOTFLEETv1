@@ -106,7 +106,7 @@
       steps: [
         { title: 'Level 30 — GALAXY SUPPLY is open', body: 'Skip the RNG: supply crates let you <b>buy the exact gear tier you want</b> with the resources you farm — every tier crate is a 100% guaranteed drop.' },
         { target: '#nav-command', tap: true, title: 'Open Command', body: 'Galaxy Supply lives in your Command console. Tap the highlighted button.' },
-        { target: '#mega .mega-card[data-go="boxes"]', tap: true, title: 'Open Galaxy Supply', body: 'Tap the crate card.' },
+        { target: '#mega .mega-card[data-go="crates"]', tap: true, title: 'Open Crates', body: 'Tap the crate card, then the SUPPLY tab.' },
         { target: '#boxes-body', title: 'Requisition your gear', body: 'Pick a rarity and buy it outright — crates roll <b>at your current zone</b>, so deeper pushes mean stronger requisitions. The <b>Cosmic Cache</b> is the only source of Artifact-tier relics.' },
       ],
     },

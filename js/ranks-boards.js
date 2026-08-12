@@ -1,5 +1,5 @@
 /* =============================================================================
-   ranks-boards.js — SEVEN LADDERS for Command ▸ Ranks
+   ranks-boards.js — NINE LADDERS for Command ▸ Ranks
    ---------------------------------------------------------------------------
    The Ranks screen used to be one board: all-time fleet power. This adds six
    more, each measuring something a pilot actually *did* rather than power they
@@ -120,11 +120,32 @@
     },
     {
       id: 'cargo', ic: '\u26df', col: '#ffb84d', label: 'HAULAGE', sub: 'Cargo Delivered',
+      sql: 'cargo-ladder.sql',
       info: 'Space Cargo Defense — lifetime shipments escorted to the Citadel. Ties break on best delivered condition.',
       unit: 'HAULS',
       metric: (p) => (p.cargo || 0) * 1e3 + Math.min(999, (p.cargo_best | 0) * 9),
       fmt: (v, p) => fmt(p.cargo | 0),
       meta: (p) => ((p.cargo | 0) ? 'best delivery ' + Math.min(100, p.cargo_best | 0) + '% · ' : '') + rankLabel(ascOf(p)) + ' · Lv ' + (p.level | 0),
+    },
+    {
+      // NANOCORES — the top of the scale only. Common through Epic cores drop
+      // for everyone; ranking them would rank crate volume. This board measures
+      // the 1.5% pull, then what the pilot did with it: how deep they built ONE
+      // core, and how many rolls landed in the top 5% of their range.
+      id: 'nano', ic: '\u25c8', col: '#f0972a', label: 'NANOCORE', sub: 'Legendary Cores',
+      sql: 'nanocore-ladder.sql',
+      info: 'Legendary Nanocores recovered — 1.5% a crate. Ties break on the deepest single core built, then on top-5% buff rolls.',
+      unit: 'CORES',
+      metric: (p) => (p.nano_legend | 0) * 1e9 + Math.min(5, p.nano_slots | 0) * 1e6 + Math.min(999999, p.nano_god | 0),
+      fmt: (v, p) => String(p.nano_legend | 0),
+      meta: (p) => {
+        const s = Math.min(5, p.nano_slots | 0), g = p.nano_god | 0;
+        if (!(p.nano_legend | 0)) return 'No Legendary core yet · Lv ' + (p.level | 0);
+        return (s >= 5 ? '★ 5/5 slots — core finished' : s + '/5 slots on one core') +
+               (g ? ' · ' + fmt(g) + ' god roll' + (g === 1 ? '' : 's') : '') +
+               ' · Lv ' + (p.level | 0);
+      },
+      empty: 'No Legendary Nanocores recovered yet. They drop at 1.5% a crate — the first pilot to pull one takes this board outright.',
     },
     {
       id: 'badges', ic: '\u2b21', col: '#b57bff', label: 'BADGES', sub: 'Ranks Claimed',
@@ -199,6 +220,17 @@
     // BADGES — the 1,000-rank ladder is a multi-year climb; even veterans are low
     const badges = Math.min(1000, Math.floor(Math.pow(career, 0.92) * (0.22 + r() * 0.4)));
 
+    // NANOCORES — gated at Lv 50 and paid for in Prism Ingots, so a sim's
+    // Legendary count tracks career rather than luck, and stays low enough that
+    // one real 1.5% pull is worth something on the board. Slot depth is weighted
+    // hard toward the shallow end: 25 successful upgrades on ONE core is the rare
+    // thing, and no derived pilot is ever handed a finished 5/5 — that row has to
+    // be earned by a human.
+    const legend = lv >= 50 ? Math.max(0, Math.floor((career / 900) * (0.25 + r() * 1.35))) : 0;
+    p.nano_legend = Math.min(14, legend);
+    p.nano_slots = legend ? Math.min(4, Math.floor(Math.pow(r(), 1.7) * 5.4)) : 0;
+    p.nano_god = legend ? Math.floor(legend * r() * 1.4) : 0;
+
     p.tiles = tiles; p.citadels = citadels; p.tile_rev = rev;
     p.ships = ships; p.missions = missions; p.badges = badges;
     p._derived = true;
@@ -241,11 +273,17 @@
   // quietly credit simulated pilots with records no human could be shown to
   // beat. Detected by absence of the property (not a zero value), and those
   // boards refuse to render until the columns exist.
-  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1 };
-  function migrated(rows) {
+  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1 };
+  // Which property proves the migration for THIS board ran. Haulage and Nanocore
+  // ship in their OWN migrations (cargo-ladder.sql, nanocore-ladder.sql), so the
+  // shared lb-onefunction probe would pass on a server that had run neither and
+  // both boards would quietly rank every human at zero.
+  const SQL_PROBE = { cargo: ['cargo', 'cargo_best'], nano: ['nano_legend', 'nano_slots'] };
+  function migrated(rows, id) {
+    const keys = SQL_PROBE[id] || ['missions', 'tile_rev'];
     for (const p of rows) {
       if (p.isMe || p._sim || p.is_simulated || p._filler) continue;
-      if (p.missions !== undefined || p.tile_rev !== undefined) return true;
+      for (const k of keys) if (p[k] !== undefined) return true;
     }
     return false;                       // no human row carries the columns
   }
@@ -275,7 +313,7 @@
 
     // LEADERBOARD LADDERS — the same pool the power board uses, re-sorted
     const data = LB.allTimeBoard(g);
-    if (NEEDS_SQL[id] && !migrated(data.board)) {
+    if (NEEDS_SQL[id] && !migrated(data.board, id)) {
       return { rows: [], real: 0, tab, pending: false, needsSql: true };
     }
     const rows = data.board.map((p) => {
@@ -301,6 +339,14 @@
     q.missions = s.lifetimeMissions | 0;
     q.cargo = (s.cargo && s.cargo.wins) | 0;
     q.cargo_best = Math.min(100, (s.cargo && s.cargo.best) | 0);
+    // Nanocores read through the module so this row, the badge chains and the
+    // Discord feed all quote one number.
+    try {
+      const f = (window.NANO && window.NANO.feedFields) ? window.NANO.feedFields() : null;
+      q.nano_legend = f ? f.nano_legend | 0 : 0;
+      q.nano_slots = f ? f.nano_slots | 0 : 0;
+      q.nano_god = f ? f.nano_god | 0 : 0;
+    } catch (e) { q.nano_legend = q.nano_slots = q.nano_god = 0; }
     q.badges = (() => {
       // Badges live in state.achieve.claimed (per-chain counts) — the old
       // badgeRanks/achClaimed fields never existed, so every real player
@@ -319,6 +365,7 @@
     q.tile_rev = Number(q.tile_rev) || 0;
     q.ships = q.ships | 0; q.missions = q.missions | 0; q.badges = q.badges | 0;
     q.cargo = q.cargo | 0; q.cargo_best = q.cargo_best | 0;
+    q.nano_legend = q.nano_legend | 0; q.nano_slots = Math.min(5, q.nano_slots | 0); q.nano_god = q.nano_god | 0;
     return q;
   }
 
@@ -345,7 +392,7 @@
   function publishFields() {
     try {
       const s = G().state || {};
-      return {
+      const out = {
         tiles: Object.keys(s.ownedSystems || {}).length,
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
@@ -361,6 +408,11 @@
       try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(1000, n); } catch (e) { return 0; }
     })(),
       };
+      // NANOCORES — legendary-only figures (Legendary cores recovered, deepest
+      // slot count on one of them, top-5% rolls), read through the module so the
+      // Discord feed and the game can never disagree about what a pilot did.
+      try { if (window.NANO && window.NANO.feedFields) Object.assign(out, window.NANO.feedFields()); } catch (e) {}
+      return out;
     } catch (e) { return null; }
   }
 

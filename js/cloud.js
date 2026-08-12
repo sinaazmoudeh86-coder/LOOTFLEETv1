@@ -187,6 +187,7 @@
   // ranks-ladders.sql keeps publishing stars.
   let _lbNoLadder = false, _lbLadderRetryAt = 0;
   let _lbNoCargo = false, _lbCargoRetryAt = 0;
+  let _lbNoNano = false, _lbNanoRetryAt = 0;
   function lbFail(where, err) {
     _lbFails++;
     // A row that never publishes makes the player INVISIBLE on Ranks while they
@@ -235,6 +236,7 @@
       if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
       if (_lbNoLadder && Date.now() > _lbLadderRetryAt) _lbNoLadder = false;
       if (_lbNoCargo && Date.now() > _lbCargoRetryAt) _lbNoCargo = false;
+      if (_lbNoNano && Date.now() > _lbNanoRetryAt) _lbNoNano = false;
 
       // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
       // p_asc. Folding them into the p_asc attempt would mean a server with
@@ -246,6 +248,17 @@
         p_tile_rev: bignum(p.tile_rev),
         p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
       } : null;
+      // NANOCORE COLUMNS are the newest tier and try FIRST, degrading on their
+      // own flag: a server with cargo-ladder.sql but not nanocore-ladder.sql
+      // keeps publishing haulage and every other ladder untouched.
+      if (ladder && !_lbNoLadder && !_lbNoCargo && p.nano_legend !== undefined && !_lbNoNano) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+            p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 }, base, ladder));
+        if (!error) { _lbFails = 0; return; }
+        if (!isLegacy(error)) { lbFail('nano', error); return; }
+        _lbNoNano = true; _lbNanoRetryAt = Date.now() + 6 * 3600 * 1000;
+      }
       // HAULAGE COLUMNS degrade on their own flag, exactly like the tiers below:
       // a server that has ranks-ladders.sql but not cargo-ladder.sql keeps
       // publishing every other ladder untouched.
@@ -279,9 +292,26 @@
   async function lbTop(n) {
     try {
       if (!enabled) return null;
+      // HAULAGE + NANOCORE COLUMNS come from cargo-ladder.sql and
+      // nanocore-ladder.sql. They were being PUBLISHED by lbUpsert and never
+      // READ BACK here, so the Haulage ladder ranked every human at zero and a
+      // Nanocore ladder was impossible to build. Each migration gets its own
+      // rung on the ladder below, so a server missing one still serves the rest.
       let { data, error } = await client.from('leaderboard')
-        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges')
+        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god')
         .order('power', { ascending: false }).limit(n || 100);
+      if (error) {   // nanocore-ladder.sql not run yet
+        const rN = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = rN.data; error = rN.error;
+      }
+      if (error) {   // cargo-ladder.sql not run yet
+        const rC = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = rC.data; error = rC.error;
+      }
       if (error) {   // ranks-ladders.sql not run yet
         const r0 = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet,asc_stars')

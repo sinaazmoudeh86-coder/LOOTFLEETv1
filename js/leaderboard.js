@@ -20,8 +20,13 @@
   // pinned the Territory, Hangar, Missions and Badges ladders to a permanent
   // "waiting on a database migration" notice that no migration could ever clear.
   // Copied through as undefined when absent, so that check keeps working.
+  // Cargo and nanocore columns join the same whitelist for the same reason: they
+  // are published on every heartbeat, and dropping them here pinned Haulage to a
+  // board of zeroes and left Nanocore with nothing to rank at all.
   function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true,
-    tiles: r.tiles, citadels: r.citadels, tile_rev: r.tile_rev, ships: r.ships, missions: r.missions, badges: r.badges }; }
+    tiles: r.tiles, citadels: r.citadels, tile_rev: r.tile_rev, ships: r.ships, missions: r.missions, badges: r.badges,
+    cargo: r.cargo, cargo_best: r.cargo_best,
+    nano_legend: r.nano_legend, nano_slots: r.nano_slots, nano_god: r.nano_god }; }
   function ensureReal(cb){
     if (!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.lbTop)) return;
     if (_realInflight || Date.now() - _realT < 8000) return;

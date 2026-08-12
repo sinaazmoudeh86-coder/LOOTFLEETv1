@@ -91,11 +91,17 @@
     // amount of gold, level or zone. Same term fixes the best-ever vault, which
     // otherwise kept offering the pre-ascension save as the "heaviest" copy.
     const stars = (s.pasc && (s.pasc.stars | 0)) || 0;
+    // NANOCORES — a real progression axis bought with Prism Ingots, so a save
+    // that holds cores and unlocked buff slots must not lose to one that does
+    // not. Weighted like hull levels (below stars, above gold): a core is cheap,
+    // an unlocked slot is five successful upgrades and costs real ingots.
+    let nano = 0;
+    try { const cs = (s.nano && s.nano.cores) || {}; for (const k in cs) { const c = cs[k] || {}; nano += 40 + (c.slots | 0) * 300 + (c.stage | 0) * 40; } } catch (e) {}
     return stars * 5e6
       + (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600
       + Math.log10(1 + Math.max(0, s.gold || 0)) * 7200
       + Math.max(s.highestDungeonReached | 0, s.highestUnlocked | 0) * 1800
-      + hull * 900 + asc * 60;
+      + hull * 900 + asc * 60 + nano;
   }
   // BEST-EVER VAULT — every ~45s the heaviest save this account has ever had on
   // this device is copied to lf-best::<uid>. Max-only: weaker data never touches

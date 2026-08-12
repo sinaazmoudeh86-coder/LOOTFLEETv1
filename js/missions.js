@@ -46,10 +46,17 @@
     // Deliveries are capped at 2/day base, so targets are counted in RUNS, not
     // the usual ×38 tier ladder (see the clamp in buildList).
     { id: 'cargo1',  ic: '⛟', name: 'Escort Contract',    blurb: 'Deliver {N} cargo shipment(s) to the Citadel', m: 'cargo', n: () => 1,             rw: (l, z) => ({ gold: Math.round(4000 * dayScale(z)), lc: 30 }), gate: () => cargoOpen() },
+    // ---- NANOCORES — gated on the system itself (Lv 50), not a board level.
+    { id: 'nano1',   ic: '◈', name: 'Core Requisition',   blurb: 'Open {N} Nanocore Crate(s)',                   m: 'nanoOpen', n: () => 1,   rw: (l, z) => ({ gold: Math.round(5000 * dayScale(z)), lc: 25 }), gate: () => nanoOpen() },
+    { id: 'nano2',   ic: '⬢', name: 'Bench Time',         blurb: 'Land {N} successful core upgrade(s)',          m: 'nanoUp',   n: () => 2,   rw: (l, z) => ({ plasma: Math.round(150 * dayScale(z)), lc: 20 }), gate: () => nanoOpen() },
+    { id: 'nano3',   ic: '✧', name: 'Spin the Lattice',   blurb: 'Reroll extra buffs {N} time(s)',               m: 'nanoRoll', n: () => 2,   rw: (l, z) => ({ iron: Math.round(180 * dayScale(z)), lc: 20 }), gate: () => nanoOpen() },
     { id: 'cargo2',  ic: '✦', name: 'Pristine Manifest',  blurb: 'Deliver {N} shipment(s) at 90%+ integrity',    m: 'cargoClean', n: () => 1,        rw: (l, z) => ({ plasma: Math.round(200 * dayScale(z)), lc: 45 }), gate: () => cargoOpen() },
   ];
   // the event unlocks at Pilot Ascension ★20 — no level ever opens it
   function cargoOpen() { try { return !!(window.CARGO && window.CARGO.unlocked && window.CARGO.unlocked()); } catch (e) { return false; } }
+  // Nanocores opens at Level 50 — asked through the module so the gate lives in
+  // exactly one place (NANO.CFG.gate).
+  function nanoOpen() { try { return !!(window.NANO && window.NANO.unlocked()); } catch (e) { return false; } }
 
   // ---- BOARDS ---------------------------------------------------------------
   // tm = target multiplier vs daily · rm = reward multiplier vs daily
@@ -96,7 +103,7 @@
     for (let i = a.length - 1; i > 0; i--) { s = (s * 1664525 + 1013904223) >>> 0; const j = s % (i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
   }
-  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0, cargo: 0, cargoClean: 0 });
+  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0, cargo: 0, cargoClean: 0, nanoOpen: 0, nanoUp: 0, nanoRoll: 0 });
   function buildList(cfg, tier) {
     const s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
     const eligible = POOL.filter((p) => (!p.req || lvl >= p.req) && (!p.gate || p.gate()));
@@ -108,6 +115,10 @@
       // cargo runs are rationed (2/day base) — targets stay inside what the
       // period can physically hold: daily 1-2 · weekly ≤8 · monthly ≤30
       if (p.m === 'cargo' || p.m === 'cargoClean') n = Math.min(n, Math.max(1, Math.round(1.6 * cfg.tm)));
+      // A crate is 30,000 ◈ and an upgrade climbs past 40,000 — the ×38 monthly
+      // ladder would price these in the millions, so nanocore targets scale on
+      // the period multiplier only.
+      if (p.m === 'nanoOpen' || p.m === 'nanoUp' || p.m === 'nanoRoll') n = Math.min(n, Math.max(1, Math.round(p.n(lvl, z) * cfg.tm)));
       return { id: p.id, n, done: 0, claimed: false };
     });
   }
@@ -160,9 +171,13 @@
     return { kills: s.totalKills || 0, gold: s.gold || 0, fuel: r.fuel || 0, iron: r.iron || 0, plasma: r.plasma || 0,
              level: s.level || 1, play: s.playTime || 0, items: (s.inventory || []).length + (s.lifetimeLooted || 0), boss: bossCount(),
              hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum(),
-             cargo: (s.cargo && s.cargo.wins) | 0, cargoClean: (s.cargo && s.cargo.clean) | 0 };
+             cargo: (s.cargo && s.cargo.wins) | 0, cargoClean: (s.cargo && s.cargo.clean) | 0,
+             nanoOpen: lifeStat('nanoOpened'), nanoUp: lifeStat('nanoUps'), nanoRoll: lifeStat('nanoRolls') };
   }
   function hullLevelSum() { const sl = G.state.shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return t; }
+  // Nanocore progress is already counted for life once, in nanocores.js — the
+  // boards read those same monotonic counters rather than keeping a second tally.
+  function lifeStat(k) { const L = G.state.lifeStats; return (L && L[k]) | 0; }
   function moonLifetimeSum() { const lt = (G.state.moon && G.state.moon.lifetime) || {}; let t = 0; for (const k in lt) t += lt[k] || 0; return t; }
   function colonyLevelSum() {
     const root = G.state.moon; if (!root || !root.moons) return 0;
@@ -212,7 +227,8 @@
                 iron: pos(now.iron - o.iron), plasma: pos(now.plasma - o.plasma), levels: pos(now.level - o.level),
                 bosses: pos(now.boss - o.boss), loot: pos(now.items - o.items), hulls: pos(now.hulls - (o.hulls || 0)),
                 tiles: pos(now.tiles - (o.tiles || 0)), moon: pos(now.moon - (o.moon || 0)), colony: pos(now.colony - (o.colony || 0)),
-                cargo: pos(now.cargo - (o.cargo || 0)), cargoClean: pos(now.cargoClean - (o.cargoClean || 0)) };
+                cargo: pos(now.cargo - (o.cargo || 0)), cargoClean: pos(now.cargoClean - (o.cargoClean || 0)),
+                nanoOpen: pos(now.nanoOpen - (o.nanoOpen || 0)), nanoUp: pos(now.nanoUp - (o.nanoUp || 0)), nanoRoll: pos(now.nanoRoll - (o.nanoRoll || 0)) };
     s.msnBase = now;
     // lifetime accumulators for non-monotonic metrics (achievements)
     const L = s.lifeStats;

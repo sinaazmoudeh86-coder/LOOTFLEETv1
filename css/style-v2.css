@@ -520,13 +520,21 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 .bl-artifact{border-left-color:var(--c-artifact);}
 @keyframes primShimmer{0%{background-position:0% 0}100%{background-position:240% 0}}
 
-/* ---- RANKS: seven-ladder tab strip + pagination -------------------------- */
-.lbx-tabs{display:flex;gap:6px;overflow-x:auto;padding:0 0 8px;margin-bottom:8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.lbx-tabs::-webkit-scrollbar{display:none}
-.lbx-tab{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--font-ui);font-weight:700;font-size:11px;letter-spacing:.08em;white-space:nowrap;cursor:pointer;min-height:40px}
-.lbx-ic{font-style:normal;font-size:13px;line-height:1;color:var(--c);opacity:.85}
+/* ---- RANKS: eight-ladder tab grid + pagination ---------------------------
+   IT USED TO BE A HORIZONTAL SCROLL STRIP. Eight ladders in a one-line
+   overflow:auto row meant HAULAGE and BADGES sat off the right edge with no
+   affordance saying so — players reported not knowing the cargo board existed.
+   It is now a WRAPPING GRID sized off the PANEL, not the viewport: auto-fit
+   columns with a 104px floor, so every ladder is on screen at every width —
+   three columns on a phone, all nine in one row on desktop — and no chip is
+   ever narrow enough to clip its own label. No sideways scroll anywhere. */
+.lbx-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px;padding:0;margin-bottom:10px}
+.lbx-tab{min-width:0;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--font-ui);font-weight:700;font-size:11px;letter-spacing:.05em;white-space:nowrap;overflow:hidden;cursor:pointer;min-height:44px}
+@media (max-width:400px){.lbx-tabs{grid-template-columns:repeat(auto-fit,minmax(92px,1fr))}.lbx-tab{font-size:10px;letter-spacing:.02em;gap:4px;padding:7px 3px}}
+.lbx-ic{flex:0 0 auto;font-style:normal;font-size:13px;line-height:1;color:var(--c);opacity:.85}
 .lbx-tab.on{border-color:var(--c);color:#eaf0fa;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 16%,transparent),transparent);box-shadow:0 0 14px -6px var(--c)}
 .lbx-tab.on .lbx-ic{opacity:1}
+.lbx-tab:not(.on):hover{border-color:color-mix(in srgb,var(--c) 45%,var(--line));color:var(--text)}
 .lbx-note{text-align:center;padding:22px 18px;margin:4px 0 12px;border:1px dashed var(--line-2,#37475f);border-radius:12px;font-size:12.5px;line-height:1.5;color:var(--muted)}
 .lbx-note.err{color:#ff8a96;border-color:rgba(255,90,104,.4)}
 .lbx-pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 4px}

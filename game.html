@@ -62,7 +62,7 @@ window.__lfErr=[];
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=516">
+<link rel="stylesheet" href="css/style-v2.css?v=570">
 <link rel="stylesheet" href="css/theme.css?v=421">
 <link rel="stylesheet" href="css/web-v89.css?v=508">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=421">
@@ -784,6 +784,20 @@ window.__lfErr=[];
           </div></div>
         </div>
 
+        <!-- NANOCORES (Command) — the system's home -->
+        <div class="screen overlay" id="screen-nano" data-screen-label="Nanocores">
+          <div class="scr-head"><span class="scr-title">Nanocores</span><span class="scr-sub" id="nano-sub"></span></div>
+          <div class="scr-body" id="nano-body"></div>
+        </div>
+
+        <!-- CRATES (Command) — the NANOCORE tab lives here; SUPPLY and SHIP PARTS
+             are the Galaxy Supply and Shipworks screens, tied to this one by the
+             shared sub-tab strip crates-hub.js puts in all three heads. -->
+        <div class="screen overlay" id="screen-crates" data-screen-label="Crates">
+          <div class="scr-head"><span class="scr-title">Crates</span><span class="scr-sub" id="crates-sub"></span></div>
+          <div class="scr-body" id="crates-body"></div>
+        </div>
+
         <!-- GALAXY BOXES (Command) -->
         <div class="screen overlay" id="screen-boxes">
           <div class="scr-head"><span class="scr-title">Galaxy Supply</span><span class="scr-sub" id="boxes-sub"></span></div>
@@ -958,10 +972,15 @@ window.__lfErr=[];
               <div><div class="mc-n">Missions</div><div class="mc-s">Daily · weekly · monthly boards + lifetime badges</div></div>
               <span class="badge cmd-cardbadge" id="cmd-msn-badge" style="display:none">0</span>
             </div>
-            <div class="mega-card cmd-works" data-go="shipworks">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M12 8v8M8 12h8"/></svg></div>
-              <div><div class="mc-n">Shipworks</div><div class="mc-s">Open part crates &amp; assemble hulls — up to the Titan Sina</div></div>
+            <div class="mega-card cmd-crates" data-go="crates">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M3 6.5L12 11l9-4.5M12 11v11"/></svg></div>
+              <div><div class="mc-n">Crates</div><div class="mc-s">Nanocores, supply crates &amp; ship parts — one console</div></div>
               <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-works-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-prism cmd-nano" data-go="nano">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.8 2.8M16.2 16.2L19 19M19 5l-2.8 2.8M7.8 16.2L5 19"/></svg></div>
+              <div><div class="mc-n">Nanocores</div><div class="mc-s">One core per hull · unlock buff slots with ◈ Prism Ingots</div></div>
+              <span class="mc-lock"></span>
             </div>
             <div class="mega-card pa-pill" data-go="pasc" id="cmd-pasc">
               <div class="pa-pill-ic">✦</div>
@@ -986,11 +1005,6 @@ window.__lfErr=[];
             <div class="mega-card cmd-casino" data-go="casino">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.4"/><circle cx="15.5" cy="15.5" r="1.4"/><circle cx="15.5" cy="8.5" r="1.4"/><circle cx="8.5" cy="15.5" r="1.4"/></svg></div>
               <div><div class="mc-n">Space Casino</div><div class="mc-s">Blackjack · hold’em · roulette · craps · slots — any currency</div></div>
-              <span class="mc-lock"></span>
-            </div>
-            <div class="mega-card cmd-boxes" data-go="boxes">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5v11L12 22 3 17.5v-11z"/><path d="M3 6.5L12 11l9-4.5M12 11v11"/></svg></div>
-              <div><div class="mc-n">Galaxy Supply</div><div class="mc-s">Supply crates · published drop odds</div></div>
               <span class="mc-lock"></span>
             </div>
             <a class="mega-card cmd-discord" id="cmd-discord" href="https://discord.gg/jUAhgb99D" target="_blank" rel="noopener noreferrer">
@@ -1071,18 +1085,18 @@ window.__lfErr=[];
 <script src="js/entities.js?v=550"></script>
 <script src="js/render.js?v=556"></script>
 <script src="js/galaxy.js?v=503"></script>
-<script src="js/leaderboard.js?v=421"></script>
+<script src="js/leaderboard.js?v=570"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js?v=501"></script>
 <script src="js/analytics.js?v=421"></script>
-<script src="js/cloud.js?v=560"></script>
-<script src="js/account.js?v=532"></script>
+<script src="js/cloud.js?v=570"></script>
+<script src="js/account.js?v=569"></script>
 <script src="js/session-lock.js?v=421"></script>
 <script src="js/vip.js?v=431"></script>
 <script src="js/territory.js?v=481"></script>
 <script src="js/payments-v91.js?v=492"></script>
-<script src="js/game-v93.js?v=562"></script>
-<script src="js/ui-v94.js?v=559"></script>
+<script src="js/game-v93.js?v=569"></script>
+<script src="js/ui-v94.js?v=570"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
 <script src="js/fx-aaa.js?v=421"></script>
@@ -1091,19 +1105,19 @@ window.__lfErr=[];
 <script src="js/moon-colony.js?v=431"></script>
 <script src="js/return-brief.js?v=421"></script>
 <script src="js/home-citadel.js?v=546"></script>
-<script src="js/missions.js?v=560"></script>
-<script src="js/achievements.js?v=478"></script>
-<script src="js/coach-v89.js?v=421"></script>
+<script src="js/missions.js?v=569"></script>
+<script src="js/achievements.js?v=569"></script>
+<script src="js/coach-v89.js?v=569"></script>
 <script src="js/prism-v5.js?v=431"></script>
 <script src="js/prism-fleet.js?v=431"></script>
-<script src="js/dreadnaught.js?v=516"></script>
+<script src="js/dreadnaught.js?v=569"></script>
 <script src="js/server-dreadnaught.js?v=558"></script>
 <script src="js/galaxy-box.js?v=501"></script>
 <script src="js/shipworks.js?v=431"></script>
 <script src="js/starforge.js?v=421"></script>
 <script src="js/pilot-ascension.js?v=518"></script>
 <script src="js/sim-pilots.js?v=421"></script>
-<script src="js/ranks-boards.js?v=562"></script>
+<script src="js/ranks-boards.js?v=570"></script>
 <script src="js/rank-rewards.js?v=421"></script>
 <script src="js/discord-reward.js?v=421"></script>
 <script src="js/onboard.js?v=421"></script>
@@ -1115,8 +1129,11 @@ window.__lfErr=[];
 <script src="js/alliance.js?v=488"></script>
 <script src="js/alliance-boss.js?v=558"></script>
 <script src="js/void-zone.js?v=506"></script>
-<script src="js/cargo-run.js?v=562"></script>
+<script src="js/cargo-run.js?v=569"></script>
 <script src="js/cargo-defense.js?v=560"></script>
+<script src="js/nanocores.js?v=569"></script>
+<script src="js/nanocores-ui.js?v=569"></script>
+<script src="js/crates-hub.js?v=569"></script>
 <script src="js/ascension.js?v=478"></script>
 <script src="js/casino.js?v=449"></script>
 <script src="js/casino2.js?v=449"></script>
@@ -1128,7 +1145,7 @@ window.__lfErr=[];
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 563;
+  window.LF_BUILD = 570;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1320,6 +1337,10 @@ window.__lfErr=[];
       galaxy:25, voidzone:25,                      // voidzone now matches its own copy
       dread:30, pilot:30, moon:30, boxes:30,
       prism:40, sdread:50, prismfleet:50,
+      // CRATES opens with its earliest tab (Shipworks, 20); Galaxy Supply (30)
+      // and Nanocores (50) keep their own levels, which the sub-tab strip
+      // enforces now that they have no Command cards of their own.
+      crates:20, nano:50,
       ascend:60, forge:100, pasc:100, homecit:150,
     };
     // STAR-GATED CARDS. A few systems are gated by PILOT ASCENSION, not level —
@@ -1431,12 +1452,21 @@ window.__lfErr=[];
     { const dc=document.getElementById('cmd-discord'); if(dc) dc.addEventListener('click',()=>{ close(); }); }
     document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&mega.classList.contains('open')) close(); });
     mega.querySelectorAll('[data-go]').forEach(c=>c.addEventListener('click',()=>{
-      const btn=document.querySelector('.nav-btn[data-screen="'+c.dataset.go+'"]');
-      close(); if(btn) btn.click(); cmd.classList.add('active');
+      const to=c.dataset.go;
+      // Cards navigate by clicking the matching (usually hidden) nav button. A
+      // screen that has NO nav button used to fall through this handler in
+      // silence: the sheet closed and whatever screen was already open stayed
+      // up, so the new card looked like it pointed at a random screen. Fall back
+      // to the router by name so a card can never dead-end again.
+      const btn=document.querySelector('.nav-btn[data-screen="'+to+'"]');
+      close();
+      if(btn) btn.click();
+      else if(window.UI&&UI.showScreen) UI.showScreen(to);
+      cmd.classList.add('active');
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active,#screen-cargo.active');
+      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-crates.active,#screen-nano.active,#screen-ascend.active,#screen-casino.active,#screen-cargo.active');
       cmd.classList.toggle('active', !!on);
       syncDock();
     },500);

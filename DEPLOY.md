@@ -1,22 +1,24 @@
-# Loot Fleet — deploy v217 · build 563
+# Loot Fleet — deploy v219 · build 570
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v216. Service worker cache is `lootfleet-v563`.
+Supersedes v218. Service worker cache is `lootfleet-v570`.
 
-**Headline:** Space Cargo Defense (the escort event) + the Eternum, the smooth
-flight model, the end-of-run frame-rate fix, the Ranks screen crash fix, and
-the seven-ladder Ranks board with the new HAULAGE ladder.
+**Headline:** the Nanocore Discord announcements and the Haulage ladder were
+written, shipped and never once fired — three separate reads dropped the columns
+they depend on. Fixed end to end, plus a new **NANOCORE ladder** in Ranks, a
+broken-thumbnail fix on leaderboard rows, and every "now available to attack"
+callout removed from Discord.
 
 ---
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 563 |
+| Stamp | File | Build 570 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `563` |
-| Update beacon | `version.json` → `build` | `563` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v563` |
-| Project root beacon | root `version.json` (source tree) | `563` |
+| Client constant | `game.html` → `window.LF_BUILD` | `570` |
+| Update beacon | `version.json` → `build` | `570` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v570` |
+| Project root beacon | root `version.json` (source tree) | `570` |
 
 ```bash
 grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
@@ -25,130 +27,132 @@ grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. This folder's `sw.js` is the real one.
 
-### Folder audit — run before the push (all green for this folder)
+### Folder audit — all green for this folder
 
 | check | result |
 |---|---|
-| js/css files `game.html` references | **71** |
+| js/css files `game.html` references | **74** |
 | stale vs project root | **0** |
 | missing from folder | **0** |
 | references without `?v=` | **0** |
-| root `game.html` vs folder copy | **byte-identical** |
-| sw precache entries | **80**, none dead |
-| referenced but not precached | **0** (9 offline gaps closed this release) |
-| top-level html/json/js vs source | **identical** |
-| `ships/` vs source | **65 / 65, match** |
-| ship art paths referenced in js | **25**, all present |
+| cache-busts raised this release | **5** (only the files that changed) |
 
-Nine files were referenced by `game.html` but had never been precached —
-`ember-choir.css`, `hangar-ships.css`, `return-brief.js`, `rank-rewards.js`,
-`discord-reward.js`, `onboard.js`, `pro-offer.js`, `paragon-cannon.js`,
-`casino-citadels.js`. Offline, those screens fell through to a network fetch
-that could not resolve. Added to `CORE`.
+Folder was seeded from `deploy-v218`, then `js/`, `css/`, `guides/` and
+`supabase/` were **deleted and re-copied from the project root as separate
+calls** — never a bulk copy over patched files (the v216 failure).
 
-**ART DRIFT — the lesson from build 562.** The audit checked js/css and the four
-build stamps, and passed, because `ships/` was never in it. A release folder
-seeded from the previous release inherits that folder wholesale, so any art added
-since is silently missing and the game falls back to its vector hulls — which
-looks like a rendering bug, not a deploy bug. Diff EVERY asset folder against the
-project root, not just the code:
-
-```bash
-# from the release folder
-for d in ships js css guides supabase; do
-  diff <(ls $d) <(ls ../$d) >/dev/null || echo "DRIFT in $d"
-done
-```
+Files changed this build: `js/cloud.js`, `js/leaderboard.js`, `js/ranks-boards.js`,
+`js/ui-v94.js`, `css/style-v2.css`, `supabase/functions/discord-feed/index.ts`.
 
 ---
 
-## Step 1 — run the SQL (REQUIRED — the HAULAGE ladder is empty without it)
+## Step 1 — SQL (only if `nanocore-ladder.sql` has never been run)
 
-Supabase → **SQL Editor** → paste **`supabase/cargo-ladder.sql`** → Run.
+Supabase → SQL Editor → run `supabase/nanocore-ladder.sql`. Safe to re-run.
 
-It adds the `cargo` / `cargo_best` columns to `leaderboard` and lets the
-heartbeat publish them. Until it runs, real players publish nothing for the
-HAULAGE board and the ladder shows sims only.
+It adds `nano_legend`, `nano_slots`, `nano_god` to `leaderboard` and re-creates
+`lb_upsert` with the three optional params. Without it the Nanocore ladder shows
+"waiting on a database migration" and the feed posts nothing — the game itself is
+unaffected.
 
-Verify:
+Same applies to `cargo-ladder.sql` if that was never run (Haulage ladder).
 
-```sql
-select column_name from information_schema.columns
- where table_name = 'leaderboard' and column_name in ('cargo','cargo_best');
+## Step 2 — redeploy the Discord feed Edge Function
+
+**This is the fix.** The function has to be redeployed or nothing changes.
+
+```bash
+supabase functions deploy discord-feed
 ```
 
-Two rows = done.
-
-## Step 2 — redeploy the Discord Edge Function (if not already on ver 216+)
-
-Supabase → **Edge Functions** → **discord-feed** → **Code** → select-all,
-delete, paste **`supabase/functions/discord-feed/index.ts`** → **Deploy** and
-wait for the confirmation.
-
-Verify the running build stamps its version:
+Confirm the new build is live — the cron log must show `"ver":570`:
 
 ```sql
-select status, content from net._http_response order by created desc limit 3;
+select content from net._http_response order by created desc limit 3;
 ```
 
-Must show `"ver":216` or higher — no `ver` field means the old build is still
-running (that is how the first attempt silently failed).
+If `ver` reads 565, the old function is still running and no Nanocore card will
+ever post.
 
 ## Step 3 — push the site
 
 Folder contents to the repo root, commit, let Vercel build. **The site goes
-first, the beacon confirms after** — `version.json` in this folder already says
-562, and the in-session update gate evicts every connected player onto the new
-build within ~90 seconds of Vercel serving it. Never push a beacon bump without
-the files it names.
+first, the beacon confirms after** — `version.json` in this folder says 570 and
+the in-session update gate evicts every connected player onto the new build
+within ~90 seconds of Vercel serving it. Never push a beacon bump ahead of the
+files it names.
 
 ## Step 4 — hard-reload and smoke-test
 
 `Cmd/Ctrl + Shift + R`, then:
 
-1. **Ranks** — open Command ▸ Ranks: all seven tabs render rows (the v216 code
-   threw `ReferenceError: q is not defined` on every board; blank Ranks =
-   stale js/ranks-boards.js).
-2. **HAULAGE tab** — after Step 1, your own row shows your cargo wins; other
-   real players fill in as their heartbeats publish.
-3. **Cargo Defense** — fly a run; the citadel approach (last minute) should
-   hold frame rate now. If it still stutters, read
-   `localStorage.lf_play` right after — the new `cg:{r,v,e}` field counts live
-   rings/voids/hostiles for diagnosis.
-4. **Cargo missions** — Missions board shows the cargo chain (queued from the
-   previous session, first real-host check).
-5. **Eternum art** — Command ▸ Cargo Defense: the Eternum card shows the ship
-   photo, not a wireframe sphere. Each shipment tier card likewise shows its
-   freighter. A vector fallback here means `ships/` did not upload.
-6. Console shows `BUILD 563` on the login screen.
+1. **Login screen shows `BUILD 570`.**
+2. **Ranks → NANOCORE tab exists** (◈, orange) and is one of nine chips that
+   wrap without sideways scroll at 360px and on desktop.
+3. **Nanocore ladder ranks real pilots**, not just sims. If it says "waiting on a
+   database migration", Step 1 was skipped.
+4. **Haulage ladder shows non-zero for real pilots** who have delivered. This was
+   silently zero for everyone before this build.
+5. **No broken-image box** in any leaderboard row's fleet strip (rank 1 was
+   showing one).
+6. **Discord within ~2 minutes** — the first tick after deploy must post
+   **nothing** about Nanocores or cargo. That silence is the backfill guard
+   working. Announcements start from the next real change.
+7. **No "available to attack" cards** and no shield countdowns in the 3-hour
+   situation report.
 
 ---
 
-## What shipped since v216 (builds 502–563)
+## What shipped in v219 (build 570)
 
-- **Space Cargo Defense** — five shipment tiers (Cargo I–Omega V), sector
-  bosses, corridor-wide collapse rings, a 10-minute manual escort, upgrade-strip
-  death penalty, integrity-scaled payouts, 2 runs/day (+Pro extras). The
-  Eternum — Celestial Class freighter behind 1,000 missions · ★100 · Titan Sina.
-- **Flight model rewrite** — velocity steering (no teleport-turns), committed
-  autopilot targets, 620px proportional loot magnet.
-- **Drone flights** — visual squadrons at 10:1–25:1 with lane offsets; cached
-  gradients, no per-drone shadow blur.
-- **Perf pass** — in-place array compaction, batched composite modes, gradient
-  caches, squared-distance rejects, near-linear enemy separation.
-- **End-of-run frame fix (562)** — collapse rings + void discs are pre-baked
-  sprites (drawImage, not per-frame path fills), corridor rails/centre-lines
-  clamp to the viewport, live voids capped at 12, `lf_play` sample now carries
-  `cg` counts.
-- **Ranks crash fix (562)** — `derive()` wrote sim haulage stats to an
-  undefined `q`; every board threw and the screen rendered blank.
-- **Seven-ladder Ranks** incl. HAULAGE (needs Step 1), publishing via the
-  existing heartbeat.
-- **Ascension pill (561)** — mobile shows one chip + bar; desktop unchanged.
-- **Event art shipped (563)** — Eternum + five freighter hulls were missing from
-  the release folder; the game was drawing vector fallbacks on live.
-- Pilot Tree bonuses survive ascension (`ASC_KEEP`), bonus cache re-validates
-  on save merge, Skills page shows the active tree.
+- **The Nanocore + cargo announcements never fired.** The cards were written in
+  feed v565 and were dead code. Three reads dropped the columns:
+  `cloud.js lbTop` did not select them, `leaderboard.js mapReal` dropped them
+  from its row whitelist, and the Edge Function's leaderboard select asked for
+  seven columns and never the rest. Every value read `undefined`,
+  `Number(undefined) || 0` scored zero on both sides of the diff, and no
+  milestone could cross. All three fixed with the cascading fallback the code
+  already used, so a server missing a migration degrades instead of erroring.
+- **Backfill guard.** Snapshots written before the columns were selected carry no
+  such keys at all. Without a guard, the first tick after deploy would fire a
+  FIRST LEGENDARY card for every pilot who already owns one, and a full-width
+  message for every finished core, all in one batch. Absent keys are adopted
+  silently once; announcing starts from the next change.
+- **Finished Legendary core gets its own message** — the Kaevith treatment.
+  5/5 slots is 25 successful upgrades on one core, the last five at 20% base, on
+  a core that drops 1.5% of the time. Never batched, capped at three standalone
+  posts per tick.
+- **Memes on the loud ones** — first Legendary, finished core and first god roll
+  carry a GIF; collection and slot milestones stay text so the channel keeps a
+  rhythm. GIF ids are drawn from the pool already in use, so nothing 404s.
+- **Scarcity lines** — "the 3rd pilot to recover one", or "the FIRST" when
+  nobody else has, computed from rows already in memory. No extra query.
+- **Nanocore standing in the situation report** — who holds Legendaries, best
+  roll luck, how many finished cores exist.
+- **`'nano'` was missing from `PRIORITY`**, sorting to `-1` and outranking
+  Kaevith hulls by accident. Placed deliberately now.
+- **God-roll odds corrected** — the card claimed "1 roll in 100"; the roll curve
+  (`rollBias 2.6`) puts it at ~2%, which is what `nanocores.js` documents.
+- **NANOCORE ladder in Ranks** (ninth board). Ranks on Legendary cores
+  recovered, ties on the deepest single core built, then on top-5% rolls.
+  Simulated pilots get derived figures like every other ladder but are **never**
+  handed a finished 5/5 — that row has to be earned by a human.
+- **Per-board migration probes.** Haulage and Nanocore ship in their own SQL
+  files, but both were gated behind the shared `lb-onefunction` probe — so on a
+  server that had run neither, both boards would quietly rank every human at
+  zero instead of saying so. Each board now names its own migration in the
+  notice.
+- **Broken fleet thumbnail** — a published fleet can name a hull this build has
+  no art for, and the row rendered the browser's broken-image glyph in the
+  flagship slot. Unknown keys are dropped before the tag is written and a 404 on
+  a known key removes its own `<img>`, matching every other ship thumbnail in
+  the game.
+- **"Available to attack" callouts removed from Discord.** Shield-expiry cards,
+  the Void spire countdowns and the House Citadel shield timers are all gone: a
+  public clock on when a named pilot's tile becomes attackable is a raid
+  schedule pointed at whoever is asleep, not a report. Shield state is still
+  snapshotted, so it can be brought back without a cursor change. The Void Zone
+  and House Citadel sections now list holders only.
 
 ## Still open (carried forward)
 

@@ -1,8 +1,8 @@
 /* =============================================================================
    pilot-ascension.js — LOOTFLEET · PILOT ASCENSION (prestige)
    -----------------------------------------------------------------------------
-   The endless loop. At Level 100 the pilot may ascend: the account resets to
-   Level 1 in exchange for PERMANENT account-wide power.
+   The endless loop. At half the level cap the pilot may ascend: the account
+   resets to Level 1 in exchange for PERMANENT account-wide power.
 
      • ASCENSION POINTS are earned from the run you're giving up — pilot level is
        the spine (Lv 100 = 1 pt, 250 = 2, 500 = 4, 1000 = 8, exactly per spec),
@@ -17,7 +17,8 @@
        the three ASCENSION-EXCLUSIVE loot tiers — Ascendant (★1), Celestial
        (★20), Paragon (★50). Those tiers cannot drop for an un-ascended pilot at
        any zone, from any boss, out of any crate.
-     • RESET also clears the PILOT TREE (Dread Core nodes) — unspent cores stay.
+     • The PILOT TREE and its ◇ Dread Cores SURVIVE the reset (Aug 2026) — the
+       nodes are weekly-raid currency, not pilot level, so they carry across.
      • PERKS spend points on eight permanent multipliers that apply to every
        future run.
 
@@ -30,11 +31,21 @@
   const G = () => window.GAME;
   const C = () => window.CONFIG;
   const $ = (id) => document.getElementById(id);
-  const UNLOCK_LV = 100;
   // LEVEL CAP — mirrors CONFIG.levelCap(): 150, +50 per star. Read from config
   // when it's there so the two can never drift.
   const CAP_BASE = (() => { try { return C().LEVEL_CAP_BASE || 150; } catch (e) { return 150; } })();
   const CAP_STEP = (() => { try { return C().LEVEL_CAP_PER_STAR || 50; } catch (e) { return 50; } })();
+  // THE GATE IS HALF THE LEVEL CAP. The cap is 150 +50 per star, so the gate
+  // walks up with it: 75 · 100 · 125 · 150 · 175… A flat Level 100 shipped in 505
+  // and is reverted here. A fixed number does not mean a fixed ASK: at ★0 it made
+  // the pilot climb two thirds of their 150 ceiling, while a ★5 pilot cleared it a
+  // quarter of the way up a 400 ceiling — the same requirement got softer every
+  // star until ascending was something you passed on the way to somewhere else.
+  // Half the cap states one rule that reads the same in every run: climb to the
+  // middle of your ceiling, then choose. Kept as a function so the whole game
+  // reads the gate from one place.
+  function capLv() { try { return C().levelCap(); } catch (e) { return CAP_BASE + CAP_STEP * stars(); } }
+  function gateLv() { return Math.max(1, Math.round(capLv() / 2)); }
   const PT_MULT = 10;   // ascension point payout multiplier (see preview())
   const MAX_RANK = 25;
 
@@ -99,7 +110,7 @@
     // instead of another quiet percentage. At full rank the swarm becomes how an
     // ascended pilot farms: near-permanent, quadruple size, and worth far more
     // per kill than anything else in the game.
-    { k: 'bcCd',   ic: '◉', name: 'Distress Relay',    sub: 'Beacon Recharge',   per: 2.4, col: '#ff8a3d', beacon: true, desc: 'Cuts the beacon’s recharge. At rank 25 it returns in well under a minute.' },
+    { k: 'bcCd',   ic: '◉', name: 'Distress Relay',    sub: 'Beacon Recharge',   per: 2.4, col: '#ff8a3d', beacon: true, desc: 'Cuts the beacon’s recharge — −2.4% a rank, capped at −60%. Rank 25 takes the 300s wait down to about 2 minutes; stacking Defense ranks and Choir hulls on top is what pushes it under a minute.' },
     { k: 'bcLife', ic: '◎', name: 'Sustained Signal',  sub: 'Beacon Duration',   per: 8,   col: '#ff6b78', beacon: true, desc: 'The beacon keeps calling for far longer — stacks on top of your Defense ranks. Capped so a third of the cycle stays quiet.' },
     { k: 'bcSize', ic: '✹', name: 'Wideband Broadcast', sub: 'Beacon Swarm Size', per: 8, col: '#ffd24d', beacon: true, desc: 'More hostiles answer every call, up to what the sector can hold.' },
     { k: 'bcLoot', ic: '◈', name: 'Wreckfield Tithe',  sub: 'Beacon Kill Value', per: 10,  col: '#7ce0a0', beacon: true, desc: 'Beacon-summoned kills pay extra gold, XP and loot — the swarm becomes your best farm.' },
@@ -148,7 +159,7 @@
     // it, and the note text is rewritten from the same multiplier.
     rows.forEach((r) => { r.pts *= PT_MULT; if (r.cap) r.cap *= PT_MULT; });
     const total = rows.reduce((a, r) => a + r.pts, 0);
-    return { rows, total, lvl, score, zone, tiles, badges, wing, eligible: lvl >= UNLOCK_LV };
+    return { rows, total, lvl, score, zone, tiles, badges, wing, eligible: lvl >= gateLv() };
   }
 
   // ---- RARITY UNLOCKS --------------------------------------------------------
@@ -163,7 +174,7 @@
     const body = $('pasc-body'); if (!body) return;
     const S = G().state, p = st();
     const sub = $('pasc-sub');
-    if (sub) sub.innerHTML = p.stars ? badge(null, p.stars, { tier: true }) + ' · ' + fmt(points()) + ' pts' : 'Level ' + fmt(S.level) + ' / ' + UNLOCK_LV;
+    if (sub) sub.innerHTML = p.stars ? badge(null, p.stars, { tier: true }) + ' · ' + fmt(points()) + ' pts' : 'Level ' + fmt(S.level) + ' / ' + gateLv();
     body.innerHTML =
       '<div class="pa-tabs">' +
         '<button class="pa-tab' + (tab === 'ascend' ? ' on' : '') + '" data-patab="ascend">✦ Ascend</button>' +
@@ -179,7 +190,9 @@
   function ascendTab() {
     const S = G().state, p = st(), pv = preview();
     const locked = !pv.eligible;
-    const atCap = (S.level | 0) >= CAP_BASE + CAP_STEP * stars();
+    const cap = capLv(), gate = gateLv();
+    const atCap = (S.level | 0) >= cap;
+    const toCap = Math.max(0, cap - (S.level | 0));
     const nt = nextTierAt();
     const calcRows = pv.rows.map((r) =>
       '<div class="pa-calc-row' + (r.pts ? '' : ' zero') + '">' +
@@ -189,13 +202,29 @@
       '</div>').join('');
 
     const ctaTop = locked
-      ? '<div class="pa-locked">Ascension opens at <b>Level ' + UNLOCK_LV + '</b>. There is no rush — every level past ' + UNLOCK_LV + ' makes the payout bigger.</div>'
+      ? '<div class="pa-locked">Ascension opens at <b>Level ' + gate + '</b> — halfway to your Lv ' + fmt(cap) + ' ceiling. There is no rush: every level past ' + gate + ' makes the payout bigger.</div>'
       : '<div class="pa-cta">' +
+          // THE CHOICE, stated before the button. Reaching the gate is not an
+          // instruction to ascend — it is the point at which both roads open, and
+          // the pilot should be able to read the trade in one glance.
+          '<div class="pa-fork">' +
+            '<div class="pa-fork-h">You are past the gate — both roads are open</div>' +
+            '<div class="pa-fork-2">' +
+              '<div class="pa-fork-o"><span class="pa-fork-k">✦ ASCEND NOW</span>' +
+                '<b>+' + pv.total + ' pt' + (pv.total === 1 ? '' : 's') + ' · +1 ★</b>' +
+                '<em>Ceiling rises to Lv ' + fmt(cap + CAP_STEP) + '. The run restarts at Level 1; the fleet comes with you.</em></div>' +
+              '<div class="pa-fork-o"><span class="pa-fork-k">△ KEEP CLIMBING</span>' +
+                '<b>' + (atCap ? 'at the ceiling' : toCap + ' level' + (toCap === 1 ? '' : 's') + ' to Lv ' + fmt(cap)) + '</b>' +
+                '<em>' + (atCap
+                  ? 'XP has stopped accruing — there is nothing left to gain by waiting.'
+                  : 'Every level adds to the payout, so the points you bank grow with the climb.') + '</em></div>' +
+            '</div>' +
+          '</div>' +
           '<div class="pa-cta-row">' +
             '<div class="pa-cta-n"><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '<br>+ 1 ★</em></div>' +
             '<div class="pa-cta-sum">' +
               '<div class="pa-cta-k">✓ <b>Your whole fleet comes with you</b> — every hull, every hull upgrade level, and every Ship Ascension</div>' +
-              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level, items, gold and the Pilot Tree</div>' +
+              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level, items and gold (the Pilot Tree stays)</div>' +
             '</div>' +
           '</div>' +
           '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button>' +
@@ -208,9 +237,10 @@
         (p.stars ? '<div class="pa-hero-cur">' + badge(null, p.stars, { tier: true }) + '<span class="pa-hero-n">Ascension ' + p.stars + '</span></div>' : '') +
         '<div class="pa-hero-t">PILOT ASCENSION</div>' +
         '<div class="pa-hero-s">' + (locked
-          ? 'Reach <b>Level ' + UNLOCK_LV + '</b> to unlock — you are Level ' + fmt(S.level)
+          ? 'Reach <b>Level ' + gate + '</b> to unlock — you are Level ' + fmt(S.level)
           : 'Trade the <b>pilot’s</b> run for permanent power. Your <b>fleet keeps everything the shipyard built</b>.') + '</div>' +
-        (locked ? '<div class="pa-lvbar"><i style="width:' + Math.min(100, S.level / UNLOCK_LV * 100).toFixed(1) + '%"></i></div>' : '') +
+        (locked ? '<div class="pa-lvbar"><i style="width:' + Math.min(100, S.level / gate * 100).toFixed(1) + '%"></i></div>' +
+          '<div class="pa-lvbar-l"><span>Lv ' + fmt(S.level) + '</span><span>' + Math.max(0, gate - (S.level | 0)) + ' to go</span><span>Lv ' + gate + '</span></div>' : '') +
       '</div>' +
 
       ctaTop +
@@ -255,10 +285,10 @@
             '<li><b>Every item you own</b> — equipped, in the bag, and stowed on escorts</li>' +
             '<li>Gold &amp; all Galaxy resources</li>' +
             '<li>All Starforge hardpoint tempers &amp; purity</li>' +
-            '<li><b>The whole Pilot Tree</b> — every node unlocked, and every ◇ Dread Core you were holding</li>' +
             '<li>Your wing — escorts disband (the hulls stay in the hangar, fully upgraded)</li>' +
           '</ul></div>' +
           '<div class="pa-led keep"><div class="pa-led-h">✓ CARRIED OVER</div><ul>' +
+            '<li><b>The whole Pilot Tree</b> — every node you unlocked, and every ◇ Dread Core you hold</li>' +
             '<li><b>Every hull in your hangar</b> — nothing is taken from the fleet</li>' +
             '<li><b>Every hull upgrade level</b> — your ships stay exactly as strong as you built them</li>' +
             '<li><b>Every Ship Ascension</b> — module tiers &amp; stars, on <b>every</b> hull</li>' +
@@ -431,6 +461,7 @@
     const hasAxiom = !!(window.AXIOM && window.AXIOM.owned());
     const keep = [
       ['\u2b22', '<b>All ' + hulls + ' hull' + (hulls === 1 ? '' : 's') + '</b> \u2014 upgrade levels and Ship Ascensions intact'],
+      ['\u25c7', '<b>Your Pilot Tree</b> \u2014 every node and every Dread Core'],
       ['\u2691', tiles ? '<b>All ' + tiles + ' system' + (tiles === 1 ? '' : 's') + '</b> \u2014 citadels and Void spires stay yours' : 'Any territory you hold'],
       ['\u25d0', 'Moon Colony, Home Citadel and Prism \u2014 still producing'],
       ['\u2756', 'Season 1: Voidmaw \u2014 Event Coins, parts and best stage'],
@@ -443,7 +474,6 @@
       ['\u25b2', '<b>Level ' + fmt(S.level) + ' \u2192 1</b> and Zone ' + fmt(zone) + ' progress'],
       ['$', fmt(S.gold || 0) + ' gold and every resource'],
       ['\u2756', (hasAxiom ? 'Every other item' : 'Every item') + ' \u2014 equipped, in the bag, and Starforge tempers'],
-      ['\u25c7', 'The Pilot Tree and every Dread Core'],
       ['\u27a4', 'Your wing disbands \u2014 escort slots re-earn with level'],
     ];
     const row = (a) => a.map((x) => '<li><i>' + x[0] + '</i><span>' + x[1] + '</span></li>').join('');
@@ -578,7 +608,7 @@
   window.PASCEND = {
     render, stars, points, mult, preview, PERKS, rank, perkPct,
     beaconMods,
-    badge, plain, tierOf, starOf, tierDef, UNLOCK_LV,
+    badge, plain, tierOf, starOf, tierDef, gateLv, capLv,
     unlockedTiers: () => ascTiers().filter((r) => stars() >= r.ascReq).map((r) => r.key),
     nameSuffix: () => plain(),
   };

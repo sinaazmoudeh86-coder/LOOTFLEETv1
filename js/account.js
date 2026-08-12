@@ -341,10 +341,66 @@
     base.vipPts = Math.max(base.vipPts | 0, other.vipPts | 0);   // ⚜ VIP points never regress
     // ASCENSION RECORD never regresses either — but ONLY the record, never the
     // run it reset (gold, level, inventory stay with whichever copy is base).
+    //
+    // ASCENSION POINTS ARE A BALANCE, NOT A RECORD (Aug 2026 — "ascend, spend the
+    // 90 points, log in on another device and the 90 points come back, and the
+    // perks I bought with them stay"). This line used to read
+    //     base.pasc.pts = Math.max(base.pasc.pts, other.pasc.pts)
+    // and `pts` is the UNSPENT WALLET: buyPerk() does `pts -= cost; spent += cost;
+    // perks[k]++`. Maxing a wallet against a copy that had not spent yet refunds
+    // every point while the perks bought with them ride along in `perks` — free
+    // money, repeatable on every relog. `spent` and `perks` were not unioned at
+    // all, so the mirror case silently DELETED purchased perks instead.
+    //
+    // The only monotonic quantity here is LIFETIME EARNED, and the ledger already
+    // defines it (achievements reads "points earned" as pts + spent). So union the
+    // earned total and the perk ranks, then DERIVE the wallet from the perks the
+    // pilot actually owns. Idempotent by construction — merging the result again
+    // produces the same numbers, which is what kills the repeat.
     if (other.pasc && base.pasc) {
-      base.pasc.stars = Math.max(base.pasc.stars | 0, other.pasc.stars | 0);
-      base.pasc.pts = Math.max(base.pasc.pts | 0, other.pasc.pts | 0);
+      const bp = base.pasc, op = other.pasc;
+      bp.stars = Math.max(bp.stars | 0, op.stars | 0);
+      // 1 — lifetime earned: only an ascension ever adds to it
+      let earned = Math.max((bp.pts | 0) + (bp.spent | 0), (op.pts | 0) + (op.spent | 0));
+      // 2 — perk ranks: never lose a rank a pilot paid for, from either timeline
+      const perks = Object.assign({}, op.perks || {});
+      for (const k in (bp.perks || {})) perks[k] = Math.max(perks[k] | 0, bp.perks[k] | 0);
+      bp.perks = perks;
+      // 3 — spend recomputed from those ranks. Rank r→r+1 costs r+1 (pilot-
+      //     ascension.js rankCost), so reaching rank R costs R(R+1)/2.
+      let spent = 0;
+      for (const k in perks) { const R = Math.max(0, perks[k] | 0); spent += R * (R + 1) / 2; }
+      // 4 — two devices spending the same points offline into DIFFERENT perks can
+      //     make the union cost more than was ever earned. Keep the perks and
+      //     record the debt as earned rather than leaving the ledger negative:
+      //     bounded, one-time, and it cannot recur once written.
+      earned = Math.max(earned, spent);
+      bp.spent = spent;
+      bp.pts = Math.max(0, earned - spent);
+      // event/premium hulls kept through a reset — an entitlement list, so union it
+      if (op.entitled) bp.entitled = Array.from(new Set((bp.entitled || []).concat(op.entitled)));
+      // keep the longer ascension log (display only)
+      if ((op.hist || []).length > (bp.hist || []).length) bp.hist = op.hist;
     } else if (other.pasc && !base.pasc) base.pasc = other.pasc;
+    // PILOT LEVEL NEVER REGRESSES (Aug 2026 — "logged out and came back ~70 levels
+    // lower"). Level, xp and the points they buy were the only progression signals
+    // missing from this union, and they are near-invisible to the base pick as
+    // well: on an ascended account one star is worth 5e6 weight, so a 70-level gap
+    // (252K) sits deep inside the ×1.3 band, the tie falls to `lastSave`, and a
+    // stale copy legitimately wins the merge and silently rolls the levels back.
+    // Level only drops for ONE legitimate reason — a pilot ascension — and that is
+    // already caught by the star tiebreak above, so when the stars match the
+    // higher level is always the true one. Restored levels re-credit their skill
+    // points (levelUp() grants pointsPerLevel each); points are NOT maxed on their
+    // own, or a copy that had already spent them into `skills` would double-dip.
+    if (sl === sc && (other.level | 0) > (base.level | 0)) {
+      let ppl = 1;
+      try { ppl = (window.CONFIG && window.CONFIG.SKILLS && window.CONFIG.SKILLS.pointsPerLevel) || 1; } catch (e) {}
+      const regained = (other.level | 0) - (base.level | 0);
+      base.level = other.level | 0;
+      base.xp = Math.max(base.xp || 0, other.xp || 0);
+      base.skillPoints = (base.skillPoints | 0) + regained * ppl;
+    }
     // lifetime tallies exist on both timelines — keep the larger of each
     base.totalKills = Math.max(base.totalKills || 0, other.totalKills || 0);
     base.playTime = Math.max(base.playTime || 0, other.playTime || 0);

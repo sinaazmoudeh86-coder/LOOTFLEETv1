@@ -69,7 +69,10 @@
     // would dereference a non-existent #screen-undefined and throw.
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => { if (b.dataset.screen) showScreen(b.dataset.screen); }));
     buildSpeedRow();
-    el['auto-btn'].addEventListener('click', () => { G.setAuto(!G.getAuto()); syncAuto(); });
+    el['auto-btn'].addEventListener('click', () => {
+      if (screen !== 'battle') return;   // the pill floats over menus too — dead unless the arena is showing
+      G.setAuto(!G.getAuto()); syncAuto();
+    });
     // ◉ BEACON — HUMAN-PRESS ONLY. Nothing else calls fireBeacon and autopilot has
     // no path to it: inviting a 20× swarm is a decision, not a behaviour. Zone
     // Grind only — the engine refuses everywhere else.
@@ -161,6 +164,7 @@
     else if (name === 'social') { if (window.SOCIAL) window.SOCIAL.open(); }
     else if (name === 'mail') { if (window.MAIL) window.MAIL.render(); }
     else if (name === 'voidzone') { if (window.VOIDZ) window.VOIDZ.render(); }
+    else if (name === 'cargo') { if (window.CARGO) window.CARGO.render(); }
     else if (name === 'forge') { if (window.STARFORGE) window.STARFORGE.render(); }
     else if (name === 'pasc') { if (window.PASCEND) window.PASCEND.render(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
@@ -172,6 +176,14 @@
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
     else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
     else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
+    if (name === 'battle') {
+      try {
+        const rt = G.rt || {};
+        const evt = document.getElementById('app').classList.contains('sd-noauto') ||   // Voidmaw / alliance raid
+                    (rt.cgrun && rt.cgrun.active);                                      // cargo escort
+        if (!evt && (G.state.currentDungeon | 0) >= 1 && !G.getAuto()) { G.setAuto(true); syncAuto(); }
+      } catch (e) {}
+    }
     syncJoystickVisible();
   }
 
@@ -1196,7 +1208,7 @@
         if (idx >= 0) G.setFleetSlot(idx, null);   // pull from escort duty first
       }
       if (G.switchShip(k)) { toast('★ ' + C.SHIP_BY_KEY[k].name + ' is now your flagship', '#ffd24d'); closeSheet(); renderHero(); }
-      else toast('Cannot switch to that hull', '#e23b4e');
+      else switchFailToast(k);
     }));
   }
   function openFleetPicker(i) {
@@ -1262,7 +1274,7 @@
       const AST = G.state.autoSellTier == null ? -1 : G.state.autoSellTier;
       html += `<div class="filter-row">
         <div class="fr-item"><span class="fr-l">▼ Pick up</span><select id="pickup-sel">${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === PF ? 'selected' : ''}>${i === 0 ? 'Everything' : r.name + ' +'}</option>`).join('')}</select></div>
-        <div class="fr-item"><span class="fr-l">$ Sell on pickup</span><select id="autosell-pickup-sel"><option value="-1" ${AST < 0 ? 'selected' : ''}>Off</option>${C.RARITY.slice(0, 7).map((r, i) => `<option value="${i}" ${i === AST ? 'selected' : ''}>≤ ${r.name}</option>`).join('')}</select></div>
+        <div class="fr-item"><span class="fr-l">$ Sell on pickup</span><select id="autosell-pickup-sel"><option value="-1" ${AST < 0 ? 'selected' : ''}>Off</option>${C.RARITY.map((r, i) => `<option value="${i}" ${i === AST ? 'selected' : ''}>≤ ${r.name}</option>`).join('')}</select></div>
       </div>
       <div class="fr-hint">Pick up: anything below is scrapped to resources on contact · Sell on pickup: drops at/below this rarity are sold for gold as you grab them (upgrades always kept)</div>`;
     }
@@ -1980,7 +1992,10 @@
     }
     const typeName = t.citadel ? '⛴ CITADEL SIEGE ZONE' : t.boss ? '☠ Boss Tile' : t.resource ? (GM.RES[t.resource].glyph + ' Resource Field') : 'Combat Sector';
     // KAEVITH INCURSION — an invaded zone fights differently. Ownership does not change.
-    const xenChance = (t.alien && !t.void && GM.alienChance) ? Math.round(GM.alienChance(t.ring) * 100) : 0;
+    // Rendered to 2dp, not rounded to whole percent: the rate runs 0.2% → 2% after the
+    // Aug 2026 rarity pass, and Math.round() turned every inner-ring tile into "0%".
+    const xenPct = (t.alien && !t.void && GM.alienChance) ? GM.alienChance(t.ring) * 100 : 0;
+    const xenChance = xenPct ? (xenPct >= 1 ? (Math.round(xenPct * 10) / 10) : (Math.round(xenPct * 100) / 100)) : 0;
     // EMPIRE AT CAPACITY — explain the block BEFORE the pilot taps a dead button.
     // Only relevant on a tile you don't already hold; redeploying to your own is
     // never capped.
@@ -2322,7 +2337,7 @@
       html += `<div class="zone-row ${active?'active':''} ${locked||citCd>0?'locked':''} ${d===rec?'rec':''} ${bz.prismatic||wave?'prismatic':''} ${wave?'wavezone':''} ${cit?'citzone':''} ${emb?'embzone':''}" data-d="${d}" data-cit-cd="${citCd>0?1:0}" style="${pvars}">
         <div class="z-orb ${ptype}${d % 5 === 0 ? ' ringed' : ''}${cit ? ' cit' : ''}${wave ? ' wav' : ''}${emb ? ' emb' : ''}"><span>${d}</span></div>
         <div class="z-meta"><div class="z-name">${zoneName(d)}${wave?' <span class="z-wtag">WAVE</span>':''}${bz.density>1?' <span class="z-wtag" style="background:rgba(226,59,78,.16);color:#ff8090;border-color:rgba(226,59,78,.5)">SWARM</span>':''}${cit?' <span class="z-ctag">CITADEL</span>':''}${emb?' <span class="z-etag">CHOIR</span>':''}</div>
-          <div class="z-sub">${G.formatNum(lyOf(d))} ly · Enemy Lv ${G.formatNum(C.dungeonEnemyLevel(d))} · ${topType.name}s</div>
+          <div class="z-sub">${G.formatNum(lyOf(d))} ly · Lv ${G.formatNum(C.zoneCombatLevel(d))} mobs · ${topType.name}s</div>
           ${bonus?`<div class="z-bons">${bonus}</div>`:''}
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
         <div class="z-go">${locked ? lockLabel : citCd>0 ? '◷ ' + fmtCd(citCd) : active ? '● HERE' : (cit ? '⛴ BREACH' : wave ? '◎ ENTER' : (d===rec ? '★ DEPLOY' : 'DEPLOY'))}</div></div>`;
@@ -2333,8 +2348,10 @@
     el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => {
       const d = +row.dataset.d;
       const deploy = () => { G.selectDungeon(d); showScreen('battle'); };
-      // HIGH-RISK WARNING — enemy level more than 5 above the pilot
-      const eLv = C.dungeonEnemyLevel(d), pLv = G.state.level, gap = eLv - pLv;
+      // HIGH-RISK WARNING — hostiles more than 5 PILOT LEVELS above you. This
+      // used to compare zone² against the pilot's level, so the gap was always
+      // thousands and the sheet interrupted every deploy past ~Zone 12.
+      const eLv = C.zoneCombatLevel(d), pLv = G.state.level, gap = eLv - pLv;
       if (gap > 5) {
         const sheet = showSheet(`<div class="sheet-head">⚠ High-Risk Zone</div><div class="sheet-body">
           <p style="font-size:12.5px;line-height:1.6;margin:0 0 8px">Enemies in <b>${zoneName(d)}</b> are <b>Lv ${G.formatNum(eLv)}</b> — <b style="color:#ff6a78">${G.formatNum(gap)} levels above you</b> (you're Lv ${G.formatNum(pLv)}).</p>
@@ -2498,10 +2515,25 @@
     if (G.state.ship === key) return 'active';
     return owned ? 'owned' : 'locked';
   }
+  // A hull with a FLIGHT LICENCE (the Eternum) can be OWNED and still refuse to
+  // launch. switchShip() returns false for both "not owned" and "not licensed",
+  // so every switch site asks this what to say rather than shrugging.
+  function flyBlockMsg(k) {
+    const r = (G.canFlyShip ? G.canFlyShip(k) : { ok: true });
+    if (r.ok || !r.need) return null;
+    return r.need.map((n) => n.k === 'missions' ? (G.formatNum(n.want - n.have) + ' more successful missions')
+      : n.k === 'stars' ? ((n.want - n.have) + ' more ascension' + (n.want - n.have === 1 ? '' : 's'))
+      : 'a Titan Sina in your hangar').join(' · ');
+  }
+  function switchFailToast(k) {
+    const m = flyBlockMsg(k);
+    toast(m ? '🔒 ' + C.SHIP_BY_KEY[k].name + ' needs ' + m : 'Cannot switch to that hull', '#e23b4e');
+  }
   function tileBadge(key, ship) {
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     if (owned) return '';
     if (ship.event) return '❖ Season 1';
+    if (ship.celestial) return '✦ Cargo Defense';
     if (ship.alienTech) return '◈ Kaevith';
     if (ship.emberTech) return '✦ Choir';
     if (ship.missionShip) return '⌘ 1,000 Missions';
@@ -2519,19 +2551,30 @@
     const active = stateCls === 'active';
     const lvl = (owned && G.shipUpInfo) ? G.shipUpInfo(key).level : 0;
     const badge = tileBadge(key, ship);
-    // FULL-ROW SHOWCASE TILES — the two apex hulls get the whole grid width.
+    // FULL-ROW SHOWCASE TILES — the apex hulls get the whole grid width.
     // The Aeternum sits ABOVE the Titan Sina (its config entry precedes it) and
-    // wears the same pill with a lance-green identity instead of rainbow.
-    if (key === 'titansina' || key === 'aeternum') {
-      const aet = key === 'aeternum';
-      const beams = aet
+    // wears the same pill with a lance-green identity instead of rainbow; the
+    // Eternum sits ABOVE both in celestial blue and, uniquely, can be OWNED
+    // while still un-flyable — so its tile states the licence.
+    if (key === 'titansina' || key === 'aeternum' || key === 'eternum') {
+      const aet = key === 'aeternum', etr = key === 'eternum';
+      const fly = (etr && G.canFlyShip) ? G.canFlyShip('eternum') : { ok: true };
+      const beams = etr
+        ? '<i class="etr-beam"></i><i class="etr-beam b2"></i><i class="etr-beam b3"></i><i class="etr-beam b4"></i><i class="etr-beam b5"></i><i class="etr-aura"></i>'
+        : aet
         ? '<i class="aet-lance"></i><i class="aet-ring"></i><i class="aet-ring r2"></i>'
         : '<i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>';
-      const chip = aet ? '<span class="apex-chip aet">ASCENSION CLASS</span>' : '<span class="apex-chip sina">FINAL CLASS</span>';
-      const callout = aet
+      const chip = etr ? '<span class="apex-chip etr">CELESTIAL CLASS</span>'
+        : aet ? '<span class="apex-chip aet">ASCENSION CLASS</span>' : '<span class="apex-chip sina">FINAL CLASS</span>';
+      const callout = etr
+        ? '1.5× THE TITAN SINA · FIVE DEATH BEAMS · CELESTIAL AURA'
+        : aet
         ? 'AN ARTIFICIAL WORLD · THE LANCE ALIGNS · THE LANE IS ERASED'
         : '2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS';
-      return `<button class="ship-tile st-sina ${aet ? 'st-aet ' : ''}${stateCls}" data-ship-tile="${key}">
+      const lic = (etr && owned && !fly.ok)
+        ? '<div class="etr-lic">🔒 LICENCE INCOMPLETE — ' + fly.need.map((n) => n.k === 'missions' ? (G.formatNum(n.have) + ' / 1,000 successful missions') : n.k === 'stars' ? ('★' + n.have + ' / 50') : 'Titan Sina required').join(' · ') + '</div>'
+        : (etr && !owned ? '<div class="etr-lic">✦ Recovered only from an OMEGA CARGO V manifest — Cargo Defense</div>' : '');
+      return `<button class="ship-tile st-sina ${etr ? 'st-etr ' : ''}${aet ? 'st-aet ' : ''}${stateCls}" data-ship-tile="${key}">
         <div class="sts-art">
           ${beams}
           <img src="ships/ship-${key}.png" alt="" decoding="async">
@@ -2540,6 +2583,7 @@
         <div class="sts-meta">
           <div class="st-name">${ship.name} ${chip}</div>
           <div class="sts-callout">${callout}</div>
+          ${lic}
           <div class="st-stats"><span>⚔${ship.weapons}</span><span>⊕${ship.ammo}</span><span>⛨${ship.hull}</span><span class="dr">◎${ship.drones}</span></div>
           ${owned ? '' : `<div class="st-badge">${badge}</div>`}
         </div>
@@ -2589,6 +2633,9 @@
     { cls: 'Aegis', accent: '#7ce0a0', pick: (s) => s.cls === 'Aegis',
       role: 'The support hull — it keeps the rest of the fleet alive.',
       benefit: 'The <b>only</b> hull that mounts Warden arrays, at <b>double</b> their listed regen and damage reduction. As an escort an Aegis fires nothing — it pulses <b>repairs</b> instead.' },
+    { cls: 'Celestial', accent: '#5b7cff', pick: (s) => s.key === 'eternum',
+      role: 'Celestial Class — the hull that comes after Titan.',
+      benefit: 'One and a half times the Titan Sina on every line, five continuous <b>death beams</b> and a standing <b>celestial aura</b>. Recovered only from Space Cargo Defense, and it will not launch without the licence: 1,000 missions, ★50, and a Titan Sina in the hangar.' },
     { cls: 'Titan', accent: '#ffd24d', pick: (s) => s.key === 'titansina',
       role: 'A class of one. Nothing else in the game is built to this scale.',
       benefit: 'The single largest hull ever fielded — every stat line on it is an order above Dread-class. There is no upgrade path beyond it.' },
@@ -2601,7 +2648,7 @@
   ];
   // Display order on screen: the progression ladder, with the two specialist tiers
   // last. (SHIP_CLASSES order is MATCH priority, which is a different thing.)
-  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Aegis', 'Carrier', 'Dread', 'Titan'];
+  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Aegis', 'Carrier', 'Dread', 'Titan', 'Celestial'];
 
   function shipRoster() {
     const owned = G.state.ownedShips || {};
@@ -2651,7 +2698,7 @@
   function openShipDetail(key) {
     const sheet = showSheet(`<div class="sheet-head">${C.SHIP_BY_KEY[key].name}</div><div class="sheet-body ship-detail-sheet">${shipCard(key)}<div class="sheet-actions" style="margin-top:12px"><button class="btn" data-x>Close</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
-    sheet.querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); closeSheet(); renderStore(); } }));
+    sheet.querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); closeSheet(); renderStore(); } else switchFailToast(k); }));
     sheet.querySelectorAll('[data-ship-buy]').forEach((b) => b.addEventListener('click', () => { closeSheet(); openShipBuy(b.dataset.shipBuy); }));
     sheet.querySelectorAll('[data-ship-upg]').forEach((b) => b.addEventListener('click', () => confirmHullUpgrade(b.dataset.shipUpg, () => { closeSheet(); renderStore(); })));
     sheet.querySelectorAll('[data-build-start]').forEach((b) => b.addEventListener('click', () => { closeSheet(); openBuildConfirm(b.dataset.buildStart); }));
@@ -3168,7 +3215,7 @@
     }));
     el['store-body'].querySelectorAll('[data-ship-buy]').forEach((b) => b.addEventListener('click', () => openShipBuy(b.dataset.shipBuy)));
     el['store-body'].querySelectorAll('[data-ship-switch]').forEach((b) => b.addEventListener('click', () => {
-      const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); }
+      const k = b.dataset.shipSwitch; if (G.switchShip(k)) { toast('Now flying the ' + C.SHIP_BY_KEY[k].name, '#5bc06b'); renderStore(); } else switchFailToast(k);
     }));
     el['store-body'].querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => showScreen('sdread')));
     el['store-body'].querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => showScreen('missions')));
@@ -3565,6 +3612,31 @@
       html += '</div>';
     }
     html += '</div>';
+
+    // ---- ◇ PILOT TREE — the OTHER half of pilot power ----------------------
+    // Dread Core nodes buff every hull you fly, stacking on top of the branches
+    // above, but their running total lived only on the tree canvas itself —
+    // so from this page it was impossible to tell the tree did anything at all.
+    // computeStats() folds these into damage, hull, crit, rate, move, lifesteal,
+    // multi-fire, armor, regen and range; resolveHit() applies boss/elite; the
+    // util keys feed XP, gold, loot quality and pickup radius.
+    if (window.DREAD && DREAD.bonusList) {
+      const ptLvl = DREAD.unlockLevel || 30;
+      const ptList = DREAD.bonusList();
+      if (ptList.length || (G.state.level | 0) >= ptLvl) {
+        const ptN = DREAD.nodeCount ? DREAD.nodeCount() : 0;
+        html += '<div class="sk-tot sk-pt" style="--bc:#ff5a68">';
+        html += '<span class="sk-tot-h">◇ Active from Pilot Tree · ' + ptN + ' node' + (ptN === 1 ? '' : 's') + '</span>';
+        if (!ptList.length) {
+          html += '<span class="sk-tot-none">No nodes unlocked yet — spend ◇ Dread Cores in Command ▸ Pilot Tree.</span>';
+        } else {
+          html += '<div class="sk-tot-g">' + ptList.map((b) =>
+            '<span class="sk-chip"><b>+' + (Math.round(b.value * 10) / 10) + b.unit + '</b>' + b.label + '</span>').join('') + '</div>';
+          html += '<p class="sk-pt-note">Applies to <b>every hull you fly</b>, on top of the branches above — and <b>survives Ascension</b>.</p>';
+        }
+        html += '</div>';
+      }
+    }
 
     // ---- ◉ BEACON — the Defense branch's shared payoff ---------------------
     // Shown on the Defense tab so the link between "tank ranks" and "bigger, more
@@ -3999,6 +4071,35 @@
     const go = sheet.querySelector('[data-asc]');
     if (go) go.addEventListener('click', () => { closeSheet(); try { showScreen('pasc'); if (window.PASCEND) window.PASCEND.render(); } catch (e) {} });
   }
+  // THE GATE IS OPEN — fired once per star, the moment the pilot passes half their
+  // level cap. It is an OPTION, not an instruction: the two roads get equal weight
+  // and equal space, and nothing here is styled as the recommended one.
+  function showAscendGate(gate, cap) {
+    const s = G.state || {};
+    const stars = (() => { try { return window.PASCEND ? window.PASCEND.stars() | 0 : 0; } catch (e) { return 0; } })();
+    const pts = (() => { try { return (window.PASCEND.preview() || {}).total | 0; } catch (e) { return 0; } })();
+    const toCap = Math.max(0, (cap | 0) - (s.level | 0));
+    const sheet = showSheet(`<div id="asc-gate-pop">
+      <div class="wreck-skull" style="color:#e05bff">✦</div>
+      <div class="wreck-title" style="color:#e05bff">ASCENSION UNLOCKED</div>
+      <div class="wreck-by">You reached Level ${gate} — halfway to your Lv ${cap} ceiling. The pilot run can now be traded in.</div>
+      <div style="margin-top:12px;display:grid;gap:9px">
+        <div style="border:1px solid rgba(224,91,255,.32);background:rgba(224,91,255,.07);border-radius:11px;padding:11px 13px">
+          <div style="font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#e05bff;margin-bottom:6px">✦ ASCEND NOW</div>
+          <div style="font-size:12.5px;line-height:1.55;color:#f2d4ff">Bank <b>+${pts} ascension point${pts === 1 ? '' : 's'}</b> and <b>+1 ★</b>. Your ceiling rises to <b>Lv ${(cap | 0) + 50}</b>. The pilot run restarts at Level 1 — <b>your whole fleet comes with you</b>.</div>
+        </div>
+        <div style="border:1px solid var(--line-2,#37475f);border-radius:11px;padding:11px 13px">
+          <div style="font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#8fa3bd;margin-bottom:6px">△ KEEP CLIMBING</div>
+          <div style="font-size:12.5px;line-height:1.55;color:var(--muted,#93a2ba)">${toCap > 0
+            ? `<b style="color:#cfe0f5">${toCap} more level${toCap === 1 ? '' : 's'}</b> to the Lv ${cap} cap. Nothing expires, and every level you add makes the ascension payout bigger.`
+            : `You are already at the Lv ${cap} cap — XP has stopped accruing, so waiting no longer adds anything.`}</div>
+        </div>
+      </div>
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Keep climbing</button><button class="btn primary" data-asc>✦ Review ascension</button></div></div>`);
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const go = sheet.querySelector('[data-asc]');
+    if (go) go.addEventListener('click', () => { closeSheet(); try { showScreen('pasc'); if (window.PASCEND) window.PASCEND.render(); } catch (e) {} });
+  }
   function showOffline(sum) {
     const sheet = showSheet(`<div class="sheet-head">Welcome Back, Operator</div><div class="sheet-body">
       <p>Your operator held the line for <b style="color:var(--gold)">${G.formatTime(sum.elapsed)}</b> while you were away.</p>
@@ -4161,5 +4262,5 @@
     return v + s;
   }
 
-  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
+  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
 })();

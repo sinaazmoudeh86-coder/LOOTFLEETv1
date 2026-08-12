@@ -61,7 +61,7 @@
     let b = null;
     try { b = G().startAllianceRaid(n, pool); } catch (e) {}
     if (!b) {
-      try { G().setAuto(prevAuto); G().setGameSpeed(prevSpeed); } catch (e) {}
+      try { G().setAuto(true); G().setGameSpeed(prevSpeed); } catch (e) {}
       if (window.SOCIAL) SOCIAL.toast('Deploy failed — try again', '#e23b4e');
       return;
     }
@@ -216,7 +216,7 @@
     // landed — one-shotting an early mark must not pay zero
     const frac = killed ? 1 : clamp((T - Math.max(0, r.left)) / T, 0, 1);
     const app = $('app'); if (app) app.classList.remove('sd-noauto');
-    try { G().setAuto(!!r.prevAuto); } catch (e) {}
+    try { G().setAuto(true); } catch (e) {}   // events end INTO autopilot
     try { if (r.prevSpeed && r.prevSpeed !== 1) G().setGameSpeed(r.prevSpeed); } catch (e) {}
     try { G().refreshStats(); } catch (e) {}       // drop the 3× event fire range
     try { if (window.UI) window.UI.refreshAll(); } catch (e) {}

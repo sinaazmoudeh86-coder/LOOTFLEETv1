@@ -42,22 +42,37 @@
     { id: 'gal2',    ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 20 }), req: 25 },
     { id: 'moon1',   ic: '☾', name: 'Colony Shipment',    blurb: 'Collect {N} resources from your Moon Colony', m: 'moon', n: (l, z) => Math.round(1500 * dayScale(z)), rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), lc: 10 }), req: 30 },
     { id: 'moon2',   ic: '⛏', name: 'Colony Foreman',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 3,                              rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 15 }), req: 30 },
+    // ---- SPACE CARGO DEFENSE — gated on the event itself (★20), not a level.
+    // Deliveries are capped at 2/day base, so targets are counted in RUNS, not
+    // the usual ×38 tier ladder (see the clamp in buildList).
+    { id: 'cargo1',  ic: '⛟', name: 'Escort Contract',    blurb: 'Deliver {N} cargo shipment(s) to the Citadel', m: 'cargo', n: () => 1,             rw: (l, z) => ({ gold: Math.round(4000 * dayScale(z)), lc: 30 }), gate: () => cargoOpen() },
+    { id: 'cargo2',  ic: '✦', name: 'Pristine Manifest',  blurb: 'Deliver {N} shipment(s) at 90%+ integrity',    m: 'cargoClean', n: () => 1,        rw: (l, z) => ({ plasma: Math.round(200 * dayScale(z)), lc: 45 }), gate: () => cargoOpen() },
   ];
+  // the event unlocks at Pilot Ascension ★20 — no level ever opens it
+  function cargoOpen() { try { return !!(window.CARGO && window.CARGO.unlocked && window.CARGO.unlocked()); } catch (e) { return false; } }
 
   // ---- BOARDS ---------------------------------------------------------------
   // tm = target multiplier vs daily · rm = reward multiplier vs daily
   const BOARDS = [
-    { id: 'd', key: 'missions',  label: 'DAILY',   word: 'day',   tm: 1,  rm: 1,
+    { id: 'd', key: 'missions',  label: 'DAILY',   word: 'day',   tm: 1,  rm: 1,  msnCredit: 1,
       pk: () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); },
       left: () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) - d; } },
-    { id: 'w', key: 'missionsW', label: 'WEEKLY',  word: 'week',  tm: 5,  rm: 6,
+    { id: 'w', key: 'missionsW', label: 'WEEKLY',  word: 'week',  tm: 5,  rm: 6,  msnCredit: 3,
       pk: () => { const d = new Date(); const s = new Date(d); s.setDate(d.getDate() - d.getDay()); s.setHours(0, 0, 0, 0); return 'w' + s.getTime(); },
       left: () => { const d = new Date(); const add = (7 - d.getDay()) % 7 || 7; const s = new Date(d); s.setDate(d.getDate() + add); s.setHours(0, 0, 0, 0); return s - d; } },
-    { id: 'm', key: 'missionsM', label: 'MONTHLY', word: 'month', tm: 18, rm: 22,
+    { id: 'm', key: 'missionsM', label: 'MONTHLY', word: 'month', tm: 18, rm: 22, msnCredit: 5,
       pk: () => { const d = new Date(); return 'm' + d.getFullYear() + '-' + (d.getMonth() + 1); },
       left: () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 1) - d; } },
   ];
   const boardCfg = (id) => BOARDS.find((c) => c.id === id);
+  // LIFETIME MISSION CREDIT — what one claimed order is worth on the career
+  // counter. It scales with the BOARD, not the board's tier: daily 1, weekly 3,
+  // monthly 5. Deliberately capped at 5 so the counter stays a readable count of
+  // work done rather than a number that runs away with the reward multiplier.
+  const msnCredit = (cfg) => Math.max(1, Math.min(5, (cfg && cfg.msnCredit) || 1));
+  function creditMissions(cfg, n) {
+    G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + msnCredit(cfg) * (n || 1);
+  }
 
   // ---- TIER SCALING (within a board) ---------------------------------------
   // Targets: T1 ×1 · T2 ×2.4 · T3 ×6 · T4 ×15 · T5 ×38 · T6+ ×2.5 each.
@@ -81,15 +96,18 @@
     for (let i = a.length - 1; i > 0; i--) { s = (s * 1664525 + 1013904223) >>> 0; const j = s % (i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
   }
-  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0 });
+  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0, cargo: 0, cargoClean: 0 });
   function buildList(cfg, tier) {
     const s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
-    const eligible = POOL.filter((p) => !p.req || lvl >= p.req);
+    const eligible = POOL.filter((p) => (!p.req || lvl >= p.req) && (!p.gate || p.gate()));
     const picks = seededShuffle(eligible, cfg.pk() + ':t' + tier + ':' + (s.playerName || 'cmdr')).slice(0, 10);
     const mult = targetMult(tier) * cfg.tm;
     return picks.map((p) => {
       let n = Math.max(1, Math.round(p.n(lvl, z) * mult));
       if (p.m === 'zones') n = Math.min(n, Math.max(4, s.highestUnlocked || 4));
+      // cargo runs are rationed (2/day base) — targets stay inside what the
+      // period can physically hold: daily 1-2 · weekly ≤8 · monthly ≤30
+      if (p.m === 'cargo' || p.m === 'cargoClean') n = Math.min(n, Math.max(1, Math.round(1.6 * cfg.tm)));
       return { id: p.id, n, done: 0, claimed: false };
     });
   }
@@ -141,7 +159,8 @@
     const s = G.state, r = s.resources || {};
     return { kills: s.totalKills || 0, gold: s.gold || 0, fuel: r.fuel || 0, iron: r.iron || 0, plasma: r.plasma || 0,
              level: s.level || 1, play: s.playTime || 0, items: (s.inventory || []).length + (s.lifetimeLooted || 0), boss: bossCount(),
-             hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum() };
+             hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum(),
+             cargo: (s.cargo && s.cargo.wins) | 0, cargoClean: (s.cargo && s.cargo.clean) | 0 };
   }
   function hullLevelSum() { const sl = G.state.shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return t; }
   function moonLifetimeSum() { const lt = (G.state.moon && G.state.moon.lifetime) || {}; let t = 0; for (const k in lt) t += lt[k] || 0; return t; }
@@ -192,7 +211,8 @@
     const D = { kills: pos(now.kills - o.kills), gold: pos(now.gold - o.gold), fuel: pos(now.fuel - o.fuel),
                 iron: pos(now.iron - o.iron), plasma: pos(now.plasma - o.plasma), levels: pos(now.level - o.level),
                 bosses: pos(now.boss - o.boss), loot: pos(now.items - o.items), hulls: pos(now.hulls - (o.hulls || 0)),
-                tiles: pos(now.tiles - (o.tiles || 0)), moon: pos(now.moon - (o.moon || 0)), colony: pos(now.colony - (o.colony || 0)) };
+                tiles: pos(now.tiles - (o.tiles || 0)), moon: pos(now.moon - (o.moon || 0)), colony: pos(now.colony - (o.colony || 0)),
+                cargo: pos(now.cargo - (o.cargo || 0)), cargoClean: pos(now.cargoClean - (o.cargoClean || 0)) };
     s.msnBase = now;
     // lifetime accumulators for non-monotonic metrics (achievements)
     const L = s.lifeStats;
@@ -333,7 +353,7 @@
     body.querySelectorAll('[data-claim]').forEach((btn) => btn.addEventListener('click', () => {
       const mi = b.list[+btn.dataset.claim]; if (!mi || mi.claimed || mi.done < mi.n) return;
       const def = POOL.find((p) => p.id === mi.id);
-      mi.claimed = true; G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
+      mi.claimed = true; creditMissions(cfg, 1);
       payout(scaleRw(def.rw(lvl, z), tier, cfg)); render(); syncBadge();
     }));
     const vb = body.querySelector('[data-veridian-accept]');
@@ -348,7 +368,7 @@
         if (mi.claimed || mi.done < mi.n) return;
         const def = POOL.find((p) => p.id === mi.id); if (!def) return;
         mi.claimed = true; n++;
-        G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
+        creditMissions(cfg, 1);
         const rw = scaleRw(def.rw(lvl, z), tier, cfg);
         for (const k in rw) total[k] = (total[k] || 0) + rw[k];
       });
@@ -371,7 +391,7 @@
       b.list.forEach((mi) => {
         if (!mi.claimed && mi.done >= mi.n) {
           const d = POOL.find((p) => p.id === mi.id);
-          mi.claimed = true; G.state.lifetimeMissions = (G.state.lifetimeMissions | 0) + 1;
+          mi.claimed = true; creditMissions(cfg, 1);
           if (d) payout(scaleRw(d.rw(lvl, z), tier, cfg));
         }
       });

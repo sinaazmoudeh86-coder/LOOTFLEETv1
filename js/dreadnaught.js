@@ -176,23 +176,48 @@
   }
 
   // ---- bonus aggregation (cached; recomputed only when nodes change) -------
-  let _aggDirty = true, _agg = null;
+  // SELF-HEALING CACHE. The dirty flag alone was not enough: it was raised on
+  // unlock, on boot and on ascension, and nowhere else — so ANY other path that
+  // swapped the save under the module (cloud pull on login, account switch,
+  // admin grant, a migration rewriting state.pilot) kept serving the PREVIOUS
+  // tree's bonuses for the rest of the session, which is exactly what "the tree
+  // isn't doing anything" looks like from the cockpit. Re-derive whenever the
+  // node object identity or its node count moves, not just when we were told to.
+  let _aggDirty = true, _agg = null, _aggRef = null, _aggN = -1;
   function ensureAgg() {
-    if (!_aggDirty && _agg) return _agg;
+    const src = nodes(), n = Object.keys(src).length;
+    if (!_aggDirty && _agg && src === _aggRef && n === _aggN) return _agg;
     const combat = {}; const util = {}; const special = {};
     unlockedKeys().forEach((k) => {
       const [q, r] = parseKey(k); const d = nodeDef(q, r);
       if (d.special) special[d.special] = (special[d.special] || 0) + 1;
       if (!d.bonus) return;
-      const bucket = d.util ? util : combat;
       for (const bk in d.bonus) {
         // util rares may carry combat keys too; route by node-level util flag
         const u = d.util && (bk === 'lootQuality' || bk === 'goldFind' || bk === 'xpGain' || bk === 'pickupRadius');
         (u ? util : combat)[bk] = ((u ? util : combat)[bk] || 0) + d.bonus[bk];
       }
     });
-    _agg = { combat, util, special }; _aggDirty = false; return _agg;
+    _agg = { combat, util, special }; _aggDirty = false; _aggRef = src; _aggN = n;
+    return _agg;
   }
+  // Every active bonus as one sorted, labelled list. ONE source of truth for the
+  // pill rows on both the Pilot screen and the Pilot Skills screen.
+  const BONUS_LABELS = {
+    dmgPct: 'DMG', atkSpeedPct: 'Fire Rate', critChance: 'Crit', critDamage: 'Crit DMG', multiShot: 'Multi-Fire',
+    bossDamage: 'Boss DMG', eliteDamage: 'Elite DMG', rangePct: 'Weapon Range', hpPct: 'Hull', regen: 'Regen',
+    dmgReduce: 'Armor', lifeSteal: 'Life Steal', moveSpeed: 'Move',
+    lootQuality: 'Loot', goldFind: 'Gold', xpGain: 'XP', pickupRadius: 'Pickup',
+  };
+  function bonusList() {
+    const a = ensureAgg(), out = [];
+    const push = (src, u) => { for (const k in src) if (src[k]) out.push({ key: k, label: BONUS_LABELS[k] || k, value: src[k], unit: k === 'regen' ? '%/s' : '%', util: u }); };
+    push(a.combat, false); push(a.util, true);
+    out.sort((x, y) => y.value - x.value);
+    return out;
+  }
+  // Unlocked nodes, not counting the free origin core.
+  function nodeCount() { return Math.max(0, unlockedKeys().length - 1); }
   function combatMods() { return ensureAgg().combat; }
   function mult(k) { const v = ensureAgg().util[k] || 0; return 1 + v / 100; }
   function dmgVs(e) { const c = ensureAgg().combat; if (!e) return 1; let b = (c.bossDamage || 0); const elite = e.isSuper || e.isDread || e.isCitadel || e.isClone; if (elite) b += (c.eliteDamage || 0); return 1 + b / 100; }
@@ -417,7 +442,6 @@
     }
     maybeTutorial();
     const score = pilotScore(), rank = rankFor(score);
-    const ag = ensureAgg();
 
     body.innerHTML =
       '<div class="pl-hero">' +
@@ -426,7 +450,7 @@
         '<span class="pl-hero-score"><b>' + fmt(score) + '</b> Score</span>' +
         '<button class="pl-hunt-mini" id="pl-hunt-btn">☄ Hunt</button>' +
       '</div>' +
-      bonusStrip(ag.combat, ag.util) +
+      bonusStrip() +
       '<div class="pl-treewrap">' +
         '<div class="pl-treebar">' +
           '<span class="pl-treetitle">⬡ Pilot Tree</span>' +
@@ -455,20 +479,11 @@
     renderDetail();
   }
 
-  function bonusStrip(combat, util) {
-    const LABELS = {
-      dmgPct: 'DMG', atkSpeedPct: 'Fire Rate', critChance: 'Crit', critDamage: 'Crit DMG', multiShot: 'Multi-Fire',
-      bossDamage: 'Boss DMG', eliteDamage: 'Elite DMG', rangePct: 'Proj Speed', hpPct: 'Hull', regen: 'Regen',
-      dmgReduce: 'Armor', lifeSteal: 'Life Steal', moveSpeed: 'Move',
-      lootQuality: 'Loot', goldFind: 'Gold', xpGain: 'XP', pickupRadius: 'Pickup',
-    };
-    const chips = [];
-    for (const k in combat) if (combat[k]) chips.push({ k, v: combat[k], u: k === 'regen' ? '%/s' : '%' });
-    for (const k in util) if (util[k]) chips.push({ k, v: util[k], u: '%' });
+  function bonusStrip() {
+    const chips = bonusList();
     if (!chips.length) return '<div class="pl-bonuses empty">No bonuses yet — unlock your first node below.</div>';
-    chips.sort((a, b) => b.v - a.v);
     return '<div class="pl-bonuses">' + chips.map((c) =>
-      '<span class="pl-bchip"><b>+' + (Math.round(c.v * 10) / 10) + c.u + '</b> ' + (LABELS[c.k] || c.k) + '</span>').join('') + '</div>';
+      '<span class="pl-bchip"><b>+' + (Math.round(c.value * 10) / 10) + c.unit + '</b> ' + c.label + '</span>').join('') + '</div>';
   }
 
   // ---- tree canvas ----
@@ -833,8 +848,15 @@
     combatMods, mult, dmgVs, tick, render, onHuntCleared, proAttempt,
     // ui
     renderPilot, renderHunt, updateHud, deploy,
-    // cache control — game-v93 calls this after an ascension wipes the tree
-    refresh: () => { _aggDirty = true; },
+    // cache control — any caller that swaps state.pilot wholesale calls this.
+    // Dropping the ref too forces a genuine rebuild, and the stat recompute
+    // means the new tree is folded into live combat numbers immediately.
+    refresh: () => {
+      _aggDirty = true; _aggRef = null; _aggN = -1;
+      try { G() && G().refreshStats && G().refreshStats(); } catch (e) {}
+    },
+    // bonus readout — shared by the Pilot screen strip and the Pilot Skills page
+    bonuses: ensureAgg, bonusList, nodeCount, unlockLevel: UNLOCK_LEVEL,
     // helpers / debug
     pilotScore, canHunt, levelForTier, _dbg: { nodeDef, ensureAgg, unlock },
   };

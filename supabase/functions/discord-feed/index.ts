@@ -158,6 +158,24 @@ const QUIPS: Record<string, string[]> = {
     "🎰 {a} donated generously to the house. Very charitable 🫡",
     "📉 {a} tested their luck. Luck said no. 💸",
   ],
+  // {a} pilot · {n} lifetime deliveries
+  cargoFirst: [
+    "🚚 {a} just delivered their FIRST shipment. The freighter made it. Nobody is more surprised than the freighter. 📦",
+    "📦 {a} escorted a cargo ship through pirate space and it arrived with the paint still on. Beginner's luck? We'll see.",
+    "🚚 {a} completed their first escort — the insurance adjusters have been sent home disappointed 🫡",
+  ],
+  cargo: [
+    "🚛 {a} has now delivered {n} shipments. At this point the raiders just wave them through 👋",
+    "📦 {n} deliveries for {a}. The Citadel dock crew knows their coffee order ☕",
+    "🚚 {a} hit {n} lifetime hauls — space truckers hate this one simple pilot 🛻",
+    "📈 {n} shipments and counting: {a} is basically a logistics company with guns.",
+    "🧾 {a}: {n} deliveries, zero apologies. The freight union is drafting a thank-you card ✉️",
+  ],
+  cargoClean: [
+    "✨ {a} delivered at 100% integrity — not a scratch. The freighter wants to fly with them FOREVER 💅",
+    "🧼 A PERFECT delivery from {a}. Raiders touched nothing. Feelings were hurt instead 💔",
+    "✨ {a} just ran the gauntlet and handed the Citadel a shipment in showroom condition 🏆",
+  ],
 };
 function quip(kind: string, seed: string, vars: Record<string, string | number>): string {
   let t = pickBy(seed, QUIPS[kind] || ['']);
@@ -171,7 +189,7 @@ function quip(kind: string, seed: string, vars: Record<string, string | number>)
 const SITREP_MS = 3 * 60 * 60 * 1000;
 
 // Priority decides what survives the MAX_EMBEDS cap — loud, rare things first.
-const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'top10',
+const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'cargo', 'top10',
                   'zone', 'level', 'open', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
@@ -180,6 +198,7 @@ const PRIORITY = ['xen', 'void', 'throne', 'ascend', 'casino', 'bigbet', 'repel'
 const BURST = 4;
 
 const ZONE_MARKS  = [10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500];
+const CARGO_MARKS = [10, 25, 50, 100, 250, 500, 1000];   // first delivery gets its own event
 const LEVEL_MARKS = [25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
 
 // Matches the in-game ladder in game-v93.js so Discord and the HUD agree.
@@ -366,6 +385,8 @@ Deno.serve(async (req) => {
       level: Number(p.level) || 0,
       zone: Number(p.zone) || 0,
       asc: Number(p.asc_stars) || 0,
+      cargo: Number((p as any).cargo) || 0,
+      cargoBest: Number((p as any).cargo_best) || 0,
       top10: top10.has(p.user_id) ? 1 : 0,
     };
     snap.push({ kind: 'pilot', ref: p.user_id, data: cur, updated_at: now });
@@ -445,6 +466,41 @@ Deno.serve(async (req) => {
           author: { name: '⬡  MILESTONE' },
           title: `${p.name} reached Level ${lv}`,
           description: `-# ${fmt(cur.power)} power · zone ${cur.zone}`,
+        },
+      });
+    }
+
+    // SPACE CARGO DEFENSE — the fun ones. First delivery is its own moment;
+    // after that, milestone crossings; a first-ever PERFECT run (cargo_best
+    // hits 100) once per pilot, ever.
+    if (cur.cargo > (was.cargo || 0)) {
+      const first = !(was.cargo || 0);
+      const mark = first ? null : crossed(was.cargo || 0, cur.cargo, CARGO_MARKS);
+      if (first || mark !== null) {
+        events.push({
+          kind: 'cargo',
+          line: first ? `**${p.name}** made their first delivery` : `**${p.name}** hit ${mark} deliveries`,
+          embed: {
+            color: 0xffb84d,
+            author: { name: first ? '🚚  FIRST DELIVERY' : '🚚  HAULAGE MILESTONE' },
+            title: first ? `${p.name} got the cargo through` : `${p.name} — ${mark} lifetime deliveries`,
+            description: (first
+              ? quip('cargoFirst', 'cg0:' + p.user_id, { a: '**' + p.name + '**' })
+              : quip('cargo', 'cg:' + p.user_id + ':' + mark, { a: '**' + p.name + '**', n: mark as number })) +
+              `\n-# Space Cargo Defense · ${cur.cargo} delivered lifetime`,
+          },
+        });
+      }
+    }
+    if (cur.cargoBest >= 100 && (was.cargoBest || 0) < 100 && (was.cargo || 0) > 0) {
+      events.push({
+        kind: 'cargo',
+        line: `**${p.name}** ran a PERFECT delivery`,
+        embed: {
+          color: 0xffe1a6,
+          author: { name: '✨  PERFECT DELIVERY' },
+          title: `${p.name} delivered at 100% integrity`,
+          description: quip('cargoClean', 'cgp:' + p.user_id, { a: '**' + p.name + '**' }),
         },
       });
     }

@@ -159,6 +159,7 @@
       this.deathT = 0;        // 0..1 death animation progress
       this.dead = false;      // fully removed
       this.spawnT = 0;        // 0..1 spawn-in animation
+      this.vx = 0; this.vy = 0;   // steering velocity — see update()
     }
     update(dt, archer) {
       // HOME CITADEL raiders besiege the FORT, not the pilot — the whole AI
@@ -195,26 +196,40 @@
       const dx = archer.x - this.x, dy = archer.y - this.y;
       const dist = Math.hypot(dx, dy) || 1;
       this.wobble += dt * 8;
-      this.dir = dx >= 0 ? 1 : -1;
       const reach = this.size + archer.size;
       const gunner = this.ranged || this.isBoss;
       // BEACON RUSH — summoned swarms ignore hold-at-range and charge the pilot,
       // and they close faster than a normal patrol so the wave actually arrives.
       const holdAt = this.rush ? reach : (gunner ? Math.max(reach + 6, this.isBoss ? this.range * 0.8 : this.holdAt) : reach);
+      // ---- STEERING, NOT TELEPORTING ---------------------------------------
+      // Movement used to write straight into x/y along the exact vector to the
+      // target, recomputed from scratch every frame. Three things followed:
+      // a ship could reverse direction completely between two frames (so a
+      // moving pilot made the whole swarm snap-turn in lockstep), the switch
+      // from "charge" to "orbit" flipped the heading 90° in one frame, and
+      // every hostile ran the identical straight line, stacking into a single
+      // file. They now hold a VELOCITY and steer it toward what they want,
+      // which gives them inertia: they lead, arc, overshoot slightly and settle.
+      const side = (this.seed % 2) < 1 ? 1 : -1;
+      let wx = 0, wy = 0;                       // desired velocity this frame
       if (dist > holdAt) {
         const sp = this.speed * Math.min(1, this.spawnT * 1.5) * chill * (this.rush ? 2.1 : 1);
-        this.x += (dx / dist) * sp * dt;
-        this.y += (dy / dist) * sp * dt;
-        this.walk += dt * sp * 0.16;   // walk cycle speed tied to movement
+        const nx = dx / dist, ny = dy / dist;
+        // a curve into the approach, strongest far out and unwinding to a clean
+        // line as it closes — this is what fans a wave out instead of a queue
+        const arc = this.rush ? 0 : Math.min(0.5, (dist - holdAt) / 500) * side;
+        wx = (nx - ny * arc) * sp;
+        wy = (ny + nx * arc) * sp;
         this.moving = true;
         this.contactTimer = Math.max(0, this.contactTimer - dt);
       } else if (dist > reach) {
-        // gunner on station — slow strafing orbit while the guns cycle
+        // gunner on station — slow strafing orbit while the guns cycle, with a
+        // gentle pull to hold the ring so it does not drift off station
         const ta = Math.atan2(dy, dx) + Math.PI / 2;
-        const drift = this.speed * 0.3 * ((this.seed % 2) < 1 ? 1 : -1) * chill;
-        this.x += Math.cos(ta) * drift * dt;
-        this.y += Math.sin(ta) * drift * dt;
-        this.walk += dt * Math.abs(drift) * 0.16;
+        const drift = this.speed * 0.1 * side * chill;
+        const hold = (dist - (holdAt + reach) * 0.5) * 0.3;
+        wx = Math.cos(ta) * drift + (dx / dist) * hold;
+        wy = Math.sin(ta) * drift + (dy / dist) * hold;
         this.moving = false;
         this.contactTimer = Math.max(0, this.contactTimer - dt);
       } else {
@@ -227,6 +242,17 @@
           archer.takeHit(this.damage, this);
         }
       }
+      // Ease the current velocity toward the desired one. exp() keeps the rate
+      // frame-rate independent, so it behaves the same at 1× and inside a 10×
+      // sub-step. Bosses carry more mass and turn slower than a raider.
+      const turn = 1 - Math.exp(-dt * (this.isBoss ? 4.5 : this.rush ? 9 : 6.5));
+      this.vx += (wx - this.vx) * turn;
+      this.vy += (wy - this.vy) * turn;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      const spd = Math.abs(this.vx) + Math.abs(this.vy);
+      this.walk += dt * spd * 0.12;
+      if (spd > 6) this.dir = this.vx >= 0 ? 1 : -1;   // face travel, not the target
       // standoff fire — request a bolt; the game loop spawns + draws it
       if (gunner && !archer.dead && this.spawnT >= 1 && dist <= this.range * 1.05) {
         this.fireT -= dt * chill;

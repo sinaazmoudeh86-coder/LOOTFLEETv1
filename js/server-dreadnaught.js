@@ -602,7 +602,7 @@
     const drops = run.drops, b = run.boss, prevAuto = run.prevAuto, prevSpeed = run.prevSpeed;
     run = null;
     const app = $('app'); if (app) app.classList.remove('sd-noauto');
-    try { G().setAuto(!!prevAuto); } catch (e) {}   // hand auto-pilot back
+    try { G().setAuto(true); } catch (e) {}   // events end INTO autopilot — the standing default
     try { if (prevSpeed && prevSpeed !== 1) G().setGameSpeed(prevSpeed); } catch (e) {}   // restore battle speed (the 1× was event-only)
     try { G().refreshStats(); } catch (e) {}         // drop the 3× event fire range
     try { if (window.UI) window.UI.refreshAll(); } catch (e) {}   // speed pills reflect the restore
@@ -713,6 +713,7 @@
     if (sub) sub.textContent = lvl() >= UNLOCK ? '' : ('Unlocks at Lv ' + UNLOCK);
     if (lvl() < UNLOCK) { body.innerHTML = lockedView(); wireLocked(body); return; }
     const s = sd();
+    flushPublish();                  // a run the server never confirmed gets another try
     if (s && s.pendingToast) { toast(s.pendingToast); delete s.pendingToast; }
     if (s && !s.seen) { s.seen = 1; try { G().save(); } catch (e) {} setTimeout(() => openHowTo(true), 350); }
     body.innerHTML = run ? runView() : idleView();
@@ -926,7 +927,19 @@
     const sr = liveSeasonRank(); if (sr) s.lbSeasonRank = sr;
   }
   // publish my row after every run (identity = auth.uid(); server keeps maxes)
-  function publishScore() {
+  //
+  // A PUBLISH IS NOT DONE UNTIL THE SERVER CONFIRMS IT (Aug 2026). This was a
+  // fire-and-forget call into a function that swallowed its own errors, with no
+  // retry and no record that the write had failed — so one refused RPC (expired
+  // JWT, RLS, a network blip on a phone leaving the arena) dropped the run off the
+  // board permanently while the local record kept climbing. That is the
+  // "completed the event, leaderboard never updated" report.
+  //
+  // The row is now marked dirty until a write is CONFIRMED, retried with backoff,
+  // and re-flushed by flushPublish() whenever the event screen opens — so a run
+  // that failed to publish mid-flight still lands on the board later. The server
+  // RPC keeps maxes, so republishing the same figures is idempotent.
+  function publishScore(attempt) {
     const s = sd(); if (!s) return;
     // GUESTS can read the live board but can never WRITE it (the RPC requires a
     // signed-in account) — tell them once a day why their run isn't showing up.
@@ -935,8 +948,34 @@
       return;
     }
     if (!cloudOn()) return;
-    try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: s.bestDay, total: Math.floor(s.total), stage: Math.max(1, s.bestStage | 0) }); } catch (e) {}
-    setTimeout(() => ensureCloud(null, true), 1500);
+    const n = (attempt | 0) || 1;
+    s.pubDirty = 1;
+    const payload = { name: myName(), season: SEASON.num, day: s.day, best: s.bestDay, total: Math.floor(s.total), stage: Math.max(1, s.bestStage | 0) };
+    let call = null;
+    try { call = window.CLOUD.sdUpsert(payload); } catch (e) {}
+    Promise.resolve(call).then((r) => {
+      // an older cloud.js resolves undefined — treat that as success, not a loop
+      if (!r || r.ok) {
+        s.pubDirty = 0; s.pubAt = Date.now();
+        try { G().save(); } catch (e) {}
+        setTimeout(() => ensureCloud(null, true), 1500);
+        return;
+      }
+      if (n < 5) { setTimeout(() => publishScore(n + 1), Math.min(30000, 2000 * Math.pow(2, n - 1))); return; }
+      // five refusals is a real problem, not a blip: say so rather than leaving the
+      // player to discover the gap on the board themselves
+      try { G().save(); } catch (e) {}
+      toast('⚠ Score not published yet — will retry when you reopen the event');
+    }).catch(() => {
+      if (n < 5) setTimeout(() => publishScore(n + 1), Math.min(30000, 2000 * Math.pow(2, n - 1)));
+    });
+  }
+  // Re-send a run the server never confirmed. Cheap and idempotent, so it runs on
+  // every event-screen open — including the first one after a guest signs in.
+  function flushPublish() {
+    const s = sd(); if (!s || !s.pubDirty) return;
+    if (!cloudOn() || !myUid()) return;
+    publishScore();
   }
 
   // ---- leaderboards (daily · season, side by side) ----

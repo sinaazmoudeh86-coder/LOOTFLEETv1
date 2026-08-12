@@ -186,6 +186,7 @@
   // Ladder columns degrade on their own flag so a server with stars but without
   // ranks-ladders.sql keeps publishing stars.
   let _lbNoLadder = false, _lbLadderRetryAt = 0;
+  let _lbNoCargo = false, _lbCargoRetryAt = 0;
   function lbFail(where, err) {
     _lbFails++;
     // A row that never publishes makes the player INVISIBLE on Ranks while they
@@ -233,6 +234,7 @@
       };
       if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
       if (_lbNoLadder && Date.now() > _lbLadderRetryAt) _lbNoLadder = false;
+      if (_lbNoCargo && Date.now() > _lbCargoRetryAt) _lbNoCargo = false;
 
       // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
       // p_asc. Folding them into the p_asc attempt would mean a server with
@@ -244,6 +246,16 @@
         p_tile_rev: bignum(p.tile_rev),
         p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
       } : null;
+      // HAULAGE COLUMNS degrade on their own flag, exactly like the tiers below:
+      // a server that has ranks-ladders.sql but not cargo-ladder.sql keeps
+      // publishing every other ladder untouched.
+      if (ladder && !_lbNoLadder && p.cargo !== undefined && !_lbNoCargo) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0 }, base, ladder));
+        if (!error) { _lbFails = 0; return; }
+        if (!isLegacy(error)) { lbFail('cargo', error); return; }
+        _lbNoCargo = true; _lbCargoRetryAt = Date.now() + 6 * 3600 * 1000;
+      }
       if (ladder && !_lbNoLadder) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0) }, base, ladder));
@@ -287,14 +299,22 @@
   }
 
   // ---- Server Dreadnaught seasonal boards (one row per user per season) ------
+  // Returns {ok} so the caller can RETRY. Supabase rpc() resolves with {data,
+  // error} rather than throwing, and this function used to ignore `error` and sit
+  // behind an empty catch — so an RLS denial, an expired JWT or a missing function
+  // all looked exactly like a successful publish. A player finished the event, the
+  // row was never written, and nothing ever tried again: "I completed Voidmaw and
+  // the leaderboard didn't update."
   async function sdUpsert(p) {
+    if (!enabled || !p) return { ok: false, reason: 'disabled' };
     try {
-      if (!enabled || !p) return;
-      await client.rpc('sdread_upsert', {
+      const { error } = await client.rpc('sdread_upsert', {
         p_name: p.name || 'Operator', p_season: p.season || 1, p_day: p.day || 0,
         p_best: Math.round(p.best || 0), p_total: Math.round(p.total || 0), p_stage: p.stage || 1,
       });
-    } catch (e) {}
+      if (error) return { ok: false, reason: error.message || 'rpc error' };
+      return { ok: true };
+    } catch (e) { return { ok: false, reason: (e && e.message) || 'network' }; }
   }
   async function sdDaily(season, day, n) {
     try {

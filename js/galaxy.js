@@ -107,14 +107,18 @@
     name: 'The Kaevith', event: 'THE KAEVITH INCURSION', seed: 0x4b41ff,
     share: 0.20, color: '#c26bff', deepColor: '#7a2ac4',
     hpMod: 1.35, dmgMod: 1.22,          // slightly above the zone's normal garrison
-    minChance: 0.01, maxChance: 0.10,   // per-clear odds of recovering a hull, ring 1 → rim
+    // PER-CLEAR ODDS OF RECOVERING A HULL, ring 1 → rim. Cut 5× in Aug 2026 (1%/10%
+    // → 0.2%/2%): with 20% of the galaxy invaded and a pity floor on top, Kaevith
+    // hulls were landing often enough to stop reading as event prizes at all. The
+    // pity guarantee is gone with it — the roll is now pure chance.
+    minChance: 0.002, maxChance: 0.02,
   };
   function isInvaded(q, r) {
     const ring = ringOf(q, r);
     if (ring <= 0 || ring > RINGS) return false;
     return rngFor(((q * 0x27d4eb2d) ^ (r * 0x165667b1) ^ XEN.seed) >>> 0)() < XEN.share;
   }
-  // Recovery odds for clearing an invaded tile: 1% on ring 1 → 10% at the rim.
+  // Recovery odds for clearing an invaded tile: 0.2% on ring 1 → 2% at the rim.
   // The curve is sqrt-shaped, not linear: over RINGS rings a linear ramp left
   // almost every real player parked near the 1% floor (ring 5 paid 2.5%), which
   // read as broken. Square-rooting climbs fast out of the low rings and still

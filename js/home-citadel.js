@@ -83,6 +83,7 @@
     st.gold -= c.gold || 0; st.resources.fuel -= c.fuel || 0; st.resources.iron -= c.iron || 0; st.resources.plasma -= c.plasma || 0;
   }
   function buyBld(key) {
+    _city.key = '';   // the skyline changed — rebake on the next frame
     const s = hc(), b = BLD[key], cur = s.b[key] | 0;
     if (cur >= bldMax(s, key)) return;
     const c = bldCost(key, cur);
@@ -378,7 +379,8 @@
     let latched = 0;
     for (const e of run.refs) {
       if (e.dead || e.dying || e.hp <= 0) continue;
-      if (Math.hypot(e.x - f.x, e.y - f.y) <= f.size + (e.size || 14) + 12) latched++;
+      const lr = f.size + (e.size || 14) + 12, ldx = e.x - f.x, ldy = e.y - f.y;
+      if (ldx * ldx + ldy * ldy <= lr * lr) latched++;
     }
     if (latched) { f.hp -= f.max * 0.016 * latched * dt; f.hitT = 0.35; if (Math.random() < dt * 2.5) rt.shake = Math.min(5, (rt.shake || 0) + 1.2); }
     f.hitT = Math.max(0, f.hitT - dt);
@@ -386,19 +388,34 @@
     run.turretTarget = null;
     if (run.turretDps > 0) {
       let best = null, bd = 1e9;
-      for (const e of run.refs) { if (e.dead || e.dying || e.hp <= 0) continue; const d = Math.hypot(e.x - f.x, e.y - f.y); if (d < bd) { bd = d; best = e; } }
-      if (best && bd < 640) { try { best.takeDamage(run.turretDps * dt); } catch (e2) { best.hp -= run.turretDps * dt; } run.turretTarget = best; }
+      for (const e of run.refs) { if (e.dead || e.dying || e.hp <= 0) continue; const dx = e.x - f.x, dy = e.y - f.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = e; } }
+      if (best && bd < 640 * 640) { try { best.takeDamage(run.turretDps * dt); } catch (e2) { best.hp -= run.turretDps * dt; } run.turretTarget = best; }
     }
     towersTick(dt);
     const alive = aliveNow;
     run.uiT -= dt;
     if (run.uiT <= 0) {
       run.uiT = 0.12; syncWarbar(alive);
-      // cache beam targets + silo fill at 8Hz — the renderer just draws them
+      // COMPACT THE REFERENCE LIST. Nothing removes dead raiders from run.refs,
+      // and four separate loops walk it every frame.
+      run.refs = run.refs.filter((e) => !(e.dead || e.dying || e.hp <= 0));
+      // cache beam targets + silo fill at 8Hz — the renderer just draws them.
+      // Distances are SQUARED and computed once per entity, not inside the
+      // comparator (which called Math.hypot O(n log n) times per sort).
       const gx = f.x + 150, muzY = f.y - 164;
-      const live = run.refs.filter((e) => !(e.dead || e.dying || e.hp <= 0));
-      live.sort((a2, b2) => Math.hypot(a2.x - gx, a2.y - muzY) - Math.hypot(b2.x - gx, b2.y - muzY));
-      run.beamTargets = ((run.b.turret | 0) > 0) ? live.slice(0, Math.min(3, Math.ceil((run.b.turret | 0) / 3))).filter((e) => Math.hypot(e.x - gx, e.y - muzY) <= 660) : [];
+      const nBeam = ((run.b.turret | 0) > 0) ? Math.min(3, Math.ceil((run.b.turret | 0) / 3)) : 0;
+      if (!nBeam) run.beamTargets = [];
+      else {
+        const cand = [];
+        for (let i = 0; i < run.refs.length; i++) {
+          const e = run.refs[i], dx = e.x - gx, dy = e.y - muzY, d2 = dx * dx + dy * dy;
+          if (d2 <= 435600) cand.push({ e: e, d: d2 });        // 660²
+        }
+        cand.sort((a2, b2) => a2.d - b2.d);
+        const out = [];
+        for (let i = 0; i < cand.length && i < nBeam; i++) out.push(cand[i].e);
+        run.beamTargets = out;
+      }
       try { const s2 = hc(); run.siloFrac = Math.min(1, accrued(s2).h / capHours(s2)); } catch (e) { run.siloFrac = 0; }
     }
     if (f.hp <= 0) { f.hp = 0; return endWave(false); }
@@ -416,7 +433,7 @@
     const f = run.fort;
     const pulse = 0.5 + 0.5 * Math.sin(t * 2.6);
     const hurt = f.hitT > 0;
-    ensureCity(f);
+    ensureCity(f, t);
     if (_city.cv) ctx.drawImage(_city.cv, f.x - CITY_W / 2, f.y - CITY_TOP);
     // dynamics over the baked city
     drawCityDynamics(ctx, t, f, pulse, hurt);
@@ -437,18 +454,22 @@
   function hexPath(ctx, r, rot) { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + rot; const px = Math.cos(a) * r, py = Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); }
   // ---- tower combat + projectile fx -----------------------------------------
   function twAlive(e) { return e && !(e.dead || e.dying || e.hp <= 0); }
+  const _live = [];
   function towersTick(dt) {
     const tws = run.tws;
     if (!tws || !tws.length) { fxTick(dt); return; }
-    const live = run.phase === 'fight' ? run.refs.filter(twAlive) : [];
+    const live = _live;
+    live.length = 0;
+    if (run.phase === 'fight') for (let i = 0; i < run.refs.length; i++) { const e = run.refs[i]; if (twAlive(e)) live.push(e); }
     for (const tw of tws) {
       const def = TOWERS[tw.k];
       tw.heat = Math.max(0, tw.heat - dt);
       tw.rt -= dt;
       if (tw.rt <= 0) {   // retarget at ~8Hz
         tw.rt = 0.12;
-        if (tw.k === 'rail') { let best = null, bh = -1; for (const e of live) { if (Math.hypot(e.x - tw.x, e.y - tw.y) <= def.range && e.maxHp > bh) { bh = e.maxHp; best = e; } } tw.tgt = best; }
-        else { let best = null, bd = 1e9; for (const e of live) { const d = Math.hypot(e.x - tw.x, e.y - tw.y); if (d <= def.range && d < bd) { bd = d; best = e; } } tw.tgt = best; }
+        const rr = def.range * def.range;
+        if (tw.k === 'rail') { let best = null, bh = -1; for (const e of live) { const dx = e.x - tw.x, dy = e.y - tw.y; if (dx * dx + dy * dy <= rr && e.maxHp > bh) { bh = e.maxHp; best = e; } } tw.tgt = best; }
+        else { let best = null, bd = 1e9; for (const e of live) { const dx = e.x - tw.x, dy = e.y - tw.y, d = dx * dx + dy * dy; if (d <= rr && d < bd) { bd = d; best = e; } } tw.tgt = best; }
       }
       if (tw.tgt && !twAlive(tw.tgt)) tw.tgt = null;
       if (tw.tgt) { const ta = Math.atan2(tw.tgt.y - tw.y, tw.tgt.x - tw.x); let da = ta - tw.ang; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2; tw.ang += da * Math.min(1, dt * 10); }
@@ -457,8 +478,10 @@
         if (tw.tgt) { const dm = dps * 0.12 * tw.lv * dt; try { tw.tgt.takeDamage(dm); } catch (e2) { tw.tgt.hp -= dm; } tw.heat = 0.2; }
       } else if (tw.k === 'cryo') {
         let hit = 0;
+        const cr = def.range * def.range;
         for (const e of live) {
-          if (Math.hypot(e.x - tw.x, e.y - tw.y) <= def.range) {
+          const cdx = e.x - tw.x, cdy = e.y - tw.y;
+          if (cdx * cdx + cdy * cdy <= cr) {
             e.chillT = Math.max(e.chillT || 0, 0.5);   // engine-native slow: 42% speed + slow guns
             const dm = dps * 0.03 * tw.lv * dt; try { e.takeDamage(dm); } catch (e2) { e.hp -= dm; }
             if (++hit >= 10) break;
@@ -484,7 +507,8 @@
             const vx = ex - tw.x, vy = ey - tw.y, wx = e.x - tw.x, wy = e.y - tw.y;
             const c1 = vx * wx + vy * wy; if (c1 <= 0) continue;
             const u = Math.min(1, c1 / (vx * vx + vy * vy));
-            if (Math.hypot(e.x - (tw.x + vx * u), e.y - (tw.y + vy * u)) <= 26 + (e.size || 12)) {
+            const pr = 26 + (e.size || 12), pdx = e.x - (tw.x + vx * u), pdy = e.y - (tw.y + vy * u);
+            if (pdx * pdx + pdy * pdy <= pr * pr) {
               try { e.takeDamage(dmg); } catch (e2) { e.hp -= dmg; }
               hits++; fxAdd({ type: 'hit', x: e.x, y: e.y, t: 0, dur: 0.3, col: '#ff8a95' });
             }
@@ -508,7 +532,7 @@
         if (u >= 1) {
           fx.splice(i, 1);
           fxAdd({ type: 'boom', x: p.tx, y: p.ty, t: 0, dur: 0.38, col: p.col });
-          if (run.phase === 'fight') for (const e of run.refs) { if (!twAlive(e)) continue; if (Math.hypot(e.x - p.tx, e.y - p.ty) <= 95) { try { e.takeDamage(p.dmg); } catch (e2) { e.hp -= p.dmg; } } }
+          if (run.phase === 'fight') for (const e of run.refs) { if (!twAlive(e)) continue; const bx = e.x - p.tx, by = e.y - p.ty; if (bx * bx + by * by <= 9025) { try { e.takeDamage(p.dmg); } catch (e2) { e.hp -= p.dmg; } } }
           try { const grt = G().rt; if (grt) grt.shake = Math.min(5, (grt.shake || 0) + 1); } catch (e) {}
         }
       } else if (p.t >= p.dur) fx.splice(i, 1);
@@ -521,9 +545,11 @@
       const def = TOWERS[tw.k];
       ctx.save(); ctx.translate(tw.x, tw.y);
       if (tw.k === 'cryo') {
-        ctx.globalAlpha = 0.08 + 0.04 * Math.sin(t * 2 + tw.i);
-        ctx.fillStyle = def.col; ctx.beginPath(); ctx.arc(0, 0, def.range, 0, 7); ctx.fill();
-        ctx.globalAlpha = 0.3; ctx.strokeStyle = def.col; ctx.lineWidth = 1;
+        // Ring only — the filled range disc was a full-radius alpha blend per
+        // tower per frame, the single most expensive thing on this screen once
+        // two or three cryo towers were up. The outline reads the same.
+        ctx.globalAlpha = 0.22 + 0.1 * Math.sin(t * 2 + tw.i);
+        ctx.strokeStyle = def.col; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(0, 0, def.range, 0, 7); ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -693,7 +719,15 @@
     let twSig = ''; try { twSig = hc().tw.map((t2) => t2 ? t2.k[0] : '-').join(''); } catch (e) {}
     return b.mine + '·' + b.silo + '·' + b.turret + '·' + b.repair + '·' + imgs + '·' + twSig;
   }
-  function ensureCity(f) {
+  let _cityCheck = 0;
+  function ensureCity(f, t) {
+    // Re-key at 2Hz, not per frame (and always on the first call). Building
+    // changes go through invalidateCity(), so this poll only has to catch the
+    // sprites finishing their decode.
+    if (_city.cv && _city.key) {
+      if (t != null && t - _cityCheck < 0.5) return;
+      _cityCheck = t == null ? _cityCheck : t;
+    }
     const key = cityKey();
     if (_city.cv && _city.key === key) return;
     _city.key = key;
@@ -1272,7 +1306,7 @@
   .hc-rate-sub{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:12px; color:#b8a887; margin-top:2px; }
   .hc-collect{ display:flex; align-items:center; gap:11px; background:linear-gradient(180deg,#161d14,#101710); border:1px solid rgba(124,224,160,.35); border-radius:13px; padding:11px 12px; cursor:pointer; }
   .hc-collect.full{ border-color:#ffcf7a; box-shadow:0 0 18px -6px rgba(255,207,122,.6); animation:hcFullPulse 1.6s ease-in-out infinite; }
-  @keyframes hcFullPulse{ 0%,100%{ box-shadow:0 0 12px -6px rgba(255,207,122,.4);} 50%{ box-shadow:0 0 22px -4px rgba(255,207,122,.8);} }
+  @keyframes hcFullPulse{ 0%,100%{ opacity:.86;} 50%{ opacity:1;} }
   .hc-c-l{ flex:1; min-width:0; }
   .hc-c-t{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10.5px; letter-spacing:.1em; color:#8fb89c; }
   .hc-collect.full .hc-c-t{ color:#ffcf7a; }
@@ -1331,7 +1365,7 @@
   .hc-citbar{ position:relative; height:18px; border-radius:9px; background:#241733; background:#221407; border:1px solid #4d3c14; overflow:hidden; }
   .hc-cit-fill{ height:100%; background:linear-gradient(90deg,#ffb84d,#ffe1a6); transition:width .15s linear; }
   .hc-cit-fill.low{ background:linear-gradient(90deg,#ff495f,#ff8a3c); animation:hcHpLow .7s ease-in-out infinite; }
-  @keyframes hcHpLow{ 0%,100%{ filter:brightness(1);} 50%{ filter:brightness(1.5);} }
+  @keyframes hcHpLow{ 0%,100%{ opacity:1;} 50%{ opacity:.6;} }
   .hc-citbar span{ position:absolute; inset:0; display:grid; place-items:center; font-family:'Rajdhani',sans-serif; font-weight:800; font-size:9.5px; letter-spacing:.1em; color:#2a1206; }
   .hc-arena{ position:relative; height:290px; border:1px solid #4d3c14; border-radius:14px; overflow:hidden; background:radial-gradient(130% 120% at 12% 50%, #241a0c 0%, #0e0b07 60%, #090705 100%); }
   .hc-arena canvas{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }

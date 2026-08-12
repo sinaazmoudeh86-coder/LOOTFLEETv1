@@ -192,9 +192,35 @@
     return Math.floor(xp);
   }
 
-  // Cosmetic "enemy level" shown to the player. D1=1, D5=25, D20=400, D100=10000.
+  // ITEM LEVEL of a zone — zone², the geometric curve gear generation and
+  // blueprint gates are built on. NOT a player-facing number: it climbs
+  // quadratically, so Zone 264 reads "69,696" and cannot be compared to a pilot
+  // level. items.js and the blueprint drops use it; nothing shown to a player
+  // should. Kept under its historical name so those call sites are untouched.
   function dungeonEnemyLevel(dungeon) {
     return dungeon * dungeon;
+  }
+  // ===========================================================================
+  // THE ONE CONVERSION: ZONE → PILOT LEVEL
+  // ---------------------------------------------------------------------------
+  // A player knows exactly one number about their own strength: their level. So
+  // every difficulty statement in the game — grind zones, the high-risk warning,
+  // cargo shipments — states the level of PILOT the content is built for, and
+  // lets them compare it to their own.
+  //
+  // The conversion already exists implicitly: unlockCeil() decides how far past
+  // your level you may fly, so its inverse — the lowest level that unlocks a
+  // zone — IS that zone's pilot level. Zone 156 ↔ Lv 128. Zone 264 ↔ Lv 250.
+  // game-v93's zoneReqLevel() now delegates here, so the number that gates a
+  // zone and the number that describes it can never drift apart.
+  const LVL_BANDS = [[1, 100, 35], [100, 200, 28], [200, 300, 14], [300, 400, 7], [400, 500, 4], [500, Infinity, 0]];
+  function zoneCombatLevel(zone) {
+    const d = Math.max(1, zone | 0);
+    for (const [lo, hi, ahead] of LVL_BANDS) {
+      const L = Math.max(1, d - ahead);
+      if (L >= lo && L < hi) return L;
+    }
+    return d;
   }
 
   // The master geometric difficulty/reward multiplier for a dungeon.
@@ -674,6 +700,28 @@
       tag:'FINAL CLASS · TITAN SINA', sinaTracers:true,
       desc:'The final-class hero ship — twice the Dread Omega in every dimension. Its guns reach across the entire battle zone, spraying full-spectrum tracer fire. Sold outright for 1,000,000 LootCoins.',
       megaCost:{ credits:1000000 } },
+    // ETERNUM — CELESTIAL CLASS. The hull that comes after Titan. Every line on
+    // its sheet is 1.5× the Titan Sina, but the reason to fly it is the armament:
+    //   • DEATH BEAMS — five continuous lances that lock the five nearest hostiles
+    //     and burn them for as long as they stay in range. No cooldown, no aim.
+    //   • CELESTIAL AURA — a standing field that cooks everything near the hull.
+    // NEVER SOLD, in any currency. It is the apex prize of Space Cargo Defense —
+    // and it does not fly for anyone who has not put the years in:
+    //   1,000 SUCCESSFUL missions claimed  AND  Pilot Ascension ★100  AND a
+    //   TITAN SINA in the hangar — the Celestial hull is crewed off a Titan Sina,
+    //   so the Titan line is the licence to fly it.
+    // All three are checked at SWITCH time, not just at grant time (see canFlyShip).
+    { key:'eternum', name:'Eternum', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:192,
+      mods:{ hpPct:7920, dmgPct:4455, multiShot:1188, critChance:95, critDamage:3465, moveSpeed:744, atkSpeedPct:1485, rangePct:6000, lifeSteal:43.8 },
+      tag:'CELESTIAL CLASS · ETERNUM', celestial:true, sinaTracers:true, deathBeams:5, dpsAura:0.9,
+      flyReq:{ missions:1000, stars:100, ship:'titansina' },
+      // COMMISSIONING COST. The 2% Omega Cargo V roll recovers an ETERNUM CORE,
+      // not the hull — the hull is then built around it, and the yard wants
+      // 10 TRILLION gold, and — since the non-gold economy came down 10× — one
+      // trillion of each resource and 10,000 LootCoins.
+      claimCost:{ gold:1e13, fuel:1e12, iron:1e12, plasma:1e12, credits:10000 },
+      motto:'Built not to conquer worlds, but to outlive them.',
+      desc:'The Celestial Class — one and a half times the Titan Sina on every line, wrapped in a standing celestial field that burns anything that drifts near the hull. Five death beams lock the nearest hostiles and never let go. Its core is recovered only from the deepest Space Cargo Defense manifest, commissioned for 10T of every primary and 100,000 LootCoins, and flyable only by a pilot with 1,000 successful missions, ★50 and a Titan Sina behind them.' },
   ];
   // Economy tuning: hulls cost 3× gold and demand 5× the kills to unlock.
   SHIPS.forEach((s) => {
@@ -849,7 +897,7 @@
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
     SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
-    xpToNext, dungeonEnemyLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
+    xpToNext, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
     levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,
     ascRarityCap, ascTopBoost, TOP_TIER,

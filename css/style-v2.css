@@ -595,6 +595,8 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 .sk-tot-g{display:flex;flex-wrap:wrap;gap:6px;}
 .sk-chip{display:inline-flex;align-items:baseline;gap:5px;padding:4px 8px;border-radius:7px;font-size:10.5px;color:var(--muted);border:1px solid var(--line-2);background:var(--panel-3);white-space:nowrap;}
 .sk-chip b{font-family:var(--font-ui);font-size:11.5px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;}
+.sk-pt-note{margin:8px 0 0;font-size:10.5px;line-height:1.5;color:var(--muted-2);}
+.sk-pt-note b{color:var(--muted);}
 .sn-num{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;margin-top:5px;}
 .sn-now{font-family:var(--font-ui);font-size:12px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums;}
 .sn-arw{font-style:normal;font-size:10px;color:var(--muted-2);}

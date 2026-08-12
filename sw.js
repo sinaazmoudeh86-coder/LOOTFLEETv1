@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v501';
+const CACHE = 'lootfleet-v562';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -44,6 +44,13 @@ const CORE = [
   'js/ranks-boards.js', 'js/ship-panels.js',
   // new in v216: global clip guard + opt-in clip auditor
   'css/fit-guard.css', 'css/readability.css', 'js/fit-audit.js', 'js/update-gate.js',
+  // v217 / build 562 — Space Cargo Defense (escort event) — changed this release
+  'js/cargo-run.js', 'js/cargo-defense.js',
+  // OFFLINE GAP CLOSED (v217): referenced by game.html but never precached, so an
+  // offline PWA fell back to the network for them and the screens came up empty.
+  'css/ember-choir.css', 'css/hangar-ships.css',
+  'js/return-brief.js', 'js/rank-rewards.js', 'js/discord-reward.js', 'js/onboard.js',
+  'js/pro-offer.js', 'js/paragon-cannon.js', 'js/casino-citadels.js',
 ];
 
 self.addEventListener('install', (e) => {

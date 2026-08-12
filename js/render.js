@@ -269,9 +269,18 @@
     ctx.globalAlpha = alpha;
     if (e.isBoss && !e.dying) {
       const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 240);
-      const ag = ctx.createRadialGradient(e.x, e.y, 4, e.x, e.y, e.size * 2.4);
-      ag.addColorStop(0, `rgba(226,59,78,${0.22 * pulse})`); ag.addColorStop(1, 'rgba(226,59,78,0)');
-      ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(e.x, e.y, e.size * 2.4, 0, 7); ctx.fill();
+      // drawn in the boss's own space, so one cached gradient serves them all;
+      // the pulse rides globalAlpha instead of a rebuilt colour stop
+      const R = e.size * 2.4;
+      ctx.save(); ctx.translate(e.x, e.y); ctx.scale(R, R);
+      if (!_bossAura) {
+        _bossAura = ctx.createRadialGradient(0, 0, 0.04, 0, 0, 1);
+        _bossAura.addColorStop(0, 'rgba(226,59,78,0.22)');
+        _bossAura.addColorStop(1, 'rgba(226,59,78,0)');
+      }
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = _bossAura; ctx.beginPath(); ctx.arc(0, 0, 1, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1; ctx.restore();
     }
     ctx.translate(e.x + (e.dir < 0 ? -lunge : lunge), e.y);
     if (e.spriteImg && e.spriteImg.complete && e.spriteImg.naturalWidth) {
@@ -356,11 +365,27 @@
       ctx.fillStyle = pct > 0.5 ? '#e23b4e' : pct > 0.25 ? '#e8a13b' : '#e8d03b';
       rr(ctx, bx, by, bw*pct, bh, 2.5); ctx.fill();
       if (e.isBoss) {
-        ctx.fillStyle = '#e23b4e'; ctx.font = '800 12px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#e23b4e'; setFont(ctx, '800 12px Rajdhani, sans-serif'); ctx.textAlign = 'center';
         ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
         ctx.strokeText('\u2620 ' + (e.name || 'BOSS'), e.x, by - 6); ctx.fillText('\u2620 ' + (e.name || 'BOSS'), e.x, by - 6);
       }
     }
+  }
+
+  // ---- GRADIENT CACHE ------------------------------------------------------
+  // Keyed by colour + size, bounded, and only used while an object is NOT
+  // flashing (a hit tints the skin continuously, which would thrash the cache
+  // for the fraction of a second it lasts).
+  const _gc = new Map();
+  let _bossAura = null;
+  function hullGrad(ctx, key, x0, y0, x1, y1, c0, c1, c2) {
+    let gr = _gc.get(key);
+    if (gr) return gr;
+    if (_gc.size > 240) _gc.clear();
+    gr = ctx.createLinearGradient(x0, y0, x1, y1);
+    gr.addColorStop(0, c0); gr.addColorStop(0.5, c1); gr.addColorStop(1, c2);
+    _gc.set(key, gr);
+    return gr;
   }
 
   // ENEMY VESSELS — each type is a distinct space silhouette, all tinted by
@@ -390,8 +415,8 @@
     ctx.fillStyle = darken(skin, 0.35); ctx.strokeStyle = darken(skin, 0.55); ctx.lineWidth = 1.4;
     [[-1],[1]].forEach(([d]) => { ctx.beginPath(); ctx.moveTo(d*s*0.2,-s*0.1); ctx.lineTo(d*s*1.3,s*0.2); ctx.lineTo(d*s*0.4,s*0.6); ctx.closePath(); ctx.fill(); ctx.stroke(); });
     // hull
-    const g = ctx.createLinearGradient(-s*0.6,0,s*0.6,0);
-    g.addColorStop(0, darken(skin,0.3)); g.addColorStop(0.5, skin); g.addColorStop(1, lighten(skin,0.16));
+    const g = flash > 0.01 ? (() => { const q = ctx.createLinearGradient(-s*0.6,0,s*0.6,0); q.addColorStop(0, darken(skin,0.3)); q.addColorStop(0.5, skin); q.addColorStop(1, lighten(skin,0.16)); return q; })()
+      : hullGrad(ctx, 'h1|' + skin + '|' + (s|0), -s*0.6,0,s*0.6,0, darken(skin,0.3), skin, lighten(skin,0.16));
     ctx.fillStyle = g; ctx.strokeStyle = darken(skin,0.5); ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, -s*0.85);
@@ -420,8 +445,8 @@
     ctx.fillStyle = rgba('#ffb057', 0.5 * flick);
     ctx.beginPath(); ctx.ellipse(0, s*0.8, s*0.26, s*0.5*flick, 0, 0, 7); ctx.fill();
     // boxy corroded hull
-    const g = ctx.createLinearGradient(-s*0.6, 0, s*0.6, 0);
-    g.addColorStop(0, darken(skin, 0.4)); g.addColorStop(0.5, darken(skin, 0.1)); g.addColorStop(1, lighten(skin, 0.08));
+    const g = flash > 0.01 ? (() => { const q = ctx.createLinearGradient(-s*0.6,0,s*0.6,0); q.addColorStop(0, darken(skin,0.4)); q.addColorStop(0.5, darken(skin,0.1)); q.addColorStop(1, lighten(skin,0.08)); return q; })()
+      : hullGrad(ctx, 'h2|' + skin + '|' + (s|0), -s*0.6,0,s*0.6,0, darken(skin,0.4), darken(skin,0.1), lighten(skin,0.08));
     ctx.fillStyle = g; ctx.strokeStyle = darken(skin, 0.55); ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(-s*0.45, -s*0.75); ctx.lineTo(s*0.3, -s*0.85); ctx.lineTo(s*0.55, -s*0.3);
@@ -455,8 +480,8 @@
       ctx.beginPath(); ctx.moveTo(d*s*0.15, s*0.15); ctx.lineTo(d*s*0.9, s*0.7); ctx.lineTo(d*s*0.3, s*0.55); ctx.closePath(); ctx.fill(); ctx.stroke();
     });
     // needle fuselage
-    const g = ctx.createLinearGradient(-s*0.3, 0, s*0.3, 0);
-    g.addColorStop(0, darken(skin, 0.25)); g.addColorStop(0.5, skin); g.addColorStop(1, lighten(skin, 0.15));
+    const g = flash > 0.01 ? (() => { const q = ctx.createLinearGradient(-s*0.3,0,s*0.3,0); q.addColorStop(0, darken(skin,0.25)); q.addColorStop(0.5, skin); q.addColorStop(1, lighten(skin,0.15)); return q; })()
+      : hullGrad(ctx, 'h3|' + skin + '|' + (s|0), -s*0.3,0,s*0.3,0, darken(skin,0.25), skin, lighten(skin,0.15));
     ctx.fillStyle = g; ctx.strokeStyle = darken(skin, 0.45); ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(0, -s*1.15);
@@ -523,8 +548,8 @@
       ctx.lineTo(d*s*0.45, s*0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
     });
     // broad wedge hull
-    const g = ctx.createLinearGradient(-s*0.7, 0, s*0.7, 0);
-    g.addColorStop(0, darken(skin, 0.3)); g.addColorStop(0.5, skin); g.addColorStop(1, lighten(skin, 0.16));
+    const g = flash > 0.01 ? (() => { const q = ctx.createLinearGradient(-s*0.7,0,s*0.7,0); q.addColorStop(0, darken(skin,0.3)); q.addColorStop(0.5, skin); q.addColorStop(1, lighten(skin,0.16)); return q; })()
+      : hullGrad(ctx, 'h4|' + skin + '|' + (s|0), -s*0.7,0,s*0.7,0, darken(skin,0.3), skin, lighten(skin,0.16));
     ctx.fillStyle = g; ctx.strokeStyle = darken(skin, 0.5); ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(0, -s*1.0);
@@ -667,23 +692,42 @@
     ctx.restore();
   }
 
-  // small autonomous combat drone — orbits the player, fires teal bolts
-  function drawDrone(ctx, x, y, t, ang) {
+  // A COMBAT DRONE FROM THE FLIGHT AROUND THE FLAGSHIP. It points where it is
+  // going, snaps to its target when it shoots, and throws a muzzle flare — so
+  // the swarm reads as a squadron working rather than decoration spinning.
+  // The halo gradient is built once and reused: it is drawn in the drone's own
+  // local space, so it is position-independent, and a full bay puts a dozen of
+  // these on screen every frame.
+  let _drHalo = null;
+  function drawDrone(ctx, x, y, t, ang, flash) {
     ctx.save();
     ctx.translate(x, y);
-    const spin = t * 3 + (ang || 0);
-    // engine glow
-    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 11);
-    g.addColorStop(0, 'rgba(130,255,205,0.5)'); g.addColorStop(1, 'rgba(130,255,205,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 11, 0, 7); ctx.fill();
-    ctx.rotate(spin * 0.4);
+    if (!_drHalo) {
+      _drHalo = ctx.createRadialGradient(0, 0, 1, 0, 0, 11);
+      _drHalo.addColorStop(0, 'rgba(130,255,205,0.5)');
+      _drHalo.addColorStop(1, 'rgba(130,255,205,0)');
+    }
+    ctx.fillStyle = _drHalo; ctx.beginPath(); ctx.arc(0, 0, 11, 0, 7); ctx.fill();
+    ctx.rotate((ang || 0) + Math.PI / 2);
+    // muzzle flare, in front of the nose, on the frame it fires
+    if (flash > 0) {
+      const f = flash > 1 ? 1 : flash;
+      ctx.globalAlpha = 0.75 * f;
+      ctx.fillStyle = '#bfffe4';
+      ctx.beginPath(); ctx.ellipse(0, -9 - 4 * f, 2.2 + 1.6 * f, 5 + 4 * f, 0, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     // body: small dart
     ctx.fillStyle = '#2b3744'; ctx.strokeStyle = '#0d1318'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.2, 4.5); ctx.lineTo(0, 2.4); ctx.lineTo(-4.2, 4.5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    // core light (cheap glow)
-    ctx.globalAlpha = 0.5; ctx.fillStyle = '#7fffcb';
+    // core light (cheap glow), brightening as it cycles its guns
+    ctx.globalAlpha = 0.5 + 0.35 * (flash > 0 ? flash : 0); ctx.fillStyle = '#7fffcb';
     ctx.beginPath(); ctx.arc(0, -0.5, 3.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = '#7fffcb'; ctx.beginPath(); ctx.arc(0, -0.5, 1.7, 0, 7); ctx.fill();
+    // engine wash trailing the nose
+    ctx.globalAlpha = 0.35; ctx.fillStyle = '#4fe0b0';
+    ctx.beginPath(); ctx.ellipse(0, 5.6 + Math.sin(t * 14 + x * 0.1) * 0.9, 1.5, 3.2, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -888,31 +932,43 @@
     ctx.strokeText(label, e.x, by - 5); ctx.fillStyle = '#ffd9c4'; ctx.fillText(label, e.x, by - 5);
   }
 
+  let _boltGrad = null;
   function drawEnemyBolt(ctx, b) {
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.ang);
-    const tg = ctx.createLinearGradient(-14, 0, 4, 0);
-    tg.addColorStop(0, 'rgba(255,60,90,0)'); tg.addColorStop(1, 'rgba(255,90,110,0.8)');
-    ctx.strokeStyle = tg; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    // The trail gradient is identical for every bolt and lives in bolt space —
+    // built once for the session instead of ninety times a frame. The per-bolt
+    // shadowBlur is gone too: a blurred sprite is the most expensive thing a 2D
+    // context can draw, and a bright core reads the same at this size.
+    if (!_boltGrad) {
+      _boltGrad = ctx.createLinearGradient(-14, 0, 4, 0);
+      _boltGrad.addColorStop(0, 'rgba(255,60,90,0)');
+      _boltGrad.addColorStop(1, 'rgba(255,90,110,0.8)');
+    }
+    ctx.strokeStyle = _boltGrad; ctx.lineWidth = 3; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(2, 0); ctx.stroke();
-    if (!(window.GAME && window.GAME.rt && window.GAME.rt.ebolts.length > 20)) { ctx.shadowColor = b.tint || '#ff5a6e'; ctx.shadowBlur = 8; }
     ctx.fillStyle = b.tint || '#ff8a5c';
     ctx.beginPath(); ctx.ellipse(0, 0, 5, 2, 0, 0, 7); ctx.fill();
     ctx.fillStyle = '#ffdade';
     ctx.beginPath(); ctx.arc(1.6, 0, 1.5, 0, 7); ctx.fill();
-    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
-  function drawParticle(ctx, p) {
+  // The additive halo. The CALLER sets 'lighter' once around the whole pass —
+  // doing it per particle flushed the canvas batch 320 times a frame.
+  // ctx.font assignment re-parses a CSS font shorthand every time; a string
+  // compare first is far cheaper and the value is almost always unchanged.
+  let _lastFont = '';
+  function setFont(ctx, f) { if (_lastFont !== f) { ctx.font = f; _lastFont = f; } }
+  function drawParticleGlow(ctx, p) {
     const a = Math.max(0, p.life / p.maxLife);
-    const r2 = p.size * (0.5 + a * 0.9) * 1.45;   // beefier core
-    // additive bloom halo on every particle — reads as heat/energy
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    const r2 = p.size * (0.5 + a * 0.9) * 1.45;
     ctx.globalAlpha = a * (p.glow ? 0.5 : 0.32);
     ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x, p.y, r2 * (p.glow ? 3.4 : 2.4), 0, 7); ctx.fill();
-    ctx.restore();
+  }
+  function drawParticle(ctx, p) {
+    const a = Math.max(0, p.life / p.maxLife);
+    const r2 = p.size * (0.5 + a * 0.9) * 1.45;   // beefier core
     ctx.globalAlpha = a;
     ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x, p.y, r2, 0, 7); ctx.fill();
@@ -925,10 +981,10 @@
   function drawFloat(ctx, f) {
     const a = Math.max(0, f.life / f.maxLife);
     ctx.globalAlpha = a;
-    ctx.font = `800 ${f.size}px Rajdhani, sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
+    setFont(ctx, '800 ' + f.size + 'px Rajdhani, sans-serif'); ctx.textAlign = 'center'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(f.text, f.x, f.y);
     ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
-    if (f.crit) { ctx.font = `800 ${f.size*0.5}px Rajdhani, sans-serif`; ctx.fillStyle = '#ffd24d'; ctx.fillText('CRIT!', f.x, f.y - f.size*0.85); }
+    if (f.crit) { setFont(ctx, '800 ' + (f.size * 0.5) + 'px Rajdhani, sans-serif'); ctx.fillStyle = '#ffd24d'; ctx.fillText('CRIT!', f.x, f.y - f.size*0.85); }
     ctx.globalAlpha = 1;
   }
 
@@ -941,14 +997,17 @@
   // Visual tier driven by the owned HULL CLASS (so buying a bigger hull visibly
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
-    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, aeternum:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2,
+    dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, aeternum:5, eternum:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2,
     xen1:0, xen2:1, xen3:2, xen4:4, xen5:5 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
   // THE AETERNUM is not a ship at all but an artificial WORLD, so it draws larger
   // than anything else in the game. It had no entry before, which meant a
   // planetbreaker rendered at frigate scale.
+  // THE ETERNUM is the Celestial class ABOVE the Titan Sina — 1.5× the Titan on
+  // every stat line — and it was missing here too, so the game's final hull flew
+  // at frigate scale. It draws larger than the Titan Sina, as the class implies.
   const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
-    dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4, aeternum:4.8,
+    dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4, eternum:5.2, aeternum:4.8,
     xen1:0.85, xen2:1, xen3:1.3, xen4:1.7, xen5:2.6 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
@@ -959,7 +1018,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4','xen1','xen2','xen3','xen4','xen5'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','eternum','aeternum','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4','xen1','xen2','xen3','xen4','xen5'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }
@@ -1601,7 +1660,7 @@
   }
 
   window.RENDER = {
-    drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon, skinnedShip, drawCosmeticAura,
+    drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawParticleGlow, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon, skinnedShip, drawCosmeticAura,
     gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES, shipScaleOf,
   };
 })();

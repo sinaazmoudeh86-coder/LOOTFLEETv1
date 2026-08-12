@@ -17,8 +17,8 @@
   const RESPAWN_SEC = 10;         // enemy respawn delay after a kill
   const RESPAWN_SPREAD = 5 * FEET;// respawn within 5 ft of the node
   const PICKUP_RADIUS = 26;       // how close to walk to collect loot
-  const MAGNET_RADIUS = 230;      // LOOT MAGNET attraction range (~5× the old pull) — drops fly to the player
-  const MAGNET_SPEED = 240;       // base px/s a magnetized drop travels (accelerates as it nears you)
+  const MAGNET_RADIUS = 620;      // LOOT MAGNET attraction range — drops fly to the player rather than the player to them
+  const MAGNET_SPEED = 420;       // base px/s a magnetized drop travels (accelerates as it nears you)
   const FIRE_RANGE = 250;         // auto-fire engagement range
   const NODE_COUNT = 9;           // base spawn nodes per zone (scales up — see nodeCount)
   // Zone-scaled feel: deeper zones get a wider world, more spawns, and a more
@@ -34,15 +34,11 @@
     const ahead = level < 100 ? 35 : level < 200 ? 28 : level < 300 ? 14 : level < 400 ? 7 : level < 500 ? 4 : 0;
     return level + ahead;
   }
-  // Inverse of unlockCeil: the LOWEST account level that unlocks zone d.
-  function zoneReqLevel(d) {
-    const bands = [[1, 100, 35], [100, 200, 28], [200, 300, 14], [300, 400, 7], [400, 500, 4], [500, Infinity, 0]];
-    for (const [lo, hi, ahead] of bands) {
-      const L = Math.max(1, d - ahead);
-      if (L >= lo && L < hi) return L;
-    }
-    return d;
-  }
+  // Inverse of unlockCeil: the LOWEST account level that unlocks zone d — which
+  // is also the level the zone is BUILT for, and so the figure every difficulty
+  // label in the game quotes. Lives in CONFIG.zoneCombatLevel so the gate and
+  // the description are the same number by construction.
+  function zoneReqLevel(d) { return C.zoneCombatLevel(d); }
   // Every 11th Grind Zone (11, 22, 33…) is a WAVE ZONE: 25 escalating waves of
   // extreme density ending in a boss (30% Super Boss). Classic free-play only.
   function isWaveZone(zone) { return zone > 0 && zone % 11 === 0; }
@@ -164,6 +160,11 @@
     // clock, not the pilot's run, so ascending mid-season must not cost a player
     // their standing in it.
     'sdread', 'season', 'shipParts',
+    // SPACE CARGO DEFENSE SURVIVES ASCENSION. The event is GATED on ★20, so it
+    // only exists for ascended pilots — wiping it would reset the lifetime record
+    // (deliveries, best condition, Eternums recovered) on exactly the action that
+    // qualifies you for it, and hand back today's spent runs for free.
+    'cargo',
     'startWeek', 'name', 'sellTier', 'keepUpgrades', 'autoEquipAlways', 'auto', 'gameSpeed',
     // LOOT FILTERS ARE SETTINGS, NOT PROGRESS — sell-on-pickup and the pickup
     // floor used to silently reset to defaults on every ascension.
@@ -203,6 +204,20 @@
     // Neither is bought with the pilot's level, so neither goes back to zero
     // when the pilot does.
     'homecit', 'prism', 'prismFleet',
+    // THE PILOT TREE SURVIVES ASCENSION (Aug 2026). Its nodes are not bought
+    // with pilot level — they are bought with ◇ Dread Cores from a WEEKLY raid,
+    // one attempt per tier per week. A built tree is months of real calendar
+    // time, and no amount of play shortens re-earning it, so wiping it made
+    // every ascension a net LOSS of the only account-wide buff in the game and
+    // taught players to never ascend. Unspent cores ride across with it.
+    'pilot', 'dreadCores',
+    // UNLIMITED MODE (coupon) is an account entitlement, not run progress — the
+    // watchdog in redeem.js keys off this flag, so wiping it here would quietly
+    // switch the mode off on the next ascension.
+    'unlimited',
+    // FLIGHT WAIVER (FULL FLEET coupon) is an entitlement too — the hulls ride
+    // across in the hangar, so the licence that lets you fly them must as well.
+    'flightWaiver',
   ];
   // Event / premium hulls are entitlements, not progress — never taken.
   const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
@@ -216,7 +231,7 @@
     // pointing at a wiped account: a wave could complete and hand a Level 1 pilot
     // a captured citadel, an alliance raid could keep transmitting damage, and
     // loot still lying on the ground could be vacuumed up after the reset.
-    rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.alrun = null;
+    rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.alrun = null; rt.cgrun = null;
     rt.beaconSwarm = 0; rt.beaconT = 0; rt.razingClaim = false;
     rt.enemies = []; rt.boss = null; rt.bossAlive = false; rt.superBossAlive = false;
     try { sweepLoot(); } catch (e) {}
@@ -307,13 +322,14 @@
     state.fleet = null; state.drones = 0;   // wing disbanded — re-form it as slots unlock
     state.ascension = keepAsc;             // SHIP ASCENSION KEPT — module tiers & stars ride across
     state.forge = {};                      // Starforge hardpoint tempers reset
-    // PILOT TREE wiped — every node re-earned. Seed the origin core NOW: leaving
-    // this null meant zero tiles rendered on the tree until the next full reload
-    // (boot is the only other place the seed was planted).
-    state.pilot = { nodes: { '0,0': 1 } };
-    if (window.DREAD && window.DREAD.refresh) { try { window.DREAD.refresh(); } catch (e) {} }   // drop the cached bonus aggregate — it still held pre-ascension node buffs
-    state.dreadCores = 0;                  // ◇ CORES are run currency, not an entitlement: they
-                                           // buy the Pilot Tree, so they reset with it
+    // PILOT TREE KEPT — `pilot` and `dreadCores` ride across in ASC_KEEP. Seed
+    // the origin core defensively (a legacy save can arrive with pilot null,
+    // which rendered zero tiles on the tree until the next full reload), then
+    // drop the cached aggregate so the tree's buffs are re-folded into the
+    // freshly reset stat block.
+    if (!state.pilot || !state.pilot.nodes) state.pilot = { nodes: { '0,0': 1 } };
+    state.pilot.nodes['0,0'] = 1;
+    if (window.DREAD && window.DREAD.refresh) { try { window.DREAD.refresh(); } catch (e) {} }
     state.beaconUntil = 0;
     state.shipKills = {};
     hangar.forEach((k) => { state.shipKills[k] = 0; });
@@ -356,7 +372,7 @@
     state.currentSystem = null;
     state.highestUnlocked = 1;
     state.highestDungeonReached = 1;
-    rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null;
+    rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.cgrun = null;
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; state.prismRun = null;
     state.fleet = null; state.drones = 0;   // no wing, no drones — re-form as slots unlock
@@ -756,10 +772,32 @@
       state.level += gained;
       state.skillPoints += gained * C.SKILLS.pointsPerLevel;
       onLevelUp(gained);
+      maybeAscendGate();
       if (state.level >= cap) {
         state.xp = 0; state.capNotified = cap; save();
         if (window.UI && window.UI.showLevelCap) window.UI.showLevelCap(cap);
       }
+    }
+  }
+  // THE ASCENSION GATE ANNOUNCEMENT — fires the moment a pilot crosses half their
+  // level cap, which is where ascending becomes possible. Once PER STAR: the gate
+  // moves up with every ascension (75 · 100 · 125 · 150…), so each new run earns
+  // the notice again, and the flag is stamped with the star count that saw it.
+  // Never a nag beyond that — it states the choice once and gets out of the way.
+  function maybeAscendGate() {
+    let gate = 0, stars = 0;
+    try {
+      if (!window.PASCEND || !window.PASCEND.gateLv) return;
+      gate = window.PASCEND.gateLv() | 0;
+      stars = window.PASCEND.stars() | 0;
+    } catch (e) { return; }
+    if (!gate || (state.level | 0) < gate) return;
+    if (!state.pasc) return;
+    if (state.pasc.gateSeen === stars) return;   // already announced for this star
+    state.pasc.gateSeen = stars;
+    save();
+    if (window.UI && window.UI.showAscendGate) {
+      setTimeout(() => { try { window.UI.showAscendGate(gate, C.levelCap()); } catch (e) {} }, 700);
     }
   }
   function onLevelUp(gained) {
@@ -905,7 +943,7 @@
     if ((state.level | 0) < BEACON_LV) return false;       // not yours yet
     if (state.currentSystem) return false;                 // galaxy / void tile
     if (state.currentDungeon < 1) return false;            // safe hangar
-    if (state.dreadRun || rt.sdrun || rt.hcrun) return false;
+    if (state.dreadRun || rt.sdrun || rt.hcrun || rt.cgrun) return false;
     if (state.prismRun && state.prismRun.active) return false;
     if (rt.siege || rt.waves) return false;                // capture / clone fight
     return true;
@@ -1059,6 +1097,14 @@
   }
   // Living-enemy count without materialising an array — the wave/siege checks ran
   // rt.enemies.filter(...).length every frame purely to test for zero.
+  // In-place compaction — same semantics as arr.filter(x => !x.dead), zero
+  // allocation. Returns the array it was given.
+  function sweepDead(a) {
+    let w = 0;
+    for (let i = 0; i < a.length; i++) { const v = a[i]; if (!v.dead) a[w++] = v; }
+    a.length = w;
+    return a;
+  }
   function livingEnemies() {
     let n = 0;
     for (let i = 0; i < rt.enemies.length; i++) if (!rt.enemies[i].dying) n++;
@@ -1157,7 +1203,7 @@
         burst(b.x, b.y, '#ff7a8a', 6, { speed: 140, life: 0.28, glow: true });
       }
     }
-    rt.ebolts = rt.ebolts.filter((b) => !b.dead);
+    sweepDead(rt.ebolts);
     if (rt.ebolts.length > 90) rt.ebolts.splice(0, rt.ebolts.length - 90);
   }
 
@@ -1425,7 +1471,14 @@
     state.shipKills[state.ship] = (state.shipKills[state.ship] || 0) + 1;
     maybeDropDrone(e);
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
-    gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1));
+    // SPACE CARGO DEFENSE PAYS ON DELIVERY, NOT PER KILL. The instance deploys
+    // far past the pilot's own ceiling, so its hostiles carry the XP and loot of
+    // zones they have not earned — ten minutes of it out-levelled and out-geared
+    // the entire grind. The escort's reward is the MANIFEST: gold, salvage, hard
+    // currency, paid once at the Citadel. Kill gold still lands (the run is a
+    // gold event), but experience and fittings do not.
+    const _cargoRun = !!(rt.cgrun && rt.cgrun.active);
+    if (!_cargoRun) gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1));
     state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1) * (window.PASCEND ? window.PASCEND.mult('gold') : 1) * proMods().gold;   // PILOT: Gold Find · ASCENSION: Prize Courts · BEACON: Wreckfield Tithe
     // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
     // iron & plasma are the rare finds (rarer, but a real grind faucet now).
@@ -1502,7 +1555,7 @@
     commitTileShield();   // first blood in a contested tile arms its 24 h shield
     // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
     const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
-    if (Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
+    if (!_cargoRun && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
       const _q = _swarmKill ? 1 : lootQ();
       let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
@@ -1775,50 +1828,151 @@
   // --------------------------------------------------------------------------
   // MOVEMENT / AI
   // --------------------------------------------------------------------------
+  // ---- FLIGHT MODEL --------------------------------------------------------
+  // The ship holds a velocity and steers it toward where it wants to be, rather
+  // than being written directly onto the line to its target. That single change
+  // is what turns the arena from a set of straight dashes into flight: the hull
+  // banks into a turn, carries momentum out of one, and a retarget nudges the
+  // curve instead of teleporting the heading.
+  // TURN is frame-rate independent (exp), so it behaves identically at 1× and
+  // inside a 10× sub-step. It is deliberately brisk — this is a ship the player
+  // is steering, not a physics toy.
+  // HEADING AND SPEED ARE STEERED SEPARATELY. Easing the velocity VECTOR toward
+  // a new one looks wrong for exactly the reason it is easy to write: blending
+  // (300,0) toward (0,300) passes through (150,150), which is 30% slower than
+  // either. So every time the ship changed target it dipped almost to a stop,
+  // pivoted, and accelerated again — the hard ridge at each pickup. Rotating the
+  // heading at a bounded angular rate while the SPEED eases independently gives
+  // a banked turn that holds its pace the whole way round.
+  const TURN_RATE = 6.5;    // radians/sec of heading change at cruise
+  const ACCEL_RATE = 9;     // how fast the throttle responds
+  function steerArcher(wx, wy, dt) {
+    const a = rt.archer;
+    if (a.vx == null) { a.vx = 0; a.vy = 0; }
+    const wantSp = Math.hypot(wx, wy);
+    const curSp = Math.hypot(a.vx, a.vy);
+    let sp = curSp + (wantSp - curSp) * (1 - Math.exp(-dt * ACCEL_RATE));
+    if (wantSp < 1 && sp < 3) sp = 0;                 // settle, don't creep
+    let ang;
+    if (curSp < 1 || wantSp < 0.001) {
+      ang = wantSp > 0.001 ? Math.atan2(wy, wx) : Math.atan2(a.vy, a.vx);
+    } else {
+      const cur = Math.atan2(a.vy, a.vx);
+      let d = Math.atan2(wy, wx) - cur;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      // EASED, not rate-limited. A fixed max turn rate drew constant-radius
+      // arcs — mechanically stiff. Exponential easing corrects hard at first
+      // and melts into the new line; a slow ship pivots quicker than one at
+      // full burn.
+      const k = 1 - Math.exp(-dt * (6.5 + (curSp < 220 ? 5 : 0)));
+      ang = cur + d * k;
+    }
+    a.vx = Math.cos(ang) * sp;
+    a.vy = Math.sin(ang) * sp;
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+  }
   function moveToward(tx, ty, dt, speed, stopDist) {
     const a = rt.archer;
     const dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy) || 1;
-    if (stopDist && d <= stopDist) return false;
-    // never overshoot the target — at extreme move speeds an uncapped step made
-    // the ship oscillate across its destination every frame (autopilot retargets
-    // each tick, so the thrash also churned the camera and collision sweeps)
-    const step = Math.min(d, speed * dt);
-    a.x += (dx / d) * step;
-    a.y += (dy / d) * step;
-    return true;
+    const nx = dx / d, ny = dy / d;
+    if (!stopDist) {
+      // A waypoint the ship flies THROUGH — loot is collected on contact, so
+      // braking onto it would only stutter the run.
+      steerArcher(nx * speed, ny * speed, dt);
+      return true;
+    }
+    // A station the ship is meant to HOLD. Ease onto it: full speed while the
+    // gap is wide, tapering to nothing AT the ring, and a gentle push back out
+    // if something crowded the ship inside it. Braking starts far enough out
+    // that it settles rather than sailing through and looping back.
+    const gap = d - stopDist;
+    let want = gap * 3.2;
+    if (want > speed) want = speed;
+    else if (want < -speed * 0.45) want = -speed * 0.45;
+    if (gap > -14 && gap < 14) want = 0;        // deadband — park, don't hunt
+    steerArcher(nx * want, ny * want, dt);
+    return gap > 0;
   }
   function autopilot(dt) {
     const a = rt.archer, s = rt.stats, sp = s.moveSpeedPx;
     // 1) collect any ground loot first (the "pick everything up" promise)
     // distant drops only — anything inside magnet range flies to the ship on
     // its own, so the operator keeps fighting instead of fetching every pickup.
-    const loot = rt.ground.filter((g) => !g.lost && !g.dead && Math.hypot(g.x - a.x, g.y - a.y) > MAGNET_RADIUS * (window.DREAD ? window.DREAD.mult('pickupRadius') : 1) * 0.9);
+    const magR = MAGNET_RADIUS * (window.DREAD ? window.DREAD.mult('pickupRadius') : 1);
+    const loot = rt.ground.filter((q) => !q.lost && !q.dead && Math.hypot(q.x - a.x, q.y - a.y) > magR);
+    // ONE TARGET, HELD UNTIL THE MAGNET TAKES IT. The old 25%-closer swap rule
+    // re-litigated the choice every tick while the field kept changing under
+    // it, and a hand-off could pick a drop directly BEHIND the ship — together
+    // that is the zig-zag. The target is dropped only when it is gone or the
+    // magnet has it; a new one is chosen at most 5×/sec, scored by distance ×
+    // misalignment with the CURRENT HEADING, so the ship takes the field in one
+    // flowing sweep and never doubles back for a drop the magnet will finish.
+    let tgt = rt.lootTgt;
+    if (!tgt || tgt.dead || tgt.lost ||
+        (tgt.x - a.x) ** 2 + (tgt.y - a.y) ** 2 <= magR * magR) { tgt = null; rt.lootTgt = null; rt.lootT = 0; }
     if (loot.length) {
-      loot.sort((g, h) => ((g.x-a.x)**2+(g.y-a.y)**2)-((h.x-a.x)**2+(h.y-a.y)**2));
-      moveToward(loot[0].x, loot[0].y, dt, sp);
-      return;
+      rt.lootT = (rt.lootT || 0) - dt;
+      if (!tgt && rt.lootT <= 0) {
+        rt.lootT = 0.2;
+        const hd = Math.atan2(a.vy || 0, (a.vx || 0) || 1);
+        let bs = Infinity;
+        for (const q of loot) {
+          const dx = q.x - a.x, dy = q.y - a.y, d2 = dx * dx + dy * dy;
+          let da = Math.atan2(dy, dx) - hd;
+          while (da > Math.PI) da -= Math.PI * 2;
+          while (da < -Math.PI) da += Math.PI * 2;
+          const sc = d2 * (1 + Math.abs(da) * 0.6);   // behind costs ~3× as far
+          if (sc < bs) { bs = sc; tgt = q; }
+        }
+        rt.lootTgt = tgt;
+      }
+      if (tgt) { moveToward(tgt.x, tgt.y, dt, sp); return; }
+      // between targets for a beat — keep flying the current line, don't stall
+      if (Math.abs(a.vx || 0) + Math.abs(a.vy || 0) > 40) { steerArcher(a.vx, a.vy, dt); return; }
     }
     // 2) low health → kite away from the nearest threat
     const threat = nearestEnemy();
     if (threat && a.hp < s.maxHp * 0.3) {
+      // Fleeing goes through the flight model like everything else — it used to
+      // write position directly, which teleported the hull sideways the instant
+      // health crossed the threshold.
       const dx = a.x - threat.x, dy = a.y - threat.y, d = Math.hypot(dx, dy) || 1;
-      a.x = Math.max(20, Math.min(rt.worldW-20, a.x + (dx/d) * sp * dt));
-      a.y = Math.max(20, Math.min(rt.worldH-20, a.y + (dy/d) * sp * dt));
+      steerArcher((dx / d) * sp, (dy / d) * sp, dt);
+      a.x = Math.max(20, Math.min(rt.worldW - 20, a.x));
+      a.y = Math.max(20, Math.min(rt.worldH - 20, a.y));
       return;
     }
     // 3) approach nearest enemy to a comfortable firing distance, then hold
-    if (threat) { moveToward(threat.x, threat.y, dt, sp, FIRE_RANGE * 0.62); return; }
+    if (threat) {
+      // HOLD A TARGET. nearestEnemy() is re-evaluated every tick, so two
+      // hostiles at similar range swapped constantly and the ship wove between
+      // them. Stay with the current one until it dies or another is clearly
+      // closer — the same commitment rule the loot run uses.
+      let t2 = rt.aiTgt;
+      if (!t2 || t2.dead || t2.dying || t2.hp <= 0) t2 = threat;
+      else if (t2 !== threat) {
+        const cd = (t2.x - a.x) ** 2 + (t2.y - a.y) ** 2;
+        const nd = (threat.x - a.x) ** 2 + (threat.y - a.y) ** 2;
+        if (nd < cd * 0.56) t2 = threat;      // 0.56 ≈ 25% nearer in real distance
+      }
+      rt.aiTgt = t2;
+      moveToward(t2.x, t2.y, dt, sp, FIRE_RANGE * 0.62);
+      return;
+    }
     // 4) nothing around → drift toward the nearest pending spawn node
     let node = null, bd = Infinity;
     for (const n of rt.nodes) { const d = (n.x-a.x)**2+(n.y-a.y)**2; if (d < bd) { bd = d; node = n; } }
     if (node) moveToward(node.x, node.y, dt, sp, 40);
   }
   function manualMove(dt) {
-    const a = rt.archer, sp = rt.stats.moveSpeedPx;
-    if (rt.joy.active && (rt.joy.x || rt.joy.y)) {
-      a.x += rt.joy.x * sp * dt;
-      a.y += rt.joy.y * sp * dt;
-    }
+    const sp = rt.stats.moveSpeedPx;
+    // Releasing the stick asks for zero velocity rather than snapping to a
+    // stop, so the ship coasts the last few pixels — the same steering path as
+    // the autopilot, so both modes fly identically.
+    if (rt.joy.active && (rt.joy.x || rt.joy.y)) steerArcher(rt.joy.x * sp, rt.joy.y * sp, dt);
+    else steerArcher(0, 0, dt);
   }
 
   // --------------------------------------------------------------------------
@@ -1865,6 +2019,9 @@
   // for a relog that never carries the data.
   let _stallN = 0, _stallT = 0, _visT = 0;
   document.addEventListener('visibilitychange', () => { _visT = performance.now(); });
+  // Kept but no longer called — both call sites were silenced in Aug 2026 because
+  // the banner fired on ordinary sessions (a backgrounded phone reads as a stall).
+  // Left in place so re-enabling is a one-line change, not a rewrite.
   function crashBanner(msg) {
     try {
       let bar = document.getElementById('lf-recover');
@@ -1884,7 +2041,8 @@
     const mem = (performance && performance.memory) ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '?';
     return JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
       en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
-      ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem });
+      ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length,
+      cg: (window.CARGORUN && window.CARGORUN.sample) ? window.CARGORUN.sample() : 0, heap: mem });
   }
   function engageRecovery(reason) {
     if (engageRecovery._t && performance.now() - engageRecovery._t < 10000) return;
@@ -1897,8 +2055,8 @@
     } catch (e) {}
     const sample = liveSample();
     try { localStorage.setItem('lf_play', sample); localStorage.setItem('lf_err', reason); } catch (e) {}
-    crashBanner('⚠ RECOVERY — the game stalled (<b>' + reason + '</b>). Effects trimmed. Screenshot this and report it. · build ' + (window.LF_BUILD || '?')
-      + '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + sample.replace(/[<>]/g, '') + '</div>');
+    // Banner suppressed with the boot one (Aug 2026) — the trimming still happens,
+    // silently, and the breadcrumb + console warning keep the forensics.
     try { console.warn('[LOOTFLEET] recovery engaged: ' + reason + ' ' + sample); } catch (e) {}
   }
   function loop(now) {
@@ -2016,6 +2174,8 @@
     singularityTick(dt);
     // ✦ AETERNUM: lance cycle, the shot, and every burning fracture lane
     lanceTick(dt);
+    // ✦ ETERNUM: the five death beams — continuous locks, no cooldown
+    beamTick(dt);
     // defending fleets run shield repair while they hold the field
     cloneTick(dt);
 
@@ -2033,18 +2193,22 @@
       }
     }
     separateEnemies();
-    rt.enemies = rt.enemies.filter((e) => !e.dead);
+    sweepDead(rt.enemies);
     updateEbolts(dt);
     // absolute projectile ceiling — no fire source may outrun impact/expiry
     if (rt.projectiles.length > 260) rt.projectiles.splice(0, rt.projectiles.length - 260);
 
     // carrier drones: orbit the ship and fire on nearby enemies
     updateDrones(dt);
-    // VERIDIAN RESONANCE AURA — constant burn to everything near the ship,
-    // scaling with the pilot's own DPS (35% of theoretical DPS across the field).
-    if (state.ship === 'veridian' && rt.archer && !rt.archer.dead) {
-      const R = 260, a = rt.archer;
-      const aps = ((rt.stats && rt.stats.theoryDps) || 0) * 0.35;
+    // STANDING DAMAGE AURA — any hull with `dpsAura` burns everything near it,
+    // scaling with the pilot's own DPS. Veridian 0.35 (resonance), Eternum 0.9
+    // (the celestial field). `dpsAura:true` on old configs reads as 0.35.
+    const _auraSh = C.SHIP_BY_KEY[state.ship];
+    if (_auraSh && _auraSh.dpsAura && rt.archer && !rt.archer.dead) {
+      const cel = state.ship === 'eternum';
+      const R = cel ? 420 : 260, a = rt.archer;
+      const share = _auraSh.dpsAura === true ? 0.35 : _auraSh.dpsAura;
+      const aps = ((rt.stats && rt.stats.theoryDps) || 0) * share;
       if (aps > 0) {
         rt.vaFloatT = (rt.vaFloatT || 0) - dt;
         for (const en of rt.enemies) {
@@ -2054,7 +2218,7 @@
           const k = en.takeDamage(dmg);
           rt.dmgWindow.push({ t: rt.time, dmg });
           if (rt.vaFloatT <= 0 && rt.floats.length < 24) {
-            rt.floats.push(new E.FloatText(en.x, en.y - en.size, formatNum(aps * (rt.dmgShow || 1)) + '/s', { color: '#7dff9e', size: 22 }));
+            rt.floats.push(new E.FloatText(en.x, en.y - en.size, formatNum(aps * (rt.dmgShow || 1)) + '/s', { color: cel ? '#9fd0ff' : '#7dff9e', size: 22 }));
             rt.vaFloatT = 0.7;
           }
           if (k) onKill(en);
@@ -2075,6 +2239,9 @@
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineTick) { try { window.ALBOSS.engineTick(dt, rt); } catch (e) {} }
     // HOME CITADEL — wave defense on the real engine (fort objective, raider waves).
     if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineTick) { try { window.HOMECIT.engineTick(dt, rt); } catch (e) {} }
+    // SPACE CARGO DEFENSE — escort mission on the real engine (the cargo hull,
+    // its route, raider aggro, void anomalies, arrival & loss).
+    if (rt.cgrun && rt.cgrun.active && window.CARGO && window.CARGO.engineTick) { try { window.CARGO.engineTick(dt, rt); } catch (e) {} }
 
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
@@ -2089,6 +2256,7 @@
         if (window.SDREAD && window.SDREAD.onDeath) { try { window.SDREAD.onDeath(); } catch (e) {} }
         if (window.ALBOSS && window.ALBOSS.onDeath) { try { window.ALBOSS.onDeath(); } catch (e) {} }
         if (window.HOMECIT && window.HOMECIT.onDeath) { try { window.HOMECIT.onDeath(); } catch (e) {} }
+        if (rt.cgrun && window.CARGO && window.CARGO.onDeath) { try { window.CARGO.onDeath(); } catch (e) {} }
         return;
       }
       const killer = a.killer;
@@ -2121,12 +2289,15 @@
       if (window.UI) window.UI.onDeathReturn(lost, killerName, diedZone, hullReset, lostList);
       // fort defense death: settle the wave as a breach BEFORE the hangar tow
       if (rt.hcrun && window.HOMECIT && window.HOMECIT.onDeath) { try { window.HOMECIT.onDeath(); } catch (e) {} }
+      // CARGO DEFENSE death: the module settles the run (cargo lost AND the
+      // flagship's hull upgrades stripped) before the tow.
+      if (rt.cgrun && window.CARGO && window.CARGO.onDeath) { try { window.CARGO.onDeath(); } catch (e) {} }
       goSafeHangar();   // every shipwreck tows to the SAFE hangar — never respawn into a hot zone
     }
 
     // projectiles
     for (const p of rt.projectiles) { p.update(dt); if (p.hit) resolveHit(p); }
-    rt.projectiles = rt.projectiles.filter((p) => !p.dead);
+    sweepDead(rt.projectiles);
 
     // ground loot pickups + LOOT MAGNET: drops within range fly toward the
     // player (accelerating as they near) and are collected on contact.
@@ -2146,16 +2317,16 @@
         }
       }
     }
-    rt.ground = rt.ground.filter((g) => !g.dead);
+    sweepDead(rt.ground);
     if (rt.ground.length > 60) rt.ground.splice(0, rt.ground.length - 60);
 
     // particles + floats (hard caps to bound per-frame draw cost)
-    for (const p of rt.particles) p.update(dt); rt.particles = rt.particles.filter((p) => !p.dead);
+    for (const p of rt.particles) p.update(dt); sweepDead(rt.particles);
     // storm bolts fade fast; flash decays
-    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; rt.bolts = rt.bolts.filter((b) => b.t > 0); const _bc = window.__lfPlayRecovery ? 16 : 80; if (rt.bolts.length > _bc) rt.bolts.splice(0, rt.bolts.length - _bc); }
+    if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; { let w = 0; for (let i = 0; i < rt.bolts.length; i++) if (rt.bolts[i].t > 0) rt.bolts[w++] = rt.bolts[i]; rt.bolts.length = w; } const _bc = window.__lfPlayRecovery ? 16 : 80; if (rt.bolts.length > _bc) rt.bolts.splice(0, rt.bolts.length - _bc); }
     if (rt.stormFlash > 0) rt.stormFlash -= dt;
     if (rt.particles.length > 320) rt.particles.splice(0, rt.particles.length - 320);
-    for (const f of rt.floats) f.update(dt); rt.floats = rt.floats.filter((f) => !f.dead);
+    for (const f of rt.floats) f.update(dt); sweepDead(rt.floats);
     if (rt.floats.length > 60) rt.floats.splice(0, rt.floats.length - 60);
 
     // BATCHED EQUIP + SELL FLUSH (Jul 2026): running full-fleet autoEquip and
@@ -2237,10 +2408,17 @@
     const list = rt.enemies;
     for (let i = 0; i < list.length; i++) {
       const a = list[i]; if (a.dying || a.spawnT < 0.5) continue;
+      const ax = a.x, ay = a.y, asz = a.size;
       for (let j = i + 1; j < list.length; j++) {
         const b = list[j]; if (b.dying || b.spawnT < 0.5) continue;
-        const dx = b.x - a.x, dy = b.y - a.y, dist = Math.hypot(dx, dy) || 0.01, min = a.size + b.size;
-        if (dist < min) { const push = (min - dist) * 0.5, ux = dx/dist, uy = dy/dist; a.x -= ux*push; a.y -= uy*push; b.x += ux*push; b.y += uy*push; }
+        const min = asz + b.size;
+        const dx = b.x - ax, dy = b.y - ay;
+        if (dx > min || dx < -min || dy > min || dy < -min) continue;   // box reject
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= min * min) continue;                                   // circle reject
+        const dist = Math.sqrt(d2) || 0.01;                              // only now
+        const push = (min - dist) * 0.5, ux = dx / dist, uy = dy / dist;
+        a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
       }
     }
   }
@@ -2283,6 +2461,8 @@
     if (rt.holes && rt.holes.length) { try { drawSingularities(ctx); } catch (e) {} }
     // ✦ EVENT HORIZON LANCE — alignment line, the beam, and its fracture lanes
     try { drawLance(ctx); } catch (e) {}
+    // ✦ ETERNUM DEATH BEAMS — continuous locks on the nearest hostiles
+    try { drawBeams(ctx); } catch (e) {}
     // PRISM MINING — ore field + miners, drawn in world space just above the
     // arena floor (enemies & player render on top).
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.render) { try { window.PRISM.render(ctx, rt.time, rt); } catch (e) {} }
@@ -2294,7 +2474,15 @@
         ctx.beginPath(); ctx.arc(n.x, n.y, 6 + (1-k)*10, 0, 7); ctx.stroke();
       }
     }
-    for (const p of rt.particles) R.drawParticle(ctx, p);
+    // Two passes, two state changes — every additive halo under one 'lighter',
+    // then every core. Previously each particle switched the mode twice.
+    if (rt.particles.length) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (const p of rt.particles) R.drawParticleGlow(ctx, p);
+      ctx.restore();
+      for (const p of rt.particles) R.drawParticle(ctx, p);
+      ctx.globalAlpha = 1;
+    }
     // STORM CONDUIT bolts — cyan glow pass + white-hot core pass
     if (rt.bolts && rt.bolts.length) {
       ctx.save();
@@ -2316,7 +2504,7 @@
     for (const e of rt.enemies) R.drawEnemy(ctx, e);
     for (const es of (rt.escorts || [])) R.drawEscort(ctx, es.key, es.x, es.y, rt.time, es.heal);
     R.drawArcher(ctx, rt.archer.x, rt.archer.y, 1.5, rt.archer, state.equipped, rt.time);
-    for (const dr of rt.drones) R.drawDrone(ctx, dr.x, dr.y, rt.time, dr.ang);
+    for (const dr of rt.drones) R.drawDrone(ctx, dr.x, dr.y, rt.time, dr.face, dr.flash);
     for (const p of rt.projectiles) R.drawArrow(ctx, p);
     for (const b of rt.ebolts) R.drawEnemyBolt(ctx, b);
     for (const f of rt.floats) R.drawFloat(ctx, f);
@@ -2390,6 +2578,9 @@
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineRender) { try { window.ALBOSS.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOME CITADEL — the fort, its shield and turret fire, drawn in-world.
     if (rt.hcrun && rt.hcrun.active && window.HOMECIT && window.HOMECIT.engineRender) { try { window.HOMECIT.engineRender(ctx, rt.time, rt); } catch (e) {} }
+    // SPACE CARGO DEFENSE — the cargo hull, its lane, the citadel ahead and every
+    // live void anomaly, drawn in world space.
+    if (rt.cgrun && rt.cgrun.active && window.CARGO && window.CARGO.engineRender) { try { window.CARGO.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
     if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
   }
@@ -2735,6 +2926,7 @@
   }
   function shipUnlocked(key) {
     const ship = C.SHIP_BY_KEY[key]; if (!ship) return false;
+    if (awardOnly(ship)) return false;   // earned, never unlocked by progress
     if (ship.tier === 0) return true;
     if (ship.megaCost) return (state.level || 1) >= (ship.reqLevel || 1);   // DREAD-class: level-gated direct buy
     // Jul 2026: no prior-hull requirement — recover the blueprint and hit the
@@ -2776,7 +2968,7 @@
     const bp = hasBlueprint(key);
     const prevOwned = true;
     const killsMet = have >= need;
-    const unlocked = bp && prevOwned && killsMet;
+    const unlocked = !awardOnly(ship) && bp && prevOwned && killsMet;
     const resAfford = ship.resPrice ? canAfford(ship.resPrice) : null;
     return { key, owned, active, unlocked,
              affordable: ship.resPrice ? resAfford : state.gold >= ship.price,
@@ -2784,9 +2976,15 @@
              hasBlueprint: bp, bpZone: ship.bpZone, prevKey: prev, prevOwned,
              killsHave: have, killsNeed: need, killsMet, price: ship.price };
   }
+  // AWARD-ONLY HULLS are never for sale, in any currency. hasBlueprint() returns
+  // true for any hull with no bpZone and killsMet is trivially true at reqKills 0,
+  // so a price-0 award hull (Veridian, the Eternum, event/faction drops) would
+  // otherwise read as "unlocked and affordable" and hand itself over for free.
+  function awardOnly(s) { return !!(s && (s.celestial || s.missionShip || s.event || s.alienTech || s.emberTech || s.flyReq)); }
   function buyShip(key) {
     const ship = C.SHIP_BY_KEY[key];
     if (!ship || state.ownedShips[key]) return { ok: false, reason: 'owned' };
+    if (awardOnly(ship)) return { ok: false, reason: 'award' };
     if (!shipUnlocked(key)) return { ok: false, reason: 'locked' };
     // DREAD-class hulls: paid in a MIX of every currency.
     if (ship.megaCost) {
@@ -2821,8 +3019,28 @@
     if (window.UI) window.UI.refreshAll();
     return true;
   }
+  // ---- FLIGHT LICENCE ------------------------------------------------------
+  // Some hulls are OWNED long before they are FLYABLE. A hull with `flyReq` is
+  // checked on every switch, not only on grant: the Eternum can sit in a hangar
+  // for weeks while the pilot works toward the licence, and a Pilot Ascension
+  // must never leave someone flying a hull they no longer qualify for.
+  function canFlyShip(key) {
+    const sh = C.SHIP_BY_KEY[key]; const rq = sh && sh.flyReq;
+    if (!rq) return { ok: true };
+    // FLIGHT WAIVER — the FULL FLEET coupon hands over every hull, and a hull you
+    // own but may not fly is not a hull you were given. The waiver clears every
+    // licence requirement (missions, stars, prerequisite hull) for the account.
+    if (state.flightWaiver) return { ok: true, waived: true };
+    const miss = { missions: state.lifetimeMissions | 0, stars: ascStars(), ship: !!(state.ownedShips || {})[rq.ship] };
+    const need = [];
+    if (rq.missions && miss.missions < rq.missions) need.push({ k: 'missions', have: miss.missions, want: rq.missions });
+    if (rq.stars && miss.stars < rq.stars) need.push({ k: 'stars', have: miss.stars, want: rq.stars });
+    if (rq.ship && !miss.ship) need.push({ k: 'ship', have: 0, want: 1, ship: rq.ship });
+    return { ok: !need.length, need, req: rq, have: miss };
+  }
   function switchShip(key) {
     if (!state.ownedShips[key] || key === state.ship) return false;
+    if (!canFlyShip(key).ok) return false;
     // stash current fitting, then load (or init) the target ship's fitting
     state.fittings[state.ship] = state.equipped;
     const next = state.fittings[key] || {};
@@ -2850,17 +3068,36 @@
     if (state.drones == null) state.drones = 0;
     state.drones = Math.max(0, Math.min(cap, state.drones | 0));
   }
+  const DRONE_PER_SPRITE = 14;   // real drones represented by one visible craft
+  const DRONE_MAX_VIS = 16;      // ceiling on visible craft, whatever the bay holds
   function spawnDrones() {
     clampDrones();
     const n = state.drones, prev = rt.drones || [];
     rt.drones = [];
     const ax = rt.archer ? rt.archer.x : 0, ay = rt.archer ? rt.archer.y : 0;
-    for (let i = 0; i < n; i++) {
+    const vis = n <= 0 ? 0 : Math.max(1, Math.min(DRONE_MAX_VIS, Math.ceil(n / DRONE_PER_SPRITE)));
+    for (let i = 0; i < vis; i++) {
       const p = prev[i];
-      rt.drones.push({ ang: p ? p.ang : (Math.PI * 2 * i / Math.max(1, n)), cd: p ? p.cd : Math.random() * 0.5, x: ax, y: ay });
+      // Deterministic per-index parameters, so the swarm is stable across a
+      // rebuild but no two craft share a lane, a speed or a bob.
+      const f1 = ((i * 0.6180339887) % 1), f2 = ((i * 0.7548776662) % 1), f3 = ((i * 0.3247179572) % 1);
+      rt.drones.push({
+        ang: p ? p.ang : f1 * Math.PI * 2,
+        cd: p ? p.cd : Math.random() * 0.5,
+        x: p ? p.x : ax, y: p ? p.y : ay,
+        rad: 0.68 + f1 * 0.85,            // own orbit lane
+        spd: 0.55 + f2 * 1.05,            // own angular pace
+        dir: (i % 4 === 0) ? -1 : 1,      // a few run retrograde
+        w1: f2 * Math.PI * 2,             // bob phases
+        w2: f3 * Math.PI * 2,
+        face: 0, flash: 0, n: 1,
+      });
     }
+    // spread the real bay across the sprites so total damage is unchanged
+    for (let i = 0; i < vis; i++) rt.drones[i].n = Math.floor(n / vis) + (i < n % vis ? 1 : 0);
     rebuildEscorts(); // fleet escorts redeploy alongside the drone screen
   }
+
   // On a kill, a carrier with an empty bay has a chance to capture a drone.
   function maybeDropDrone(e) {
     const cap = shipDroneCount();
@@ -2875,13 +3112,28 @@
     const list = rt.drones;
     if (!list || !list.length) return;
     const a = rt.archer, s = rt.stats, cap = list.length;
-    const orbit = C.DRONE.orbit + cap * 1.6;
+    const base = C.DRONE.orbit * 2.35 + Math.min(96, cap * 4.5);
+    const T = rt.time;
     for (let i = 0; i < list.length; i++) {
       const dr = list[i];
-      dr.ang += C.DRONE.spin * dt;
-      const ta = dr.ang + (Math.PI * 2 * i / cap);
-      dr.x = a.x + Math.cos(ta) * orbit;
-      dr.y = a.y + Math.sin(ta) * orbit;
+      // ---- HIVE ORBIT ------------------------------------------------------
+      // Two out-of-phase bobs on the radius and a third on the angle: the path
+      // never closes on itself, so the craft weaves around the flagship instead
+      // of tracing a circle. Everything is seeded per craft, so no two agree.
+      dr.ang += C.DRONE.spin * dr.spd * dr.dir * dt;
+      const wob = Math.sin(T * 1.6 + dr.w1) * 0.55 + Math.sin(T * 0.83 + dr.w2) * 0.4;
+      const rad = base * dr.rad + wob * 34;
+      const ta = dr.ang + Math.sin(T * 0.7 + dr.w2) * 0.35;
+      const tx = a.x + Math.cos(ta) * rad;
+      const ty = a.y + Math.sin(ta) * rad * 0.84;      // slightly flattened
+      // chase the station rather than snapping to it — this is what makes the
+      // swarm trail and bunch as the flagship manoeuvres
+      const k = 1 - Math.exp(-dt * (5 + dr.spd * 3));
+      const px = dr.x, py = dr.y;
+      dr.x += (tx - dr.x) * k;
+      dr.y += (ty - dr.y) * k;
+      if (dr.flash > 0) dr.flash -= dt * 6;
+      else if (Math.abs(dr.x - px) + Math.abs(dr.y - py) > 0.4) dr.face = Math.atan2(dr.y - py, dr.x - px);
       dr.cd -= dt;
       if (a.dead || rt.awaitingRespawn) continue;
       if (dr.cd > 0) continue;                 // scan only when ready to fire
@@ -2893,7 +3145,9 @@
         const crowd2 = rt.projectiles.length > 120;
         const p = new E.Projectile(dr.x, dr.y, best, 0, false);
         const crit = Math.random() * 100 < s.critChance;
-        let dmg = s.attackDamage * C.DRONE.dmgFrac * (0.9 + Math.random() * 0.2);
+        // ONE SPRITE, MANY GUNS. dr.n is the flight this craft stands for, so
+        // the bay's damage is unchanged no matter how few are drawn.
+        let dmg = s.attackDamage * C.DRONE.dmgFrac * (0.9 + Math.random() * 0.2) * Math.max(1, dr.n);
         if (crit) dmg *= 1 + s.critDamage / 100;
         if (state.auto) dmg *= 0.8;
         p.damage = Math.max(1, Math.round(dmg * (crowd2 ? 2 : 1))); p.crit = crit; p.drone = true;
@@ -2904,6 +3158,8 @@
         // cap the shot simply doesn't spawn — next tick fires again.
         if (rt.projectiles.length < 240) rt.projectiles.push(p);
         dr.cd = (crowd2 ? 2 : 1) / C.DRONE.fireRate;
+        // turn to the shot and light the muzzle, so the swarm visibly fights
+        dr.face = p.angle; dr.flash = 1;
         rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.12, size: 1.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
       }
     }
@@ -3215,6 +3471,7 @@
     if (state.auto) return;
     state.auto = true;
     rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
+    try { save(); } catch (e) {}   // persist NOW — a reload must not resurrect stale manual
     try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
   }
 
@@ -3284,7 +3541,7 @@
     sweepLoot();
     rt.nodes = []; rt.enemies = []; rt.ground = [];
     rt.bossInit = rt.bossTimer = 1e9;
-    rt.alrun = null; rt.hcrun = null;   // one event at a time — module watchdogs settle any live run
+    rt.alrun = null; rt.hcrun = null; rt.cgrun = null;   // one event at a time — module watchdogs settle any live run
     rt.sdrun = { active: true, started: Date.now() };
     const b = spawnServerDreadBoss();
     rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
@@ -3349,7 +3606,7 @@
     sweepLoot();
     rt.nodes = []; rt.enemies = []; rt.ground = [];
     rt.bossInit = rt.bossTimer = 1e9;
-    rt.sdrun = null; rt.hcrun = null;   // one event at a time — module watchdogs settle any live run
+    rt.sdrun = null; rt.hcrun = null; rt.cgrun = null;   // one event at a time — module watchdogs settle any live run
     rt.alrun = { active: true, started: Date.now() };
     const pool = allowedEnemies();
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
@@ -3415,18 +3672,93 @@
     rt.hcrun = null;
     respawnAt(Math.max(1, state.currentDungeon || 1));
   }
+  // ===========================================================================
+  // SPACE CARGO DEFENSE — deploy on the REAL battle engine
+  // ---------------------------------------------------------------------------
+  // Identical treatment to the Home Citadel defense: the pilot's deepest zone,
+  // a clean arena, real stats, real hulls, real loot. window.CARGO owns the
+  // cargo hull, the route, spawns, win/loss and the payout. This is the SAME
+  // combat as the rest of the game — there is no separate simulation.
+  // ===========================================================================
+  function startCargoRun(opts) {
+    const tier = Math.max(1, (opts && opts.tier) | 0 || 1);
+    // THE INSTANCE IS OVER-LEVELLED ON PURPOSE. A cargo run is not the zone you
+    // farm — it is deliberately deeper than anything you normally fly, and the
+    // depth scales with the shipment: Cargo I sits ~13% past your ceiling, Omega
+    // V lands roughly 65% deeper. Enemy HP, damage and loot all ride the zone
+    // curve, so this raises the whole fight at once.
+    // NOTE: reachZone() is deliberately NOT called — it would bank this depth as
+    // highestDungeonReached and launder free unlock ceiling out of the event.
+    const base = Math.max(1, state.highestUnlocked || 1, state.level | 0);
+    const zone = Math.max(1, Math.min(999, Math.round(base * (1 + 0.10 * tier)) + tier * 6));
+    state.currentDungeon = zone;
+    state.currentSystem = null;
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null; rt.siege = null; rt.waves = null; rt.sdrun = null; rt.alrun = null; rt.hcrun = null;
+    resetZone();
+    // resetZone re-arms siege/wave machinery on citadel zones — the event owns
+    // this arena, so strip it again after the rebuild.
+    rt.siege = null; rt.waves = null;
+    sweepLoot();
+    rt.nodes = []; rt.enemies = []; rt.ground = [];
+    rt.bossInit = rt.bossTimer = 1e9;   // no zone boss — the module spawns the assault
+    rt.cgrun = { active: true, zone, tier, started: Date.now() };
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 3;
+    rt.archer.x = rt.worldW / 2; rt.archer.y = rt.worldH * 0.72;
+    if (window.UI) window.UI.refreshAll(); save();
+    return { zone, worldW: rt.worldW, worldH: rt.worldH };
+  }
+  // one zone-native hostile for the escort — real art, real AI, real drops.
+  // `toCargo` hands it the cargo proxy as its raid target so it besieges the
+  // freighter instead of the pilot (same mechanism the fort defense uses).
+  function spawnCargoRaider(x, y, opts) {
+    if (!rt.cgrun) return null;
+    const pool = allowedEnemies();
+    const o = opts || {};
+    const type = o.boss ? pool[pool.length - 1] : pool[(Math.random() * Math.max(1, pool.length - (o.elite ? 1 : 2)) + (o.elite ? 1 : 0)) | 0];
+    const e = new E.Enemy(type, state.currentDungeon, x, y);
+    e.isBoss = !!o.boss; e.isCitadel = false;
+    if (o.hpMult) { e.maxHp = e.hp = Math.max(1, e.maxHp * o.hpMult); }
+    if (o.raidTarget) { e.raidTarget = o.raidTarget; e.isRaider = true; }
+    e.cgRole = o.role || 'fighter';
+    rt.enemies.push(e);
+    return e;
+  }
+  function endCargoRun() {
+    rt.cgrun = null;
+    respawnAt(Math.max(1, state.currentDungeon || 1));
+  }
+  // ---- HULL UPGRADE FORFEIT ------------------------------------------------
+  // Dying on an escort run does NOT take the ship. It takes everything the
+  // SHIPYARD built into it: the flagship's hull upgrade levels are stripped back
+  // to stock (Lv 1). The hull itself, its Ship Ascension, and every fitted item
+  // stay exactly where they are — you keep flying the same ship, rebuilt from
+  // nothing.
+  function stripHullUpgrades() {
+    const key = state.ship, sh = C.SHIP_BY_KEY[key];
+    if (!sh) return null;
+    if (!state.shipLevels) state.shipLevels = {};
+    const had = Math.max(1, state.shipLevels[key] | 0 || 1);
+    if (had <= 1) return { ship: sh.name, key, levels: 0, wasLevel: 1 };
+    state.shipLevels[key] = 1;
+    refreshStats(); save();
+    if (window.UI) window.UI.refreshAll();
+    return { ship: sh.name, key, levels: had - 1, wasLevel: had };
+  }
   function respawnAt(d) {
     if (d > state.highestUnlocked) d = state.highestUnlocked;
     state.currentDungeon = d;
     reachZone(d);
     rt.awaitingRespawn = false;
     rt.archer.dead = false; rt.archer.killer = null;
-    rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.cgrun = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null;
     resetZone();
     // generous safety on redeploy: 4s invulnerability + a spawn grace window so
     // the player is never instantly swarmed after choosing a zone.
     rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 4;
+    if (d >= 1) armAuto();          // a redeploy is a zone entry — autopilot on
     { const swarm = isSwarmZone(state.currentDungeon) && !state.currentSystem;
       rt.nodes.forEach((n, i) => { n.respawnT = swarm ? 1.5 + i * 0.07 : 2.2 + i * 0.45; }); }
     if (window.UI) window.UI.refreshAll(); save();
@@ -3692,17 +4024,14 @@
   // end-of-battle popup can tell the player either way. ("Salvage" is already
   // this game's word for scrapping items into resources — kept distinct.)
   //
-  // PITY (HIDDEN): only ~1 tile in 5 is invaded, so a low-ring pilot can
-  // legitimately clear dozens of zones and see nothing. Every invaded clear that
-  // misses banks a counter, and XEN_PITY misses in a row forces the next one to
-  // pay. The counter resets on any win and persists in the save.
+  // NO PITY FLOOR (Aug 2026). Every invaded clear that misses still banks a dry
+  // counter for debugging, but nothing forces a win any more: alongside the 5× rate
+  // cut in galaxy.js, the guarantee was the main reason Kaevith hulls felt common.
+  // A pilot clearing invaded tiles at the rim was capped at 25 misses, so the true
+  // rate was never the advertised one — it was one hull every 25 clears, floor and
+  // ceiling both. The roll is now exactly what the tooltip says it is.
   //
-  // DELIBERATELY NOT SURFACED: no popup, briefing line, HUD readout or Discord
-  // mention exposes the counter or the threshold. A visible floor turns the event
-  // into a checklist players grind to a known number; kept hidden it just stops
-  // long dry streaks from feeling broken. `dry`/`pityAt`/`pity` still ride along
-  // on the result object for debugging — nothing renders them.
-  const XEN_PITY = 25;
+  // `dry` still rides along on the result object; nothing renders it.
   // ==========================================================================
   // THE EMBER CHOIR — the ZONE GRIND incursion (sister event to the Kaevith
   // Incursion in My Galaxy).
@@ -3883,14 +4212,15 @@
   function xenTechRoll(tile) {
     if (!tile || !tile.alien || tile.void || tile.home) return null;
     const chance = GX.alienChance(tile.ring);
-    const pct = Math.max(1, Math.round(chance * 100));
+    // honest to 2dp — the old Math.max(1, round(pct)) floor reported "1%" on a tile
+    // that actually pays 0.2%
+    const pct = chance * 100 >= 1 ? Math.round(chance * 1000) / 10 : Math.round(chance * 10000) / 100;
     const have = XEN_MOB_KEYS.filter((k) => state.ownedShips && state.ownedShips[k]).length;
     if (have >= XEN_MOB_KEYS.length) return { won: false, complete: true, pct };
     const dry = state.xenDry || 0;
-    const pity = dry + 1 >= XEN_PITY;
-    if (!pity && Math.random() >= chance) {
+    if (Math.random() >= chance) {
       state.xenDry = dry + 1; save();
-      return { won: false, pct, dry: state.xenDry, pityAt: XEN_PITY };
+      return { won: false, pct, dry: state.xenDry };
     }
     const frac = Math.min(1, Math.max(0, (tile.ring - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
     const pool = [];
@@ -3900,13 +4230,13 @@
     });
     let roll = Math.random() * pool.reduce((a, b) => a + b.w, 0);
     const hit = pool.find((p) => (roll -= p.w) <= 0) || pool[pool.length - 1];
-    if (!grantShip(hit.k)) { state.xenDry = dry + 1; save(); return { won: false, pct, dry: state.xenDry, pityAt: XEN_PITY }; }
+    if (!grantShip(hit.k)) { state.xenDry = dry + 1; save(); return { won: false, pct, dry: state.xenDry }; }
     state.xenDry = 0;
     const sh = C.SHIP_BY_KEY[hit.k];
     pushFeed('◈ ALIEN SHIP TECHNOLOGY EARNED — the ' + sh.name + ' is in your hangar');
     // Announce to the shared world. Server-side the call is whitelisted and
     // idempotent per (pilot, hull), so it can't be replayed into spam.
-    try { if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.logXenHull(hit.k, tile.id, tile.ring, pity); } catch (e) {}
+    try { if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.logXenHull(hit.k, tile.id, tile.ring, false); } catch (e) {}
     save();
     return { won: true, key: hit.k, ship: sh, pct, pity: pity };
   }
@@ -3984,16 +4314,62 @@
   // Simulated rival owners (no real multiplayer). Seeded once; higher regions are
   // more heavily contested. Never overwrites existing ownership/assignments.
   const RIVAL_NAMES = ['GhostHD','ReaperX','Viper77','HawkOG','WolfPack','RavenTX','SteelRecon','AceMag','FrostByte','DieselK','MakoSix','EchoNine','RazorBravo','BoltActual','TalonVet','IronProto','NyxPrime','OnyxFPS','SaintTac','KriegMk2'];
+  // NPC HOLDINGS ARE CAPPED (Aug 2026). Seeding was unbounded: 20 names spread
+  // over ~1,950 tiles left every rival sitting on 25-30 systems, so the map read
+  // as a handful of untouchable empires instead of a contested frontier. No
+  // simulated pilot may hold more than RIVAL_CAP tiles — at seed time, or through
+  // the live turf war — and saves made before the cap are trimmed on load.
+  const RIVAL_CAP = 10;
+  const ringXenP = (ring) => Math.min(0.5, 0.08 + ring * 0.018);   // deeper rings more contested
+  function rivalCounts() {
+    const c = {}, held = state.rivalTiles || {};
+    for (const id in held) { const n = held[id]; if (n) c[n] = (c[n] | 0) + 1; }
+    return c;
+  }
+  // A rival still under the cap, or null when every one of them is full. `counts`
+  // is the caller's live tally so a burst of events can't overshoot between reads.
+  function freeRivalName(counts, exclude, rnd) {
+    const pool = RIVAL_NAMES.filter((n) => n !== exclude && (counts[n] | 0) < RIVAL_CAP);
+    if (!pool.length) return null;
+    return pool[(((rnd || Math.random)()) * pool.length) | 0];
+  }
+  // Release everything a rival holds above the cap back to neutral. Runs once per
+  // load, so an existing save converges on the cap instead of keeping its empires.
+  function trimRivalHoldings() {
+    const counts = {}, held = state.rivalTiles || {};
+    let freed = 0;
+    for (const id in held) {
+      const n = held[id]; if (!n) continue;
+      if ((counts[n] | 0) >= RIVAL_CAP) { delete held[id]; freed++; }
+      else counts[n] = (counts[n] | 0) + 1;
+    }
+    return freed;
+  }
   function seedRivals() {
     if (!state.rivalTiles) state.rivalTiles = {};
+    trimRivalHoldings();
+    const counts = rivalCounts();
+    // BUDGET SCALING. The cap allows 20 × 10 = 200 holdings, far fewer than the raw
+    // per-ring odds would place (~480), and seeding runs centre-outward — so an
+    // unscaled pass would spend the whole budget on the inner rings and leave deep
+    // space, the most contested ground by design, completely neutral. Every ring's
+    // odds are scaled by the same factor instead, which spreads the budget across
+    // all 25 rings and keeps the deeper-is-more-contested gradient intact.
+    let expect = 0;
+    for (let ring = 1; ring <= GX.RINGS; ring++) expect += 6 * ring * ringXenP(ring);
+    const budget = Math.max(0, RIVAL_NAMES.length * RIVAL_CAP - Object.keys(state.rivalTiles).length);
+    const scale = expect > 0 ? Math.min(1, budget / expect) : 0;
     let seed = 1337;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
     for (let ring = 1; ring <= GX.RINGS; ring++) {
-      const p = Math.min(0.5, 0.08 + ring * 0.018); // deeper rings more contested
+      const p = ringXenP(ring) * scale;
       GX.ringCoords(ring).forEach((c) => {
         const id = GX.tileId(c.q, c.r);
         if (state.ownedSystems[id] || state.rivalTiles[id]) return;
-        if (rnd() < p) state.rivalTiles[id] = RIVAL_NAMES[(rnd() * RIVAL_NAMES.length) | 0];
+        if (rnd() >= p) return;
+        const name = freeRivalName(counts, null, rnd);
+        if (!name) return;
+        state.rivalTiles[id] = name; counts[name] = (counts[name] | 0) + 1;
       });
     }
   }
@@ -4031,29 +4407,39 @@
     // weighted ring pick — deeper space is more contested
     const ring = 1 + Math.min(GX.RINGS - 1, Math.floor(Math.pow(Math.random(), 0.6) * GX.RINGS));
     const ids = GX.ringCoords(ring).map((c) => GX.tileId(c.q, c.r));
-    const neutral = ids.filter((id) => !state.ownedSystems[id] && !state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]));
-    const rivalHeld = ids.filter((id) => state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]));
-    const mine = ids.filter((id) => state.ownedSystems[id] && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]));
+    // A SHIELDED TILE IS OFF THE BOARD FOR EVERYONE (Aug 2026). The 24h attack
+    // shield is supposed to freeze a contested tile win or lose, and the branch
+    // that takes YOUR tiles honoured it — but the expand and war branches did not,
+    // so the sim happily claimed shielded neutral ground the player had just
+    // fought over and was waiting out the clock to take.
+    const shielded = (id) => tileCooldownLeft(id) > 0;
+    const neutral = ids.filter((id) => !state.ownedSystems[id] && !state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
+    const rivalHeld = ids.filter((id) => state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
+    const mine = ids.filter((id) => state.ownedSystems[id] && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
     const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+    const counts = rivalCounts();
     const r = Math.random();
     if (r < 0.5 && neutral.length) {
-      const id = pick(neutral), name = rndRivalName();
-      state.rivalTiles[id] = name; return { kind: 'expand', name, tile: id };
+      const name = freeRivalName(counts);
+      if (name) { const id = pick(neutral); state.rivalTiles[id] = name; return { kind: 'expand', name, tile: id }; }
     }
     if (r < 0.85 && rivalHeld.length) {
-      const id = pick(rivalHeld), from = state.rivalTiles[id]; let name = rndRivalName();
-      if (name === from) name = rndRivalName();
-      state.rivalTiles[id] = name; return { kind: 'war', name, from, tile: id };
+      const id = pick(rivalHeld), from = state.rivalTiles[id];
+      // a seizure moves a tile between rivals, so the total never changes — but the
+      // pilot taking it still has to be under the cap
+      const name = freeRivalName(counts, from);
+      if (name) { state.rivalTiles[id] = name; return { kind: 'war', name, from, tile: id }; }
     }
     // contest one of YOUR tiles (deliberately rare; citadels are siege-locked)
     if (mine.length && Math.random() < 0.4) {
       const id = pick(mine);
       const t = sysAt(id);
-      if (tileCooldownLeft(id) > 0) return null;
+      if (tileCooldownLeft(id) > 0) return null;   // belt and braces — `mine` already excludes shielded tiles
       if (t && t.citadel && Math.random() < 0.85) return null; // citadels rarely fall to the sim
       // player-built citadels: higher ranks are hardened vs the rival sim
       if (hasMyCitadel(id) && Math.random() < (0.7 + 0.06 * citadelLevel(id))) return null;
-      const name = rndRivalName();
+      const name = freeRivalName(counts);
+      if (!name) return null;                      // every rival is at its cap — nobody is free to take it
       accrueResources();   // settle earnings up to the moment the tile falls
       delete state.ownedSystems[id]; state.rivalTiles[id] = name;
       // a rival takeover RAZES any citadel you built there — and the tile is
@@ -5340,6 +5726,69 @@
     }
     ctx.restore();
   }
+  // ===========================================================================
+  // ✦ DEATH BEAMS — the Eternum's armament
+  // ---------------------------------------------------------------------------
+  // No charge, no cooldown, no aiming. The hull holds a lock on the N nearest
+  // hostiles (5 on the Eternum) and pours a continuous beam into each for as
+  // long as they stay inside weapon range. Each beam does BEAM.dps × effective
+  // DPS per second, so it scales with the pilot's build rather than replacing
+  // it. Locks re-target every BEAM.relock seconds so the beams sweep the field
+  // instead of sitting on one corpse.
+  // ===========================================================================
+  const BEAM = { dps: 1.35, bossDps: 0.55, relock: 0.35, tick: 0.2 };
+  function beamCount() { const sh = C.SHIP_BY_KEY[state.ship]; return sh && sh.deathBeams ? (sh.deathBeams | 0) : 0; }
+  function beamTick(dt) {
+    const n = beamCount();
+    if (!n || !rt.archer || rt.archer.dead || state.currentDungeon < 1) { rt.beams = null; return; }
+    const a = rt.archer, range = (rt.stats && rt.stats.fireRange) || 900;
+    rt.beamRelock = (rt.beamRelock || 0) - dt;
+    if (!rt.beams || rt.beamRelock <= 0) {
+      rt.beamRelock = BEAM.relock;
+      rt.beams = rt.enemies
+        .filter((o) => !o.dead && !o.dying && Math.hypot(o.x - a.x, o.y - a.y) <= range)
+        .sort((p, q) => (Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y)))
+        .slice(0, n);
+    }
+    rt.beams = rt.beams.filter((o) => o && !o.dead && !o.dying);
+    if (!rt.beams.length) return;
+    rt.beamT = (rt.beamT || 0) + dt;
+    const pulse = rt.beamT >= BEAM.tick; if (pulse) rt.beamT = 0;
+    const dps = effectiveDps();
+    for (const o of rt.beams) {
+      const dmg = dps * (o.isBoss ? BEAM.bossDps : BEAM.dps) * dt * (window.MONO_MULT ? window.MONO_MULT(o) : 1);
+      if (dmg < 1) continue;
+      const k = o.takeDamage(dmg);
+      rt.dmgWindow.push({ t: rt.time, dmg });
+      if (pulse && rt.floats.length < 26) rt.floats.push(new E.FloatText(o.x, o.y - o.size, formatNum(dmg / dt * (rt.dmgShow || 1)) + '/s', { color: '#bfe6ff', size: 22 }));
+      if (k) onKill(o);
+    }
+  }
+  // canvas: five white-hot lances from the hull to each locked hostile
+  function drawBeams(ctx) {
+    const list = rt.beams; if (!list || !list.length || !rt.archer) return;
+    const a = rt.archer, t = rt.time;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i]; if (!o || o.dead) continue;
+      const puls = 0.72 + 0.28 * Math.sin(t * 26 + i * 1.7);
+      ctx.strokeStyle = 'rgba(90,170,255,' + (0.30 * puls).toFixed(3) + ')';
+      ctx.lineWidth = 22 * puls;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(o.x, o.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(180,225,255,' + (0.55 * puls).toFixed(3) + ')';
+      ctx.lineWidth = 9 * puls;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(o.x, o.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.9 * puls).toFixed(3) + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(o.x, o.y); ctx.stroke();
+      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, 34);
+      g.addColorStop(0, 'rgba(255,255,255,' + (0.55 * puls).toFixed(3) + ')');
+      g.addColorStop(0.5, 'rgba(110,190,255,' + (0.3 * puls).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(40,90,180,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, 34, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
   // per-frame: drag everything inward and bleed hull inside every hole
   function singularityTick(dt) {
     const holes = rt.holes; if (!holes || !holes.length) return;
@@ -5468,6 +5917,11 @@
       }
     })(state, 0);
     state.level = Math.max(1, state.level | 0 || 1);
+    // AUTO FIGHTING IS THE SESSION DEFAULT (Aug 2026). `auto` persists, so a
+    // pilot who flew manual last session came back with the ship sitting idle —
+    // every session now BOOTS in autopilot and the toggle is a per-session
+    // choice, the right shape for an idle game.
+    state.auto = true;
     if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
     return fixed;
   }
@@ -5840,18 +6294,14 @@
     // with a warning banner in a stable build. Clear the marker so the slot is
     // fresh for this session's own forensics.
     if (!SAFE_BOOT) { try { localStorage.removeItem('lf_boot'); } catch (e) {} }
-    if (window.__lfSafeBoot || window.__lfPlayRecovery) {
-      let lastPlay = '';
-      try { lastPlay = localStorage.getItem('lf_play') || ''; } catch (e) {}
-      crashBanner((window.__lfPlayRecovery
-        ? '⚠ RECOVERY MODE — your last session froze mid-combat. Heavy visual effects are trimmed for this session. Screenshot this and report it.'
-        : window.__lfSafeBoot
-          ? '⚠ SAFE BOOT — last login died during <b>' + (window.__lfBootDiedAt || '?') + '</b>. Heavy boot steps were skipped this once. Screenshot this and report it.'
-          : '⚠ Your last session ended with an error. Screenshot this and report it.')
-        + ' <i style="font-style:normal;color:#8d7b62">· build ' + (window.LF_BUILD || '?') + '</i>'
-        + (_prevErr ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#ffb0a0;margin-top:3px;word-break:break-all">' + _prevErr.replace(/[<>]/g, '') + '</div>' : '')
-        + (lastPlay ? '<div style="font:600 9.5px/1.4 ui-monospace,monospace;color:#b39c7d;margin-top:3px;word-break:break-all">' + lastPlay.replace(/[<>]/g, '') + '</div>' : ''));
-    }
+    // CRASH BANNER REMOVED (Aug 2026, temporarily). SAFE BOOT / RECOVERY MODE fire
+    // on far more sessions than they diagnose — a phone backgrounding the tab mid
+    // combat looks the same as a real freeze — so players were greeted with a
+    // "screenshot this and report it" error bar on ordinary logins. The forensics
+    // themselves are untouched: lf_err / lf_boot / lf_play breadcrumbs still record,
+    // SAFE_BOOT still trims heavy boot steps, and recovery mode still trims effects.
+    // Only the banner is silenced. Re-enable by restoring the crashBanner() call.
+    void _prevErr;
     bootMark('stats');
     refreshStats();
     rt.archer.hp = rt.stats.maxHp;
@@ -5907,7 +6357,8 @@
         const mem = (performance && performance.memory) ? Math.round(performance.memory.usedJSHeapSize / 1048576) + 'MB' : '?';
         localStorage.setItem('lf_play', JSON.stringify({ t: new Date().toISOString().slice(11, 19), zone: state.currentDungeon, sys: state.currentSystem || 0,
           en: rt.enemies.length, proj: rt.projectiles.length, parts: rt.particles.length, floats: rt.floats.length,
-          ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length, heap: mem }));
+          ground: rt.ground.length, bolts: (rt.bolts || []).length, ebolts: (rt.ebolts || []).length,
+          cg: (window.CARGORUN && window.CARGORUN.sample) ? window.CARGORUN.sample() : 0, heap: mem }));
         const mb = (performance && performance.memory) ? performance.memory.usedJSHeapSize / 1048576 : 0;
         if (mb > 1400 && !window.__lfPlayRecovery) engageRecovery('heap ' + Math.round(mb) + 'MB');
       } catch (e) {}
@@ -6119,8 +6570,11 @@
     buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     lanceState,
+    canFlyShip,
+    beamCount,
     levelCap: () => C.levelCap(), atLevelCap: () => state.level >= C.levelCap(),
     startHomeDefense, spawnHomeRaider, endHomeDefense,
+    startCargoRun, spawnCargoRaider, endCargoRun, stripHullUpgrades,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
     isCitadelZone, citadelCooldownLeft, isSwarmZone, zoneReqLevel,
     getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,
@@ -6137,7 +6591,7 @@
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
     // Kaevith Incursion
-    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => XEN_PITY, xenSplit,
+    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => 0, xenSplit,
     // House Citadels (casino holds — real tiles, sieged like Void spires)
     casinoHolds, casinoIds: () => CASINO_IDS.slice(), casinoShareOf,
     casinoTotalShare: () => CASINO_IDS.reduce((a, k) => a + casinoShareOf(k), 0),

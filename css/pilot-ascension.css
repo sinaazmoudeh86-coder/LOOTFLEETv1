@@ -75,6 +75,17 @@
 .pa-hero-s b{color:#fff;}
 .pa-lvbar{position:relative;height:6px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden;margin:12px auto 0;max-width:260px;}
 .pa-lvbar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#7c4bd8,#c07bff);}
+.pa-lvbar-l{display:flex;justify-content:space-between;gap:8px;max-width:260px;margin:5px auto 0;font:700 9.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#8d7aab;}
+.pa-lvbar-l span:nth-child(2){color:#c07bff;}
+
+/* THE FORK — ascend now vs keep climbing, given equal weight on purpose */
+.pa-fork{border:1px solid #33254f;border-radius:12px;padding:11px;margin-bottom:11px;background:rgba(0,0,0,.22);}
+.pa-fork-h{font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#c07bff;margin-bottom:9px;}
+.pa-fork-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
+.pa-fork-o{min-width:0;border:1px solid #2c2247;border-radius:10px;padding:9px 10px;background:linear-gradient(180deg,#160f26,#100b1b);}
+.pa-fork-k{display:block;font:800 9px/1 'Rajdhani',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#a795c8;margin-bottom:5px;}
+.pa-fork-o b{display:block;font-family:'Orbitron',sans-serif;font-size:13px;font-weight:900;color:#e9d8ff;line-height:1.25;margin-bottom:4px;}
+.pa-fork-o em{font-style:normal;display:block;font-size:11px;line-height:1.5;color:#a795c8;text-wrap:pretty;}
 
 .pa-card{border:1px solid #2a1f44;border-radius:15px;padding:13px;margin-bottom:11px;background:linear-gradient(180deg,#150f28,#0d0a19);}
 .pa-card.warn{border-color:rgba(255,171,74,.4);background:linear-gradient(180deg,#1c1409,#100c08);}

@@ -16,6 +16,20 @@
   // flower: 2 / 3 / 2 — the crown (Lv 500, VZ7) sits dead center
   const ROWS = [['VZ1', 'VZ2'], ['VZ3', 'VZ7', 'VZ4'], ['VZ5', 'VZ6']];
   const ART = { 25: 'ships/void-cit-1.png', 50: 'ships/void-cit-1.png', 100: 'ships/void-cit-2.png', 200: 'ships/void-cit-2.png', 300: 'ships/void-cit-3.png', 400: 'ships/void-cit-3.png', 500: 'ships/void-cit-4.png' };
+  // ART THAT FAILS TO LOAD MUST NOT LEAVE A BROKEN-IMAGE ICON (Aug 2026). Every
+  // spire below the crown was rendering the browser's grey "?" placeholder — a
+  // 200px box with a border, in the middle of the hex — because a missing or
+  // blocked file on a bare <img> has no fallback at all. Two guards now:
+  //   1. onerror retries the crown art (void-cit-4.png), which is the one file
+  //      every report so far has loaded, then removes itself if that fails too.
+  //      A hex with no art still reads correctly: level, name and status remain.
+  //   2. no loading="lazy". All seven tiles are on screen at once in the flower,
+  //      so deferral bought nothing and added a way for the fetch to be dropped.
+  const CROWN_ART = ART[500];
+  function artTag(cls, tier) {
+    return '<img class="' + cls + '" src="' + (ART[tier] || CROWN_ART) + '" alt="" decoding="async"'
+      + ' onerror="if(this.dataset.fb){this.remove();}else{this.dataset.fb=1;this.src=\'' + CROWN_ART + '\';}">';
+  }
   const cdTxt = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h > 0 ? h + 'h ' + m + 'm' : m + 'm'; };
   const valChips = (vr) => '<em style="color:#f2a93c">$ ' + fmt(vr * 1000) + '</em><em style="color:#5bc0ff">⬢ ' + fmt(vr) + '</em><em style="color:#d0a060">◆ ' + fmt(vr) + '</em><em style="color:#c07bff">✦ ' + fmt(vr) + '</em>';
   const tollChips = (cost) => ['fuel', 'iron', 'plasma'].map((k) => cost[k]
@@ -34,7 +48,7 @@
       : inf.rival ? '<span class="vzc foe">⚑ ' + esc(inf.rival) + '</span>'
       : '<span class="vzc free">◇ OPEN</span>';
     return '<button class="vz-tile ' + cls + (inf.vtier === 500 ? ' crown' : '') + (gated ? ' gated' : '') + '" data-vzopen="' + id + '">' +
-      '<img class="vz-art" src="' + ART[inf.vtier] + '" alt="" loading="lazy">' +
+      artTag('vz-art', inf.vtier) +
       '<span class="vz-lv">LV ' + inf.vtier + '</span>' +
       '<span class="vz-name">' + inf.name + '</span>' +
       status + '</button>';
@@ -72,7 +86,7 @@
     else act = '<button class="vzs-go" data-vzwarp="' + id + '">' + (inf.owned ? '⛨ ENTER YOUR TILE' : inf.rival ? '⚔ ATTACK — SIEGE THE HOLD' : '⚔ CLAIM — LAUNCH THE SIEGE') + '</button>';
     const abandon = inf.owned ? '<button class="vzs-abandon" data-vzab="' + id + '">⏏ Abandon tile — release the citadel & income</button>' : '';
     const v = S().sheet('<div class="vzs">' +
-      '<div class="vzs-hero"><img src="' + ART[inf.vtier] + '" alt="">' +
+      '<div class="vzs-hero">' + artTag('', inf.vtier) +
         '<div class="vzs-hero-top"><span class="vzs-t2">' + inf.name + '</span><span class="vzs-lv">LV ' + inf.vtier + '+</span></div>' +
         '<div class="vzs-hero-holder">' + holder + '</div>' +
       '</div>' +
@@ -116,7 +130,7 @@
     if (inc) html += '<div class="vz-income"><span>▸ EARNING / HR</span>' +
       '<em style="color:#f2a93c">$ ' + fmt(inc.g) + '</em><em style="color:#5bc0ff">⬢ ' + fmt(inc.r) + '</em><em style="color:#d0a060">◆ ' + fmt(inc.r) + '</em><em style="color:#c07bff">✦ ' + fmt(inc.r) + '</em></div>';
     if (lvl < 25) {
-      html += '<div class="vz-gate"><img src="ships/void-cit-4.png" alt=""><h3>THE VOID AWAITS</h3>' +
+      html += '<div class="vz-gate">' + artTag('', 500) + '<h3>THE VOID AWAITS</h3>' +
         '<p>The first gate opens at <b>Level 25</b> — you are Level <b>' + lvl + '</b>. Deeper spires unlock at 50, 100, 200, 300, 400 and 500.</p>' +
         '<div class="vz-gate-bar"><i style="width:' + Math.min(100, lvl / 25 * 100) + '%"></i></div></div>';
       body.innerHTML = html; return;

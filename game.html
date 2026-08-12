@@ -62,13 +62,13 @@ window.__lfErr=[];
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=459">
+<link rel="stylesheet" href="css/style-v2.css?v=516">
 <link rel="stylesheet" href="css/theme.css?v=421">
-<link rel="stylesheet" href="css/web-v89.css?v=421">
+<link rel="stylesheet" href="css/web-v89.css?v=508">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=421">
 <link rel="stylesheet" href="css/fx-primordial.css?v=421">
 <link rel="stylesheet" href="css/moon-colony.css?v=421">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=439">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=505">
 <link rel="stylesheet" href="css/fx-aaa.css?v=421">
 <link rel="stylesheet" href="css/readability.css?v=481">
 <link rel="stylesheet" href="css/kaevith.css?v=440">
@@ -639,6 +639,11 @@ window.__lfErr=[];
           <div class="scr-head"><span class="scr-title">Void Zone</span><span class="scr-sub" id="voidzone-sub">7 apex tiles · turf war</span></div>
           <div class="scr-body" id="voidzone-body"></div>
         </div>
+        <!-- SPACE CARGO DEFENSE -->
+        <div class="screen overlay" id="screen-cargo">
+          <div class="scr-head"><span class="scr-title">Cargo Defense</span><span class="scr-sub" id="cargo-sub">Manual escort event</span></div>
+          <div class="scr-body" id="cargo-body"></div>
+        </div>
         <!-- BAG -->
         <div class="screen overlay" id="screen-bag">
           <div class="scr-head"><span class="scr-title">Loot</span><span class="scr-sub" id="bag-sub"></span></div>
@@ -839,6 +844,10 @@ window.__lfErr=[];
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           <span class="nl">Moon Colony</span>
         </button>
+        <button class="nav-btn nav-grouped" data-screen="cargo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 3.5v7L12 16 5 12.5v-7z"/><path d="M5 5.5l7 3.5 7-3.5M12 9v7"/></svg>
+          <span class="nl">Cargo</span>
+        </button>
         <button class="nav-btn nav-grouped" data-screen="voidzone">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11z"/><path d="M12 7l4 2.3v5.4L12 17l-4-2.3V9.3z"/></svg>
           <span class="nl">Void Zone</span>
@@ -893,6 +902,11 @@ window.__lfErr=[];
               <div class="mc-ic mc-vm"><img src="ships/ship-voidmaw.png" alt="Voidmaw"></div>
               <div><div class="mc-n">Season 1: Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
               <span class="mc-lock"></span><span class="badge" id="cmd-sdread-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-cargo" data-go="cargo">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 3.5v7L12 16 5 12.5v-7z"/><path d="M5 5.5l7 3.5 7-3.5M12 9v7"/><path d="M8 19h8M12 16v6"/></svg></div>
+              <div><div class="mc-n">Cargo Defense <em class="sd-live-tag">EVENT</em></div><div class="mc-s">Escort a shipment to the Citadel by hand · 3 runs/day · ★20+</div></div>
+              <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-voidz" data-go="voidzone">
               <div class="mc-ic mc-vz"><img src="ships/void-cit-4.png" alt="Void Zone"></div>
@@ -954,7 +968,7 @@ window.__lfErr=[];
               <div class="pa-pill-txt">
                 <div class="pa-pill-k">PRESTIGE · THE ENDLESS LOOP</div>
                 <div class="pa-pill-n">Pilot Ascension<span id="cmd-pasc-badge"></span></div>
-                <div class="pa-pill-s" id="cmd-pasc-sub">Reset to Level 1 for <b>permanent</b> account power. Keep <b>every ship</b> — lose every item and Ship Ascension. Unlock loot tiers no un-ascended pilot can ever see.</div>
+                <div class="pa-pill-s" id="cmd-pasc-sub">Reset the pilot to Level 1 for <b>permanent</b> account power. Keep <b>every ship</b>, its upgrades and its Ship Ascensions — only level, gold and items reset. Unlock loot tiers no un-ascended pilot can ever see.</div>
                 <div class="pa-pill-meta" id="cmd-pasc-meta"></div>
               </div>
               <div class="pa-pill-go">›</div>
@@ -1052,23 +1066,23 @@ window.__lfErr=[];
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=496"></script>
+<script src="js/config-v2.js?v=535"></script>
 <script src="js/items.js?v=474"></script>
-<script src="js/entities.js?v=421"></script>
-<script src="js/render.js?v=422"></script>
-<script src="js/galaxy.js?v=430"></script>
+<script src="js/entities.js?v=550"></script>
+<script src="js/render.js?v=556"></script>
+<script src="js/galaxy.js?v=503"></script>
 <script src="js/leaderboard.js?v=421"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js?v=501"></script>
 <script src="js/analytics.js?v=421"></script>
-<script src="js/cloud.js?v=451"></script>
-<script src="js/account.js?v=498"></script>
+<script src="js/cloud.js?v=560"></script>
+<script src="js/account.js?v=532"></script>
 <script src="js/session-lock.js?v=421"></script>
 <script src="js/vip.js?v=431"></script>
 <script src="js/territory.js?v=481"></script>
 <script src="js/payments-v91.js?v=492"></script>
-<script src="js/game-v93.js?v=500"></script>
-<script src="js/ui-v94.js?v=499"></script>
+<script src="js/game-v93.js?v=562"></script>
+<script src="js/ui-v94.js?v=559"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
 <script src="js/fx-aaa.js?v=421"></script>
@@ -1076,20 +1090,20 @@ window.__lfErr=[];
 <script src="js/moon-scene.js?v=421"></script>
 <script src="js/moon-colony.js?v=431"></script>
 <script src="js/return-brief.js?v=421"></script>
-<script src="js/home-citadel.js?v=478"></script>
-<script src="js/missions.js?v=421"></script>
+<script src="js/home-citadel.js?v=546"></script>
+<script src="js/missions.js?v=560"></script>
 <script src="js/achievements.js?v=478"></script>
 <script src="js/coach-v89.js?v=421"></script>
 <script src="js/prism-v5.js?v=431"></script>
 <script src="js/prism-fleet.js?v=431"></script>
-<script src="js/dreadnaught.js?v=495"></script>
-<script src="js/server-dreadnaught.js?v=464"></script>
+<script src="js/dreadnaught.js?v=516"></script>
+<script src="js/server-dreadnaught.js?v=558"></script>
 <script src="js/galaxy-box.js?v=501"></script>
 <script src="js/shipworks.js?v=431"></script>
 <script src="js/starforge.js?v=421"></script>
-<script src="js/pilot-ascension.js?v=440"></script>
+<script src="js/pilot-ascension.js?v=518"></script>
 <script src="js/sim-pilots.js?v=421"></script>
-<script src="js/ranks-boards.js?v=478"></script>
+<script src="js/ranks-boards.js?v=562"></script>
 <script src="js/rank-rewards.js?v=421"></script>
 <script src="js/discord-reward.js?v=421"></script>
 <script src="js/onboard.js?v=421"></script>
@@ -1099,20 +1113,22 @@ window.__lfErr=[];
 <script src="js/social.js?v=431"></script>
 <script src="js/mail.js?v=483"></script>
 <script src="js/alliance.js?v=488"></script>
-<script src="js/alliance-boss.js?v=421"></script>
-<script src="js/void-zone.js?v=476"></script>
+<script src="js/alliance-boss.js?v=558"></script>
+<script src="js/void-zone.js?v=506"></script>
+<script src="js/cargo-run.js?v=562"></script>
+<script src="js/cargo-defense.js?v=560"></script>
 <script src="js/ascension.js?v=478"></script>
 <script src="js/casino.js?v=449"></script>
 <script src="js/casino2.js?v=449"></script>
 <script src="js/casino-citadels.js?v=453"></script>
-<script src="js/redeem.js?v=421"></script>
+<script src="js/redeem.js?v=520"></script>
 <script src="js/auth.js?v=421"></script>
 <script src="js/update-gate.js?v=486"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 501;
+  window.LF_BUILD = 562;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1306,6 +1322,11 @@ window.__lfErr=[];
       prism:40, sdread:50, prismfleet:50,
       ascend:60, forge:100, pasc:100, homecit:150,
     };
+    // STAR-GATED CARDS. A few systems are gated by PILOT ASCENSION, not level —
+    // they must never be measured against L or they read "unlocks at Level 20"
+    // to a Level 400 pilot who has never ascended.
+    const STAR_LOCKS={ cargo:20 };
+    function pStars(){ try{ if(window.PASCEND&&PASCEND.stars) return PASCEND.stars()|0; }catch(e){} return 0; }
     // Locked cards are DIMMED, NEVER HIDDEN. Seeing the whole map of the game
     // with a level on each lock reads as a promise and makes the game look deep;
     // hiding them makes it look small and gives a new player nothing to want.
@@ -1313,10 +1334,26 @@ window.__lfErr=[];
     // row — that traded one problem for another, so the collapse is gone.)
     let _showAll=false;
     function lvl(){ try{ return (window.GAME&&GAME.state&&GAME.state.level)|0||1; }catch(e){ return 1; } }
+    // Pilot Ascension's gate is a flat Level 100 (the half-the-cap gate from 504 was
+    // reverted in 505). Still read through PASCEND so the number lives in one place.
+    function pascGate(){ try{ if(window.PASCEND&&PASCEND.gateLv) return PASCEND.gateLv()|0; }catch(e){} return LOCKS.pasc; }
     function sync(){ const L=lvl();
       let nextNeed=Infinity, lockedN=0;
-      mega.querySelectorAll('[data-go]').forEach(c=>{ const need=LOCKS[c.dataset.go]; const isLocked=!!(need&&L<need);
+      mega.querySelectorAll('[data-go]').forEach(c=>{
         c.style.display='';                          // nothing is ever hidden
+        const starNeed=STAR_LOCKS[c.dataset.go];
+        if(starNeed){                                 // ascension-gated, not level-gated
+          const s=pStars(), lockedS=s<starNeed;
+          c.classList.toggle('locked',lockedS);
+          const lk2=c.querySelector('.mc-lock'); if(lk2) lk2.textContent='';
+          const sub=c.querySelector('.mc-s');
+          if(sub){ if(!sub.dataset.open) sub.dataset.open=sub.innerHTML;
+            if(lockedS){ lockedN++;
+              sub.innerHTML='<span class="mc-need">🔒 ★'+starNeed+'</span><span class="mc-away">'+(starNeed-s)+' ascension'+(starNeed-s===1?'':'s')+' to go</span>'; }
+            else if(sub.dataset.open){ sub.innerHTML=sub.dataset.open; delete sub.dataset.open; } }
+          return;
+        }
+        const need=c.dataset.go==='pasc'?pascGate():LOCKS[c.dataset.go]; const isLocked=!!(need&&L<need);
         c.classList.toggle('locked',isLocked);
         const lk=c.querySelector('.mc-lock');
         // Corner lock badge retired: it was absolutely positioned into the same
@@ -1349,9 +1386,14 @@ window.__lfErr=[];
     // PILOT ASCENSION pill — the one card that carries live numbers, so the
     // decision (ascend now, or push further for a bigger payout) is legible
     // without opening the screen.
+    //
+    // THE GATE IS A FLAT LEVEL 100 — read live from PASCEND rather than hard-coded,
+    // so there is one source of truth if it ever moves again.
     function syncPasc(L){
       const card=document.getElementById('cmd-pasc'); if(!card) return;
-      const need=100, locked=L<need;
+      let need=100, cap=150;
+      try{ if(window.PASCEND&&PASCEND.gateLv){ need=PASCEND.gateLv()|0; cap=PASCEND.capLv()|0; } }catch(e){}
+      const locked=L<need;
       card.classList.toggle('locked',locked);
       let lk=card.querySelector('.pa-pill-lock');
       if(!lk){ lk=document.createElement('span'); lk.className='pa-pill-lock'; card.appendChild(lk); }
@@ -1362,19 +1404,22 @@ window.__lfErr=[];
       let stars=0, pts=0, pv=null, tier=null;
       try{ if(window.PASCEND){ stars=PASCEND.stars(); pts=PASCEND.points(); pv=PASCEND.preview(); tier=PASCEND.tierDef(Math.max(1,stars)); } }catch(e){}
       if(badge) badge.innerHTML = (stars&&window.PASCEND) ? PASCEND.badge(null,stars) : '';
+      const keeps='<b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony, Home Citadel and Prism. Only <b>level, gold and items</b> reset.';
       if(locked){
-        if(sub) sub.innerHTML='Unlocks at <b>Level 100</b>. Reset the pilot for permanent power — <b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony, Home Citadel and Prism. Only <b>level, gold and items</b> reset.';
-        if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / 100</span>'+
-          '<span class="pa-pill-chip">'+(100-L)+' TO GO</span>'+
-          '<span class="pa-pill-chip">3 EXCLUSIVE LOOT TIERS</span>'+
-          '<div class="pa-pill-bar" style="flex-basis:100%"><i style="width:'+Math.min(100,L).toFixed(1)+'%"></i></div>';
+        if(sub) sub.innerHTML='Opens at <b>Level '+need+'</b>. From there it is your call: ascend, or keep climbing toward your Lv '+cap+' ceiling. Either way '+keeps;
+        if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / '+need+'</span>'+
+          '<span class="pa-pill-chip x2">'+(need-L)+' TO GO</span>'+
+          '<span class="pa-pill-chip x2">CEILING LV '+cap+'</span>'+
+          '<div class="pa-pill-bar" style="flex-basis:100%"><i style="width:'+Math.min(100,L/need*100).toFixed(1)+'%"></i></div>';
       } else {
-        if(sub) sub.innerHTML='Ready to ascend — <b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony, Home Citadel and Prism. Only <b>level, gold and items</b> reset.';
+        const toCap=Math.max(0,cap-L);
+        if(sub) sub.innerHTML='<b>Past the gate — your call.</b> Ascend now to bank the points and raise your ceiling to <b>Lv '+(cap+50)+'</b>, or keep climbing: every level adds to the payout. '+keeps;
         if(meta) meta.innerHTML=
           '<span class="pa-pill-chip hot">+<b>'+(pv?pv.total:0)+'</b> POINTS NOW</span>'+
           (pts?'<span class="pa-pill-chip hot"><b>'+pts+'</b> UNSPENT</span>':'')+
-          (stars?'<span class="pa-pill-chip">'+tier.name.toUpperCase()+' ★'+PASCEND.starOf(stars)+'</span>':'<span class="pa-pill-chip">NEVER ASCENDED</span>')+
-          '<span class="pa-pill-chip">NEXT POINT AT LV <b>'+((Math.floor(L/125)+1)*125)+'</b></span>';
+          (toCap?'<span class="pa-pill-chip x2">'+toCap+' TO THE LV '+cap+' CAP</span>':'<span class="pa-pill-chip hot">AT THE LV '+cap+' CAP</span>')+
+          (stars?'<span class="pa-pill-chip x2">'+tier.name.toUpperCase()+' ★'+PASCEND.starOf(stars)+'</span>':'<span class="pa-pill-chip x2">NEVER ASCENDED</span>')+
+          '<span class="pa-pill-chip x2">NEXT POINT AT LV <b>'+((Math.floor(L/125)+1)*125)+'</b></span>';
       }
     }
     function open(){ sync(); mega.classList.add('open'); }
@@ -1391,7 +1436,7 @@ window.__lfErr=[];
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active');
+      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-ascend.active,#screen-casino.active,#screen-cargo.active');
       cmd.classList.toggle('active', !!on);
       syncDock();
     },500);
@@ -1476,6 +1521,9 @@ window.__lfErr=[];
   .pa-pill-go{ display:none; }
   .pa-pill-lock{ top:11px; right:12px; transform:none; }
   .mega-grid .pa-pill.locked{ padding-right:66px; }
+  /* one chip + bar only — secondary chips (to-go, ceiling, cap, tier, next point)
+     wrapped to a 2nd row and doubled the card height in the stack */
+  .pa-pill-chip.x2{ display:none; }
 }
 </style>
 <script>

@@ -119,6 +119,14 @@
       empty: 'No missions cleared yet.',
     },
     {
+      id: 'cargo', ic: '\u26df', col: '#ffb84d', label: 'HAULAGE', sub: 'Cargo Delivered',
+      info: 'Space Cargo Defense — lifetime shipments escorted to the Citadel. Ties break on best delivered condition.',
+      unit: 'HAULS',
+      metric: (p) => (p.cargo || 0) * 1e3 + Math.min(999, (p.cargo_best | 0) * 9),
+      fmt: (v, p) => fmt(p.cargo | 0),
+      meta: (p) => ((p.cargo | 0) ? 'best delivery ' + Math.min(100, p.cargo_best | 0) + '% · ' : '') + rankLabel(ascOf(p)) + ' · Lv ' + (p.level | 0),
+    },
+    {
       id: 'badges', ic: '\u2b21', col: '#b57bff', label: 'BADGES', sub: 'Ranks Claimed',
       info: 'Lifetime commendations claimed, out of 1,000. Claim them all and the Titan Sina is granted.',
       unit: '/1000',
@@ -181,6 +189,10 @@
     // sim pilots were credited with more hulls than exist in the game.
     const ships = Math.max(1, Math.min(SIM_HULL_CAP, Math.floor(lv / 12) + Math.floor(st * 1.4) + Math.floor(r() * 3)));
 
+    // HAULAGE — Cargo Defense opens at Pilot Ascension ★20 and rations two runs
+    // a day, so even a veteran sim's count stays believable (and ★19 hauls zero).
+    p.cargo = st >= 20 ? Math.max(1, Math.floor(career * 0.6 * (0.4 + r() * 0.8))) : 0;
+    p.cargo_best = p.cargo ? Math.min(100, 58 + Math.floor(r() * 43)) : 0;
     // MISSIONS — a board a day, give or take, across the whole career
     const missions = Math.floor(career * (0.55 + r() * 0.75));
 
@@ -229,7 +241,7 @@
   // quietly credit simulated pilots with records no human could be shown to
   // beat. Detected by absence of the property (not a zero value), and those
   // boards refuse to render until the columns exist.
-  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1 };
+  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1 };
   function migrated(rows) {
     for (const p of rows) {
       if (p.isMe || p._sim || p.is_simulated || p._filler) continue;
@@ -287,6 +299,8 @@
     q.tile_rev = tileRevenue();
     q.ships = Object.keys(s.ownedShips || {}).length || 1;
     q.missions = s.lifetimeMissions | 0;
+    q.cargo = (s.cargo && s.cargo.wins) | 0;
+    q.cargo_best = Math.min(100, (s.cargo && s.cargo.best) | 0);
     q.badges = (() => {
       // Badges live in state.achieve.claimed (per-chain counts) — the old
       // badgeRanks/achClaimed fields never existed, so every real player
@@ -304,6 +318,7 @@
     q.tiles = q.tiles | 0; q.citadels = q.citadels | 0;
     q.tile_rev = Number(q.tile_rev) || 0;
     q.ships = q.ships | 0; q.missions = q.missions | 0; q.badges = q.badges | 0;
+    q.cargo = q.cargo | 0; q.cargo_best = q.cargo_best | 0;
     return q;
   }
 
@@ -335,6 +350,8 @@
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,
+        cargo: (s.cargo && s.cargo.wins) | 0,
+        cargo_best: Math.min(100, (s.cargo && s.cargo.best) | 0),
         badges: (() => {
       // Badges live in state.achieve.claimed (per-chain counts) — the old
       // badgeRanks/achClaimed fields never existed, so every real player

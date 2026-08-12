@@ -861,9 +861,12 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   .sina-beam{ opacity:.5; }
 }
 
-/* ===== TITAN SINA — full-row showcase TILE in the ships grid ===== */
+/* ===== TITAN SINA / AETERNUM / ETERNUM — showcase TILE in the ships grid =====
+   Aug 2026: these were full-row banners 340px tall. With three apex hulls that
+   is a full screen of banner before the player reaches a normal tile, so the
+   footprint is HALVED — same identity, half the section. */
 .ship-tile.st-sina{ grid-column:1 / -1; position:relative; display:flex; flex-direction:row; align-items:stretch; gap:0;
-  padding:0; overflow:hidden; text-align:left; min-height:340px;
+  padding:0; overflow:hidden; text-align:left; min-height:168px;
   background:linear-gradient(180deg,#131a2e,#0a0e1c) !important;
   border:1px solid transparent !important; border-radius:18px;
   animation:sinaBannerGlow 3.2s ease-in-out infinite; }
@@ -876,26 +879,26 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   background:linear-gradient(120deg,#ff5050,#ffaa3c,#ffe95a,#78ff82,#50d2ff,#9682ff,#ff6eeb,#ff5050);
   background-size:400% 400%; animation:pf-shift 3s linear infinite; opacity:.9;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; }
-.sts-art{ position:relative; flex:0 0 46%; width:46%; max-width:46%; min-height:340px; overflow:hidden;
+.sts-art{ position:relative; flex:0 0 44%; width:44%; max-width:44%; min-height:168px; overflow:hidden;
   background:
     radial-gradient(1.4px 1.4px at 22% 28%, rgba(200,220,255,.55), transparent 60%),
     radial-gradient(1.3px 1.3px at 70% 20%, rgba(200,220,255,.4), transparent 60%),
     radial-gradient(1.3px 1.3px at 52% 74%, rgba(200,220,255,.35), transparent 60%),
     radial-gradient(90% 110% at 50% 30%, #1c2748, #0a0e1c 80%); }
-.sts-art img{ position:absolute; left:50%; top:50%; width:92%; max-width:460px; max-height:88%; object-fit:contain; z-index:1;
+.sts-art img{ position:absolute; left:50%; top:50%; width:92%; max-width:300px; max-height:86%; object-fit:contain; z-index:1;
   transform:translate(-50%,-50%) rotate(-1.4deg);
   filter:drop-shadow(0 14px 26px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(255,210,77,.55)) drop-shadow(0 0 60px rgba(201,138,255,.35));
   animation:sina-float 4.5s ease-in-out infinite; }
 .sts-art .sina-beam{ width:44%; height:3px; }
 .sts-art .st-flag,.sts-art .st-lvl{ position:absolute; top:6px; left:6px; z-index:2; }
-.sts-meta{ flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:9px; padding:18px 20px; position:relative; z-index:1; }
-.ship-tile.st-sina .st-name{ font-size:24px; white-space:normal; letter-spacing:.06em;
+.sts-meta{ flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:6px; padding:12px 13px; position:relative; z-index:1; }
+.ship-tile.st-sina .st-name{ font-size:16px; white-space:normal; letter-spacing:.05em;
   background:linear-gradient(90deg,#ff8a80,#ffd24d,#8ce08a,#7ab8ff,#c98aff,#ff8a80); background-size:250% 100%;
   -webkit-background-clip:text; background-clip:text; color:transparent; animation:pf-shift 5s linear infinite; }
-.sts-callout{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.13em; color:#9ecbff;
+.sts-callout{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:9px; letter-spacing:.11em; color:#9ecbff; line-height:1.4;
   text-shadow:0 0 8px rgba(120,180,255,.6); }
 .ship-tile.st-sina .st-stats{ justify-content:flex-start; }
-.ship-tile.st-sina .st-badge{ align-self:flex-start; font-size:13px; padding:9px 18px; }
+.ship-tile.st-sina .st-badge{ align-self:flex-start; font-size:11px; padding:7px 13px; }
 
 /* ===== COSMIC JACKPOT CACHE — the 100× premium gamble ===== */
 .jkpt{ position:relative; overflow:hidden; border-radius:16px; padding:16px 15px 15px;
@@ -1020,6 +1023,33 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 @media (prefers-reduced-motion:reduce){
   .aet-lance,.aet-ring,.ship-tile.st-aet::before,.ship-tile.st-aet::after,.ship-tile.st-aet .st-name{ animation:none !important; }
   .aet-lance{ width:70%; opacity:.7; }
+}
+
+/* ===== ETERNUM — CELESTIAL CLASS showcase tile ==============================
+   Celestial blue instead of the Sina rainbow. Five death beams fan out of the
+   hull on a stagger, inside a standing aura ring — the two things the hull
+   actually does, read at a glance. */
+.ship-tile.st-etr::before{ background:linear-gradient(120deg,#dfefff,#5b7cff,#9fd0ff,#2c4ea8,#dfefff) !important; background-size:400% 400% !important; }
+.ship-tile.st-etr .st-name{ background:linear-gradient(90deg,#ffffff,#bcd8ff,#5b7cff,#dfefff,#ffffff) !important;
+  background-size:250% 100% !important; -webkit-background-clip:text; background-clip:text; color:transparent; }
+.ship-tile.st-etr .sts-callout{ color:#bcd8ff; text-shadow:0 0 9px rgba(91,124,255,.7); }
+.apex-chip.etr{ color:#061229; background:linear-gradient(180deg,#eaf3ff,#7ea8ff); box-shadow:0 0 12px -2px rgba(120,170,255,.95); }
+.etr-beam{ position:absolute; left:50%; top:50%; width:46%; height:2px; z-index:3; transform-origin:0 50%; border-radius:2px;
+  background:linear-gradient(90deg,#fff,#cfe4ff 35%,rgba(91,124,255,.65) 75%,transparent);
+  box-shadow:0 0 10px rgba(140,190,255,.9); animation:etrBeam 2.4s ease-in-out infinite; }
+.etr-beam.b2{ animation-delay:.3s; transform:rotate(24deg); }
+.etr-beam.b3{ animation-delay:.6s; transform:rotate(-22deg); }
+.etr-beam.b4{ animation-delay:.9s; transform:rotate(48deg); }
+.etr-beam.b5{ animation-delay:1.2s; transform:rotate(-46deg); }
+@keyframes etrBeam{ 0%,100%{ opacity:0; } 18%{ opacity:1; } 62%{ opacity:.55; } }
+.etr-aura{ position:absolute; left:50%; top:50%; width:78%; aspect-ratio:1; transform:translate(-50%,-50%); border-radius:50%; z-index:2; pointer-events:none;
+  border:1px solid rgba(140,190,255,.45); box-shadow:inset 0 0 34px rgba(91,124,255,.35); animation:etrAura 3.6s ease-in-out infinite; }
+@keyframes etrAura{ 0%,100%{ opacity:.35; transform:translate(-50%,-50%) scale(.94); } 50%{ opacity:.85; transform:translate(-50%,-50%) scale(1.04); } }
+.etr-lic{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:9px; letter-spacing:.09em; line-height:1.4; color:#9fb6d8;
+  border:1px solid rgba(120,170,255,.35); background:rgba(91,124,255,.1); border-radius:7px; padding:5px 7px; }
+@media (prefers-reduced-motion:reduce){
+  .etr-beam,.etr-aura,.ship-tile.st-etr::before,.ship-tile.st-etr .st-name{ animation:none !important; }
+  .etr-beam{ opacity:.6; }
 }
 
 /* bolt-down: predictable touch behavior across the app */

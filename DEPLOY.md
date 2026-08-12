@@ -1,7 +1,7 @@
-# Loot Fleet — deploy v217 · build 562
+# Loot Fleet — deploy v217 · build 563
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v216. Service worker cache is `lootfleet-v562`.
+Supersedes v216. Service worker cache is `lootfleet-v563`.
 
 **Headline:** Space Cargo Defense (the escort event) + the Eternum, the smooth
 flight model, the end-of-run frame-rate fix, the Ranks screen crash fix, and
@@ -11,12 +11,12 @@ the seven-ladder Ranks board with the new HAULAGE ladder.
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 562 |
+| Stamp | File | Build 563 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `562` |
-| Update beacon | `version.json` → `build` | `562` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v562` |
-| Project root beacon | root `version.json` (source tree) | `562` |
+| Client constant | `game.html` → `window.LF_BUILD` | `563` |
+| Update beacon | `version.json` → `build` | `563` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v563` |
+| Project root beacon | root `version.json` (source tree) | `563` |
 
 ```bash
 grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
@@ -37,12 +37,28 @@ origin and stays un-versioned. This folder's `sw.js` is the real one.
 | sw precache entries | **80**, none dead |
 | referenced but not precached | **0** (9 offline gaps closed this release) |
 | top-level html/json/js vs source | **identical** |
+| `ships/` vs source | **65 / 65, match** |
+| ship art paths referenced in js | **25**, all present |
 
 Nine files were referenced by `game.html` but had never been precached —
 `ember-choir.css`, `hangar-ships.css`, `return-brief.js`, `rank-rewards.js`,
 `discord-reward.js`, `onboard.js`, `pro-offer.js`, `paragon-cannon.js`,
 `casino-citadels.js`. Offline, those screens fell through to a network fetch
 that could not resolve. Added to `CORE`.
+
+**ART DRIFT — the lesson from build 562.** The audit checked js/css and the four
+build stamps, and passed, because `ships/` was never in it. A release folder
+seeded from the previous release inherits that folder wholesale, so any art added
+since is silently missing and the game falls back to its vector hulls — which
+looks like a rendering bug, not a deploy bug. Diff EVERY asset folder against the
+project root, not just the code:
+
+```bash
+# from the release folder
+for d in ships js css guides supabase; do
+  diff <(ls $d) <(ls ../$d) >/dev/null || echo "DRIFT in $d"
+done
+```
 
 ---
 
@@ -101,11 +117,14 @@ the files it names.
    rings/voids/hostiles for diagnosis.
 4. **Cargo missions** — Missions board shows the cargo chain (queued from the
    previous session, first real-host check).
-5. Console shows `BUILD 562` on the login screen.
+5. **Eternum art** — Command ▸ Cargo Defense: the Eternum card shows the ship
+   photo, not a wireframe sphere. Each shipment tier card likewise shows its
+   freighter. A vector fallback here means `ships/` did not upload.
+6. Console shows `BUILD 563` on the login screen.
 
 ---
 
-## What shipped since v216 (builds 502–562)
+## What shipped since v216 (builds 502–563)
 
 - **Space Cargo Defense** — five shipment tiers (Cargo I–Omega V), sector
   bosses, corridor-wide collapse rings, a 10-minute manual escort, upgrade-strip
@@ -126,6 +145,8 @@ the files it names.
 - **Seven-ladder Ranks** incl. HAULAGE (needs Step 1), publishing via the
   existing heartbeat.
 - **Ascension pill (561)** — mobile shows one chip + bar; desktop unchanged.
+- **Event art shipped (563)** — Eternum + five freighter hulls were missing from
+  the release folder; the game was drawing vector fallbacks on live.
 - Pilot Tree bonuses survive ascension (`ASC_KEEP`), bonus cache re-validates
   on save merge, Skills page shows the active tree.
 

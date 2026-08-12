@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v562';
+const CACHE = 'lootfleet-v563';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -46,6 +46,10 @@ const CORE = [
   'css/fit-guard.css', 'css/readability.css', 'js/fit-audit.js', 'js/update-gate.js',
   // v217 / build 562 — Space Cargo Defense (escort event) — changed this release
   'js/cargo-run.js', 'js/cargo-defense.js',
+  // ...and its ART. These were the six files the v216-seeded folder did not have,
+  // so the Eternum card and every freighter fell back to a vector hull on live.
+  'ships/ship-eternum.png',
+  'ships/cargo-1.png', 'ships/cargo-2.png', 'ships/cargo-3.png', 'ships/cargo-4.png', 'ships/cargo-5.png',
   // OFFLINE GAP CLOSED (v217): referenced by game.html but never precached, so an
   // offline PWA fell back to the network for them and the screens came up empty.
   'css/ember-choir.css', 'css/hangar-ships.css',

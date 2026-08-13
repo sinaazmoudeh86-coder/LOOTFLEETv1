@@ -702,6 +702,12 @@
   function drawDrone(ctx, x, y, t, ang, flash) {
     ctx.save();
     ctx.translate(x, y);
+    // THE SCREEN SCALES WITH THE CARRIER. The dart is drawn at a fixed ~11 units,
+    // which is invisible flying beside a capital hull three to five times the
+    // frigate footprint — a 96-bay Dread Omega looked like it had no drones at all.
+    let dk = 1;
+    try { dk = Math.min(2.2, 1 + Math.max(0, shipScaleOf(activeShipKey()) - 1) * 0.32); } catch (e) {}
+    if (dk !== 1) ctx.scale(dk, dk);
     if (!_drHalo) {
       _drHalo = ctx.createRadialGradient(0, 0, 1, 0, 0, 11);
       _drHalo.addColorStop(0, 'rgba(130,255,205,0.5)');
@@ -1042,15 +1048,31 @@
   const LVL_TINT_CACHE = {};
   function lvlTint(img, key, lv, skin, col) {
     if (!img) return img;
+    if (!/^#[0-9a-f]{6}$/i.test(col || '')) return img;
     const id = key + ':' + (col || '') + ':' + (skin || 'stock');
     if (LVL_TINT_CACHE[id]) return LVL_TINT_CACHE[id];
     const S = img.width || 96;
     const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
     const cx = cv.getContext('2d');
     cx.drawImage(img, 0, 0, S, S);
-    cx.globalCompositeOperation = 'source-atop';
-    cx.globalAlpha = 0.42; cx.fillStyle = col; cx.fillRect(0, 0, S, S);
-    cx.globalCompositeOperation = 'source-over'; cx.globalAlpha = 1;
+    // TINT THE HULL, NOT ITS GLOW. This was a flat 42% fill through `source-atop`,
+    // which paints EVERY pixel the sprite owns — including the wide, soft bloom
+    // the capital-ship art carries around itself. On a Dread Omega, drawn at 4×
+    // scale, that bloom became an orange haze several hundred units across sitting
+    // over the escorts and the drone screen. Only near-opaque pixels (actual hull
+    // plating) take the colour now, and at a lighter weight.
+    try {
+      const d = cx.getImageData(0, 0, S, S), px = d.data;
+      const tr = parseInt(col.slice(1, 3), 16), tg = parseInt(col.slice(3, 5), 16), tb = parseInt(col.slice(5, 7), 16);
+      const K = 0.34;
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] < 200) continue;             // glow / feathered edge keeps its own colour
+        px[i] += (tr - px[i]) * K;
+        px[i + 1] += (tg - px[i + 1]) * K;
+        px[i + 2] += (tb - px[i + 2]) * K;
+      }
+      cx.putImageData(d, 0, 0);
+    } catch (e) { return img; }                    // tainted canvas (file://) — no tint beats a haze
     LVL_TINT_CACHE[id] = cv; return cv;
   }
   // The hull sprite with a skin finish composited over its silhouette.

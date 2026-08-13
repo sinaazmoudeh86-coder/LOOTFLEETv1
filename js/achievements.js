@@ -32,7 +32,17 @@
 
   // ---- lifetime stat readers ------------------------------------------------
   const life = (k) => (S().lifeStats && S().lifeStats[k]) || 0;
-  function hullLevelSum() { const sl = S().shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return Math.max(t, life('hullLv')); }
+  // FLEET HULL LEVELS. Every hull is Lv 1 the moment it is in the hangar, so a
+  // stock hull is ONE level, not none. `shipLevels` only gains an entry once a
+  // hull has actually been UPGRADED, so summing that map alone scored a hangar
+  // full of Lv 1 ships as zero — the reported "doesn't count lvl1 ships".
+  function hullLevelSum() {
+    const s = S(), sl = s.shipLevels || {}, own = s.ownedShips || {};
+    let t = 0; const seen = {};
+    for (const k in own) { if (own[k]) { seen[k] = 1; t += Math.max(1, sl[k] | 0); } }
+    for (const k in sl) { if (!seen[k]) t += Math.max(1, sl[k] | 0); }   // a level on a hull no longer owned still counts
+    return Math.max(t, life('hullLv'));
+  }
   function moonLifetimeSum() { const lt = (S().moon && S().moon.lifetime) || {}; let t = 0; for (const k in lt) t += lt[k] || 0; return Math.max(t, life('moonRes')); }
   function colonyLevelSum() { const root = S().moon; let t = 0; if (root && root.moons) root.moons.forEach((mm) => { const b = mm.b || {}; for (const k in b) t += (b[k] && b[k].lv) || 0; }); return Math.max(t, life('colony')); }
 
@@ -46,12 +56,17 @@
     { id: 'iron',   ic: '◆', name: 'Ironclad',           unit: 'iron scavenged',           n: 80,  t: genT(150, 1.42, 80),   v: () => life('iron') },
     { id: 'plasma', ic: '✦', name: 'Plasma Sovereign',   unit: 'plasma scavenged',         n: 80,  t: genT(100, 1.42, 80),   v: () => life('plasma') },
     { id: 'moon',   ic: '☾', name: 'Lunar Baron',        unit: 'colony resources shipped', n: 90,  t: genT(5e3, 1.5, 90),    v: moonLifetimeSum },
-    { id: 'loot',   ic: '⬡', name: 'Scavenger King',     unit: 'loot collected',           n: 80,  t: genT(25, 1.2, 80),     v: () => (S().lifetimeLooted || 0) + (S().inventory || []).length },
+    // LOOT IS A CAREER TOTAL, NOT THE SIZE OF THE HOLD. This read the hold's
+    // length, so the chain stalled at the hangar's capacity, scored nothing for
+    // drops sold on pickup, and walked BACKWARDS whenever the hold was sold off.
+    // game-v93 collect() now counts every pickup into lifetimeLooted; the max
+    // keeps a save that predates the seed from reading lower than it used to.
+    { id: 'loot',   ic: '⬡', name: 'Scavenger King',     unit: 'loot collected',           n: 80,  t: genT(25, 1.2, 80),     v: () => Math.max(S().lifetimeLooted || 0, (S().inventory || []).length) },
     { id: 'boss',   ic: '♛', name: "Warlord's Bane",     unit: 'bosses destroyed',         n: 70,  t: genT(3, 1.18, 70),     v: () => Math.max((S().stats && S().stats.bossKills) || 0, life('boss')) },
     { id: 'mins',   ic: '◷', name: 'Iron Endurance',     unit: 'minutes in combat',        n: 60,  t: genT(30, 1.18, 60),    v: () => (S().playTime || 0) / 60 },
     { id: 'msn',    ic: '⌘', name: 'Order of the Crest', unit: 'missions completed',       n: 60,  t: genT(5, 1.15, 60),     v: () => S().lifetimeMissions | 0 },
     { id: 'tiles',  ic: '⚑', name: 'Galactic Conqueror', unit: 'galaxy tiles captured',    n: 60,  t: genT(1, 1.16, 60),     v: () => life('tiles') },
-    { id: 'hulls',  ic: '⚙', name: 'Fleet Admiral',      unit: 'hull levels bought',       n: 50,  t: genT(3, 1.15, 50),     v: hullLevelSum },
+    { id: 'hulls',  ic: '⚙', name: 'Fleet Admiral',      unit: 'fleet hull levels',        n: 50,  t: genT(3, 1.15, 50),     v: hullLevelSum },
     { id: 'colony', ic: '⛏', name: 'Master Builder',     unit: 'structure levels built',   n: 40,  t: genT(2, 1.17, 40),     v: colonyLevelSum },
     { id: 'level',  ic: '▲', name: 'Ascendant',          unit: 'account level',            n: 20,  t: genT(5, 1.32, 20),     v: () => S().level || 1 },
     { id: 'zone',   ic: '⌬', name: 'Frontier Legend',    unit: 'zones unlocked',           n: 10,  t: genT(3, 1.45, 10),     v: () => S().highestUnlocked || 1 },

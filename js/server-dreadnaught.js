@@ -972,10 +972,20 @@
   }
   // Re-send a run the server never confirmed. Cheap and idempotent, so it runs on
   // every event-screen open — including the first one after a guest signs in.
+  // Re-send a run the server never confirmed — and also a row that is simply NOT
+  // THERE. `pubDirty` only catches a write we KNOW failed; a row missing for any
+  // other reason left the pilot silently off the board with nothing to retry, and
+  // no daily reward to settle. So compare the fetched daily board against the
+  // local record: no row of mine, or a lower figure than my own best, and it
+  // publishes again. The RPC keeps maxes, so re-sending is free and idempotent.
   function flushPublish() {
-    const s = sd(); if (!s || !s.pubDirty) return;
+    const s = sd(); if (!s) return;
     if (!cloudOn() || !myUid()) return;
-    publishScore();
+    if (s.pubDirty) { publishScore(); return; }
+    if (!s.bestDay || !_cl.day) return;
+    const id = myUid();
+    const mine = _cl.day.filter((r) => r.user_id === id)[0];
+    if (!mine || (mine.best_day || 0) < s.bestDay) publishScore();
   }
 
   // ---- leaderboards (daily · season, side by side) ----

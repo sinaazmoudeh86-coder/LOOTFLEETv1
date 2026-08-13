@@ -707,14 +707,17 @@
     //   • CELESTIAL AURA — a standing field that cooks everything near the hull.
     // NEVER SOLD, in any currency. It is the apex prize of Space Cargo Defense —
     // and it does not fly for anyone who has not put the years in:
-    //   1,000 SUCCESSFUL missions claimed  AND  Pilot Ascension ★100  AND a
+    //   1,000 CARGO RUNS SECURED  AND  Pilot Ascension ★100  AND a
     //   TITAN SINA in the hangar — the Celestial hull is crewed off a Titan Sina,
     //   so the Titan line is the licence to fly it.
+    // The haulage line counts DELIVERIES (state.cargo.wins). It used to count the
+    // general mission tally, so the capstone of an event could be earned without
+    // flying the event.
     // All three are checked at SWITCH time, not just at grant time (see canFlyShip).
     { key:'eternum', name:'Eternum', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:192,
       mods:{ hpPct:7920, dmgPct:4455, multiShot:1188, critChance:95, critDamage:3465, moveSpeed:744, atkSpeedPct:1485, rangePct:6000, lifeSteal:43.8 },
       tag:'CELESTIAL CLASS · ETERNUM', celestial:true, sinaTracers:true, deathBeams:5, dpsAura:0.9,
-      flyReq:{ missions:1000, stars:100, ship:'titansina' },
+      flyReq:{ cargo:1000, stars:100, ship:'titansina' },
       // COMMISSIONING COST. The 2% Omega Cargo V roll recovers an ETERNUM CORE,
       // not the hull — the hull is then built around it, and the yard wants
       // 10 TRILLION gold, and — since the non-gold economy came down 10× — one

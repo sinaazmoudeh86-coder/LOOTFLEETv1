@@ -95,13 +95,15 @@
   // because the gap was measured against the zone while the depth could come
   // from the level, which overstated the gap by the difference.
   const depthBase = () => { try { return Math.max(1, hz(), plvl()); } catch (e) { return 1; } };
-  const deployZone = (tier) => Math.max(1, Math.min(999, Math.round(depthBase() * (1 + 0.10 * tier)) + tier * 6));
+  const deployZone = (tier) => Math.max(1, Math.round(depthBase() * (1 + 0.10 * tier)) + tier * 6);
   const zoneGap = (tier) => Math.max(0, deployZone(tier) - depthBase());
   // WHAT LEVEL YOU WILL BE ATTACKING. CONFIG.zoneCombatLevel converts the deploy
   // zone into the level of PILOT it is built for — the same conversion the Grind
   // Zone list and the high-risk warning use — so it can be read straight against
   // your own level. (The old figure was zone²: Zone 264 read "Lv 69,696", which
-  // compares to nothing.)
+  // compares to nothing.) THERE IS NO CEILING: deployZone used to clamp at 999,
+  // which pinned the mobs — and the pay and loot riding the same zone curve — for
+  // every pilot past that frontier. Zones are endless, so this is too.
   const mobLevel = (tier) => { try { return C().zoneCombatLevel(deployZone(tier)); } catch (e) { return deployZone(tier); } };
   // PILOT LEVEL SCALING. Everything the manifest pays in CURRENCY rides the
   // pilot's level, so a Level 400 commander is not hauling Level 100 wages;
@@ -169,7 +171,10 @@
     const own = !!(s.ownedShips || {})[ETERNUM];
     const fly = G().canFlyShip ? G().canFlyShip(ETERNUM) : { ok: true, need: [] };
     return { own, fly,
-      missions: s.lifetimeMissions | 0, missionsNeed: 1000,
+      // THE LICENCE COUNTS CARGO RUNS SECURED, not missions. This read
+      // lifetimeMissions — the general board tally — so a capstone earned inside
+      // Space Cargo Defense was being paid off by daily mission boards instead.
+      hauls: (s.cargo && s.cargo.wins) | 0, haulsNeed: 1000,
       stars: stars(), starsNeed: 100,
       sina: !!(s.ownedShips || {}).titansina };
   }
@@ -233,7 +238,7 @@
         '<div class="cd-et-line">1.5× the Titan Sina on every line · five <b>death beams</b> that lock the nearest hostiles and never let go · a standing <b>celestial aura</b> that burns anything near the hull.</div>' +
         '<div class="cd-et-reqs">' +
           '<div class="cd-et-reqh">' + (r.own ? 'LICENCE COMPLETE' : 'LICENCE TO BUILD AND FLY') + '</div>' +
-          row(r.missions >= r.missionsNeed, fmt(r.missions) + ' / 1,000', 'Successful missions') +
+          row(r.hauls >= r.haulsNeed, fmt(r.hauls) + ' / 1,000', 'Cargo runs secured') +
           row(r.stars >= r.starsNeed, '★' + r.stars + ' / ' + r.starsNeed, 'Pilot Ascension') +
           row(r.sina, r.sina ? 'IN HANGAR' : 'MISSING', 'Titan Sina') +
         '</div>' +

@@ -227,7 +227,13 @@
       return true;
     } catch (e) { return false; }
   }
-  setTimeout(publishNow, 6000);            // visible within seconds of arriving
+  // Visible within seconds of arriving — but `rt.stats` may not exist yet at 6s,
+  // and publishLb now declines to publish an unusable power rather than writing a
+  // zero that would sort the pilot off the board. Two cheap retries cover the
+  // gap so a slow boot costs seconds of absence instead of a full 90s heartbeat.
+  setTimeout(publishNow, 6000);
+  setTimeout(publishNow, 16000);
+  setTimeout(publishNow, 35000);
   setInterval(publishNow, 90000);          // and kept current regardless of saves
 
   // public leaderboard row (non-sensitive fields)
@@ -236,10 +242,31 @@
   // from local state, which is why only YOUR stars ever showed on the Ranks page
   // \u2014 every other pilot, ascended or not, published a zero. Read it from the save
   // blob, with the live module as a fallback.
+  // PUBLISHED POWER IS THE SORT KEY for the whole leaderboard, and the row is a
+  // full overwrite — so ONE bad reading makes the pilot vanish.
+  // G.score() returns 0 whenever `rt.stats` has not been computed yet (the 6s
+  // post-arrival publish, a fresh zone load, the moments after an ascension or a
+  // respawn rebuilds stats). The guard below was `(G && G.score) ? G.score() : …`
+  // — which tests whether the FUNCTION EXISTS, not whether its RESULT is usable.
+  // It does exist, so a 0 went straight to the server, the row sorted last on
+  // `order('power', desc).limit(100)`, and the pilot dropped off Ranks until the
+  // next heartbeat 90 seconds later. That is the "randomly disappears" report.
+  // Last good value wins; if there has never been one, the row is not published
+  // at all rather than published as a zero.
+  let _lastPower = 0;
   function publishLb(s, data) {
     try {
       if (window.CLOUD.lbUpsert) {
         const G = window.GAME;
+        let power = 0;
+        try { power = (G && G.score) ? Number(G.score()) : 0; } catch (e) { power = 0; }
+        if (!isFinite(power) || power <= 0) power = 0;
+        if (power > 0) _lastPower = power;
+        else power = _lastPower;
+        // Still nothing usable. A pilot with a level or kills behind them HAS a
+        // power; publishing 0 for them is strictly worse than publishing nothing,
+        // because it overwrites a good row with one that sorts last.
+        if (power <= 0 && ((data.level || 1) > 1 || (data.totalKills || 0) > 0)) return;
         let asc = (data && data.pasc && data.pasc.stars) | 0;
         if (!asc) { try { asc = window.PASCEND ? (window.PASCEND.stars() | 0) : 0; } catch (e) {} }
         // LADDER COLUMNS (Aug 2026) — territory revenue, hangar size, lifetime
@@ -252,7 +279,7 @@
         try { extra = window.RANKBOARDS ? window.RANKBOARDS.publishFields() : null; } catch (e) {}
         window.CLOUD.lbUpsert(Object.assign({
           name: s.name,
-          power: (G && G.score) ? G.score() : (data.level || 1),
+          power: power || (data.level || 1),
           level: data.level || 1, zone: data.highestDungeonReached || 1, kills: data.totalKills || 0,
           asc,
           fleet: [data.ship].concat((G && G.fleetShips) ? G.fleetShips().map((x) => x.key) : []).filter(Boolean),
@@ -411,11 +438,38 @@
     base.totalKills = Math.max(base.totalKills || 0, other.totalKills || 0);
     base.playTime = Math.max(base.playTime || 0, other.playTime || 0);
     base.itemsFound = Math.max(base.itemsFound || 0, other.itemsFound || 0);
+    base.lifetimeLooted = Math.max(base.lifetimeLooted || 0, other.lifetimeLooted || 0);
     base.highestDungeonReached = Math.max(base.highestDungeonReached || 1, other.highestDungeonReached || 1);
     base.highestUnlocked = Math.max(base.highestUnlocked || 1, other.highestUnlocked || 1);
+    // SEASON 1: VOIDMAW — merged FIELD BY FIELD. Taking one copy whole and maxing
+    // only total/bestEver let a stale copy win the pick and carry a `bestDay` of 0
+    // and a fresh `att` for a day the pilot had already spent: he burned every
+    // attempt, then vanished from the daily board and settled for no reward
+    // (settleLeaderboard returns early on a zero bestDay). bestDay/att/buys belong
+    // to ONE DAY, so they only combine when both copies are on the same day —
+    // otherwise the LATER day owns them outright. `claims` is deliberately left to
+    // the base copy: it holds unspent prizes, and unioning it can pay twice.
     if (other.sdread && base.sdread) {
-      base.sdread.total = Math.max(base.sdread.total || 0, other.sdread.total || 0);
-      base.sdread.bestEver = Math.max(base.sdread.bestEver || 0, other.sdread.bestEver || 0);
+      const b = base.sdread, o = other.sdread;
+      b.total = Math.max(b.total || 0, o.total || 0);
+      b.bestEver = Math.max(b.bestEver || 0, o.bestEver || 0);
+      b.bestStage = Math.max(b.bestStage || 0, o.bestStage || 0);
+      b.shards = Math.max(b.shards || 0, o.shards || 0);
+      b.runs = Math.max(b.runs || 0, o.runs || 0);
+      b.partDay = Math.max(b.partDay | 0, o.partDay | 0);   // first-fight bonus never pays twice
+      if (o.vmGranted) b.vmGranted = true;
+      const bd = b.day | 0, od = o.day | 0;
+      if (od > bd) {
+        b.day = od; b.bestDay = o.bestDay || 0;
+        b.att = o.att | 0; b.buys = o.buys | 0;
+        b.lbRank = o.lbRank || null;
+      } else if (od === bd) {
+        b.bestDay = Math.max(b.bestDay || 0, o.bestDay || 0);
+        b.att = Math.max(b.att | 0, o.att | 0);              // an attempt spent stays spent
+        b.buys = Math.max(b.buys | 0, o.buys | 0);
+        if (!b.lbRank && o.lbRank) b.lbRank = o.lbRank;
+      }
+      if ((o.hist || []).length > (b.hist || []).length) b.hist = o.hist;
     } else if (other.sdread && !base.sdread) base.sdread = other.sdread;
     if (other.cosmetics && other.cosmetics.owned) {
       base.cosmetics = base.cosmetics || { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };

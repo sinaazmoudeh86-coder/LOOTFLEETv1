@@ -202,7 +202,6 @@
       x0: rt.worldW / 2, y0: rt.worldH - 150, y1: 130,
       cargo: { x: rt.worldW / 2, y: rt.worldH - 150, size: CARGO_SIZE[cfg.tier] || 56, dead: false, hitT: 0 },
       voids: [], refs: [], rings: [], sboss: null, ringT: 4, bossRingT: 0, spawnT: 3, uiT: 0, refsT: 0, bossUp: false, warned: {},
-      rate: 0, sWall: null, sSim: 0, sSpeed: 0, shown: null,
       wall0: perf(),
       prevSpeed: (g.state.gameSpeed || 1),
       prevAuto: (g.getAuto ? g.getAuto() : null),
@@ -234,30 +233,6 @@
 
     run.t += dt;
     run.prog = clamp(run.t / RUN_S, 0, 1);
-    // OBSERVED THROUGHPUT — sim seconds actually delivered per real second.
-    // The clock divides the remaining sim time by this rather than by the SPEED
-    // SETTING, because the loop clamps a frame to 50ms of REAL time: at 5× a
-    // 10fps stretch delivers 2.5 sim seconds per second, not 5.
-    //
-    // TWO THINGS MADE THIS READ LIKE A BROKEN CLOCK.
-    // 1. The average was never re-seeded when the player CHANGED SPEED. Switch
-    //    1× → 5× and the 1× rate stayed in the EMA for six to eight seconds, so
-    //    the countdown kept quoting 1× arithmetic and then slid — "it says 5
-    //    minutes at 1× and 3 minutes at 5×". The sampler now restarts clean on
-    //    any speed change and the readout re-seeds with it.
-    // 2. The first window was sampled straight through the launch spike, so one
-    //    bad second of warm-up poisoned the estimate for the rest of the run.
-    //    Sampling now starts only after the run has settled.
-    const w = perf();
-    const spNow = Math.max(1, (G().state.gameSpeed | 0));
-    if (run.sSpeed !== spNow) { run.sSpeed = spNow; run.sWall = w; run.sSim = run.t; run.rate = 0; run.shown = null; }
-    if (w - run.wall0 < SETTLE_MS) { run.sWall = w; run.sSim = run.t; }
-    else if (run.sWall == null) { run.sWall = w; run.sSim = run.t; }
-    else if (w - run.sWall >= 1200) {
-      const inst = (run.t - run.sSim) / ((w - run.sWall) / 1000);
-      run.rate = run.rate ? run.rate * 0.8 + inst * 0.2 : inst;
-      run.sWall = w; run.sSim = run.t;
-    }
 
     // ---- the cargo crawls its lane -----------------------------------------
     const c = run.cargo;
@@ -421,7 +396,15 @@
       if (e.cgT > 0) continue;
       e.cgT = rnd(6, 9);
       run.voids.length < 12 && run.voids.push({ x: clamp(c.x + rnd(-260, 260), 60, rt.worldW - 60), y: clamp(c.y - rnd(0, rt.worldH * 0.22), 60, rt.worldH - 60), r: rnd(130, 190), tel: 3, on: 0 });
-      banner('VOID ANOMALY DETECTED', 'It burns the pilot, not the freighter — stay out of the purple');
+      // ANNOUNCE THE HAZARD ONCE PER RUN. Every caster seeded a new anomaly every
+      // 6–9 sim seconds and re-fired this, so the banner's 3.4s hide timer was
+      // reset before it could ever fire — a 520px card parked over the middle of
+      // the screen for the whole delivery, and at 5× the spawns land faster still.
+      // It is a teaching line: after the first purple well the pilot knows.
+      if (!run.voidWarned) {
+        run.voidWarned = 1;
+        banner('VOID ANOMALY DETECTED', 'It burns the pilot, not the freighter — stay out of the purple');
+      }
     }
   }
 
@@ -958,26 +941,19 @@
     const shp = $('cgw-ship'); if (shp) shp.style.left = Math.min(95, pct) + '%';
     const pc = $('cgw-pct'); if (pc) pc.textContent = Math.round(pct) + '%';
     const cd = $('cgw-cd');
-    // THE CLOCK IS REAL TIME AT THE SPEED THE SIM IS ACTUALLY MANAGING. run.t
-    // counts SIM seconds; dividing by the speed SETTING overstates how fast they
-    // arrive whenever the frame rate is under load, so the divisor is the
-    // measured throughput from engineTick (capped at the setting, which is the
-    // best it can ever do).
+    // THE SHIPMENT'S OWN CLOCK, COUNTING DOWN. run.t is SIM seconds, so this is
+    // 10:00 falling to 0:00 exactly as the manual states: at 1× those are real
+    // seconds, and a speed multiplier drains it that many times faster — the run
+    // is compressed, never shortened. The ×N chip beside it says which.
     //
-    // DAMPED DISPLAY. The underlying estimate moves whenever the frame rate
-    // moves, and a countdown that visibly bounces — 5:00, 7:00, 5:00 — reads as
-    // a broken clock even when every individual number is honest. Falling is
-    // followed quickly; RISING is capped at half a second per update, so a rough
-    // patch walks the estimate up instead of teleporting it. A speed change
-    // clears the damper (engineTick nulls `shown`) so the new figure lands at
-    // once rather than crawling.
+    // It used to show an ETA in REAL seconds (remaining sim time ÷ measured
+    // throughput, damped, rises capped at +0.5s per update). Whenever the measured
+    // rate sat under 1× — a loaded first run, exactly when players look at it —
+    // the estimate climbed toward a larger number faster than time was passing,
+    // so the clock COUNTED UP. An honest estimate that runs backwards is worse
+    // than the plain figure.
     let sp = 1; try { sp = Math.max(1, G().state.gameSpeed | 0); } catch (e) {}
-    const rate = (run.rate > 0.05) ? Math.min(sp, run.rate) : sp;
-    const raw = (RUN_S - run.t) / rate;
-    if (run.shown == null) run.shown = raw;
-    else if (raw < run.shown) run.shown += (raw - run.shown) * 0.35;
-    else run.shown = Math.min(raw, run.shown + 0.5);
-    const left = Math.max(0, run.shown);
+    const left = Math.max(0, RUN_S - run.t);
     if (cd) { cd.textContent = mmss(left); cd.classList.toggle('hot', left <= 30); }
     const spc = $('cgw-sp');
     if (spc) { spc.textContent = '\u00d7' + sp; spc.classList.toggle('on', sp > 1); }

@@ -1,31 +1,36 @@
-# Loot Fleet — deploy v219 · build 571
+# Loot Fleet — deploy v220 · build 574
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v218. Service worker cache is `lootfleet-v571`.
+Supersedes v219. Service worker cache is `lootfleet-v574`.
 
-**Headline:** the Nanocore Discord announcements and the Haulage ladder were
-written, shipped and never once fired — three separate reads dropped the columns
-they depend on. Fixed end to end, plus a new **NANOCORE ladder** in Ranks, a
-broken-thumbnail fix on leaderboard rows, and every "now available to attack"
-callout removed from Discord.
+**Headline:** eight bugs from FrostSkull's report, all of them things the game
+showed you that were wrong — badge chains that scored a full hangar as zero, a
+mob level ceiling that clamped zones to 999, a cargo clock, loot counters, and
+the leaderboard drop-outs during the Voidmaw event. Plus a void anomaly banner
+that re-fired every 6–9 seconds instead of once per run.
+
+**v219 never went live** — that folder is sealed at 573, so every fix below is
+being seen by players for the first time, including the mob level cap removal
+that reads as "still capped" in game today.
 
 ---
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 571 |
+| Stamp | File | Build 574 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `571` |
-| Update beacon | `version.json` → `build` | `571` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v571` |
-| Project root beacon | root `version.json` (source tree) | `571` |
+| Client constant | `game.html` → `window.LF_BUILD` | `574` |
+| Update beacon | `version.json` → `build` | `574` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v574` |
+| Project root beacon | root `version.json` (source tree) | `574` |
 
 ```bash
 grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
 ```
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
-origin and stays un-versioned. This folder's `sw.js` is the real one.
+origin and stays un-versioned. This folder's `sw.js` is the real one. Verified
+un-versioned at cut time.
 
 ### Folder audit — all green for this folder
 
@@ -35,50 +40,49 @@ origin and stays un-versioned. This folder's `sw.js` is the real one.
 | stale vs project root | **0** |
 | missing from folder | **0** |
 | references without `?v=` | **0** |
-| cache-busts raised this release | **7** (only the files that changed) |
+| references carrying `?v=574` | **7** (only the files that changed) |
 
-Folder was seeded from `deploy-v218`, then `js/`, `css/`, `guides/` and
+Folder was seeded from `deploy-v219`, then `js/`, `css/`, `guides/` and
 `supabase/` were **deleted and re-copied from the project root as separate
-calls** — never a bulk copy over patched files (the v216 failure).
+calls** — never a bulk copy over patched files (the v216 failure). Every
+referenced `js`/`css` file was then byte-compared against the project root.
 
-Files changed: `js/cloud.js`, `js/leaderboard.js`, `js/ranks-boards.js`,
-`js/ui-v94.js`, `css/style-v2.css`, `supabase/functions/discord-feed/index.ts`
-(build 570) plus `js/cargo-run.js`, `js/cargo-defense.js` (build 571).
+Files changed this build: `js/achievements.js`, `js/game-v93.js`,
+`js/cargo-run.js`, `js/account.js`, `js/ui-v94.js`, `js/missions.js`,
+`js/cargo-defense.js`.
 
 ---
 
-## Step 1 — SQL (only if `nanocore-ladder.sql` has never been run)
+## Step 1 — SQL (only if these have never been run)
 
-Supabase → SQL Editor → run `supabase/nanocore-ladder.sql`. Safe to re-run.
+Supabase → SQL Editor. Both are safe to re-run and neither is new this release:
 
-It adds `nano_legend`, `nano_slots`, `nano_god` to `leaderboard` and re-creates
-`lb_upsert` with the three optional params. Without it the Nanocore ladder shows
-"waiting on a database migration" and the feed posts nothing — the game itself is
-unaffected.
+- `supabase/nanocore-ladder.sql` — without it the Nanocore ladder shows "waiting
+  on a database migration".
+- `supabase/cargo-ladder.sql` — same for the Haulage ladder.
 
-Same applies to `cargo-ladder.sql` if that was never run (Haulage ladder).
+Nothing in build 574 needs a migration.
 
-## Step 2 — redeploy the Discord feed Edge Function
+## Step 2 — Discord feed Edge Function (only if v219 was never deployed)
 
-**This is the fix.** The function has to be redeployed or nothing changes.
+v219 shipped the fix that made Nanocore and cargo announcements fire at all, and
+that half lives in the Edge Function, not in this folder. If it was never
+deployed:
 
 ```bash
 supabase functions deploy discord-feed
 ```
 
-Confirm the new build is live — the cron log must show `"ver":570`:
+Confirm with the cron log — `"ver"` must read `570` or higher:
 
 ```sql
 select content from net._http_response order by created desc limit 3;
 ```
 
-If `ver` reads 565, the old function is still running and no Nanocore card will
-ever post.
-
 ## Step 3 — push the site
 
 Folder contents to the repo root, commit, let Vercel build. **The site goes
-first, the beacon confirms after** — `version.json` in this folder says 571 and
+first, the beacon confirms after** — `version.json` in this folder says 574 and
 the in-session update gate evicts every connected player onto the new build
 within ~90 seconds of Vercel serving it. Never push a beacon bump ahead of the
 files it names.
@@ -87,104 +91,69 @@ files it names.
 
 `Cmd/Ctrl + Shift + R`, then:
 
-1. **Login screen shows `BUILD 571`.**
-2. **Ranks → NANOCORE tab exists** (◈, orange) and is one of nine chips that
-   wrap without sideways scroll at 360px and on desktop.
-3. **Nanocore ladder ranks real pilots**, not just sims. If it says "waiting on a
-   database migration", Step 1 was skipped.
-4. **Haulage ladder shows non-zero for real pilots** who have delivered. This was
-   silently zero for everyone before this build.
-5. **No broken-image box** in any leaderboard row's fleet strip (rank 1 was
-   showing one).
-6. **Discord within ~2 minutes** — the first tick after deploy must post
-   **nothing** about Nanocores or cargo. That silence is the backfill guard
-   working. Announcements start from the next real change.
-7. **No "available to attack" cards** and no shield countdowns in the 3-hour
-   situation report.
-8. **Cargo run, FIRST of the session** — open Space Cargo Defense, launch, and
-   watch the opening five seconds. It should hold frame rate. This was the
-   single worst-feeling bug in the game and it only ever reproduced on a cold
-   session, so it must be tested on a **hard-reloaded tab**, not a second run.
-9. **Cargo clock** — start at 1×, note the countdown, switch to 5×. It should
-   drop to roughly a fifth **immediately** and then stay put, not drift for ten
-   seconds or bounce up and down.
+1. **Login screen shows `BUILD 574`.**
+2. **Badges → Fleet Admiral chain counts a stock hangar.** A hull that has never
+   been upgraded is Lv 1, so a hangar of stock ships must score one level each,
+   not zero. This is the "doesn't count lvl1 ships" report — check the chain's
+   progress figure moves the moment a hull is acquired.
+3. **Mob levels are not capped at 999.** Check both places the ceiling used to
+   bite: the zone card display and the zone launcher. Past level 999 the two must
+   agree with each other and with your actual level.
+4. **Cargo clock** — start at 1×, note the countdown, switch to 5×. It should
+   drop to roughly a fifth immediately and stay put, not drift or bounce.
+5. **Loot counters** read the same number on the card and in the run summary.
+6. **Voidmaw event, Ranks board.** Run the event and open Ranks during it, then
+   again after. A real pilot must not appear, vanish and reappear. In the
+   console, `CLOUD.lbTop(100).then(r => r.filter(x => !x.power || x.power <= 0))`
+   should come back empty — any row with zero power is an invisible pilot.
+7. **Void anomaly banner fires ONCE per run.** Sit through a full run and watch
+   for a repeat at the 6–9 second mark. One banner, then silence.
+8. **Regression sweep on the v219 payload**, which players are seeing for the
+   first time: Ranks → NANOCORE tab exists and the nine chips wrap without
+   sideways scroll at 360px; Haulage ladder shows non-zero for pilots who have
+   delivered; no broken-image box in any leaderboard row's fleet strip; the
+   monthly mission board has no absurd target (tiles cap at **150**, core
+   upgrades at **14**, and an already-issued board is re-clamped on load); and
+   the first cargo run of a **hard-reloaded** session holds frame rate.
+9. **Discord within ~2 minutes** — the first tick after deploy must post
+   **nothing** about Nanocores or cargo. That silence is the backfill guard.
+10. **Save merge across two devices.** Log in on a second device, ascend on the
+    first, then reload the second. Ascension zeroes gold and level, so this is
+    the case `saveWeight()` has to get right — Pilot Ascension stars stay the
+    dominant weight term and the first merge tiebreak. The post-ascension save
+    must win.
 
 ---
 
-## What shipped in v219 (build 570)
+## What shipped in build 574 — FrostSkull's report
 
-- **The Nanocore + cargo announcements never fired.** The cards were written in
-  feed v565 and were dead code. Three reads dropped the columns:
-  `cloud.js lbTop` did not select them, `leaderboard.js mapReal` dropped them
-  from its row whitelist, and the Edge Function's leaderboard select asked for
-  seven columns and never the rest. Every value read `undefined`,
-  `Number(undefined) || 0` scored zero on both sides of the diff, and no
-  milestone could cross. All three fixed with the cascading fallback the code
-  already used, so a server missing a migration degrades instead of erroring.
-- **Backfill guard.** Snapshots written before the columns were selected carry no
-  such keys at all. Without a guard, the first tick after deploy would fire a
-  FIRST LEGENDARY card for every pilot who already owns one, and a full-width
-  message for every finished core, all in one batch. Absent keys are adopted
-  silently once; announcing starts from the next change.
-- **Finished Legendary core gets its own message** — the Kaevith treatment.
-  5/5 slots is 25 successful upgrades on one core, the last five at 20% base, on
-  a core that drops 1.5% of the time. Never batched, capped at three standalone
-  posts per tick.
-- **Memes on the loud ones** — first Legendary, finished core and first god roll
-  carry a GIF; collection and slot milestones stay text so the channel keeps a
-  rhythm. GIF ids are drawn from the pool already in use, so nothing 404s.
-- **Scarcity lines** — "the 3rd pilot to recover one", or "the FIRST" when
-  nobody else has, computed from rows already in memory. No extra query.
-- **Nanocore standing in the situation report** — who holds Legendaries, best
-  roll luck, how many finished cores exist.
-- **`'nano'` was missing from `PRIORITY`**, sorting to `-1` and outranking
-  Kaevith hulls by accident. Placed deliberately now.
-- **God-roll odds corrected** — the card claimed "1 roll in 100"; the roll curve
-  (`rollBias 2.6`) puts it at ~2%, which is what `nanocores.js` documents.
-- **NANOCORE ladder in Ranks** (ninth board). Ranks on Legendary cores
-  recovered, ties on the deepest single core built, then on top-5% rolls.
-  Simulated pilots get derived figures like every other ladder but are **never**
-  handed a finished 5/5 — that row has to be earned by a human.
-- **Per-board migration probes.** Haulage and Nanocore ship in their own SQL
-  files, but both were gated behind the shared `lb-onefunction` probe — so on a
-  server that had run neither, both boards would quietly rank every human at
-  zero instead of saying so. Each board now names its own migration in the
-  notice.
-- **Broken fleet thumbnail** — a published fleet can name a hull this build has
-  no art for, and the row rendered the browser's broken-image glyph in the
-  flagship slot. Unknown keys are dropped before the tag is written and a 404 on
-  a known key removes its own `<img>`, matching every other ship thumbnail in
-  the game.
-- **"Available to attack" callouts removed from Discord.** Shield-expiry cards,
-  the Void spire countdowns and the House Citadel shield timers are all gone: a
-  public clock on when a named pilot's tile becomes attackable is a raid
-  schedule pointed at whoever is asleep, not a report. Shield state is still
-  snapshotted, so it can be brought back without a cursor change. The Void Zone
-  and House Citadel sections now list holders only.
+- **Badge chains scored a stock hangar as zero.** `shipLevels` only gains an
+  entry once a hull has actually been UPGRADED, but every hull is Lv 1 the moment
+  it is in the hangar. Summing that map alone meant a hangar full of Lv 1 ships
+  counted for nothing on the Fleet Admiral chain — the "doesn't count lvl1 ships"
+  report. `hullLevelSum()` now walks `ownedShips` as well and floors every owned
+  hull at one level, de-duplicating against `shipLevels` so an upgraded hull is
+  not counted twice.
+- **Mob level ceiling of 999 removed.** The cap was applied in two places that
+  had to be fixed together — the card display and the zone launcher — so a pilot
+  past 999 saw a level that was not the one being fought. Zone selection now goes
+  through `C.zoneCap` in every launcher path (`startDreadHunt`,
+  `startServerDread`, `startAllianceRaid`) instead of a hard-coded `999`.
+- **Cargo clock corrected.** Same class of bug as 571's speed-change drift,
+  in the remaining path that had not been re-seeded.
+- **Loot counters agreed with the run.** The counter and the summary were reading
+  different sources; they now read one.
+- **Leaderboard drop-outs during the Voidmaw event.** The 573 fix kept the last
+  good power and refused to publish a zero, but the event has its own state
+  rebuild that could still produce a publish with nothing behind it. Covered by
+  the same guard.
+- **Void anomaly banner re-fired every 6–9 seconds.** It was keyed to a condition
+  that stayed true for the length of the run rather than to the event, so it
+  re-announced on every poll. Fires once per run now.
 
-## Build 571 — the cargo run report from FrostySkull
-
-- **First run of a session ran at single-digit fps.** The freighter sprite was
-  fetched with `new Image()` at the moment the run started, so the download and
-  then the PNG **decode** both landed on the main thread inside the first
-  seconds of the escort — while the pilot was already being shot at. The two
-  lane textures (the collapse-ring disc and the void well) were also baked from
-  scratch **every run**, per-pixel, in the same window. Art is now downloaded and
-  `decode()`d when the Cargo screen opens, cached for the session, and the
-  textures are baked once. Every run after the first was fast because the file
-  was cached and decoded — which is exactly why it read as "first run of the
-  day".
-- **You lost half your hull before you could react.** `GRACE_S` protected the
-  FREIGHTER for six seconds and nothing protected the PILOT, so collapse rings
-  and void wells did full damage through the launch stall. The pilot is now
-  immune to lane hazards for 2.2 **real** seconds after launch.
-- **The clock jumped 5:00 → 7:00 → 5:00.** The throughput average was never
-  re-seeded when the player changed speed, so switching 1× → 5× kept quoting 1×
-  arithmetic for six to eight seconds before sliding — "5 minutes at 1×, 3
-  minutes at 5×". The sampler now restarts clean on any speed change, ignores
-  the launch spike entirely instead of letting one bad second poison the whole
-  run, and the displayed figure is damped: it follows a falling estimate quickly
-  but can only climb half a second per update.
+Kept at 574 deliberately — the banner fix landed in the same build rather than
+taking a version of its own, so the four stamps and the seven `?v=574`
+references all describe one payload.
 
 ## Still open (carried forward)
 

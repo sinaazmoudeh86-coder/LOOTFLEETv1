@@ -228,6 +228,13 @@
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
+      // LAST-DITCH SORT-KEY GUARD. The row is a full overwrite and `power` orders
+      // the whole board, so a zero here does not mean "weak pilot", it means
+      // "invisible pilot" — the row sorts below every sim and falls out of the
+      // top 100 the UI asks for. publishLb already keeps a last-good value; this
+      // catches any other caller that hands us an unusable reading.
+      const pw = Number(p.power);
+      if ((!isFinite(pw) || pw <= 0) && ((p.level || 1) > 1 || (p.kills || 0) > 0)) return;
       const base = {
         p_name: p.name || 'Operator', p_power: bignum(p.power),
         p_level: p.level || 1, p_zone: p.zone || 1, p_kills: bignum(p.kills),

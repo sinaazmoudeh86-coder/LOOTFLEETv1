@@ -2459,6 +2459,13 @@
   function collect(g) {
     g.picked = true; g.dead = true;
     const item = g.item;
+    // EVERY PICKUP COUNTS FOR LIFE, and this is the only place a drop is really
+    // collected. Three of the four paths below never reach the bag — scrapped by
+    // the pickup filter, sold on pickup, or slotted straight into an empty
+    // hardpoint — so measuring loot by what SITS IN THE HOLD counted none of
+    // them: sell-on-pickup scored nothing towards "pick up N pieces of loot"
+    // even though selling it required picking it up first.
+    state.lifetimeLooted = (state.lifetimeLooted || 0) + 1;
     // PICKUP FILTER: drops below the player's chosen rarity floor never enter
     // the bag — they're instantly scrapped into Galaxy Resources on contact.
     // (An empty slot still equips anything: never scrap gear you NEED.)
@@ -3161,9 +3168,14 @@
     // own but may not fly is not a hull you were given. The waiver clears every
     // licence requirement (missions, stars, prerequisite hull) for the account.
     if (state.flightWaiver) return { ok: true, waived: true };
-    const miss = { missions: state.lifetimeMissions | 0, stars: ascStars(), ship: !!(state.ownedShips || {})[rq.ship] };
+    const miss = { missions: state.lifetimeMissions | 0, cargo: (state.cargo && state.cargo.wins) | 0,
+                   stars: ascStars(), ship: !!(state.ownedShips || {})[rq.ship] };
     const need = [];
     if (rq.missions && miss.missions < rq.missions) need.push({ k: 'missions', have: miss.missions, want: rq.missions });
+    // CARGO DELIVERIES, not missions. The Eternum licence is earned in Space Cargo
+    // Defense, so it counts shipments SECURED (cargo.wins) — it was reading the
+    // general mission tally, which any board completion ticked up.
+    if (rq.cargo && miss.cargo < rq.cargo) need.push({ k: 'cargo', have: miss.cargo, want: rq.cargo });
     if (rq.stars && miss.stars < rq.stars) need.push({ k: 'stars', have: miss.stars, want: rq.stars });
     if (rq.ship && !miss.ship) need.push({ k: 'ship', have: 0, want: 1, ship: rq.ship });
     return { ok: !need.length, need, req: rq, have: miss };
@@ -3242,7 +3254,12 @@
     const list = rt.drones;
     if (!list || !list.length) return;
     const a = rt.archer, s = rt.stats, cap = list.length;
-    const base = C.DRONE.orbit * 2.35 + Math.min(96, cap * 4.5);
+    // THE BAY ORBITS OUTSIDE THE HULL. A fixed ~122-unit orbit sits well inside a
+    // capital hull's silhouette once the sprite scale is 3–5×, so a 96-bay Dread
+    // Omega flew its whole screen underneath itself and read as having no drones.
+    let hs = 1;
+    try { if (window.RENDER && RENDER.shipScaleOf) hs = RENDER.shipScaleOf(state.ship) || 1; } catch (e) {}
+    const base = C.DRONE.orbit * 2.35 + Math.min(96, cap * 4.5) + Math.max(0, hs - 1) * 34;
     const T = rt.time;
     for (let i = 0; i < list.length; i++) {
       const dr = list[i];
@@ -3331,13 +3348,23 @@
   // wide V formation — clear of even the biggest flagship sprites (Jul 2026:
   // old ±36/±66 offsets left escorts hidden UNDER a Titan-class flagship)
   const ESCORT_OFF = [[-95, 58], [95, 58], [-160, 14], [160, 14]];
+  // THE FORMATION SCALES WITH THE FLAGSHIP. Capital hulls draw at up to 5× the
+  // frigate footprint (RENDER.shipScaleOf) — a Dread Omega is ~228 units across,
+  // so fixed ±95 offsets parked the wing INSIDE its silhouette, and the flagship
+  // draws after the escorts: they were simply covered by it.
+  function escortSpread() {
+    let s = 1;
+    try { if (window.RENDER && RENDER.shipScaleOf) s = RENDER.shipScaleOf(state.ship) || 1; } catch (e) {}
+    return 1 + Math.max(0, s - 1) * 0.3;      // frigate ×1 · Dread Omega ×1.9 · Eternum ×2.26
+  }
   const ESCORT_WTYPE = { Frigate: 'laser', Cruiser: 'gatling', Battleship: 'missile', Carrier: 'rail', Aegis: 'support' };
   function rebuildEscorts() {
     const ax = rt.archer ? rt.archer.x : 0, ay = rt.archer ? rt.archer.y : 0;
+    const sp = escortSpread();
     rt.escorts = fleetShips().map((sh, i) => ({
       key: sh.key, cls: sh.cls,
-      x: ax + ESCORT_OFF[i][0], y: ay + ESCORT_OFF[i][1],
-      ox: ESCORT_OFF[i][0], oy: ESCORT_OFF[i][1],
+      x: ax + ESCORT_OFF[i][0] * sp, y: ay + ESCORT_OFF[i][1] * sp,
+      ox: ESCORT_OFF[i][0] * sp, oy: ESCORT_OFF[i][1] * sp,
       cd: Math.random(), heal: 0,
     }));
   }
@@ -3819,8 +3846,13 @@
     // curve, so this raises the whole fight at once.
     // NOTE: reachZone() is deliberately NOT called — it would bank this depth as
     // highestDungeonReached and launder free unlock ceiling out of the event.
+    // NO ZONE CEILING. This used to clamp at 999, which quietly capped the mobs a
+    // deep pilot fights (and the pay and loot that ride the zone curve) while the
+    // card still advertised the deeper figure. Zones are endless — the shipment
+    // deploys wherever the pilot's own frontier puts it. Must stay identical to
+    // cargo-defense.js deployZone(), which is what the card quotes.
     const base = Math.max(1, state.highestUnlocked || 1, state.level | 0);
-    const zone = Math.max(1, Math.min(999, Math.round(base * (1 + 0.10 * tier)) + tier * 6));
+    const zone = Math.max(1, Math.round(base * (1 + 0.10 * tier)) + tier * 6);
     state.currentDungeon = zone;
     state.currentSystem = null;
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
@@ -6182,6 +6214,11 @@
     if (state.shipKills[state.ship] == null) state.shipKills[state.ship] = 0;
     if (!state.blueprints) state.blueprints = {};
     if (state.drones == null) state.drones = 0;
+    // SEED THE CAREER LOOT COUNTER, ONCE. lifetimeLooted rode through ascension
+    // in ASC_KEEP but was never actually incremented, so every account read 0 and
+    // both readers fell back to the hold's length. Seeding it with exactly what
+    // the old formula displayed means no progress bar moves backwards today.
+    if (state.lifetimeLooted == null) state.lifetimeLooted = (state.inventory || []).length;
     // ---- GALAXY v3 migration: regions → one massive unified hex grid --------
     if (state.galaxyVer !== 3) {
       state.ownedSystems = {};            // the Home Citadel is neutral — no starter tile

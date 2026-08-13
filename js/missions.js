@@ -58,6 +58,29 @@
   // exactly one place (NANO.CFG.gate).
   function nanoOpen() { try { return !!(window.NANO && window.NANO.unlocked()); } catch (e) { return false; } }
 
+  // ---- PHYSICAL CEILINGS ----------------------------------------------------
+  // Some metrics are gated by REAL TIME or by a currency, not by the pilot's
+  // power. Kills scale with damage — a stronger fleet clears a zone faster, so a
+  // bigger kill target is fair. A TILE CAPTURE costs travel plus a fight plus a
+  // cooldown no amount of power removes; a CORE UPGRADE costs tens of thousands
+  // of Prism Ingots and can fail four times out of five. Multiplying those by the
+  // tier ladder produced orders that could not be filled inside the period at
+  // any power level, which is exactly what was reported: 1,370 tile captures in a
+  // month (measured at roughly 50/hour — 27 hours of unbroken play) and 36
+  // successful upgrades on cores whose last slot costs 80,000 ingots an attempt.
+  //
+  // These are hard ceilings per period, applied AFTER tier scaling. They are set
+  // from observed rates, not from what looks tidy on a card.
+  const RATE_CAP = {
+    tiles:     { d: 10, w: 45,  m: 150 },   // ~50/hr flat out → monthly ≈ 3 hours
+    colony:    { d: 3,  w: 12,  m: 30  },   // build costs, not time, are the wall
+    nanoOpen:  { d: 1,  w: 4,   m: 10  },   // 30,000 ingots a crate
+    nanoUp:    { d: 2,  w: 6,   m: 14  },   // up to 80,000 an attempt, 20% to land
+    nanoRoll:  { d: 2,  w: 6,   m: 15  },   // rerolls double in price per lock
+    cargo:     { d: 2,  w: 10,  m: 40  },   // 2 runs/day base ration
+    cargoClean:{ d: 1,  w: 6,   m: 24  },
+  };
+
   // ---- BOARDS ---------------------------------------------------------------
   // tm = target multiplier vs daily · rm = reward multiplier vs daily
   const BOARDS = [
@@ -85,7 +108,13 @@
   // Targets: T1 ×1 · T2 ×2.4 · T3 ×6 · T4 ×15 · T5 ×38 · T6+ ×2.5 each.
   // Rewards double every tier.
   const TIER_TARGET = [1, 2.4, 6, 15, 38];
-  const targetMult = (t) => (t <= 5 ? TIER_TARGET[t - 1] : 38 * Math.pow(2.5, t - 5));
+  // TIER SCALING IS BOUNDED. This was `38 * 2.5^(t-5)` — an unbounded exponential
+  // with nothing above it, so the board's demands grew forever while a day stayed
+  // 24 hours long. It is the reason a monthly order read "Capture 1.37k galaxy
+  // tiles" (tier 5 monthly: base 2 × 38 × 18). Growth past tier 5 is gentler and
+  // stops at ×300; REWARDS still double every tier without a ceiling, so climbing
+  // tiers keeps paying — the targets just stop outrunning the clock.
+  const targetMult = (t) => (t <= 5 ? TIER_TARGET[t - 1] : Math.min(300, 38 * Math.pow(1.6, t - 5)));
   const rwMult = (t) => Math.pow(2, t - 1);
   function scaleRw(rw, tier, cfg) {
     const m = rwMult(tier) * cfg.rm, out = {};
@@ -112,13 +141,12 @@
     return picks.map((p) => {
       let n = Math.max(1, Math.round(p.n(lvl, z) * mult));
       if (p.m === 'zones') n = Math.min(n, Math.max(4, s.highestUnlocked || 4));
-      // cargo runs are rationed (2/day base) — targets stay inside what the
-      // period can physically hold: daily 1-2 · weekly ≤8 · monthly ≤30
-      if (p.m === 'cargo' || p.m === 'cargoClean') n = Math.min(n, Math.max(1, Math.round(1.6 * cfg.tm)));
-      // A crate is 30,000 ◈ and an upgrade climbs past 40,000 — the ×38 monthly
-      // ladder would price these in the millions, so nanocore targets scale on
-      // the period multiplier only.
-      if (p.m === 'nanoOpen' || p.m === 'nanoUp' || p.m === 'nanoRoll') n = Math.min(n, Math.max(1, Math.round(p.n(lvl, z) * cfg.tm)));
+      // RATE-LIMITED METRICS — clamped to what the period can physically hold.
+      // This replaces the two hand-rolled clamps that used to live here (one for
+      // cargo, one for nanocores) and covers tile capture and colony work, which
+      // had none and so rode the full tier ladder.
+      const cap = RATE_CAP[p.m];
+      if (cap) n = Math.min(n, Math.max(1, cap[cfg.id] || cap.d));
       return { id: p.id, n, done: 0, claimed: false };
     });
   }
@@ -134,6 +162,24 @@
     }
     if (s.lifeStats.fuel == null) { const r = s.resources || {}; s.lifeStats.fuel = r.fuel || 0; s.lifeStats.iron = r.iron || 0; s.lifeStats.plasma = r.plasma || 0; } // pre-split saves
   }
+  // RE-CLAMP A STORED BOARD. Targets are generated once and then live in the save
+  // for the rest of the period, so a monthly board issued before these ceilings
+  // existed would keep asking for 1,370 tile captures until the month rolled
+  // over. This lowers an over-cap target in place on load, leaving `done` and
+  // `claimed` untouched — progress already earned still counts, and an order that
+  // is now inside its ceiling may already be complete.
+  function reclamp(b, cfg) {
+    if (!b || !b.list) return;
+    let changed = false;
+    for (const it of b.list) {
+      const p = POOL.find((q) => q.id === it.id);
+      const cap = p && RATE_CAP[p.m];
+      if (!cap) continue;
+      const lim = Math.max(1, cap[cfg.id] || cap.d);
+      if (it.n > lim) { it.n = lim; changed = true; }
+    }
+    if (changed) G.save();
+  }
   function ensureBoard(cfg) {
     const s = G.state;
     let b = s[cfg.key];
@@ -144,6 +190,7 @@
     }
     if (!b.tier) b.tier = 1;
     if (!b.list) b.list = buildList(cfg, b.tier);
+    reclamp(b, cfg);
     if (b.allClaimed) advanceTier(cfg); // self-heal: crate claimed but tier never advanced
     return b;
   }
@@ -169,7 +216,11 @@
   function snapshot() {
     const s = G.state, r = s.resources || {};
     return { kills: s.totalKills || 0, gold: s.gold || 0, fuel: r.fuel || 0, iron: r.iron || 0, plasma: r.plasma || 0,
-             level: s.level || 1, play: s.playTime || 0, items: (s.inventory || []).length + (s.lifetimeLooted || 0), boss: bossCount(),
+    // LOOT COLLECTED IS A CAREER COUNT (see game-v93 collect()). It used to add
+    // the hold's length to a counter nothing incremented, so "pick up N pieces of
+    // loot" ignored anything sold or scrapped on pickup and went backwards when
+    // the hold was sold. The max protects a save that predates the one-time seed.
+             level: s.level || 1, play: s.playTime || 0, items: Math.max(s.lifetimeLooted || 0, (s.inventory || []).length), boss: bossCount(),
              hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum(),
              cargo: (s.cargo && s.cargo.wins) | 0, cargoClean: (s.cargo && s.cargo.clean) | 0,
              nanoOpen: lifeStat('nanoOpened'), nanoUp: lifeStat('nanoUps'), nanoRoll: lifeStat('nanoRolls') };

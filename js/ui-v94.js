@@ -2535,6 +2535,7 @@
     const r = (G.canFlyShip ? G.canFlyShip(k) : { ok: true });
     if (r.ok || !r.need) return null;
     return r.need.map((n) => n.k === 'missions' ? (G.formatNum(n.want - n.have) + ' more successful missions')
+      : n.k === 'cargo' ? (G.formatNum(n.want - n.have) + ' more cargo runs secured')
       : n.k === 'stars' ? ((n.want - n.have) + ' more ascension' + (n.want - n.have === 1 ? '' : 's'))
       : 'a Titan Sina in your hangar').join(' · ');
   }
@@ -2585,7 +2586,7 @@
         ? 'AN ARTIFICIAL WORLD · THE LANCE ALIGNS · THE LANE IS ERASED'
         : '2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS';
       const lic = (etr && owned && !fly.ok)
-        ? '<div class="etr-lic">🔒 LICENCE INCOMPLETE — ' + fly.need.map((n) => n.k === 'missions' ? (G.formatNum(n.have) + ' / 1,000 successful missions') : n.k === 'stars' ? ('★' + n.have + ' / 50') : 'Titan Sina required').join(' · ') + '</div>'
+        ? '<div class="etr-lic">🔒 LICENCE INCOMPLETE — ' + fly.need.map((n) => n.k === 'cargo' ? (G.formatNum(n.have) + ' / 1,000 cargo runs secured') : n.k === 'missions' ? (G.formatNum(n.have) + ' / 1,000 successful missions') : n.k === 'stars' ? ('★' + n.have + ' / 50') : 'Titan Sina required').join(' · ') + '</div>'
         : (etr && !owned ? '<div class="etr-lic">✦ Recovered only from an OMEGA CARGO V manifest — Cargo Defense</div>' : '');
       return `<button class="ship-tile st-sina ${etr ? 'st-etr ' : ''}${aet ? 'st-aet ' : ''}${stateCls}" data-ship-tile="${key}">
         <div class="sts-art">

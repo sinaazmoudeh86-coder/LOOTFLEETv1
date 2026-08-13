@@ -1,7 +1,7 @@
-# Loot Fleet — deploy v219 · build 570
+# Loot Fleet — deploy v219 · build 571
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v218. Service worker cache is `lootfleet-v570`.
+Supersedes v218. Service worker cache is `lootfleet-v571`.
 
 **Headline:** the Nanocore Discord announcements and the Haulage ladder were
 written, shipped and never once fired — three separate reads dropped the columns
@@ -13,12 +13,12 @@ callout removed from Discord.
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 570 |
+| Stamp | File | Build 571 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `570` |
-| Update beacon | `version.json` → `build` | `570` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v570` |
-| Project root beacon | root `version.json` (source tree) | `570` |
+| Client constant | `game.html` → `window.LF_BUILD` | `571` |
+| Update beacon | `version.json` → `build` | `571` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v571` |
+| Project root beacon | root `version.json` (source tree) | `571` |
 
 ```bash
 grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
@@ -35,14 +35,15 @@ origin and stays un-versioned. This folder's `sw.js` is the real one.
 | stale vs project root | **0** |
 | missing from folder | **0** |
 | references without `?v=` | **0** |
-| cache-busts raised this release | **5** (only the files that changed) |
+| cache-busts raised this release | **7** (only the files that changed) |
 
 Folder was seeded from `deploy-v218`, then `js/`, `css/`, `guides/` and
 `supabase/` were **deleted and re-copied from the project root as separate
 calls** — never a bulk copy over patched files (the v216 failure).
 
-Files changed this build: `js/cloud.js`, `js/leaderboard.js`, `js/ranks-boards.js`,
-`js/ui-v94.js`, `css/style-v2.css`, `supabase/functions/discord-feed/index.ts`.
+Files changed: `js/cloud.js`, `js/leaderboard.js`, `js/ranks-boards.js`,
+`js/ui-v94.js`, `css/style-v2.css`, `supabase/functions/discord-feed/index.ts`
+(build 570) plus `js/cargo-run.js`, `js/cargo-defense.js` (build 571).
 
 ---
 
@@ -77,7 +78,7 @@ ever post.
 ## Step 3 — push the site
 
 Folder contents to the repo root, commit, let Vercel build. **The site goes
-first, the beacon confirms after** — `version.json` in this folder says 570 and
+first, the beacon confirms after** — `version.json` in this folder says 571 and
 the in-session update gate evicts every connected player onto the new build
 within ~90 seconds of Vercel serving it. Never push a beacon bump ahead of the
 files it names.
@@ -86,7 +87,7 @@ files it names.
 
 `Cmd/Ctrl + Shift + R`, then:
 
-1. **Login screen shows `BUILD 570`.**
+1. **Login screen shows `BUILD 571`.**
 2. **Ranks → NANOCORE tab exists** (◈, orange) and is one of nine chips that
    wrap without sideways scroll at 360px and on desktop.
 3. **Nanocore ladder ranks real pilots**, not just sims. If it says "waiting on a
@@ -100,6 +101,13 @@ files it names.
    working. Announcements start from the next real change.
 7. **No "available to attack" cards** and no shield countdowns in the 3-hour
    situation report.
+8. **Cargo run, FIRST of the session** — open Space Cargo Defense, launch, and
+   watch the opening five seconds. It should hold frame rate. This was the
+   single worst-feeling bug in the game and it only ever reproduced on a cold
+   session, so it must be tested on a **hard-reloaded tab**, not a second run.
+9. **Cargo clock** — start at 1×, note the countdown, switch to 5×. It should
+   drop to roughly a fifth **immediately** and then stay put, not drift for ten
+   seconds or bounce up and down.
 
 ---
 
@@ -153,6 +161,30 @@ files it names.
   schedule pointed at whoever is asleep, not a report. Shield state is still
   snapshotted, so it can be brought back without a cursor change. The Void Zone
   and House Citadel sections now list holders only.
+
+## Build 571 — the cargo run report from FrostySkull
+
+- **First run of a session ran at single-digit fps.** The freighter sprite was
+  fetched with `new Image()` at the moment the run started, so the download and
+  then the PNG **decode** both landed on the main thread inside the first
+  seconds of the escort — while the pilot was already being shot at. The two
+  lane textures (the collapse-ring disc and the void well) were also baked from
+  scratch **every run**, per-pixel, in the same window. Art is now downloaded and
+  `decode()`d when the Cargo screen opens, cached for the session, and the
+  textures are baked once. Every run after the first was fast because the file
+  was cached and decoded — which is exactly why it read as "first run of the
+  day".
+- **You lost half your hull before you could react.** `GRACE_S` protected the
+  FREIGHTER for six seconds and nothing protected the PILOT, so collapse rings
+  and void wells did full damage through the launch stall. The pilot is now
+  immune to lane hazards for 2.2 **real** seconds after launch.
+- **The clock jumped 5:00 → 7:00 → 5:00.** The throughput average was never
+  re-seeded when the player changed speed, so switching 1× → 5× kept quoting 1×
+  arithmetic for six to eight seconds before sliding — "5 minutes at 1×, 3
+  minutes at 5×". The sampler now restarts clean on any speed change, ignores
+  the launch spike entirely instead of letting one bad second poison the whole
+  run, and the displayed figure is damped: it follows a falling estimate quickly
+  but can only climb half a second per update.
 
 ## Still open (carried forward)
 

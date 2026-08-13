@@ -247,6 +247,11 @@
   // ===========================================================================
   function render() {
     const body = $('cargo-body'); if (!body || !G() || !G().state) return;
+    // WARM THE ESCORT while the player reads the shipment list. The freighter
+    // sprites and the lane textures used to be fetched and decoded at the moment
+    // the run started, which is why the FIRST run of a session crawled and every
+    // one after it was smooth. Doing it here costs nothing the player can feel.
+    try { if (window.CARGORUN && window.CARGORUN.warm) window.CARGORUN.warm(); } catch (e) {}
     const sub = $('cargo-sub');
     const c = st();
     if (sub) sub.textContent = unlocked() ? runsLeft() + ' / ' + (DAILY_RUNS + (c.extra | 0)) + ' runs today' : 'Locked · Ascension ★' + UNLOCK_STARS;
@@ -369,6 +374,9 @@
   // ===========================================================================
   function openManifest(key) {
     const t = TIERS.find((x) => x.key === key); if (!t || !window.SOCIAL) return;
+    // The tier is known now — make sure THIS freighter's art is decoded before
+    // the launch button is even available.
+    try { if (window.CARGORUN && window.CARGORUN.warm) window.CARGORUN.warm(t.tier); } catch (e) {}
     const g = G(), gold = g.state.gold || 0, afford = gold >= t.cost;
     const left = runsLeft();
     const hull = (C().SHIP_BY_KEY[g.state.ship] || {}).name || 'your flagship';

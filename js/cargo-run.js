@@ -82,6 +82,16 @@
   const LATCH_DPS = 0.85;     // integrity/sec per boarder, before hull fragility
   const LATCH_MAX = 6;        // boarders that can chew at once
   const GRACE_S = 6;          // launch grace — nothing touches the hull for six seconds
+  // LAUNCH SETTLE — REAL milliseconds, not sim seconds. The opening moments of a
+  // run are the most expensive frames in the game (texture upload, the first
+  // hostiles resolving, the engine's hot paths still being compiled), and the
+  // pilot spends them unable to react. GRACE_S covered the FREIGHTER only, so
+  // collapse rings and void wells were free to strip half a hull before the
+  // player had a playable frame — "especially at the start it's like 2fps and
+  // you lose half the health of the ship". For this window the pilot is immune
+  // to lane hazards too, and the throughput sampler ignores the spike.
+  const SETTLE_MS = 2200;
+  const settling = () => !!(run && perf() - run.wall0 < SETTLE_MS);
 
   let run = null;
 
@@ -89,12 +99,47 @@
   const perf = () => (window.performance && performance.now ? performance.now() : Date.now());
   const rnd = (a, b) => a + Math.random() * (b - a);
   const toast = (m, c) => { try { window.SOCIAL.toast(m, c || '#8fc4ff'); } catch (e) {} };
-  function loadArt(slot, src) {
-    const im = new Image();
-    im.onload = () => { if (run) run[slot] = im; };
-    im.src = src;
-  }
+  // ART CACHE — MODULE LEVEL, NOT PER RUN.
+  // This used to `new Image()` at startRun and hand the browser a cold URL at the
+  // exact moment the run began. The download, and then the DECODE of a full-size
+  // PNG, both landed on the main thread inside the first seconds of the escort:
+  // the first run of a session sat at single-digit fps while the pilot was
+  // already being shot at, and every run after it was smooth because the file
+  // was in the HTTP cache and decoded. That is precisely the "first run of the
+  // day is giga lag, the rest are fine" report, on desktop and iPad alike.
+  // Images are cached for the session and decoded BEFORE a run can start.
+  const ART = {};
+  function artFor(tier) { return ART['cargo-' + tier] || null; }
   const ready = (im) => !!(im && im.complete && im.naturalWidth);
+  // Decode to completion. img.decode() moves the decode off the first paint;
+  // where it is unsupported, onload alone is still better than nothing.
+  function loadImg(key, src) {
+    if (ART[key]) return ART[key]._p || Promise.resolve(ART[key]);
+    const im = new Image();
+    ART[key] = im;
+    im._p = new Promise((res) => {
+      const done = () => res(im);
+      im.onload = () => { if (im.decode) im.decode().then(done, done); else done(); };
+      im.onerror = done;                 // a missing file falls back to the vector draw
+      im.src = src;
+    });
+    return im._p;
+  }
+  // WARM-UP — called when the Cargo screen opens, so the download, the decode and
+  // the static texture bake all happen while the player is reading the shipment
+  // list instead of while they are flying. Safe to call repeatedly; the second
+  // call is free.
+  let _warmed = false;
+  function warm(tier) {
+    const jobs = [];
+    if (tier) jobs.push(loadImg('cargo-' + tier, 'ships/cargo-' + tier + '.png'));
+    if (!_warmed) {
+      _warmed = true;
+      for (let t = 1; t <= 5; t++) jobs.push(loadImg('cargo-' + t, 'ships/cargo-' + t + '.png'));
+      ringDisc(); voidDisc();            // bake the static discs once per session
+    }
+    return Promise.all(jobs);
+  }
   // GRADIENT CACHE. Canvas gradients are objects: building six of them per frame
   // (plus one per void) allocated and collected garbage for the whole ten
   // minutes. Every gradient here is either fixed in world space or drawn in a
@@ -109,10 +154,14 @@
   // per-pixel path fill is exactly what melted the frame rate at the end of a
   // run. Baked once to an offscreen canvas, each disc becomes a scaled
   // drawImage — a texture blit the GPU does for free.
+  // These two textures are static — a red disc and a purple radial, identical in
+  // every run — so the cache lives at MODULE level and is baked once per session.
+  // On `run` it was re-rasterized at the start of every single run, which is
+  // per-pixel path fill work landing in the same first seconds as the art decode.
+  const _sp = {};
   function spr(key, paint) {
-    if (!run._sp) run._sp = {};
-    let s = run._sp[key];
-    if (!s) { s = document.createElement('canvas'); s.width = s.height = 256; paint(s.getContext('2d')); run._sp[key] = s; }
+    let s = _sp[key];
+    if (!s) { s = document.createElement('canvas'); s.width = s.height = 256; paint(s.getContext('2d')); _sp[key] = s; }
     return s;
   }
   const ringDisc = () => spr('ring', (c) => { c.fillStyle = '#ff2a3a'; c.beginPath(); c.arc(128, 128, 127, 0, 7); c.fill(); });
@@ -153,15 +202,17 @@
       x0: rt.worldW / 2, y0: rt.worldH - 150, y1: 130,
       cargo: { x: rt.worldW / 2, y: rt.worldH - 150, size: CARGO_SIZE[cfg.tier] || 56, dead: false, hitT: 0 },
       voids: [], refs: [], rings: [], sboss: null, ringT: 4, bossRingT: 0, spawnT: 3, uiT: 0, refsT: 0, bossUp: false, warned: {},
-      rate: 0, sWall: null, sSim: 0,
+      rate: 0, sWall: null, sSim: 0, sSpeed: 0, shown: null,
+      wall0: perf(),
       prevSpeed: (g.state.gameSpeed || 1),
       prevAuto: (g.getAuto ? g.getAuto() : null),
       art: null,
     };
-    // REAL ART — the freighter sprite for this tier and the game's own citadel.
-    // Both fall back to the vector draw if a file is missing, so a bad path can
-    // never leave the escort invisible.
-    loadArt('art', 'ships/cargo-' + cfg.tier + '.png');
+    // REAL ART — already downloaded and decoded by warm() when the Cargo screen
+    // opened. If the player got here faster than the network, the vector draw
+    // covers the gap and the sprite appears the moment it lands.
+    run.art = artFor(cfg.tier);
+    warm(cfg.tier).then(() => { if (run) run.art = artFor(cfg.tier); });
     // AUTO OFF — the escort is flown by hand. SPEED IS ALLOWED: update() is handed
     // sim time already multiplied by gameSpeed, so the freighter, the waves and the
     // mission clock all advance on the same clock — running 5× makes the fight
@@ -184,18 +235,27 @@
     run.t += dt;
     run.prog = clamp(run.t / RUN_S, 0, 1);
     // OBSERVED THROUGHPUT — sim seconds actually delivered per real second.
-    // The clock used to divide the remaining sim time by the SPEED SETTING, which
-    // silently assumes the sim keeps up with the wall clock. It does not when the
-    // frame rate drops: the loop clamps a frame to 50ms of real time, so at 5× a
-    // 10fps stretch delivers 2.5 sim seconds per second, not 5 — a run that read
-    // "2:00" took four real minutes. Sampled over 1.5s windows and smoothed, this
-    // is what the readout divides by, so the countdown tracks the clock on the
-    // player's wall even while the field is heavy.
+    // The clock divides the remaining sim time by this rather than by the SPEED
+    // SETTING, because the loop clamps a frame to 50ms of REAL time: at 5× a
+    // 10fps stretch delivers 2.5 sim seconds per second, not 5.
+    //
+    // TWO THINGS MADE THIS READ LIKE A BROKEN CLOCK.
+    // 1. The average was never re-seeded when the player CHANGED SPEED. Switch
+    //    1× → 5× and the 1× rate stayed in the EMA for six to eight seconds, so
+    //    the countdown kept quoting 1× arithmetic and then slid — "it says 5
+    //    minutes at 1× and 3 minutes at 5×". The sampler now restarts clean on
+    //    any speed change and the readout re-seeds with it.
+    // 2. The first window was sampled straight through the launch spike, so one
+    //    bad second of warm-up poisoned the estimate for the rest of the run.
+    //    Sampling now starts only after the run has settled.
     const w = perf();
-    if (run.sWall == null) { run.sWall = w; run.sSim = run.t; }
-    else if (w - run.sWall >= 1500) {
+    const spNow = Math.max(1, (G().state.gameSpeed | 0));
+    if (run.sSpeed !== spNow) { run.sSpeed = spNow; run.sWall = w; run.sSim = run.t; run.rate = 0; run.shown = null; }
+    if (w - run.wall0 < SETTLE_MS) { run.sWall = w; run.sSim = run.t; }
+    else if (run.sWall == null) { run.sWall = w; run.sSim = run.t; }
+    else if (w - run.sWall >= 1200) {
       const inst = (run.t - run.sSim) / ((w - run.sWall) / 1000);
-      run.rate = run.rate ? run.rate * 0.7 + inst * 0.3 : inst;
+      run.rate = run.rate ? run.rate * 0.8 + inst * 0.2 : inst;
       run.sWall = w; run.sSim = run.t;
     }
 
@@ -386,7 +446,7 @@
       v.on -= dt;
       if (v.on <= 0) { run.voids.splice(i, 1); continue; }
       // (the freighter is deliberately immune — boarders are the only threat to it)
-      if (a && !a.dead && (a.x - v.x) * (a.x - v.x) + (a.y - v.y) * (a.y - v.y) < v.r * v.r) {
+      if (a && !a.dead && !settling() && (a.x - v.x) * (a.x - v.x) + (a.y - v.y) * (a.y - v.y) < v.r * v.r) {
         // real damage to the real hull, through the real damage path
         try { a.takeHit((rt.stats.maxHp || 1000) * 0.055 * dt * 60 / 60, null); } catch (e) { a.hp -= (rt.stats.maxHp || 1000) * 0.05 * dt; }
       }
@@ -516,7 +576,7 @@
         z.burn -= dt; z.phase += dt * 4;
         if (z.burn <= 0) { run.rings.splice(i, 1); continue; }
         const rr = z.r * z.r;
-        if (a && !a.dead && (a.invuln || 0) <= 0) {
+        if (a && !a.dead && (a.invuln || 0) <= 0 && !settling()) {
           const dx = a.x - z.x, dy = a.y - z.y;
           if (dx * dx + dy * dy <= rr) {
             a.hp -= (rt.stats.maxHp || 1000) * RING_DPS * dt; a.hurtFlash = 1;
@@ -903,9 +963,21 @@
     // arrive whenever the frame rate is under load, so the divisor is the
     // measured throughput from engineTick (capped at the setting, which is the
     // best it can ever do).
+    //
+    // DAMPED DISPLAY. The underlying estimate moves whenever the frame rate
+    // moves, and a countdown that visibly bounces — 5:00, 7:00, 5:00 — reads as
+    // a broken clock even when every individual number is honest. Falling is
+    // followed quickly; RISING is capped at half a second per update, so a rough
+    // patch walks the estimate up instead of teleporting it. A speed change
+    // clears the damper (engineTick nulls `shown`) so the new figure lands at
+    // once rather than crawling.
     let sp = 1; try { sp = Math.max(1, G().state.gameSpeed | 0); } catch (e) {}
     const rate = (run.rate > 0.05) ? Math.min(sp, run.rate) : sp;
-    const left = (RUN_S - run.t) / rate;
+    const raw = (RUN_S - run.t) / rate;
+    if (run.shown == null) run.shown = raw;
+    else if (raw < run.shown) run.shown += (raw - run.shown) * 0.35;
+    else run.shown = Math.min(raw, run.shown + 0.5);
+    const left = Math.max(0, run.shown);
     if (cd) { cd.textContent = mmss(left); cd.classList.toggle('hot', left <= 30); }
     const spc = $('cgw-sp');
     if (spc) { spc.textContent = '\u00d7' + sp; spc.classList.toggle('on', sp > 1); }
@@ -982,7 +1054,7 @@
     const s = document.createElement('style'); s.id = 'cg-css'; s.textContent = CSS; document.head.appendChild(s);
   }
 
-  window.CARGORUN = { startRun, engineTick, engineRender, onDeath, RUN_S, active: () => !!run,
+  window.CARGORUN = { startRun, engineTick, engineRender, onDeath, warm, RUN_S, active: () => !!run,
     sample: () => (run ? { r: run.rings.length, v: run.voids.length, e: run.refs.length } : 0) };
 
   const CSS = `

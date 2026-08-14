@@ -2045,6 +2045,13 @@
       // closer — the same commitment rule the loot run uses.
       let t2 = rt.aiTgt;
       if (!t2 || t2.dead || t2.dying || t2.hp <= 0) t2 = threat;
+      // NEVER CHASE SOMETHING OUTSIDE THE ARENA. The archer is clamped to the
+      // world every frame; a target beyond that clamp can never be reached, so
+      // the ship flew into the wall and held there at full throttle — dead still
+      // on screen, in autopilot, apparently frozen. Enemies are clamped now too
+      // (entities.js), and this is the belt to that braces.
+      if (t2 && (t2.x < 0 || t2.y < 0 || t2.x > rt.worldW || t2.y > rt.worldH)) t2 = null;
+      if (!t2) { rt.aiTgt = null; steerArcher(0, 0, dt); return; }
       else if (t2 !== threat) {
         const cd = (t2.x - a.x) ** 2 + (t2.y - a.y) ** 2;
         const nd = (threat.x - a.x) ** 2 + (threat.y - a.y) ** 2;
@@ -3127,6 +3134,17 @@
   }
   function shipUnlocked(key) {
     const ship = C.SHIP_BY_KEY[key]; if (!ship) return false;
+    // A HULL YOU ALREADY OWN IS UNLOCKED, FULL STOP. This function answers two
+    // different questions for its two callers — shipBuyState asks "can progress
+    // reach this?" and NANO.ownsHull asks "do I have this?" — and the rules
+    // below only ever answered the first. Two ways an OWNED hull read as locked:
+    // an award-only hull (Voidmaw, Eternum) returned false by design, and a
+    // Dread-class hull is gated on reqLevel — 160/180/200 for Harbinger/Tyrant/
+    // Omega, all ABOVE the 150 level cap, so after the season reset every Dread
+    // you own vanished from Nanocores' MY HULLS. Ownership is checked first now;
+    // shipBuyState already returns 'owned' before it ever consults this, so the
+    // buy path is unaffected.
+    if (state.ownedShips && state.ownedShips[key]) return true;
     if (awardOnly(ship)) return false;   // earned, never unlocked by progress
     if (ship.tier === 0) return true;
     if (ship.megaCost) return (state.level || 1) >= (ship.reqLevel || 1);   // DREAD-class: level-gated direct buy
@@ -5726,7 +5744,18 @@
   // back to manual after one) landed in manual mode with active=true and a zero
   // vector: manualMove's `active && (x||y)` guard never fired and the ship sat
   // still until they touched and released the joystick again.
-  function setAuto(v) { state.auto = !!v; rt.joy.x = rt.joy.y = 0; rt.joy.active = false; save(); }
+  // ...AND IT MUST TELL THE UI. syncJoystickVisible() only shows the stick when
+  // getAuto() is false, and it is only ever called from UI.syncAuto() — which
+  // nothing outside ui.js could reach. So the three systems that force manual
+  // flight for their own duration (Voidmaw, alliance raid, cargo escort) flipped
+  // auto off and left the joystick HIDDEN: forced into manual with no control
+  // surface, the ship would not move on auto or manual, and it cleared itself the
+  // moment anything else happened to call syncAuto(). That is the intermittent
+  // "locks in on the 3rd or 4th boss jump" freeze.
+  function setAuto(v) {
+    state.auto = !!v; rt.joy.x = rt.joy.y = 0; rt.joy.active = false; save();
+    try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
+  }
   function setJoystick(x, y, active) { rt.joy.x = x; rt.joy.y = y; rt.joy.active = active; }
   function setGameSpeed(mult) {
     // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it

@@ -246,8 +246,8 @@
       if (el['hud-lc'].textContent !== v) el['hud-lc'].textContent = v;
     }
     // WALLET FIT GUARD — when balances grow long, drop the /h rates first, then
-    // compress the chips, and as a last resort WRAP to a second row — every
-    // currency is always fully visible, nothing clips or overlaps.
+    // compress the chips, and finally SCALE the whole row down — it is always
+    // exactly one row, at any width, and nothing clips or overlaps.
     {
       const w = document.querySelector('#statusbar .wallet');
       if (w) {
@@ -258,11 +258,20 @@
           + '|' + w.clientWidth;                                     // re-fit on any resize / rotation
         if (syncHUD._wsig !== sig) {
           syncHUD._wsig = sig;
-          w.classList.remove('tight', 'tighter', 'tightest', 'wrap');
+          w.classList.remove('tight', 'tighter', 'tightest', 'fitscale');
+          w.style.removeProperty('--ws');
           if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tight');
           if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tighter');
           if (w.scrollWidth > w.clientWidth + 1) w.classList.add('tightest');
-          if (w.scrollWidth > w.clientWidth + 1) w.classList.add('wrap');   // final stage: 2 rows, all chips visible
+          // FINAL STAGE — SCALE, NEVER STACK. This used to add .wrap and let the
+          // chips fall onto a second row. The resource row is one row at every
+          // width: measure how much too wide it still is and shrink the whole
+          // row by that ratio instead.
+          if (w.scrollWidth > w.clientWidth + 1) {
+            w.classList.add('fitscale');
+            const ws = Math.max(0.5, Math.min(1, (w.clientWidth - 2) / Math.max(1, w.scrollWidth)));
+            w.style.setProperty('--ws', ws.toFixed(3));
+          }
         }
       }
     }
@@ -4312,5 +4321,5 @@
     return v + s;
   }
 
-  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
+  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
 })();

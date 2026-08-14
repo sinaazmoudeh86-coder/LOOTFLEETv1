@@ -227,7 +227,15 @@
         // gentle pull to hold the ring so it does not drift off station
         const ta = Math.atan2(dy, dx) + Math.PI / 2;
         const drift = this.speed * 0.1 * side * chill;
-        const hold = (dist - (holdAt + reach) * 0.5) * 0.3;
+        // STATION-KEEPING IS ENGINE WORK, so it is capped by the engine. The
+        // ring-hold term used to be pure geometry with no reference to `speed`,
+        // so a hull with speed 0 still got a real push out of it. The Void
+        // Citadel is exactly that hull ("It cannot move", speed:0) — closing
+        // inside its hold ring made `hold` negative and shoved the fortress
+        // backwards, and since the autopilot then chased it the pair walked each
+        // other clean out of the zone. That is "I pushed the Citadel off the
+        // screen and it's not coming back".
+        const hold = Math.max(-this.speed, Math.min(this.speed, (dist - (holdAt + reach) * 0.5) * 0.3));
         wx = Math.cos(ta) * drift + (dx / dist) * hold;
         wy = Math.sin(ta) * drift + (dy / dist) * hold;
         this.moving = false;
@@ -250,6 +258,22 @@
       this.vy += (wy - this.vy) * turn;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
+      // NOTHING LEAVES THE ARENA. Enemies were the one class of mover with no
+      // world clamp — the archer has had one forever. An unclamped hostile can
+      // park itself somewhere the player is physically unable to follow, which
+      // strands the objective (an off-world siege citadel is unkillable and the
+      // zone cannot be finished) and pins the autopilot against the wall
+      // chasing it.
+      try {
+        const _w = window.GAME && window.GAME.rt;
+        if (_w && _w.worldW) {
+          const m = this.size * 0.5 + 4;
+          const cx = Math.max(m, Math.min(_w.worldW - m, this.x));
+          const cy = Math.max(m, Math.min(_w.worldH - m, this.y));
+          if (cx !== this.x) { this.x = cx; this.vx = 0; }
+          if (cy !== this.y) { this.y = cy; this.vy = 0; }
+        }
+      } catch (e) {}
       const spd = Math.abs(this.vx) + Math.abs(this.vy);
       this.walk += dt * spd * 0.12;
       if (spd > 6) this.dir = this.vx >= 0 ? 1 : -1;   // face travel, not the target

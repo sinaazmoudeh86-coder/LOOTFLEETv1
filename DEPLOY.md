@@ -1,17 +1,20 @@
-# Loot Fleet — deploy v227 · build 590 · COMBAT FIXES · VOID/CASINO CLOSURES · DISCORD GAME ART · NANOCORES UNGATED · NANOCORE WIPE FIXED
+# Loot Fleet — deploy v227 · build 591 · COMBAT FIXES · VOID/CASINO CLOSURES · DISCORD GAME ART · NANOCORES UNGATED · NANOCORE WIPE FIXED
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v226. Service worker cache is `lootfleet-v590`.
-**Login screen reads `BUILD 590`.**
+Supersedes v226. Service worker cache is `lootfleet-v591`.
+**Login screen reads `BUILD 591`.**
 
-A bug-fix release plus one balance change — no data migration, no SQL, no reset.
+**Build 591 requires one SQL run** (`supabase/discord-art-publish.sql`, step 1 of
+THE SEQUENCE). Without it every Discord card posts with no art — the exact bug
+this build exists to fix. No reset, no data migration beyond that one file.
+Otherwise a bug-fix release plus one balance change.
 Four fixes from the Aug 13 field reports (the stuck ship in boss zones, the Void
 Citadel that could be pushed out of the arena, owned Dread hulls reading as
 unowned in Nanocores, the resource row stacking onto two lines) and three reward
 closures: **Home Citadel defense pays no XP**, and **Void Zone / casino tiles pay
 neither XP nor fittings.**
 
-Carries builds 583–587. **Build 587 needs one SQL run** — see the sequence. If v226 never went live, read that folder's DEPLOY.md
+Carries builds 583–591. **Build 591 needs one SQL run** — `discord-art-publish.sql`, see the sequence. If v226 never went live, read that folder's DEPLOY.md
 first — this folder contains its season-reset code too, and **its SQL sequence
 still applies.**
 
@@ -19,12 +22,12 @@ still applies.**
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 590 |
+| Stamp | File | Build 591 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `590` |
-| Update beacon | `version.json` → `build` | `590` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v590` |
-| Project root beacon | root `version.json` (source tree) | `590` |
+| Client constant | `game.html` → `window.LF_BUILD` | `591` |
+| Update beacon | `version.json` → `build` | `591` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v591` |
+| Project root beacon | root `version.json` (source tree) | `591` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -41,6 +44,7 @@ origin and stays un-versioned. Verified un-versioned at cut time.
 | references carrying `?v=587` | **3** (`game-v93.js`, `cargo-defense.js`, `ranks-boards.js`) |
 | references carrying `?v=588` | **1** (`nanocores.js`) |
 | references carrying `?v=590` | **1** (`account.js`) |
+| references carrying `?v=591` | **1** (`cloud.js`) |
 | `game.html` byte-identical to project root | **yes** |
 
 Seeded from `deploy-v226`, then `js/`, `css/`, `guides/` and `supabase/` deleted
@@ -48,19 +52,25 @@ and re-copied from the project root as separate calls (never a bulk copy over
 patched files — the v216 failure), then all 74 referenced files byte-compared.
 
 Files changed: `js/game-v93.js`, `js/entities.js`, `js/ui-v94.js`,
-`js/nanocores.js`, `js/account.js`, `css/web-v89.css`, `css/readability.css`.
+`js/nanocores.js`, `js/account.js`, `js/cloud.js`, `css/web-v89.css`,
+`css/readability.css`, `supabase/functions/discord-feed/index.ts`.
 
-**Re-cut seven times** — 584 Home Citadel XP, 585 Void Zone XP, 586 Void/casino
+**Re-cut eight times** — 584 Home Citadel XP, 585 Void Zone XP, 586 Void/casino
 loot, 587 the Discord game-art feed, 588 the Nanocores level gate removed, 589
-the nanocore wipe, 590 the equipped-core repair narrowed. All four stamps are at
-590. If you pushed this folder at 583–589, push it again.
+the nanocore wipe, 590 the equipped-core repair narrowed, 591 the art fields
+actually reaching the table. All four stamps are at 591. If you pushed this
+folder at 583–590, push it again.
 
 ---
 
 ## THE SEQUENCE
 
-1. **Supabase → SQL Editor → run `supabase/discord-art-fields.sql`.** Safe to
-   re-run; it adds three nullable columns to `leaderboard` and `sim_pilots`.
+1. **Supabase → SQL Editor → run `supabase/discord-art-publish.sql`.** Safe to
+   re-run. It adds the three nullable columns to `leaderboard` and `sim_pilots`
+   AND re-creates `lb_upsert` so the client can actually write them — it is a
+   superset of `discord-art-fields.sql`, so run this one and skip that file.
+   **Without it every card posts with no art**, because the values are discarded
+   at the RPC.
 2. **Deploy the `discord-feed` Edge Function** from `supabase/functions/discord-feed`.
 3. **Push this folder** to the repo root and let Vercel build.
 4. **Then** confirm `version.json` reads 587 at the live URL.
@@ -68,6 +78,12 @@ the nanocore wipe, 590 the equipped-core repair narrowed. All four stamps are at
 Steps 1–2 are safe to run before the push: an old client publishes nothing into
 the new columns, and the feed posts those cards without art rather than failing.
 Doing them after the push is also fine — the feed just stays art-less until then.
+
+The SQL DROPS the 18-argument `lb_upsert` and creates a 21-argument one. That is
+deliberate: PostgREST resolves `rpc()` by argument NAME, so leaving both in place
+makes an older client's call match two candidates and fail outright. Clients on
+build 590 and below keep publishing through the same function — their calls just
+omit the three new params, which default to null and leave the columns alone.
 
 The beacon ships inside the folder, so the order is automatic — but if you push
 the beacon by hand ahead of the files, connected players are evicted onto code
@@ -307,7 +323,46 @@ either still has the browser they lost them in, that copy may still hold the bag
 Do not restore currency from those snapshots (they predate resets); the `nano`
 object alone is safe to lift.
 
-### 9 · The resource row stacked onto two lines
+### 9 · The art fields never reached the table (591)
+
+The first NEW HULL card in the channel posted with **no sprite** and the title
+"took delivery of **the a new hull**". Everything upstream was right:
+
+- `discord-art-fields.sql` had added `hull_last`, `nano_last`, `cargo_tier`
+- the client computed all three (`ranks-boards.js` → `publishLb`)
+- the feed asked for them by name (`LB_ART`) and got the columns back
+
+They were dropped at the last boundary. `lb_upsert` enumerates its parameters,
+and the widest overload — 18 args, from `nanocore-ladder.sql` — has no
+`p_hull_last`, `p_nano_last` or `p_cargo_tier`. PostgREST discarded all three,
+so every row carried an empty `hull_last` forever.
+
+**This is the same trap as the missing SELECT, one layer down.** The read was
+fixed and the write never was. That the card FIRED at all is the proof the read
+works: `ships` only exists in `LB_ART`, so a hull card is impossible unless that
+select succeeded — which means the columns exist and the value was empty.
+
+Three parts:
+
+- **`supabase/discord-art-publish.sql`** — new migration. Re-creates `lb_upsert`
+  with the three params, dropping the 18-arg form so PostgREST has one candidate.
+  An empty string never clears a stored value: a client publishes every 90
+  seconds and only one of those publishes follows a hull purchase, so overwriting
+  with `''` would blank the key before the feed's next 2-minute tick — exactly
+  the race that produces an art-less card.
+- **`js/cloud.js`** — a new top rung on the degrade ladder sends the three
+  params, with its own `_lbNoArt` flag and 6-hour re-arm, so a server that has
+  not run the migration keeps publishing every other ladder untouched.
+- **The feed's copy** — `hullName('')` returns the phrase "a new hull", which
+  cannot take an article. The title and the line now have a named and an unnamed
+  form, so a row with no key still reads correctly.
+
+`FEED_VER` is now **591**, tracking the client build (was 570 — never bumped when the art code
+shipped). That number is echoed in every response, so
+`select content from net._http_response order by created desc limit 3;` proves
+which build of the function is actually live.
+
+### 10 · The resource row stacked onto two lines
 
 The top-bar fit guard had four stages: three that compressed the chips and a
 final one that wrapped to a second row. It now measures the overflow and scales
@@ -318,7 +373,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 590**.
+1. Login screen reads **BUILD 591**.
 2. Enter a Citadel Siege zone (any zone ending in 7). Fly straight into the
    Citadel and hold there — it must not slide backwards, and must stay on screen.
 3. Jump in and out of a boss dungeon 5–6 times. The ship moves every time, on
@@ -368,9 +423,19 @@ stage can start a second row. One row at every viewport width.
     milestone count.
 23. Take a Void spire — the card gains the citadel art for that tier.
 
-If a card posts with no art, the SQL has not run (or `lb_upsert` whitelists
-columns and needs the three names added — the SQL prints a notice if so). The
-post itself still lands; only the picture is missing.
+**If a card posts with no art, work backwards down these three:**
+
+1. `select name, ships, hull_last, cargo_tier from leaderboard order by updated_at
+   desc limit 10;` — if `hull_last` is null or empty for someone who just bought
+   a hull, the WRITE is being dropped: `discord-art-publish.sql` has not run, or
+   the client is on build 590 or below.
+2. `select content from net._http_response order by created desc limit 3;` — must
+   show `"ver":591`. Anything lower and the old function is still deployed.
+3. The art file itself: open `https://<site>/ships/ship-<key>.png` directly.
+   Discord fetches the URL itself, so a 404 renders as a card with no image and
+   nothing server-side can detect it.
+
+The post always lands either way; only the picture is missing.
 
 ## Still open (carried forward)
 

@@ -77,6 +77,9 @@
   // low-level phone idling with the tab open beat a billions-strong browser
   // save. Weight now reads the POWER signals too: log-gold (economy is
   // exponential), deepest zone, hull upgrade levels, ascension investment.
+  // The pilot-ascension RESET EPOCH carried by a save. Bumped by the one-time
+  // migration in game-v93.js; compared here above every other progression signal.
+  function pascEpoch(s) { try { return (s && s.pasc && (s.pasc.epoch | 0)) || 0; } catch (e) { return 0; } }
   function saveWeight(s) {
     if (!s) return 0;
     let hull = 0; try { const sl = s.shipLevels || {}; for (const k in sl) hull += sl[k] || 0; } catch (e) {}
@@ -97,7 +100,17 @@
     // an unlocked slot is five successful upgrades and costs real ingots.
     let nano = 0;
     try { const cs = (s.nano && s.nano.cores) || {}; for (const k in cs) { const c = cs[k] || {}; nano += 40 + (c.slots | 0) * 300 + (c.stage | 0) * 40; } } catch (e) {}
-    return stars * 5e6
+    // RESET EPOCH OUTRANKS EVERYTHING, INCLUDING STARS (Aug 2026, the global
+    // pilot-ascension reset). Every rule below and in mergeSaves() exists to stop
+    // ascension progress from regressing, which is correct for a normal timeline
+    // and fatal for a deliberate wipe: a 0-star reset save loses to the pre-reset
+    // cloud copy on the star tiebreak and the reset is undone at the next login.
+    // The epoch only ever increases, so a save that has been through the reset is
+    // unambiguously the later timeline. 1e12 dwarfs the star term (20 stars = 1e8)
+    // by four orders, so it also re-bases the best-ever vault for free — otherwise
+    // Save Recovery would keep offering the pre-reset copy as the heaviest ever.
+    return pascEpoch(s) * 1e12
+      + stars * 5e6
       + (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600
       + Math.log10(1 + Math.max(0, s.gold || 0)) * 7200
       + Math.max(s.highestDungeonReached | 0, s.highestUnlocked | 0) * 1800
@@ -329,14 +342,15 @@
     // comparable weight (within ×1.3), i.e. devices genuinely taking turns.
     const wl = saveWeight(local), wc = saveWeight(cloud);
     let base, other;
-    // ASCENSION STARS ARE THE TIEBREAK ABOVE ALL ELSE. They only ever increase,
-    // so the copy with more stars is unambiguously the later timeline — no
-    // weight or timestamp comparison may override it. Without this, the copy
-    // saved seconds BEFORE an ascension (rich, high level) beat the ascended
-    // one and the whole reset was rolled back on the next login.
+    // RESET EPOCH IS THE FIRST TIEBREAK, ABOVE STARS. See saveWeight(). A global
+    // ascension reset makes progress legitimately go DOWN, which every rule here
+    // is built to prevent; the epoch is the one signal that says "this regression
+    // was intentional, and it is the newer timeline".
+    const el = pascEpoch(local), ec = pascEpoch(cloud);
     const sl = (local.pasc && (local.pasc.stars | 0)) || 0;
     const sc = (cloud.pasc && (cloud.pasc.stars | 0)) || 0;
-    if (sl !== sc) { base = sl > sc ? local : cloud; other = base === local ? cloud : local; }
+    if (el !== ec) { base = el > ec ? local : cloud; other = base === local ? cloud : local; }
+    else if (sl !== sc) { base = sl > sc ? local : cloud; other = base === local ? cloud : local; }
     else if (wl > wc * 1.3) { base = local; other = cloud; }
     else if (wc > wl * 1.3) { base = cloud; other = local; }
     else { base = (cloud.lastSave || 0) >= (local.lastSave || 0) ? cloud : local; other = base === cloud ? local : cloud; }
@@ -390,7 +404,7 @@
     // earned total and the perk ranks, then DERIVE the wallet from the perks the
     // pilot actually owns. Idempotent by construction — merging the result again
     // produces the same numbers, which is what kills the repeat.
-    if (other.pasc && base.pasc) {
+    if (other.pasc && base.pasc && el === ec) {
       const bp = base.pasc, op = other.pasc;
       bp.stars = Math.max(bp.stars | 0, op.stars | 0);
       // 1 — lifetime earned: only an ascension ever adds to it
@@ -414,6 +428,15 @@
       if (op.entitled) bp.entitled = Array.from(new Set((bp.entitled || []).concat(op.entitled)));
       // keep the longer ascension log (display only)
       if ((op.hist || []).length > (bp.hist || []).length) bp.hist = op.hist;
+    } else if (other.pasc && base.pasc && el !== ec) {
+      // EPOCHS DIFFER — the reset already ran on `base`. Union NOTHING from the
+      // pre-reset copy except the entitlement list: stars, points and perk ranks
+      // are exactly what the reset removed, and every max/union rule above would
+      // hand them straight back. Entitlements are event and premium hulls, some
+      // bought with real money, and are kept by design.
+      if (other.pasc.entitled) {
+        base.pasc.entitled = Array.from(new Set((base.pasc.entitled || []).concat(other.pasc.entitled)));
+      }
     } else if (other.pasc && !base.pasc) base.pasc = other.pasc;
     // PILOT LEVEL NEVER REGRESSES (Aug 2026 — "logged out and came back ~70 levels
     // lower"). Level, xp and the points they buy were the only progression signals
@@ -426,7 +449,10 @@
     // higher level is always the true one. Restored levels re-credit their skill
     // points (levelUp() grants pointsPerLevel each); points are NOT maxed on their
     // own, or a copy that had already spent them into `skills` would double-dip.
-    if (sl === sc && (other.level | 0) > (base.level | 0)) {
+    // A RESET EPOCH ALSO CLAMPS THE LEVEL, so this must not run across epochs
+    // either — the pre-reset copy is hundreds of levels higher by definition and
+    // would restore every one of them, and their skill points with them.
+    if (el === ec && sl === sc && (other.level | 0) > (base.level | 0)) {
       let ppl = 1;
       try { ppl = (window.CONFIG && window.CONFIG.SKILLS && window.CONFIG.SKILLS.pointsPerLevel) || 1; } catch (e) {}
       const regained = (other.level | 0) - (base.level | 0);

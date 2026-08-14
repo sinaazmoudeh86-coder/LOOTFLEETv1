@@ -1,37 +1,31 @@
-# Loot Fleet — deploy v225 · build 579
+# Loot Fleet — deploy v226 · build 582 · SEASON RESET
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v224. Service worker cache is `lootfleet-v579`.
-**Login screen reads `BUILD 579`.**
+Supersedes v225. Service worker cache is `lootfleet-v582`.
+**Login screen reads `BUILD 582`.**
 
-**Headline:** boss kills no longer pay an XP bonus. Boss dungeons were the
-fastest XP in the game — a repeatable boss paid **12× XP** on a fight you can
-queue back to back, which is a farm rather than an encounter.
+**This release wipes player progress on purpose.** Pilot Ascension and the whole
+galaxy map are cleared for everyone. It has a server half that must be run in a
+specific order — see `supabase/reset-territory.sql` and the sequence below.
 
-This folder carries **578, 577, 576, 575 and 574** in full — including the
-Dread-class gold-loss fix. If v224 never went live, push this instead; it
-supersedes it and its `DEPLOY.md` smoke-tests still apply.
+Carries builds 574–582. If earlier folders never went live, this supersedes all
+of them, including the Dread-class gold-loss fix.
 
 ---
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 579 |
+| Stamp | File | Build 582 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `579` |
-| Update beacon | `version.json` → `build` | `579` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v579` |
-| Project root beacon | root `version.json` (source tree) | `579` |
-
-```bash
-grep -o 'LF_BUILD = [0-9]*' game.html; cat version.json; grep -o "lootfleet-v[0-9]*" sw.js
-```
+| Client constant | `game.html` → `window.LF_BUILD` | `582` |
+| Update beacon | `version.json` → `build` | `582` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v582` |
+| Project root beacon | root `version.json` (source tree) | `582` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
-origin and stays un-versioned. This folder's `sw.js` is the real one. Verified
-un-versioned at cut time.
+origin and stays un-versioned. Verified un-versioned at cut time.
 
-### Folder audit — all green for this folder
+### Folder audit — all green
 
 | check | result |
 |---|---|
@@ -39,83 +33,92 @@ un-versioned at cut time.
 | stale vs project root | **0** |
 | missing from folder | **0** |
 | references without `?v=` | **0** |
-| references carrying `?v=579` | **1** (`game-v93.js`) |
-| parse check | **clean** |
+| references carrying `?v=582` | **2** (`game-v93.js`, `account.js`) |
+| parse check on changed files | **clean** |
 
-Folder was seeded from `deploy-v224`, then `js/`, `css/`, `guides/` and
-`supabase/` were **deleted and re-copied from the project root as separate
-calls** — never a bulk copy over patched files (the v216 failure). Every
-referenced `js`/`css` file was then byte-compared against the project root.
+Seeded from `deploy-v225`, then `js/`, `css/`, `guides/` and `supabase/` deleted
+and re-copied from the project root as separate calls (never a bulk copy over
+patched files — the v216 failure), then every referenced file byte-compared.
 
-Files changed this build: `js/game-v93.js`.
-
----
-
-## ⚠ STILL CARRYING THE MONEY-LOSS FIX
-
-If v224 was never pushed, everything in its warning still applies: players are
-losing balances to the Dread-class partial charge right now, and this folder is
-the fix. Recovery is not possible for already-corrupted saves — a nulled balance
-never had its real value written anywhere. Do not restore currency from
-`lf-best` or `lf-backup`; those snapshots predate resets.
+Files changed: `js/game-v93.js`, `js/account.js`, plus the new
+`supabase/reset-territory.sql`.
 
 ---
 
-## Step 1 — SQL (only if these have never been run)
+## THE SEQUENCE — do not reorder
 
-`supabase/nanocore-ladder.sql`, `supabase/cargo-ladder.sql`. Both safe to
-re-run, neither is new. Nothing in 579 needs a migration.
+1. **Announce it.** Players should not log in cold to a level-150 pilot on an
+   empty map.
+2. **Supabase → SQL Editor → run `supabase/reset-territory.sql`.** It archives
+   the table to `territory_prereset_s1` first, then clears it.
+3. **Push this folder** to the repo root and let Vercel build. The update gate
+   evicts every connected player within ~90 seconds.
+4. **Wait 10 minutes.**
+5. **Run STEP 1 of the SQL again** (`delete from public.territory;`).
 
-## Step 2 — Discord feed Edge Function (only if v219 was never deployed)
+Step 5 is not optional. Between the first delete and the eviction, clients still
+on the old build hold a populated `ownedSystems` and republish it into the empty
+table. The second delete clears that. By then every client has wiped its local
+mirror and latched `_turfRepub2`, which permanently retires the republish path —
+so the table stays empty until someone captures fresh ground.
 
-```bash
-supabase functions deploy discord-feed
-```
-
-Cron log `"ver"` must read `570` or higher.
-
-## Step 3 — push the site
-
-Folder contents to the repo root, commit, let Vercel build. **The site goes
-first, the beacon confirms after** — `version.json` here says 579 and the update
-gate evicts every connected player within ~90 seconds of Vercel serving it.
-
-## Step 4 — hard-reload and smoke-test
-
-`Cmd/Ctrl + Shift + R`, then:
-
-1. **Login screen shows `BUILD 579`.**
-2. **Kill a zone boss and watch the XP bar.** It must move by roughly what a
-   normal kill in that zone gives — not twelve times it.
-3. **Boss GOLD is unchanged.** Same kill should still pay a boss-sized gold
-   number. If gold dropped too, that is a bug — only XP was cut.
-4. **Boss loot and drops are unchanged.**
-5. **Check the Dreadnaught and Voidmaw.** These run through the same `isBoss`
-   path, so they lost the bonus as well. If either is meant to stay a real XP
-   event, it needs an explicit carve-out — decide before or shortly after this
-   ships.
-6. **Regression:** the ships screen scrolls past Dread without crashing, and a
-   Dread purchase either charges and grants or does neither (v224 fixes, first
-   live here if v224 was skipped).
+Running the delete once, before the push, and never again is the one sequence
+that silently fails: the map looks reset for a minute and then comes back.
 
 ---
 
-## What shipped in build 579
+## What the reset does
 
-- **Boss XP bonus removed.** The `× 12` on `e.isBoss` is gone from the XP award.
-  A boss now pays exactly what any kill in that zone pays. Boss dungeons were
-  the fastest levelling route in the game by a wide margin, and the repeatable
-  ones made it a loop rather than an event.
-- **Gold, loot and drops keep the full 12×.** Killing a boss is still worth a
-  boss's reward — it just is not levels. Only the XP line changed; the gold line
-  is untouched and was verified to still carry the multiplier.
+### Cleared for every pilot
 
-### Known knock-on — needs a decision
+- **Pilot Ascension** — stars, points (spent and unspent), every perk rank.
+- **Level clamped to 150** (the cap at zero stars), XP zeroed. Skill tree wiped
+  and refunded to 149 points to respend inside the smaller budget.
+- **The entire galaxy** — tiles, Void spires, House Citadel holds, player-built
+  citadels and their levels, contest cooldowns, razed-citadel records, and the
+  simulated rival owners. The map returns fully neutral.
+- **Casino** — chips, bet size, win/loss books.
 
-The Dreadnaught hunt and the Voidmaw event resolve through the same `isBoss`
-flag, so they lost the 12× as well. That may be correct (they are the biggest
-XP farms of all) or it may be too blunt (they are genuine encounters, not a
-loop). Nothing was carved out; flagging it rather than guessing.
+### Kept, verified
+
+Gold, LootCoins, Dread Cores, Fuel, Ore, Plasma, Prism. Every item equipped, in
+the hold, and in saved loadouts. Every hull, hull upgrade level and blueprint.
+**Ship Ascension.** Starforge tempers. Nanocores. Moon Colony. Home Citadel
+waves, structures and towers. Badges, lifetime stats, missions. VIP and Pro.
+**Event and premium hull entitlements** — carried across the reset by name in
+the merge, because some were bought with real money.
+
+### Why it sticks
+
+Every rule in `account.js` exists to stop ascension progress from regressing —
+stars outrank weight and timestamps, and stars/points/perks are max-unioned. A
+plain wipe would be repaired away at the next login on any device. `pasc.epoch`
+is now compared **above stars** in `saveWeight()` and in all three merge paths,
+so a reset save reads as the later timeline instead of a corrupted one. It also
+re-bases the best-ever vault, or Save Recovery would keep offering the pre-reset
+copy as the heaviest ever and players could restore their stars in one tap.
+
+### Rollback
+
+**There isn't one.** Once a client reaches epoch 1 and pushes, the pre-reset
+cloud copy is permanently outranked by design. Each save records a full
+`pasc.preReset` snapshot (stars, points, perks, level, XP, skills, skill points,
+tile list, citadels) so a future epoch 2 could restore an individual account on
+request. The server table is archived to `territory_prereset_s1`. Neither is
+automatic; both are there so a support case is answerable.
+
+---
+
+## Smoke-test after the push
+
+1. Login screen reads **BUILD 582**.
+2. Ascension screen: 0 stars, 0 points, no perk ranks.
+3. A previously-deep pilot is level 150 with 149 skill points to spend.
+4. Galaxy map is empty — no owned tiles, no rivals, no citadels, no Void holds.
+5. `select count(*) from public.territory;` returns **0** and stays there.
+6. Hangar is intact: all hulls, all gear, all currencies, Ship Ascension intact.
+7. Event/premium hulls still owned.
+8. Log in on a second device — the reset holds, nothing comes back.
 
 ## Still open (carried forward)
 
@@ -123,8 +126,10 @@ loop). Nothing was carved out; flagging it rather than guessing.
   nothing recording or fulfilling it. Most serious open item.
 - Check last-deployed dates on: `stripe-webhook`, `digest-build`,
   `notify-unsub`, `iap-validate`, `delete-account`.
-- Confirm `lf-daily-ranks` cron succeeded at 00:05; watch sim-held territory.
 - **Solo-boss DPS display overstates damage** — `theoryDps` counts multishot,
   which needs a second target.
-- **No recovery path for already-nulled balances.** If this hit many players,
-  the honest options are a manual grant or a documented amnesty.
+- **No recovery path for already-nulled gold balances** from the pre-578 bug.
+- **The Dreadnaught and Voidmaw lost the 12× XP bonus** with all other bosses
+  (579). Decide whether they deserve a carve-out.
+- **The map will not stay empty** — `galaxyTick()` seeds simulated rival holdings
+  again as people play. Expected, but worth knowing.

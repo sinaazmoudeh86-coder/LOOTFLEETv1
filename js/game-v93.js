@@ -6356,6 +6356,84 @@
     // both readers fell back to the hold's length. Seeding it with exactly what
     // the old formula displayed means no progress bar moves backwards today.
     if (state.lifetimeLooted == null) state.lifetimeLooted = (state.inventory || []).length;
+    // ---- ONE-TIME GLOBAL PILOT ASCENSION RESET (epoch 1) ---------------------
+    // A bug let pilots rush ascensions. It is fixed, and the community agreed to
+    // a clean slate rather than a selective claw-back. Stars, points and perks go
+    // to zero for everyone, exactly once.
+    //
+    // `pasc.epoch` is what makes it STICK. Every rule in account.js exists to stop
+    // ascension progress from regressing — stars outrank weight and timestamps in
+    // mergeSaves, and stars/points/perks are max-unioned so they can never drop.
+    // Correct for a normal timeline, fatal for a deliberate wipe: without an epoch
+    // the 0-star save loses to the pre-reset cloud copy and the reset is undone at
+    // the next login, on every device, forever. saveWeight() and mergeSaves() now
+    // compare the epoch ABOVE stars, so a reset save reads as the later timeline.
+    // Bump PASC_EPOCH to run another reset later.
+    const PASC_EPOCH = 1;
+    if (!state.pasc) state.pasc = { stars: 0, pts: 0, spent: 0, perks: {}, legacy: null, hist: [] };
+    if ((state.pasc.epoch | 0) < PASC_EPOCH) {
+      const p = state.pasc;
+      // FULL PRE-RESET SNAPSHOT. Stars and points alone would not be enough to
+      // put a specific pilot back: the level clamp and the skill wipe below are
+      // the parts that cannot be reconstructed from anything else in the save.
+      // Nothing reads this for gameplay — it exists so a future epoch 2 (or a
+      // support grant) can restore an individual account if this goes wrong.
+      const before = {
+        stars: p.stars | 0, pts: p.pts | 0, spent: p.spent | 0,
+        perks: JSON.parse(JSON.stringify(p.perks || {})),
+        level: state.level | 0, xp: state.xp || 0,
+        skillPoints: state.skillPoints | 0,
+        skills: JSON.parse(JSON.stringify(state.skills || {})),
+        tiles: Object.keys(state.ownedSystems || {}),
+        citadels: JSON.parse(JSON.stringify(state.citadels || {})),
+        at: Date.now(), build: (window.LF_BUILD | 0) || 0,
+      };
+      p.stars = 0; p.pts = 0; p.spent = 0; p.perks = {}; p.legacy = null;
+      p.entitled = Array.isArray(p.entitled) ? p.entitled : [];   // event/premium hulls stay
+      if (!Array.isArray(p.hist)) p.hist = [];
+      p.epoch = PASC_EPOCH;
+      p.resetAt = Date.now();
+      p.preReset = before;   // support record only — no gameplay path reads it
+      // LEVEL CAP RETURNS TO 150 (cap = 150 + 50 per star). Hard clamp, and
+      // rebuild the skill budget with it: a pilot left holding 550 levels' worth
+      // of skill points at level 150 would carry the whole advantage through the
+      // reset. Spent ranks are refunded into a level-150 budget to respend.
+      const cap = C.levelCap(0);
+      if ((state.level | 0) > cap) {
+        state.level = cap; state.xp = 0;
+        state.skills = {};
+        state.skillPoints = Math.max(0, (cap - 1) * ((C.SKILLS && C.SKILLS.pointsPerLevel) || 1));
+      }
+      // ---- GALAXY / TERRITORY / CASINO WIPE (same epoch, one clean slate) ----
+      // TERRITORY IS SERVER-AUTHORITATIVE. `ownedSystems` is only a mirror of the
+      // `territory` table, so clearing it here is HALF the job — the SQL in
+      // supabase/reset-territory.sql is the other half, and the ORDER MATTERS
+      // (see that file's header). What this side must guarantee is that no client
+      // ever pushes its old holdings back up: republishOwnedTiles() exists to
+      // re-send conquests the server missed, and against a freshly truncated
+      // table it would repopulate the entire map from local mirrors. Latching
+      // `_turfRepub2` retires that path permanently for this epoch.
+      state.ownedSystems = {};      // tiles, Void spires and House Citadel holds
+      state.citadels = {};          // player-built citadels and their levels
+      state.rivalCitadels = {};
+      state.rivalTiles = {};        // simulated owners — the map returns fully neutral
+      state.tileCd = {};            // contest cooldowns and attack shields
+      state.razedCitadels = {};
+      state.currentSystem = null;   // never leave a pilot deployed to a tile that no longer exists
+      state._turfRepub2 = 1;        // republish retired — must not refill the truncated table
+      try { rt.realTiles = {}; } catch (e) {}
+      // CASINO — chips, bet size and the win/loss books. Resources and gold
+      // already banked are NOT touched anywhere in this migration, by decision.
+      state.casino = null;          // casino.js cas() rebuilds it fresh on next open
+      refreshStats();
+      save();
+      try { console.warn('[LOOTFLEET] pilot ascension reset → epoch ' + PASC_EPOCH + ' (was ' + before.stars + '★, level ' + before.level + ')'); } catch (e) {}
+      try {
+        if (window.UI && window.UI.unlockToast) setTimeout(() => {
+          try { window.UI.unlockToast('★ SEASON RESET — ascension, the galaxy and the casino are wiped for every pilot. Your hulls, gear, currencies and Home Citadel are untouched.'); } catch (e) {}
+        }, 1400);
+      } catch (e) {}
+    }
     // ---- GALAXY v3 migration: regions → one massive unified hex grid --------
     if (state.galaxyVer !== 3) {
       state.ownedSystems = {};            // the Home Citadel is neutral — no starter tile

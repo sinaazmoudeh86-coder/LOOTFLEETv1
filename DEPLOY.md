@@ -1,26 +1,28 @@
-# Loot Fleet — deploy v226 · build 582 · SEASON RESET
+# Loot Fleet — deploy v227 · build 583 · COMBAT LOCK-UP FIXES
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v225. Service worker cache is `lootfleet-v582`.
-**Login screen reads `BUILD 582`.**
+Supersedes v226. Service worker cache is `lootfleet-v583`.
+**Login screen reads `BUILD 583`.**
 
-**This release wipes player progress on purpose.** Pilot Ascension and the whole
-galaxy map are cleared for everyone. It has a server half that must be run in a
-specific order — see `supabase/reset-territory.sql` and the sequence below.
+A plain bug-fix release — no data migration, no SQL, no reset. Four fixes, all
+from the Aug 13 field reports: the stuck ship in boss zones, the Void Citadel
+that could be pushed out of the arena, owned Dread hulls reading as unowned in
+Nanocores, and the resource row stacking onto two lines.
 
-Carries builds 574–582. If earlier folders never went live, this supersedes all
-of them, including the Dread-class gold-loss fix.
+Carries build 583 only. If v226 never went live, read that folder's DEPLOY.md
+first — this folder contains its season-reset code too, and **its SQL sequence
+still applies.**
 
 ---
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 582 |
+| Stamp | File | Build 583 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `582` |
-| Update beacon | `version.json` → `build` | `582` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v582` |
-| Project root beacon | root `version.json` (source tree) | `582` |
+| Client constant | `game.html` → `window.LF_BUILD` | `583` |
+| Update beacon | `version.json` → `build` | `583` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v583` |
+| Project root beacon | root `version.json` (source tree) | `583` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -33,92 +35,104 @@ origin and stays un-versioned. Verified un-versioned at cut time.
 | stale vs project root | **0** |
 | missing from folder | **0** |
 | references without `?v=` | **0** |
-| references carrying `?v=582` | **2** (`game-v93.js`, `account.js`) |
-| parse check on changed files | **clean** |
+| references carrying `?v=583` | **5** (`web-v89.css`, `readability.css`, `entities.js`, `game-v93.js`, `ui-v94.js`) |
+| `game.html` byte-identical to project root | **yes** |
 
-Seeded from `deploy-v225`, then `js/`, `css/`, `guides/` and `supabase/` deleted
+Seeded from `deploy-v226`, then `js/`, `css/`, `guides/` and `supabase/` deleted
 and re-copied from the project root as separate calls (never a bulk copy over
-patched files — the v216 failure), then every referenced file byte-compared.
+patched files — the v216 failure), then all 74 referenced files byte-compared.
 
-Files changed: `js/game-v93.js`, `js/account.js`, plus the new
-`supabase/reset-territory.sql`.
-
----
-
-## THE SEQUENCE — do not reorder
-
-1. **Announce it.** Players should not log in cold to a level-150 pilot on an
-   empty map.
-2. **Supabase → SQL Editor → run `supabase/reset-territory.sql`.** It archives
-   the table to `territory_prereset_s1` first, then clears it.
-3. **Push this folder** to the repo root and let Vercel build. The update gate
-   evicts every connected player within ~90 seconds.
-4. **Wait 10 minutes.**
-5. **Run STEP 1 of the SQL again** (`delete from public.territory;`).
-
-Step 5 is not optional. Between the first delete and the eviction, clients still
-on the old build hold a populated `ownedSystems` and republish it into the empty
-table. The second delete clears that. By then every client has wiped its local
-mirror and latched `_turfRepub2`, which permanently retires the republish path —
-so the table stays empty until someone captures fresh ground.
-
-Running the delete once, before the push, and never again is the one sequence
-that silently fails: the map looks reset for a minute and then comes back.
+Files changed: `js/game-v93.js`, `js/entities.js`, `js/ui-v94.js`,
+`css/web-v89.css`, `css/readability.css`.
 
 ---
 
-## What the reset does
+## THE SEQUENCE
 
-### Cleared for every pilot
+1. **Push this folder** to the repo root and let Vercel build.
+2. **Then** confirm `version.json` reads 583 at the live URL.
 
-- **Pilot Ascension** — stars, points (spent and unspent), every perk rank.
-- **Level clamped to 150** (the cap at zero stars), XP zeroed. Skill tree wiped
-  and refunded to 149 points to respend inside the smaller budget.
-- **The entire galaxy** — tiles, Void spires, House Citadel holds, player-built
-  citadels and their levels, contest cooldowns, razed-citadel records, and the
-  simulated rival owners. The map returns fully neutral.
-- **Casino** — chips, bet size, win/loss books.
+The beacon ships inside the folder, so the order is automatic — but if you push
+the beacon by hand ahead of the files, connected players are evicted onto code
+that is not live yet. Don't.
 
-### Kept, verified
+The update gate evicts every connected player within ~90 seconds of the push.
 
-Gold, LootCoins, Dread Cores, Fuel, Ore, Plasma, Prism. Every item equipped, in
-the hold, and in saved loadouts. Every hull, hull upgrade level and blueprint.
-**Ship Ascension.** Starforge tempers. Nanocores. Moon Colony. Home Citadel
-waves, structures and towers. Badges, lifetime stats, missions. VIP and Pro.
-**Event and premium hull entitlements** — carried across the reset by name in
-the merge, because some were bought with real money.
+---
 
-### Why it sticks
+## What changed
 
-Every rule in `account.js` exists to stop ascension progress from regressing —
-stars outrank weight and timestamps, and stars/points/perks are max-unioned. A
-plain wipe would be repaired away at the next login on any device. `pasc.epoch`
-is now compared **above stars** in `saveWeight()` and in all three merge paths,
-so a reset save reads as the later timeline instead of a corrupted one. It also
-re-bases the best-ever vault, or Save Recovery would keep offering the pre-reset
-copy as the heaviest ever and players could restore their stars in one tap.
+### 1 · Ship frozen in boss zones — auto AND manual (the big one)
 
-### Rollback
+Two separate faults stacked into one symptom.
 
-**There isn't one.** Once a client reaches epoch 1 and pushes, the pre-reset
-cloud copy is permanently outranked by design. Each save records a full
-`pasc.preReset` snapshot (stars, points, perks, level, XP, skills, skill points,
-tile list, citadels) so a future epoch 2 could restore an individual account on
-request. The server table is archived to `territory_prereset_s1`. Neither is
-automatic; both are there so a support case is answerable.
+**The joystick was hidden while the game forced manual flight.** The stick is
+only shown when `getAuto()` is false, and that check ran from `UI.syncAuto()`,
+which was never exported on `window.UI`. The Voidmaw, alliance raids and the
+cargo escort all call `setAuto(false)` directly to enforce manual flight — so
+they flipped the mode and left the control surface hidden. No stick, no autopilot:
+the ship did not move on either setting. It cleared itself as soon as anything
+else happened to call `syncAuto()`, which is the reported intermittency ("every
+3–4 times you jump into a boss dungeon it locks in"). `setAuto()` now notifies
+the UI on every change.
+
+**The autopilot could chase a target it was physically unable to reach.** The
+player hull is clamped to the arena every frame; enemies were not. Given a
+hostile outside those bounds the autopilot flew into the wall and held there at
+full throttle — visually dead still. It now ignores any target outside the world.
+
+### 2 · The Void Citadel could be pushed off the map
+
+`Enemy.update()`'s station-keeping term was pure geometry with no reference to
+the hull's own `speed`, so a `speed:0` hull still got a real push out of its
+hold ring. The Void Citadel is exactly that hull. Closing inside its ring shoved
+the fortress backwards, the autopilot chased it, and the pair walked each other
+clean out of the zone — where a siege objective is unkillable and the zone can
+never be completed.
+
+Station-keeping is now capped by the hull's own speed, so a fortress genuinely
+cannot move. **And enemies are clamped to the arena** — they were the only mover
+in the game without a world clamp, which is what let this become unrecoverable
+rather than merely annoying.
+
+### 3 · Owned Dread hulls read as unowned in Nanocores
+
+`shipUnlocked()` answers "can progress reach this hull?" — Nanocores was using it
+as "do I own this hull?". Dread Harbinger, Tyrant and Omega gate on level
+160/180/200, all **above the 150 level cap**, so after the season reset every
+Dread hull a player owned disappeared from the MY HULLS filter. Award-only hulls
+(Voidmaw, Eternum) returned false by design and had the same problem.
+
+Ownership is checked first now. The buy path is unaffected — `shipBuyState()`
+already returns `owned` before it ever consults this.
+
+This is also the most likely source of the Dread-screen crash in the same report,
+which was intermittent and not reproducible on demand. If it recurs, the console
+line at the moment it happens will pin it.
+
+### 4 · The resource row stacked onto two lines
+
+The top-bar fit guard had four stages: three that compressed the chips and a
+final one that wrapped to a second row. It now measures the overflow and scales
+the whole row by that ratio instead, and wrapping is disabled outright so no
+stage can start a second row. One row at every viewport width.
 
 ---
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 582**.
-2. Ascension screen: 0 stars, 0 points, no perk ranks.
-3. A previously-deep pilot is level 150 with 149 skill points to spend.
-4. Galaxy map is empty — no owned tiles, no rivals, no citadels, no Void holds.
-5. `select count(*) from public.territory;` returns **0** and stays there.
-6. Hangar is intact: all hulls, all gear, all currencies, Ship Ascension intact.
-7. Event/premium hulls still owned.
-8. Log in on a second device — the reset holds, nothing comes back.
+1. Login screen reads **BUILD 583**.
+2. Enter a Citadel Siege zone (any zone ending in 7). Fly straight into the
+   Citadel and hold there — it must not slide backwards, and must stay on screen.
+3. Jump in and out of a boss dungeon 5–6 times. The ship moves every time, on
+   auto and on manual.
+4. Start a Voidmaw run: auto turns off (by design) **and the joystick appears.**
+   Same for an alliance raid and a cargo escort.
+5. End a Voidmaw run — auto comes back on and the stick hides.
+6. Nanocores → MY HULLS: every Dread-class hull you own is listed.
+7. Open the Dread hull detail from the ships screen — no crash.
+8. Top bar at 360px wide with large balances: one row, nothing clipped, nothing
+   stacked. Rotate to landscape and back.
 
 ## Still open (carried forward)
 
@@ -133,3 +147,6 @@ automatic; both are there so a support case is answerable.
   (579). Decide whether they deserve a carve-out.
 - **The map will not stay empty** — `galaxyTick()` seeds simulated rival holdings
   again as people play. Expected, but worth knowing.
+- **Simulated pilots were not reset** — `sim_pilots` still carries pre-reset
+  levels and stars on the boards. Cosmetic; the SQL to pull them in line is in
+  chat history.

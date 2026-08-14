@@ -1328,8 +1328,13 @@
       toast(+ps.value === 0 ? 'Picking up everything' : '▼ Picking up ' + C.RARITY[+ps.value].name + ' and better — rest is scrapped', '#9ec5ff');
     });
     const asp = $('autosell-pickup-sel'); if (asp) asp.addEventListener('change', () => {
-      G.setAutoSellTier(+asp.value);
+      // setAutoSellTier now sweeps the hold ON THE SPOT and reports what went, so
+      // the toggle's own toast can say it. Before, the hold was swept at the next
+      // pickup flush and the player watched a stale count for a second or more.
+      const r = G.setAutoSellTier(+asp.value) || {};
       toast(+asp.value < 0 ? 'Auto-sell off' : '$ Auto-selling ' + C.RARITY[+asp.value].name + ' and below on pickup', '#e6b566');
+      if (r.n) toast('$ Hold swept — sold ' + r.n + ' for ' + G.formatNum(r.gold), '#e6b566');
+      refreshAll();
     });
     const sel = $('sort-sel'); sel.value = sortMode; sel.addEventListener('change', () => { sortMode = sel.value; renderBag(); });
     $('auto-equip').addEventListener('click', () => { const n = G.autoEquip(); toast(n ? 'Equipped best gear' : 'Already optimal', n ? '#2f9e4f' : '#9c8d78'); });
@@ -3816,6 +3821,16 @@
         while (feed.children.length > 3) feed.removeChild(feed.firstChild);
       }
     }
+    syncBag();
+  }
+  // THE HOLD COUNT IS A VIEW OF state.inventory, AND EVERY MUTATION MUST SAY SO.
+  // The badge used to be written only here (on pickup) and in refreshAll, so the
+  // batched equip/sell flush — which runs a beat LATER and can empty the hold —
+  // left the last pickup's number on screen: "386 items" in a hold auto-sell had
+  // already cleared, and "2 items" that had been auto-equipped as upgrades. Both
+  // reads were stale, not wrong. G.js calls this after every batched mutation.
+  function syncBag() {
+    if (!_inited || !el['bag-badge']) return;
     const n = G.state.inventory.length;
     el['bag-badge'].style.display = n > 0 ? 'block' : 'none'; el['bag-badge'].textContent = n;
     // debounce bag re-render to at most ~3/sec while the bag is open
@@ -4297,5 +4312,5 @@
     return v + s;
   }
 
-  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
+  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
 })();

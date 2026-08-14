@@ -706,9 +706,21 @@
   // --------------------------------------------------------------------------
   // LEVELING
   // --------------------------------------------------------------------------
-  // Roughly how many on-level kills should equal one level past the early game.
-  // Tuned so a deep-zone grind levels you in ~30 min at endgame kill rates.
-  const XP_KILLS_PER_LEVEL = 18000;
+  // Roughly how many on-level kills should equal one level.
+  // THIS USED TO BE A CONSTANT 18,000, AND THAT WAS THE WHOLE LEVELLING BUG.
+  // killXpFor() pays a fixed FRACTION of xpToNext(level) per kill, so however
+  // steep the XP wall got, a level always cost the same 18,000 kills — the
+  // century steepening in xpToNext was arithmetically cancelled out before it
+  // reached the player. Kill RATE, meanwhile, climbs without limit as power
+  // grows, so levelling got FASTER the further you went. Reported as "levelling
+  // gets easier as you progress", and it was exactly that.
+  // The kill cost now grows with level, so the curve the config file describes
+  // is the curve players actually feel:
+  //   L1 ~18.1k · L100 ~36.8k · L200 ~62k · L300 ~91k · L500 ~140k kills per level
+  // Early game is untouched (the term is ~1.0 below level 20).
+  function xpKillsPerLevel(level) {
+    return 18000 * Math.pow(1 + Math.max(0, level | 0) / 150, 1.4);
+  }
   // Per-kill XP. Early on this is just the flat zone XP (fast onboarding). Once
   // the level wall dwarfs flat XP, a kill is instead worth a FIXED FRACTION of
   // your current level wall — so a level always costs ~XP_KILLS_PER_LEVEL
@@ -718,7 +730,7 @@
     const flat = C.enemyXp(zone);
     const z = zone || state.currentDungeon || 1;
     const appropriate = Math.max(0.05, Math.min(1, z / Math.max(1, state.level)));
-    const fraction = C.xpToNext(state.level) / XP_KILLS_PER_LEVEL * appropriate;
+    const fraction = C.xpToNext(state.level) / xpKillsPerLevel(state.level) * appropriate;
     return Math.max(flat, Math.floor(fraction));
   }
   // ---- FLEET XP RATE ----------------------------------------------------------
@@ -1016,6 +1028,8 @@
     // even if the swarm window closed before it died
     const tithe = s.loot || 1;
     rt.beaconTithe = tithe;   // reused by the reinforcement trickle in beaconTick
+    // XP BUDGET FOR THIS SWARM — half a level, no matter how deep the stack.
+    rt.beaconXpBudget = 0.5 * C.xpToNext(state.level);
     for (let i = 0; i < n; i++) {
       const ang = (Math.PI * 2 * i) / n + Math.random() * 0.5;
       const rad = BEACON.ring + Math.random() * 700;
@@ -1514,7 +1528,27 @@
     // currency, paid once at the Citadel. Kill gold still lands (the run is a
     // gold event), but experience and fittings do not.
     const _cargoRun = !!(rt.cgrun && rt.cgrun.active);
-    if (!_cargoRun) gainXp(killXpFor(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1));
+    if (!_cargoRun) {
+      let xp = killXpFor(e.dungeon) * (e.isBoss ? 12 : 1);
+      const _tithe = e.tithe || 1;
+      // THE TITHE WAS A LOOT BONUS THAT ALSO PAID FULL XP. Wreckfield Tithe stacks
+      // to several × and EVERY beacon-summoned kill carries it, so a swarm paid its
+      // entire kill count at multiplied XP — "press Beacon, gain 3 levels". Gold,
+      // salvage and loot keep the whole tithe; XP now takes a quarter of it.
+      if (_tithe > 1) xp *= 1 + (_tithe - 1) * 0.25;
+      if (e.beacon) {
+        // HARD CEILING PER SWARM. However the perks stack, one beacon window can
+        // never pay more than half a level. It is a farming tool, not a level
+        // button. Gold and loot from the same kills are untouched.
+        const m = xpMultCached() || 1;
+        const left = rt.beaconXpBudget || 0;
+        const eff = xp * m;
+        if (left <= 0) xp = 0;
+        else if (eff > left) { xp = left / m; rt.beaconXpBudget = 0; }
+        else rt.beaconXpBudget = left - eff;
+      }
+      if (xp > 0) gainXp(xp);
+    }
     state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1) * (window.PASCEND ? window.PASCEND.mult('gold') : 1) * proMods().gold;   // PILOT: Gold Find · ASCENSION: Prize Courts · BEACON: Wreckfield Tithe
     // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
     // iron & plasma are the rare finds (rarer, but a real grind faucet now).
@@ -2414,8 +2448,27 @@
     // every pickup since the last flush.
     if (rt._aeDirty && rt.time - rt._aeDirty >= 0.4) {
       rt._aeDirty = 0;
+      // THE FLUSH USED TO MUTATE THE HOLD IN SILENCE. onCollect writes the bag
+      // badge at pickup time; this pass runs up to 0.4s LATER and can empty the
+      // hold completely, and it told nobody. That is both hold-count reports:
+      // "386 items" left on screen after sell-on-pickup cleared the bag, and
+      // "2 items" that had already been auto-equipped as upgrades. The count was
+      // stale, not wrong — which is why a reload "fixed" it.
+      const before = state.inventory.length;
       if (state.autoEquipAlways) autoEquip(true);
-      autoSellSweep(null);
+      // autoEquip can GROW the hold as well as shrink it — displaced gear, hulls
+      // that reject a weapon type and escort hand-backs all push into the bag.
+      // So the trigger is that the length CHANGED, not that items left: gating on
+      // `equipped > 0` left the badge stale in the opposite direction.
+      const equipped = before - state.inventory.length;
+      const sold = (autoSellSweep(null) || {}).n || 0;
+      if (state.inventory.length !== before || sold > 0) {
+        // an auto-equip is the one hold-emptying path with nothing to show for
+        // itself — the gold float covers the sell. Say so in the arena.
+        if (equipped > 0 && rt.archer) rt.floats.push(new E.FloatText(rt.archer.x, rt.archer.y - 40, '▲ ' + equipped + ' EQUIPPED', { color: '#7ce0a0', size: 12, vy: -38, life: 0.8 }));
+        if (window.UI && window.UI.syncBag) window.UI.syncBag();
+        save();
+      }
     }
     // dps
     // dps — one pass, in place. The old form allocated a new array every frame
@@ -2444,7 +2497,7 @@
   // After every pickup's equip pass, benched items at/below the auto-sell tier
   // that no longer upgrade ANY fleet slot convert to gold + salvage.
   function autoSellSweep(g) {
-    const tier = autoSellTier(); if (tier < 0) return;
+    const tier = autoSellTier(); if (tier < 0) return { n: 0, gold: 0 };
     let gold = 0, n = 0;
     state.inventory = state.inventory.filter((it) => {
       if (unsellable(it) || it.rarity > tier || isPickupUpgrade(it)) return true;
@@ -2455,6 +2508,7 @@
       const fx = g || rt.archer;
       if (fx) rt.floats.push(new E.FloatText(fx.x, fx.y - 24, '+$' + formatNum(gold) + (n > 1 ? ' (' + n + ' sold)' : ''), { color: '#e6b566', size: 12, vy: -38, life: 0.7 }));
     }
+    return { n, gold };
   }
   function collect(g) {
     g.picked = true; g.dead = true;
@@ -3210,14 +3264,18 @@
     if (state.drones == null) state.drones = 0;
     state.drones = Math.max(0, Math.min(cap, state.drones | 0));
   }
-  const DRONE_PER_SPRITE = 14;   // real drones represented by one visible craft
   const DRONE_MAX_VIS = 16;      // ceiling on visible craft, whatever the bay holds
   function spawnDrones() {
     clampDrones();
     const n = state.drones, prev = rt.drones || [];
     rt.drones = [];
     const ax = rt.archer ? rt.archer.x : 0, ay = rt.archer ? rt.archer.y : 0;
-    const vis = n <= 0 ? 0 : Math.max(1, Math.min(DRONE_MAX_VIS, Math.ceil(n / DRONE_PER_SPRITE)));
+    // ONE CRAFT PER DRONE UP TO THE CEILING. The old rule was one sprite per 14
+    // real drones, so a 4-bay carrier flew a single dart and read as broken —
+    // "the UI says 4, I see 1". Small bays are now literal; only past 16 does a
+    // craft stand for several, and dr.n below keeps total damage identical
+    // either way. Worst-case sprite count is unchanged at DRONE_MAX_VIS.
+    const vis = n <= 0 ? 0 : Math.min(DRONE_MAX_VIS, n);
     for (let i = 0; i < vis; i++) {
       const p = prev[i];
       // Deterministic per-index parameters, so the swarm is stable across a
@@ -3307,7 +3365,7 @@
         dr.cd = (crowd2 ? 2 : 1) / C.DRONE.fireRate;
         // turn to the shot and light the muzzle, so the swarm visibly fights
         dr.face = p.angle; dr.flash = 1;
-        rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.12, size: 1.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
+        rt.particles.push(new E.Particle(dr.x, dr.y, { vx: Math.cos(p.angle) * 70, vy: Math.sin(p.angle) * 70, life: 0.2, size: 2.6, color: '#7fe0ff', glow: true, drag: 0.85 }));
       }
     }
   }
@@ -6784,7 +6842,16 @@
     addDreadCores: (n) => { state.dreadCores = (state.dreadCores || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); },
     invCap, invSlotCost, buyInvSlots,
     setPickupFilter: (t) => { state.pickupFilter = Math.max(0, t | 0); save(); },
-    setAutoSellTier: (t) => { state.autoSellTier = (t == null || t < 0) ? -1 : (t | 0); save(); },
+    setAutoSellTier: (t) => {
+      state.autoSellTier = (t == null || t < 0) ? -1 : (t | 0);
+      // SWEEP ON THE SPOT. The hold was previously swept at the next pickup
+      // flush, so turning sell-on-pickup on and then standing still left a full
+      // hold and a stale count — "sometimes it takes a second for it to update".
+      const r = autoSellSweep(null) || { n: 0, gold: 0 };
+      save();
+      if (window.UI && window.UI.syncBag) window.UI.syncBag();
+      return r;
+    },
     // dev/verify
     fastForward(seconds) { const dt = 1/60, n = Math.floor(seconds/dt); for (let i=0;i<n;i++){ rt.time+=dt; state.playTime+=dt; update(dt); } if (window.UI) window.UI.refreshAll(); },
   };

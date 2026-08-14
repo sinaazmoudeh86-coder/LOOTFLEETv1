@@ -581,7 +581,10 @@
     rail:    { trail: '184,123,255', trailW: 2.2 },
     plasma:  { trail: '70,210,122',  trailW: 2.4 },
     support: { trail: '124,224,160', trailW: 2.0 },
-    drone:   { trail: '130,255,205', trailW: 1.6 },
+    // Drone tracers used to be the thinnest bolt in the game (trailW 1.6, a 5.4
+    // dash) fired by ONE sprite on a small bay — "you can barely even see them
+    // firing". Widened to near-parity with the gatling tracer; damage untouched.
+    drone:   { trail: '150,255,215', trailW: 2.4 },
   };
   // TITAN SINA — full-spectrum tracer palette (r,g,b strings, cheap to slot into rgba())
   const SINA_COLS = ['255,80,80','255,170,60','255,235,90','120,255,130','80,210,255','150,130,255','255,110,235'];
@@ -681,11 +684,11 @@
       ctx.beginPath(); ctx.arc(0, 0, 2.8 * pr, 0, 7); ctx.fill();
     } else {
       // gatling tracer (also drones, in teal) — short hot dash
-      const col = wt === 'drone' ? '#5bffb0' : (p.crit ? '#ffd24d' : '#ffe9a8');
+      const col = wt === 'drone' ? '#7dffc4' : (p.crit ? '#ffd24d' : '#ffe9a8');
       ctx.globalAlpha = 0.4; ctx.fillStyle = col;
-      ctx.beginPath(); ctx.ellipse(0, 0, (wt === 'drone' ? 5.4 : 7.4) * cs, 2.6 * cs, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.ellipse(0, 0, (wt === 'drone' ? 7 : 7.4) * cs, 2.6 * cs, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
       ctx.fillStyle = col;
-      ctx.beginPath(); ctx.ellipse(0, 0, (wt === 'drone' ? 3.6 : 5) * cs, 1.4 * cs, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, 0, (wt === 'drone' ? 4.6 : 5) * cs, 1.4 * cs, 0, 0, 7); ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.ellipse(2 * cs, 0, 1.8 * cs, 1 * cs, 0, 0, 7); ctx.fill();
     }

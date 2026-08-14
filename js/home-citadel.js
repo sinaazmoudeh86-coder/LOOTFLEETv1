@@ -46,13 +46,19 @@
     turret: { ic: '☄', name: 'Defense Grid', bmax: 10, eff: (l) => '+' + l * 8 + '% turret fire',      next: (l) => '+8% turret fire',    base: { gold: 30000, plasma: 800 } },
     repair: { ic: '🔧', name: 'Repair Bay',  bmax: 5,  eff: (l) => '−' + l * 12 + '% repair time',     next: (l) => '−12% repair time',   base: { gold: 20000, iron: 800 } },
   };
-  // CITADEL LEVEL: +10 max levels on EVERY structure, forever. Cost anchors to
-  // CURRENT hourly production (progression-true) and TRIPLES per level.
+  // CITADEL LEVEL: +10 max levels on EVERY structure, forever.
+  // FIXED PRICE LADDER (Aug 2026). Every cost in the Citadel used to be anchored
+  // to CURRENT hourly production, which meant it climbed with your wave, your
+  // deepest zone (zScale) and your VIP multiplier — and a Mining Array level,
+  // whose whole job is +10% production, made every other price in the building
+  // go up with it. Prices are now pure functions of the LEVEL OF THE THING YOU
+  // ARE UPGRADING: the same number for every pilot, rising only as that
+  // structure, tower or the Citadel itself climbs.
   function bldMax(s, key) { return BLD[key].bmax + (s.cit | 0) * 10; }
+  const CIT_BASE = 2e6, CIT_GROWTH = 3;   // triples per Citadel level
   function citCost(s) {
     const lv = s.cit | 0;
-    const hourly = Math.max(100000, rates(s).gold);
-    const gold = Math.round(Math.max(2e6, hourly * 20) * Math.pow(3, lv));
+    const gold = Math.round(CIT_BASE * Math.pow(CIT_GROWTH, lv));
     return { gold, iron: Math.round(gold / 25), fuel: Math.round(gold / 25), plasma: Math.round(gold / 40) };
   }
   function buyCit() {
@@ -65,8 +71,17 @@
     render(); if (window.UI) window.UI.refreshAll();
   }
   function bldCost(key, curLv) {
-    const s = hc(), b = BLD[key], o = {};
-    const f = Math.pow(1.9, curLv) * (1 + s.wave * 0.12);
+    const b = BLD[key], o = {};
+    // 1.34× per level of THIS structure. Two separate problems were folded in
+    // here. The old `(1 + wave * 0.12)` term made the same Lv 3 Mining Array cost
+    // four times as much at wave 25 as at wave 1 — gone. And the old 1.9 base was
+    // far too steep to live alongside a 60-level ceiling: at 1.9, Lv 41 of the
+    // Mining Array asks for 388 TRILLION iron, which is the number Rick hit.
+    // 1.34 lands the same ladder where it should:
+    //   Lv 10 ~468k gold · Lv 20 ~8.7M · Lv 30 ~163M · Lv 40 ~3.1B · Lv 60 ~1.1T
+    // Thousands to millions early, millions to billions mid, trillions only at
+    // the true ceiling (Lv 60 needs Citadel 5).
+    const f = Math.pow(1.34, curLv);
     for (const k in b.base) o[k] = Math.round(b.base[k] * f);
     return o;
   }
@@ -96,34 +111,35 @@
   }
 
   // ---- DEFENSE TOWERS — bought & upgraded INSIDE the defense ---------------
-  // 8 hex pads ring the citadel. Costs anchor to CURRENT hourly production
-  // (progression-true, deliberately expensive); each standing tower makes the
-  // next one pricier. Damage scales off YOUR fleet DPS so value tracks cost.
+  // 8 hex pads ring the citadel. FIXED prices per tower type, rising only with
+  // that tower's own level. Damage scales off YOUR fleet DPS, so a tower bought
+  // late is worth more than the same tower bought early for the same gold.
   const PADS = [[-70, -218], [92, -200], [-248, -62], [268, -44], [-300, 122], [305, 118], [-52, 262], [186, 232]];
   const TOWERS = {
-    laser:   { ic: '⚡', name: 'Pulse Laser',      col: '#7ce0ff', hrs: 1.5, mix: { plasma: 30 },                     range: 540, desc: 'Sustained single-target beam. Instant retarget, never misses.', dmgTxt: (l) => Math.round(12 * l) + '% fleet DPS, sustained beam' },
-    cryo:    { ic: '❄', name: 'Cryo Spire',       col: '#9fd6ff', hrs: 3.2, mix: { fuel: 22 },                       range: 300, unlockW: 5,  desc: 'Chill field — every raider inside crawls at 42% speed and fires slower.', dmgTxt: (l) => 'chills ALL raiders in field · +' + Math.round(3 * l) + '% fleet DPS' },
-    missile: { ic: '☄', name: 'Missile Battery',  col: '#ffb84d', hrs: 6.5, mix: { iron: 18, plasma: 30 },           range: 660, unlockW: 12, desc: 'Slow heavy salvos with wide splash. Shreds clustered raids.', dmgTxt: (l) => Math.round(55 * l) + '% fleet DPS per salvo, AoE splash' },
-    rail:    { ic: '✦', name: 'Annihilator Rail', col: '#ff5a68', hrs: 16,  mix: { iron: 14, fuel: 14, plasma: 20 }, range: 980, unlockW: 25, desc: 'Orbital-grade railgun. One shot pierces the entire raid line.', dmgTxt: (l) => Math.round(160 * l) + '% fleet DPS per shot, pierces' },
+    laser:   { ic: '⚡', name: 'Pulse Laser',      col: '#7ce0ff', cost: 150000,  mix: { plasma: 30 },                     range: 540, desc: 'Sustained single-target beam. Instant retarget, never misses.', dmgTxt: (l) => Math.round(12 * l) + '% fleet DPS, sustained beam' },
+    cryo:    { ic: '❄', name: 'Cryo Spire',       col: '#9fd6ff', cost: 320000,  mix: { fuel: 22 },                       range: 300, unlockW: 5,  desc: 'Chill field — every raider inside crawls at 42% speed and fires slower.', dmgTxt: (l) => 'chills ALL raiders in field · +' + Math.round(3 * l) + '% fleet DPS' },
+    missile: { ic: '☄', name: 'Missile Battery',  col: '#ffb84d', cost: 650000,  mix: { iron: 18, plasma: 30 },           range: 660, unlockW: 12, desc: 'Slow heavy salvos with wide splash. Shreds clustered raids.', dmgTxt: (l) => Math.round(55 * l) + '% fleet DPS per salvo, AoE splash' },
+    rail:    { ic: '✦', name: 'Annihilator Rail', col: '#ff5a68', cost: 1600000, mix: { iron: 14, fuel: 14, plasma: 20 }, range: 980, unlockW: 25, desc: 'Orbital-grade railgun. One shot pierces the entire raid line.', dmgTxt: (l) => Math.round(160 * l) + '% fleet DPS per shot, pierces' },
   };
-  function twHourly() { const s = hc(); return Math.max(60000, rates({ ...s, wave: Math.max(1, s.wave) }).gold); }
+  // Per level of THAT tower. 1.55 was far too steep against a 60-level ceiling
+  // (the last Annihilator level ran to quintillions); 1.30 puts the deepest
+  // upgrade in the game at a few trillion, which is where "true endgame" belongs.
+  const TW_GROWTH = 1.30;
   function twMaxLv(s) { return 10 + (s.cit | 0) * 10; }
+  function twResources(t, gold) { const o = { gold }; for (const r in t.mix) o[r] = Math.round(gold / t.mix[r]); return o; }
+  // BUILD = the tower's flat list price. The old form was hourly production ×
+  // hours × (1 + ownedTowers × 0.45), so the eighth pad cost four times the
+  // first and everything got dearer every wave you cleared.
   function twBuildCost(k) {
-    const s = hc(), t = TOWERS[k];
-    const owned = s.tw.filter(Boolean).length;
-    const gold = Math.round(twHourly() * t.hrs * (1 + owned * 0.45));
-    const o = { gold };
-    for (const r in t.mix) o[r] = Math.round(gold / t.mix[r]);
-    return o;
-  }
-  function twUpCost(k, lv) {
-    // FIXED upgrade price: every level costs the same (anchored to hourly
-    // production at purchase time) — no per-level exponent.
     const t = TOWERS[k];
-    const gold = Math.round(twHourly() * t.hrs * 0.65);
-    const o = { gold };
-    for (const r in t.mix) o[r] = Math.round(gold / t.mix[r]);
-    return o;
+    return twResources(t, Math.round(t.cost));
+  }
+  // UPGRADE lv → lv+1: 65% of list, then 1.55× per level already standing. The
+  // old price was FLAT per level but re-read current production, so it drifted
+  // upward on its own between one upgrade and the next.
+  function twUpCost(k, lv) {
+    const t = TOWERS[k];
+    return twResources(t, Math.round(t.cost * 0.65 * Math.pow(TW_GROWTH, Math.max(0, lv - 1))));
   }
   function buyTower(slot, k) {
     const s = hc(); if (!s || slot < 0 || s.tw[slot]) return false;
@@ -148,12 +164,19 @@
     toast(TOWERS[tw.k].ic + ' ' + TOWERS[tw.k].name + ' → Lv ' + tw.lv);
     syncTowers(); render(); if (window.UI) window.UI.refreshAll();
   }
-  // total invested in a tower — recorded spend, or reconstructed at current
-  // rates for towers built before spend tracking existed
+  // total invested in a tower, capped at what it would cost on today's ladder
   function twSpent(tw) {
-    if (tw.sp && tw.sp.gold) return tw.sp;
-    const o = { ...twBuildCost(tw.k) };
-    for (let l = 1; l < tw.lv; l++) { const c = twUpCost(tw.k, l); for (const r in c) o[r] = (o[r] || 0) + c[r]; }
+    // WHAT THIS TOWER WOULD COST TODAY. `tw.sp` records what was actually paid,
+    // but towers built before the fixed-price ladder were paid for at
+    // production-anchored prices that could be many times the list price — so a
+    // recorded spend would refund far more than a rebuild now costs, which is a
+    // free gold press. The refund is capped at the current ladder price per
+    // resource; a cheaper historical spend still refunds only what was paid.
+    const cur = { ...twBuildCost(tw.k) };
+    for (let l = 1; l < tw.lv; l++) { const c = twUpCost(tw.k, l); for (const r in c) cur[r] = (cur[r] || 0) + c[r]; }
+    if (!(tw.sp && tw.sp.gold)) return cur;
+    const o = {};
+    for (const r in cur) o[r] = Math.min(cur[r] || 0, tw.sp[r] || 0);
     return o;
   }
   function refund(c, frac) {

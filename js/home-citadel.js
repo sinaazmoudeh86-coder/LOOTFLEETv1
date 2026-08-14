@@ -65,7 +65,8 @@
     const s = hc(); if (!s) return;
     const c = citCost(s);
     if (!canAfford(c)) { toast('The Citadel demands more — ' + costTxt(c)); return; }
-    pay(c); s.cit = (s.cit | 0) + 1;
+    if (!pay(c)) return;
+    s.cit = (s.cit | 0) + 1;
     try { G().save(); } catch (e) {}
     toast('🏰 CITADEL LEVEL ' + s.cit + ' — every structure can now reach +' + (s.cit * 10) + ' levels');
     render(); if (window.UI) window.UI.refreshAll();
@@ -87,15 +88,31 @@
   }
   function canAfford(c) {
     const st = G().state;
+    const r = st.resources || (st.resources = { fuel: 0, iron: 0, plasma: 0 });
     if ((st.gold || 0) < (c.gold || 0)) return false;
-    if ((st.resources.fuel || 0) < (c.fuel || 0)) return false;
-    if ((st.resources.iron || 0) < (c.iron || 0)) return false;
-    if ((st.resources.plasma || 0) < (c.plasma || 0)) return false;
+    if ((r.fuel || 0) < (c.fuel || 0)) return false;
+    if ((r.iron || 0) < (c.iron || 0)) return false;
+    if ((r.plasma || 0) < (c.plasma || 0)) return false;
     return true;
   }
+  // ATOMIC, same lesson as payMega(): this debited gold on its first line and
+  // then reached into `st.resources` — which can be absent — on its second, so a
+  // throw left the player charged and unbuilt. Nothing is deducted until the
+  // whole charge is known to be applicable, and no balance can go negative.
   function pay(c) {
     const st = G().state;
-    st.gold -= c.gold || 0; st.resources.fuel -= c.fuel || 0; st.resources.iron -= c.iron || 0; st.resources.plasma -= c.plasma || 0;
+    const r = st.resources || (st.resources = { fuel: 0, iron: 0, plasma: 0 });
+    const num = (v) => { const n = Number(v || 0); return isFinite(n) && n >= 0 ? n : NaN; };
+    const g = num(c.gold), f = num(c.fuel), i = num(c.iron), p = num(c.plasma);
+    if (!isFinite(g) || !isFinite(f) || !isFinite(i) || !isFinite(p)) {
+      try { console.warn('[LOOTFLEET] citadel pay refused — bad cost'); } catch (e) {}
+      return false;
+    }
+    st.gold = Math.max(0, (st.gold || 0) - g);
+    r.fuel = Math.max(0, (r.fuel || 0) - f);
+    r.iron = Math.max(0, (r.iron || 0) - i);
+    r.plasma = Math.max(0, (r.plasma || 0) - p);
+    return true;
   }
   function buyBld(key) {
     _city.key = '';   // the skyline changed — rebake on the next frame
@@ -103,7 +120,8 @@
     if (cur >= bldMax(s, key)) return;
     const c = bldCost(key, cur);
     if (!canAfford(c)) { toast('Need more resources for the ' + b.name); return; }
-    pay(c); s.b[key] = cur + 1;
+    if (!pay(c)) return;
+    s.b[key] = cur + 1;
     if (run && run.b) run.b[key] = s.b[key];   // live run sees the new level (city canvas re-bakes via key)
     try { G().save(); } catch (e) {}
     toast(b.ic + ' ' + b.name + ' → Lv ' + s.b[key]);
@@ -147,7 +165,8 @@
     if (t.unlockW && s.wave < t.unlockW) { toast(t.name + ' unlocks at Wave ' + t.unlockW); return false; }
     const c = twBuildCost(k);
     if (!canAfford(c)) { toast('Need ' + costTxt(c) + ' for the ' + t.name); return false; }
-    pay(c); s.tw[slot] = { k, lv: 1, sp: { ...c } };
+    if (!pay(c)) return false;
+    s.tw[slot] = { k, lv: 1, sp: { ...c } };
     try { G().save(); } catch (e) {}
     toast(t.ic + ' ' + t.name + ' online — pad ' + (slot + 1));
     syncTowers(); render(); if (window.UI) window.UI.refreshAll();
@@ -158,7 +177,8 @@
     if (tw.lv >= twMaxLv(s)) { toast('Max level — a Citadel ascension raises the cap'); return; }
     const c = twUpCost(tw.k, tw.lv);
     if (!canAfford(c)) { toast('Need ' + costTxt(c) + ' to upgrade'); return; }
-    pay(c); tw.lv++;
+    if (!pay(c)) return;
+    tw.lv++;
     tw.sp = tw.sp || {}; for (const r in c) tw.sp[r] = (tw.sp[r] || 0) + c[r];
     try { G().save(); } catch (e) {}
     toast(TOWERS[tw.k].ic + ' ' + TOWERS[tw.k].name + ' → Lv ' + tw.lv);

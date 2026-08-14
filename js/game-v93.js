@@ -715,11 +715,15 @@
   // grows, so levelling got FASTER the further you went. Reported as "levelling
   // gets easier as you progress", and it was exactly that.
   // The kill cost now grows with level, so the curve the config file describes
-  // is the curve players actually feel:
-  //   L1 ~18.1k · L100 ~36.8k · L200 ~62k · L300 ~91k · L500 ~140k kills per level
-  // Early game is untouched (the term is ~1.0 below level 20).
+  // is the curve players actually feel. The first pass at this used ^1.4, which
+  // overshot hard — 140k kills a level at L500 was a wall, not a slope. This is
+  // the geometric middle between the old flat 18,000 and that pass (^1.4 → ^0.7
+  // is exactly sqrt of the same multiplier at every level):
+  //   L1 18.0k · L50 21.3k · L100 25.7k · L200 32.6k · L300 38.9k · L500 50.2k
+  // Progression still slows as you climb — 2.8× across the range instead of
+  // 7.8× — and the early game is untouched (the term is ~1.0 below level 20).
   function xpKillsPerLevel(level) {
-    return 18000 * Math.pow(1 + Math.max(0, level | 0) / 150, 1.4);
+    return 18000 * Math.pow(1 + Math.max(0, level | 0) / 150, 0.7);
   }
   // Per-kill XP. Early on this is just the flat zone XP (fast onboarding). Once
   // the level wall dwarfs flat XP, a kill is instead worth a FIXED FRACTION of
@@ -1529,7 +1533,13 @@
     // gold event), but experience and fittings do not.
     const _cargoRun = !!(rt.cgrun && rt.cgrun.active);
     if (!_cargoRun) {
-      let xp = killXpFor(e.dungeon) * (e.isBoss ? 12 : 1);
+      // BOSSES PAY NO XP BONUS. The 12× multiplier made boss dungeons the
+      // fastest XP in the game by a wide margin — a repeatable boss is one kill
+      // worth twelve, on a fight you can queue back to back, which is a farm
+      // rather than an encounter. A boss now pays exactly what any kill in that
+      // zone pays. Gold, loot and drops keep the full 12×: the reward for
+      // killing a boss is still a boss's reward, it just is not levels.
+      let xp = killXpFor(e.dungeon);
       const _tithe = e.tithe || 1;
       // THE TITHE WAS A LOOT BONUS THAT ALSO PAID FULL XP. Wreckfield Tithe stacks
       // to several × and EVERY beacon-summoned kill carries it, so a swarm paid its
@@ -3124,24 +3134,86 @@
     // TOTAL kill count with ANY ship. Kills are kills.
     return hasBlueprint(key) && (state.totalKills || 0) >= (ship.reqKills || 0);
   }
-  // DREAD-class multi-currency cost helpers
+  // DREAD-class multi-currency cost helpers.
+  // `state.resources` CAN be absent — half a dozen call sites create it
+  // defensively, which is the tell — and both of these used to reach straight
+  // through it. That is the Dread crash: opening the ships screen renders every
+  // hull, shipBuyState() calls megaAfford() on each Dread-class one, and
+  // `state.resources.fuel` threw on a save with no resources block, taking the
+  // whole screen down with it.
+  function ensureResources() {
+    if (!state.resources || typeof state.resources !== 'object') state.resources = { fuel: 0, iron: 0, plasma: 0 };
+    const r = state.resources;
+    for (let i = 0; i < 3; i++) {
+      const k = ['fuel', 'iron', 'plasma'][i], v = r[k];
+      if (typeof v !== 'number' || !isFinite(v) || v < 0) r[k] = 0;
+    }
+    return r;
+  }
   function megaShort(c) {
+    const r = ensureResources();
     if ((state.gold || 0) < (c.gold || 0)) return 'gold';
-    if ((state.resources.fuel || 0) < (c.fuel || 0)) return 'fuel';
-    if ((state.resources.iron || 0) < (c.iron || 0)) return 'iron';
-    if ((state.resources.plasma || 0) < (c.plasma || 0)) return 'plasma';
+    if ((r.fuel || 0) < (c.fuel || 0)) return 'fuel';
+    if ((r.iron || 0) < (c.iron || 0)) return 'iron';
+    if ((r.plasma || 0) < (c.plasma || 0)) return 'plasma';
     if (prismIngots() < (c.prism || 0)) return 'prism';
     if ((state.credits || 0) < (c.credits || 0)) return 'credits';
     if ((state.dreadCores || 0) < (c.dreadCores || 0)) return 'dreadCores';
     return null;
   }
   function megaAfford(c) { return !megaShort(c); }
+  // ATOMIC — ALL OF IT OR NONE OF IT.
+  // This used to debit gold on its FIRST line and then reach into
+  // `state.resources` on its second. On a save with no resources block it took
+  // the gold, threw, and never granted the hull: "clicked the Dread, client
+  // crashed, all my gold is gone". A Dread-class price is most of a bank
+  // balance, so the loss reads as a wipe. Everything is validated up front now
+  // and a single bad field charges nothing at all.
   function payMega(c) {
-    state.gold -= (c.gold || 0);
-    state.resources.fuel -= (c.fuel || 0); state.resources.iron -= (c.iron || 0); state.resources.plasma -= (c.plasma || 0);
-    if (c.prism && state.prism) state.prism.ingots -= c.prism;
-    state.credits = (state.credits || 0) - (c.credits || 0);
-    state.dreadCores = (state.dreadCores || 0) - (c.dreadCores || 0);
+    const r = ensureResources();
+    const num = (v) => { const n = Number(v || 0); return isFinite(n) && n >= 0 ? n : NaN; };
+    const plan = { gold: num(c.gold), fuel: num(c.fuel), iron: num(c.iron), plasma: num(c.plasma),
+                   prism: num(c.prism), credits: num(c.credits), dreadCores: num(c.dreadCores) };
+    for (const k in plan) {
+      if (!isFinite(plan[k])) { try { console.warn('[LOOTFLEET] payMega refused — bad cost field: ' + k); } catch (e) {} return false; }
+    }
+    if (megaShort(c)) return false;
+    state.gold = Math.max(0, (state.gold || 0) - plan.gold);
+    r.fuel = Math.max(0, r.fuel - plan.fuel);
+    r.iron = Math.max(0, r.iron - plan.iron);
+    r.plasma = Math.max(0, r.plasma - plan.plasma);
+    if (plan.prism && state.prism) state.prism.ingots = Math.max(0, (state.prism.ingots || 0) - plan.prism);
+    state.credits = Math.max(0, (state.credits || 0) - plan.credits);
+    state.dreadCores = Math.max(0, (state.dreadCores || 0) - plan.dreadCores);
+    return true;
+  }
+  // CURRENCY INTEGRITY (Aug 2026, the gold-wipe reports).
+  // JSON.stringify turns NaN and Infinity into null, so ONE bad multiply
+  // anywhere in a reward chain does not merely corrupt the number in memory — it
+  // is written to the save as null and the balance is gone on the next load.
+  // gainXp() has guarded against exactly this since the day it was written
+  // ("a NaN here corrupts xp forever"); the currencies never did. Nothing
+  // corrupt is allowed to reach storage now: the last finite value for each
+  // balance is remembered and restored in its place.
+  const CURRENCY_KEYS = ['gold', 'credits', 'dreadCores', 'salvage'];
+  const _curGood = {};
+  function guardCurrencies() {
+    let bad = 0;
+    const check = (obj, key, tag) => {
+      const v = obj[key];
+      if (typeof v === 'number' && isFinite(v) && v >= 0) { _curGood[tag] = v; return; }
+      obj[key] = _curGood[tag] != null ? _curGood[tag] : 0;
+      bad++;
+    };
+    for (let i = 0; i < CURRENCY_KEYS.length; i++) {
+      const k = CURRENCY_KEYS[i];
+      if (k in state || _curGood[k] != null) check(state, k, k);
+    }
+    const r = ensureResources();
+    check(r, 'fuel', 'res.fuel'); check(r, 'iron', 'res.iron'); check(r, 'plasma', 'res.plasma');
+    if (state.prism) check(state.prism, 'ingots', 'prism.ingots');
+    if (bad) { try { console.warn('[LOOTFLEET] currency guard: restored ' + bad + ' corrupt balance(s) — refused to save them as zero'); } catch (e) {} }
+    return bad;
   }
   // Descriptor the store uses to render each hull's state.
   function shipBuyState(key) {
@@ -3181,7 +3253,8 @@
     if (ship.megaCost) {
       const miss = megaShort(ship.megaCost);
       if (miss) return { ok: false, reason: miss };
-      payMega(ship.megaCost);
+      // payMega is all-or-nothing and reports it. Never assume the charge landed.
+      if (!payMega(ship.megaCost)) return { ok: false, reason: 'gold' };
     } else if (ship.resPrice) {
       if (!canAfford(ship.resPrice)) return { ok: false, reason: 'resources' };
       state.resources.fuel -= ship.resPrice.fuel || 0;
@@ -6103,6 +6176,7 @@
   }
   let _lastSig = '';
   function save() {
+    guardCurrencies();   // never persist a corrupt balance — see guardCurrencies()
     state.lastSave = Date.now(); _lastSig = saveSig();
     try { if (window.ACCOUNT) window.ACCOUNT.push(state); else localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {}
   }
@@ -6137,6 +6211,11 @@
       }
     })(state, 0);
     state.level = Math.max(1, state.level | 0 || 1);
+    ensureResources();
+    // seed the currency guard from the loaded save, and convert any `null` that
+    // a previous corrupt write left behind (the walk above only sees numbers —
+    // typeof null is 'object', so a nulled balance slipped straight past it)
+    guardCurrencies();
     // AUTO FIGHTING IS THE SESSION DEFAULT (Aug 2026). `auto` persists, so a
     // pilot who flew manual last session came back with the ship sitting idle —
     // every session now BOOTS in autopilot and the toggle is a per-session

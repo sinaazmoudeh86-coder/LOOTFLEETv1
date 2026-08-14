@@ -1090,12 +1090,12 @@ window.__lfErr=[];
 <script src="js/config.live.js?v=501"></script>
 <script src="js/analytics.js?v=421"></script>
 <script src="js/cloud.js?v=573"></script>
-<script src="js/account.js?v=582"></script>
+<script src="js/account.js?v=590"></script>
 <script src="js/session-lock.js?v=421"></script>
 <script src="js/vip.js?v=431"></script>
 <script src="js/territory.js?v=481"></script>
 <script src="js/payments-v91.js?v=492"></script>
-<script src="js/game-v93.js?v=583"></script>
+<script src="js/game-v93.js?v=587"></script>
 <script src="js/ui-v94.js?v=583"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
@@ -1117,7 +1117,7 @@ window.__lfErr=[];
 <script src="js/starforge.js?v=421"></script>
 <script src="js/pilot-ascension.js?v=518"></script>
 <script src="js/sim-pilots.js?v=421"></script>
-<script src="js/ranks-boards.js?v=570"></script>
+<script src="js/ranks-boards.js?v=587"></script>
 <script src="js/rank-rewards.js?v=421"></script>
 <script src="js/discord-reward.js?v=421"></script>
 <script src="js/onboard.js?v=421"></script>
@@ -1130,8 +1130,8 @@ window.__lfErr=[];
 <script src="js/alliance-boss.js?v=558"></script>
 <script src="js/void-zone.js?v=506"></script>
 <script src="js/cargo-run.js?v=574"></script>
-<script src="js/cargo-defense.js?v=574"></script>
-<script src="js/nanocores.js?v=569"></script>
+<script src="js/cargo-defense.js?v=587"></script>
+<script src="js/nanocores.js?v=588"></script>
 <script src="js/nanocores-ui.js?v=569"></script>
 <script src="js/crates-hub.js?v=569"></script>
 <script src="js/ascension.js?v=478"></script>
@@ -1145,7 +1145,7 @@ window.__lfErr=[];
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 583;
+  window.LF_BUILD = 590;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1338,9 +1338,8 @@ window.__lfErr=[];
       dread:30, pilot:30, moon:30, boxes:30,
       prism:40, sdread:50, prismfleet:50,
       // CRATES opens with its earliest tab (Shipworks, 20); Galaxy Supply (30)
-      // and Nanocores (50) keep their own levels, which the sub-tab strip
-      // enforces now that they have no Command cards of their own.
-      crates:20, nano:50,
+      // keeps its own level. NANOCORES IS UNGATED — reachable from Level 1.
+      crates:20, nano:0,
       ascend:60, forge:100, pasc:100, homecit:150,
     };
     // STAR-GATED CARDS. A few systems are gated by PILOT ASCENSION, not level —

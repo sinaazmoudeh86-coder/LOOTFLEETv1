@@ -402,12 +402,17 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 .wallet.tighter .gold-chip{ font-size:13.5px; height:29px; padding:0 9px; }
 .wallet.tightest .res-chip{ font-size:12px; padding:0 6px; gap:3px; height:27px; }
 .wallet.tightest .lc-chip svg.lc{ width:15px; height:15px; }
-/* FINAL stage — wrap to a second row: every chip always fully on screen,
-   no scrolling, no clipping, no overlap at ANY viewport width */
-.wallet.wrap{ flex-wrap:wrap; overflow:visible; row-gap:4px; padding:2px 0; }
-.wallet.wrap .res-chip,.wallet.wrap .gold-chip{ height:25px; font-size:11.5px; }
-.wallet.wrap .gold-chip .coin{ width:16px; height:16px; font-size:11px; }
-.wallet.wrap .res-chip .rg{ font-size:11px; }
+/* FINAL stage — SCALE DOWN, never stack. The top row of resources is ONE row at
+   every viewport width: after the three tight stages syncHUD measures the
+   overflow and drives --ws, and every chip dimension scales off it. Wrapping is
+   forbidden outright above so no stage can start a second row. */
+.wallet{ flex-wrap:nowrap !important; }
+.wallet.fitscale{ --ws:1; gap:calc(4px * var(--ws)); }
+.wallet.fitscale .res-chip{ font-size:calc(12px * var(--ws)); height:calc(27px * var(--ws)); padding:0 calc(6px * var(--ws)); gap:calc(3px * var(--ws)); }
+.wallet.fitscale .gold-chip{ font-size:calc(13.5px * var(--ws)); height:calc(27px * var(--ws)); padding:0 calc(8px * var(--ws)); }
+.wallet.fitscale .gold-chip .coin{ width:calc(17px * var(--ws)); height:calc(17px * var(--ws)); font-size:calc(11px * var(--ws)); }
+.wallet.fitscale .res-chip .rg{ font-size:calc(11.5px * var(--ws)); }
+.wallet.fitscale .lc-chip svg.lc{ width:calc(15px * var(--ws)); height:calc(15px * var(--ws)); }
 .wallet .res-chip .rg{ color:var(--rc); font-size:13.5px; }
 .wallet .res-chip .rr{ font-size:10px; font-weight:800; color:#7ce0a0; letter-spacing:.02em; margin-left:3px; }
 

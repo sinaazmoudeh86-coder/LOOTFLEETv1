@@ -24,11 +24,12 @@
   const C = () => window.CONFIG;
 
   const CFG = {
-    // NANOCORES OPENS AT LEVEL 50 — a flat level gate, independent of Prism
-    // Mining. Ingots are the currency, but the system does not wait on the
-    // mining screen: a pilot who has banked ingots any other way (events,
-    // alliance store, moon colony) can use them here the moment they hit 50.
-    gate: { level: 50 },
+    // NANOCORES HAS NO LEVEL GATE — open from Level 1. Ingots are the only
+    // cost, and they were never tied to the mining screen: a pilot who banks
+    // them any other way (events, alliance store, moon colony) can spend them
+    // here immediately. `gate.level` is kept at 0 so anything that displays the
+    // requirement reads a truthful zero rather than a stale 50.
+    gate: { level: 0 },
     // ---- RARITIES ---------------------------------------------------------
     // THE GAME'S OWN LOOT SCALE, first five tiers, with the loot colours — a
     // Rare core reads Rare-blue exactly like a Rare fitting, so nobody has to
@@ -128,9 +129,9 @@
     p.ingots -= nIngots;
     return true;
   }
-  function unlocked() {
-    try { return (G().state.level | 0) >= CFG.gate.level; } catch (e) { return false; }
-  }
+  // Always open. Every consumer (the screen, the Crates sub-tab, missions, the
+  // combat/fleet stat feeds) asks through here, so this one line is the gate.
+  function unlocked() { return true; }
   function dirty() { try { G().save(); } catch (e) {} }
   // ---- CAREER COUNTERS -----------------------------------------------------
   // Badges, missions and the Discord feed all read lifetime figures, and they
@@ -294,7 +295,10 @@
     const n = ensure(); const key = idOf(ship, r);
     if (n.cores[key]) { n.dupes[r]++; return { ship, r, dupe: true }; }
     n.cores[key] = newCore(ship, r);
-    if (r === 'legendary') bumpLife('nanoLegend', 1);
+    // WHICH HULL THE LEGENDARY WAS FOR. A core belongs to a specific hull, so the
+    // Discord feed can post that hull's real sprite — but only if the key is
+    // published. Stamped here, on the recovery itself.
+    if (r === 'legendary') { bumpLife('nanoLegend', 1); try { G().state.lastNano = { ship, at: Date.now() }; } catch (e) {} }
     // First core for a hull equips itself — nobody wants a stat bonus that
     // needs a second tap to switch on.
     if (!equipped(ship)) n.equip[ship] = r;
@@ -403,10 +407,13 @@
   // Legendary-only, by design: the feed announces the top of the scale, so
   // nothing here reports a Common core anyone can buy on their first crate.
   function feedFields() {
+    let last = '';
+    try { last = (G().state.lastNano && G().state.lastNano.ship) || ''; } catch (e) {}
     return {
       nano_legend: lifeOf('nanoLegend'),
       nano_slots: Math.min(BY_R.legendary.slots, lifeOf('nanoLegendSlots')),
       nano_god: lifeOf('nanoGod'),
+      nano_last: String(last || '').slice(0, 32),
     };
   }
   const fmt = (v) => { try { return G().formatNum(v); } catch (e) { return String(Math.round(v || 0)); } };

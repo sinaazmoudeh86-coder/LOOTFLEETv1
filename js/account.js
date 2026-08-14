@@ -497,6 +497,71 @@
       }
       if ((o.hist || []).length > (b.hist || []).length) b.hist = o.hist;
     } else if (other.sdread && !base.sdread) base.sdread = other.sdread;
+    // NANOCORES — MERGED FIELD BY FIELD (Aug 2026 — "all my nanocores are gone,
+    // complete wipe"). Everything ELSE about the account looked right, which is
+    // the signature of a system that lives entirely inside the base copy: the bag
+    // rode along with whichever timeline won the pick, and the losing timeline's
+    // cores went into the conflict quarantine with it. Not one of the union rules
+    // above ever mentioned `nano`, so it was the last real progression axis being
+    // decided wholesale.
+    //
+    // saveWeight() does count cores, but a 30-core bag is worth ~5K against
+    // log-gold's 7.2K per decade and 5e6 per star — it cannot flip the pick, so
+    // the pick had to stop being able to lose them.
+    //
+    // Reported "after ascension" because that is exactly when a save legitimately
+    // gets LIGHTER (level 1, gold 0, zone 1) and when players relog and change
+    // device — the two conditions that hand the pick to the star tiebreak instead
+    // of to weight. The ascension itself never took the bag: `nano` is in
+    // ASC_KEEP and pilotAscend() restores it.
+    if (other.nano && other.nano.cores) {
+      base.nano = base.nano || {};
+      const bn = base.nano, on = other.nano;
+      bn.cores = bn.cores || {}; bn.dupes = bn.dupes || {}; bn.equip = bn.equip || {};
+      // DEPTH DECIDES AND A CORE IS TAKEN WHOLE. slots, then stage — the exact
+      // order ingots were spent in. Buff arrays are never blended: rerolls and
+      // locks are choices, and mixing two timelines' rolls would hand back a core
+      // neither timeline ever actually had.
+      const depth = (c) => (c ? (c.slots | 0) * 100 + (c.stage | 0) : -1);
+      for (const id in on.cores) {
+        const oc = on.cores[id]; if (!oc) continue;
+        if (depth(oc) > depth(bn.cores[id])) bn.cores[id] = oc;
+      }
+      // Dupes are a 10:1 exchange BALANCE, so maxing them can in principle let
+      // two offline devices spend the same ten twice — bounded and minor. Eating
+      // dupes a player earned is neither.
+      for (const r in (on.dupes || {})) bn.dupes[r] = Math.max(bn.dupes[r] | 0, on.dupes[r] | 0);
+      bn.opened = Math.max(bn.opened | 0, on.opened | 0);
+      // An equipped rarity is only meaningful if that core survived the union, and
+      // a core adopted from `other` for a hull with nothing equipped pays nothing
+      // until it is switched on. Fill from other first, drop anything now dangling,
+      // then equip the STRONGEST surviving core on any hull still empty.
+      for (const sh in (on.equip || {})) if (!bn.equip[sh]) bn.equip[sh] = on.equip[sh];
+      for (const sh in bn.equip) if (!bn.cores[sh + '|' + bn.equip[sh]]) delete bn.equip[sh];
+      let order = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+      try { if (window.NANO && window.NANO.RKEYS && window.NANO.RKEYS.length) order = window.NANO.RKEYS; } catch (e) {}
+      // ONLY hulls left with nothing equipped. `filled` marks the ones THIS pass
+      // seeded, so the rarity preference can improve its own choice and can never
+      // reach a selection the player made: an Epic with four unlocked slots and
+      // good rolls legitimately beats a fresh 0-slot Legendary, and equipping it
+      // is a decision, not a mistake to be corrected on every login.
+      const filled = {};
+      for (const id in bn.cores) {
+        const c = bn.cores[id] || {};
+        const sh = c.ship || id.split('|')[0], r = c.r || id.split('|')[1];
+        if (!sh || !r) continue;
+        if (bn.equip[sh] && !filled[sh]) continue;
+        if (!bn.equip[sh] || order.indexOf(r) > order.indexOf(bn.equip[sh])) { bn.equip[sh] = r; filled[sh] = 1; }
+      }
+    } else if (other.nano && !base.nano) base.nano = other.nano;
+    // LIFETIME COUNTERS — strictly monotonic by construction (bumpLife only ever
+    // adds), and they are what badges, missions and the Discord feed read. Same
+    // wholesale-loss problem as the bag above: nanoLegend, nanoGod and nanoOpened
+    // all regressed with a lost pick, un-earning badges that had been posted.
+    if (other.lifeStats) {
+      base.lifeStats = base.lifeStats || {};
+      for (const k in other.lifeStats) base.lifeStats[k] = Math.max(base.lifeStats[k] || 0, other.lifeStats[k] || 0);
+    }
     if (other.cosmetics && other.cosmetics.owned) {
       base.cosmetics = base.cosmetics || { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
       base.cosmetics.owned = base.cosmetics.owned || {};

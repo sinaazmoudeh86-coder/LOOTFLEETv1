@@ -1532,7 +1532,29 @@
     // currency, paid once at the Citadel. Kill gold still lands (the run is a
     // gold event), but experience and fittings do not.
     const _cargoRun = !!(rt.cgrun && rt.cgrun.active);
-    if (!_cargoRun) {
+    // HOME DEFENSE PAYS NO XP AT ALL (Aug 2026 — it was being exploited).
+    // Fort defense sets raider HP from the PILOT'S OWN DPS
+    // (`run.unitHp = ps.dps * (55 + wave * 4.5) / run.N`), so every kill is
+    // guaranteed to die on schedule no matter how strong you get — and auto-chain
+    // rolls wave into wave with no cap. That is an XP faucet that scales with the
+    // player instead of resisting them, which is the whole exploit: park in the
+    // fort and out-level the entire zone grind without ever flying a zone.
+    // The reward for defending the fort is the WAVE PAYOUT (gold, ore, fuel,
+    // plasma, part crates, Dread Cores in grantWaveRewards) — not levels.
+    const _homeRun = !!rt.hcrun;
+    // VOID ZONES PAY NO XP AT ALL (Aug 2026 — same exploit, different door).
+    // A Void tile's difficulty is its level requirement × 1.5 — the Lv 500
+    // Singularity deploys you into ZONE 750 — and killXpFor() pays on the zone it
+    // is handed. So a Lv 500 pilot standing on a tile they are barely gated for
+    // farms XP priced for zone 750, which is the exact thing the cargo-escort
+    // carve-out above exists to stop: hostiles carrying the XP of zones the pilot
+    // has not earned. Void tiles are an INCOME and CONQUEST reward — hourly
+    // resources on all four currencies, a free fixed citadel, the Warden badge —
+    // and they stay that. They are not a levelling shortcut.
+    // This covers the casino House Citadels too: they are `void: true` tiles with
+    // the identical ×1.5 difficulty inflation, so they are the same exploit.
+    const _voidRun = inVoidSystem();
+    if (!_cargoRun && !_homeRun && !_voidRun) {
       // BOSSES PAY NO XP BONUS. The 12× multiplier made boss dungeons the
       // fastest XP in the game by a wide margin — a repeatable boss is one kill
       // worth twelve, on a fight you can queue back to back, which is a farm
@@ -1586,7 +1608,7 @@
     // (gold / xp / salvage) is stamped on the entity itself in lanceTick.
     if (e.fracT) {
       e.fracT = 0;
-      try {
+      if (!inVoidSystem()) try {
         const zone = e.dungeon || state.currentDungeon;
         const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 3));
         const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
@@ -1635,7 +1657,7 @@
     commitTileShield();   // first blood in a contested tile arms its 24 h shield
     // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
     const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
-    if (!_cargoRun && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
+    if (!_cargoRun && !_voidRun && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
       const _q = _swarmKill ? 1 : lootQ();
       let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
@@ -1881,8 +1903,24 @@
   // Boss drop table. A normal boss pays ~5× quality across 5 drops; a SUPER BOSS
   // rolls the rarity ~25× (keep-best), drops 12 items with a couple guaranteed
   // Legendary+, and pays out a Galaxy-Resource bounty.
+  // NO FITTINGS DROP IN THE VOID (Aug 2026 — with the XP, for the same reason).
+  // A Void tile deploys at level requirement × 1.5, so its wrecks roll on the
+  // INFLATED zone: `I.generate(750)` on the Lv 500 spire, with a rarity cap and
+  // quality curve to match. That out-geared the grind exactly the way it
+  // out-levelled it. Gold, Galaxy Resources and the tile's hourly income are the
+  // Void's prize and are untouched — fittings are not.
   function bossLoot(e, isSuper) {
     const zone = state.currentDungeon;
+    if (inVoidSystem()) {
+      // the resource bounty still pays; the 5–12 fittings do not
+      if (isSuper) {
+        if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
+        const f2 = 200 + zone * 30, i2 = 80 + zone * 12, p2 = 50 + zone * 10;
+        state.resources.fuel += f2; state.resources.iron += i2; state.resources.plasma += p2;
+        if (window.UI) window.UI.unlockToast('Super Boss bounty · +' + formatNum(f2) + ' fuel · +' + formatNum(i2) + ' iron · +' + formatNum(p2) + ' plasma');
+      }
+      return;
+    }
     const drops = isSuper ? 12 : 5;
     const qMul = Math.min(2, qualityMult(zone) * (rt.tileLoot || 1) * (isSuper ? 2 : 1));
     const rcap = Math.min(10, C.rarityCap(zone) + 1); // bosses beat the zone cap by ONE tier, never more
@@ -3234,6 +3272,16 @@
     return bad;
   }
   // Descriptor the store uses to render each hull's state.
+  // WHICH HULL, NOT JUST HOW MANY. The leaderboard row has always published a
+  // hull COUNT (`ships`), which is enough for the Discord feed to notice that a
+  // pilot gained one but not to name it or show its art. Both acquisition paths
+  // stamp the key here so the feed can post the real sprite.
+  function markHullEarned(key) {
+    try {
+      const sh = C.SHIP_BY_KEY[key];
+      state.lastHull = { key, name: (sh && sh.name) || key, at: Date.now() };
+    } catch (e) {}
+  }
   function shipBuyState(key) {
     const ship = C.SHIP_BY_KEY[key];
     const owned = !!state.ownedShips[key];
@@ -3284,6 +3332,7 @@
     }
     state.ownedShips[key] = true;
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
+    markHullEarned(key);
     save();
     if (window.UI) window.UI.refreshAll();
     return { ok: true };
@@ -3296,6 +3345,7 @@
     if (!ship || state.ownedShips[key]) return false;
     state.ownedShips[key] = true;
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
+    markHullEarned(key);
     if (ship.bpZone != null) { if (!state.blueprints) state.blueprints = {}; state.blueprints[key] = true; }
     save();
     if (window.UI) window.UI.refreshAll();
@@ -4255,6 +4305,14 @@
     }
   }
   function sysAt(k) { return VOID_TILES[k] || CASINO_TILES[k] || GX.tileAt(k); }
+  // AM I STANDING ON A VOID TILE? Void spires (and the casino House Citadels,
+  // which are `void: true` tiles) deploy you at `level requirement × 1.5` — the
+  // Lv 500 Singularity is ZONE 750. Every reward priced off the zone number is
+  // therefore priced far above what the pilot earned. Gold, loot and resources
+  // are the intended prize and keep it; XP does not (see onKill / computeOffline).
+  function inVoidSystem() {
+    try { if (!state.currentSystem) return false; const t = sysAt(state.currentSystem); return !!(t && t.void); } catch (err) { return false; }
+  }
   // NAME → TILE ID. War reports written before tile ids were recorded only carry
   // the system NAME, and the ◎ jump-to-map button needs an id. Names are
   // generated deterministically from each coordinate, so the whole galaxy can be
@@ -5090,7 +5148,7 @@
     // loot shower — better than the zone average, nothing absurd: +2 rarity
     // tiers over a 4×-quality roll, dropped in a ring around the PLAYER so the
     // magnet vacuums every piece before the tow home.
-    const drops = 8, zone = state.currentDungeon;
+    const drops = inVoidSystem() ? 0 : 8, zone = state.currentDungeon;
     for (let i = 0; i < drops; i++) {
       const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 4));
       const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
@@ -6265,11 +6323,13 @@
     const hp = C.enemyHp(d), dmg = C.enemyDamage(d);
     const kps = Math.min(5, Math.max(0.05, rt.stats.theoryDps / hp));
     const kills = Math.floor(kps * elapsed * 0.55);
-    const xp = kills * killXpFor(d), gold = kills * C.enemyGold(d);
+    const xp = inVoidSystem() ? 0 : kills * killXpFor(d), gold = kills * C.enemyGold(d);
     state.totalKills += kills; state.gold += gold;
     // loot: roll drops, auto-collect best-by-slot, sell the rest implicitly kept
+    // VOID / CASINO tiles pay no fittings, awake or asleep — the inflated zone
+    // number would roll offline loot far above the pilot's real progress.
     let found = 0, lostCount = 0; const newItems = [];
-    const dropP = C.dropChance(d);
+    const dropP = inVoidSystem() ? 0 : C.dropChance(d);
     for (let i = 0; i < kills; i++) {
       if (Math.random() < dropP * (isSwarmZone(d) ? SWARM_DROP_MULT : 1)) { found++; const _q = isSwarmZone(d) ? 1 : qualityMult(d); let _it = _q > 1 ? I.generate(d, rollRarityBoosted(d, _q)) : I.generate(d); if (isSwarmZone(d) && _it.rarity > 0) _it = I.generate(d, Math.max(0, _it.rarity - SWARM_RARITY_PENALTY)); if (newItems.length < 40) newItems.push(_it); }
     }

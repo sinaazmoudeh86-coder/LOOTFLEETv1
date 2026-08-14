@@ -469,6 +469,11 @@
     if (res.win) {
       c.wins = (c.wins | 0) + 1;
       c.best = Math.max(c.best | 0, res.integrity);
+      // WHICH SHIPMENT WAS DELIVERED. `best` is an integrity percentage, not a
+      // tier, so nothing published the class of freighter that made it home —
+      // the Discord feed needs the tier to show the right cargo hull.
+      c.lastTier = t.tier | 0;
+      c.lastWin = Date.now();
       if (res.integrity >= 90) c.clean = (c.clean | 0) + 1;   // "Pristine Manifest" missions read this
       const payout = rollManifest(t, res.integrity);
       grant(payout, t);

@@ -339,6 +339,11 @@
     q.missions = s.lifetimeMissions | 0;
     q.cargo = (s.cargo && s.cargo.wins) | 0;
     q.cargo_best = Math.min(100, (s.cargo && s.cargo.best) | 0);
+    // ART FIELDS — which hull, which core, which freighter. The Discord feed can
+    // see COUNTS change but not what changed, so it could never show real game
+    // art for the thing that just happened. These three name it.
+    q.cargo_tier = Math.min(5, Math.max(0, (s.cargo && s.cargo.lastTier) | 0));
+    q.hull_last = String((s.lastHull && s.lastHull.key) || '').slice(0, 32);
     // Nanocores read through the module so this row, the badge chains and the
     // Discord feed all quote one number.
     try {
@@ -365,6 +370,9 @@
     q.tile_rev = Number(q.tile_rev) || 0;
     q.ships = q.ships | 0; q.missions = q.missions | 0; q.badges = q.badges | 0;
     q.cargo = q.cargo | 0; q.cargo_best = q.cargo_best | 0;
+    q.cargo_tier = Math.min(5, Math.max(0, q.cargo_tier | 0));
+    q.hull_last = String(q.hull_last || '').slice(0, 32);
+    q.nano_last = String(q.nano_last || '').slice(0, 32);
     q.nano_legend = q.nano_legend | 0; q.nano_slots = Math.min(5, q.nano_slots | 0); q.nano_god = q.nano_god | 0;
     return q;
   }
@@ -399,6 +407,8 @@
         missions: s.lifetimeMissions | 0,
         cargo: (s.cargo && s.cargo.wins) | 0,
         cargo_best: Math.min(100, (s.cargo && s.cargo.best) | 0),
+        cargo_tier: Math.min(5, Math.max(0, (s.cargo && s.cargo.lastTier) | 0)),
+        hull_last: String((s.lastHull && s.lastHull.key) || '').slice(0, 32),
         badges: (() => {
       // Badges live in state.achieve.claimed (per-chain counts) — the old
       // badgeRanks/achClaimed fields never existed, so every real player

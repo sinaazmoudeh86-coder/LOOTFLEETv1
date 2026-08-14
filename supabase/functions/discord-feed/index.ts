@@ -224,6 +224,21 @@ const QUIPS: Record<string, string[]> = {
     "🧼 A PERFECT delivery from {a}. Raiders touched nothing. Feelings were hurt instead 💔",
     "✨ {a} just ran the gauntlet and handed the Citadel a shipment in showroom condition 🏆",
   ],
+  // {a} pilot — a new ship in the hangar, any tier
+  hull: [
+    "⬡ {a} just took delivery of a new hull. The old one is already in the scrapyard pretending not to care.",
+    "⬡ New hull for {a}. Fresh paint, zero scorch marks. Give it an hour.",
+    "⬡ {a} expanded the hangar. Somewhere a shipwright is finally getting paid.",
+    "⬡ {a} signed for a new hull. The fleet grows. The docking fees grow faster.",
+    "⬡ A new ship for {a} — still smells of coolant and optimism.",
+  ],
+  // {a} pilot — a heavy manifest (tier 3+) delivered
+  cargoBig: [
+    "🚚 {a} walked a heavy manifest through the corridor and parked it at the Citadel. By hand. No autopilot.",
+    "🚚 Big shipment, bigger target. {a} got it home anyway.",
+    "🚚 {a} escorted a fat manifest past everything that wanted it. The freighter owes them a drink.",
+    "🚚 Heavy cargo docked. {a} flew the whole lane manually and the hull has the marks to prove it.",
+  ],
 };
 function quip(kind: string, seed: string, vars: Record<string, string | number>): string {
   let t = pickBy(seed, QUIPS[kind] || ['']);
@@ -240,7 +255,7 @@ const SITREP_MS = 3 * 60 * 60 * 1000;
 // 'nano' was missing from this list, which sorted it to -1 — ahead of Kaevith
 // hulls by accident rather than by intent. It sits where it belongs now:
 // rarer than an ascension, quieter than a Void spire.
-const PRIORITY = ['xen', 'void', 'nano', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'cargo', 'top10',
+const PRIORITY = ['xen', 'void', 'nano', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'hull', 'cargo', 'top10',
                   'zone', 'level', 'open', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
@@ -384,6 +399,105 @@ function tileName(id: string): string {
   return out;
 }
 
+// =============================================================================
+//  REAL GAME ART
+//  ---------------------------------------------------------------------------
+//  Every sprite the game draws is already a public PNG on the site, so the feed
+//  can show the actual hull a pilot earned instead of a stock GIF. The Kaevith
+//  card has done this since it shipped; these helpers make it the default
+//  everywhere.
+//
+//  ART FIRST, GIF AS FALLBACK. Discord fetches the URL itself, so a missing
+//  file cannot be detected here — it simply renders the embed without an image.
+//  The rule is therefore about KNOWLEDGE, not liveness: when we know the exact
+//  subject (this hull, this freighter, this spire) we point at its art; when the
+//  subject is a mood rather than an object (a throne changing hands, a siege
+//  repelled) there is nothing to photograph and the GIF stays.
+// =============================================================================
+const SITE = 'https://lootfleet.com';
+const KEY_OK = /^[a-z0-9_-]{1,32}$/i;
+function shipArt(key: unknown): string | null {
+  const k = String(key || '').trim();
+  return KEY_OK.test(k) ? `${SITE}/ships/ship-${k}.png` : null;
+}
+function cargoArt(tier: unknown): string | null {
+  const t = Number(tier) || 0;
+  return t >= 1 && t <= 5 ? `${SITE}/ships/cargo-${t}.png` : null;
+}
+// Void spire art is banded the same way the game bands it (VOID_ART in
+// game-v93.js): tiers 25/50 → 1, 100/200 → 2, 300/400 → 3, 500 → 4.
+function voidArt(tier: unknown): string {
+  const t = Number(tier) || 0;
+  const n = t >= 500 ? 4 : t >= 300 ? 3 : t >= 100 ? 2 : 1;
+  return `${SITE}/ships/void-cit-${n}.png`;
+}
+// thumbnail (small, top-right) for "here is the object", image (large) for the
+// hero shot. Spread the result — an unknown subject contributes nothing.
+const thumb = (url: string | null) => (url ? { thumbnail: { url } } : {});
+const hero  = (url: string | null) => (url ? { image: { url } } : {});
+
+// HULL KEY → the name the game shows. Mirrors SHIPS in config-v2.js. A key that
+// is not in the table still reads sensibly (the key is prettified) so a hull
+// added to the game later posts correctly before this list is updated.
+const HULL_NAME: Record<string, string> = {
+  frigate: 'Frigate', interceptor: 'Interceptor', cruiser: 'Cruiser', chromafang: 'Chroma Fang',
+  heavycruiser: 'Heavy Cruiser', destroyer: 'Destroyer', battleship: 'Battleship', veridian: 'Veridian',
+  dreadnought: 'Dreadnought', carrier: 'Carrier', aegis: 'Aegis', supercarrier: 'Super Carrier',
+  titan: 'Titan Carrier', mothership: 'Mothership', voidmaw: 'Voidmaw', chromaregent: 'Chroma Regent',
+  frostyfrost: 'FrostyFrost',
+  monolith1: 'Monolith Shard', monolith2: 'Monolith Bastion', monolith3: 'Monolith Siegebreaker', monolith4: 'Monolith Apex',
+  oblivionspear: 'Oblivion Spear', oblivionspearalpha: 'Oblivion Spear Alpha', oblivionfinal: 'Oblivion Final',
+  dread1: 'Dread Reaver', dread2: 'Dread Sovereign', dread3: 'Dread Leviathan',
+  dread4: 'Dread Harbinger', dread5: 'Dread Tyrant', dread6: 'Dread Omega',
+  xen1: 'Kaevith Splinter', xen2: 'Kaevith Shard', xen3: 'Kaevith Glaive', xen4: 'Kaevith Sovereign', xen5: 'Kaevith Godshard',
+  emb1: 'Ember Mote', emb2: 'Cinder Acolyte', emb3: 'Ashen Cantor', emb4: 'Molten Herald', emb5: 'Choirmaster Vhorn',
+  aeternum: 'The Aeternum', titansina: 'Titan Sina', eternum: 'Eternum',
+};
+function hullName(key: string): string {
+  const k = String(key || '').trim();
+  if (HULL_NAME[k]) return HULL_NAME[k];
+  if (!k) return 'a new hull';
+  return k.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+// The five shipment classes of Space Cargo Defense, each with its own freighter.
+const CARGO_NAME: Record<number, string> = {
+  1: 'Cargo I', 2: 'Cargo II', 3: 'Cargo III', 4: 'Cargo IV', 5: 'Omega V',
+};
+
+// =============================================================================
+//  WHERE ON THE MAP
+//  ---------------------------------------------------------------------------
+//  Tile ids are literally 'q,r' axial hex coordinates, and this file already
+//  mirrors the client's deterministic tile generator (see tileName). So a
+//  capture can report its exact position with no extra column and no round
+//  trip: ring, coordinates, the ring's level band, and which region of the map
+//  it sits in.
+// =============================================================================
+const RING_LEVELS = [0, 10, 25, 30, 45, 50, 100, 125, 130];
+function ringLevel(ring: number): number {
+  if (ring <= 0) return 0;
+  if (ring < RING_LEVELS.length) return RING_LEVELS[ring];
+  return Math.min(500, 130 + (ring - 8) * 20);
+}
+// Six sextants, named off the axial direction — enough for two pilots to agree
+// on roughly where a fight happened without opening the map.
+const SEXTANT = ['Northern Reach', 'Northeast Arm', 'Southeast Arm', 'Southern Reach', 'Southwest Arm', 'Northwest Arm'];
+function tileLoc(id: string): { ring: number; q: number; r: number; text: string } | null {
+  if (VOID[id]) return null;                       // spires are named places, not coordinates
+  const m = /^(-?\d+),(-?\d+)$/.exec(id);
+  if (!m) return null;
+  const q = +m[1], r = +m[2];
+  const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
+  if (ring === 0 || ring > RINGS) return null;
+  const ang = Math.atan2(Math.sqrt(3) * (r + q / 2), 1.5 * q);   // axial → screen angle
+  const sx = SEXTANT[((Math.round((ang / (Math.PI / 3)) + 6) % 6) + 6) % 6];
+  const region = ring >= DEEP_RING ? 'DEEP SPACE' : ring >= 12 ? 'the outer rings' : ring >= 5 ? 'the mid rings' : 'the core rings';
+  const text =
+    `\`ring ${ring}\` \u00b7 \`${q}, ${r}\` \u00b7 ${sx}` +
+    `\n-# ${region} \u00b7 level band ${ringLevel(ring)}${ring >= DEEP_RING ? ' \u00b7 \u26a0 deep space' : ''}`;
+  return { ring, q, r, text };
+}
+
 type Ev = { kind: string; embed: Record<string, unknown>; line: string; sys?: string };
 
 // Fight-card typography: names read as combatants, not as sentence subjects.
@@ -408,13 +522,15 @@ Deno.serve(async (req) => {
   // and no cargo or Nanocore milestone could cross. Degrade a column set at a
   // time so a server that has not run the migrations still gets everything else
   // instead of a 500.
+  const LB_ART   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier';
   const LB_FULL  = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god';
   const LB_CARGO = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best';
   const LB_BASE  = 'user_id,name,power,level,zone,kills,asc_stars';
 
   const [lb, sd, al, seenRows] = await Promise.all([
     (async () => {
-      let r = await selectAll(db, 'leaderboard', LB_FULL, ['user_id']);
+      let r = await selectAll(db, 'leaderboard', LB_ART, ['user_id']);
+      if (r.error) r = await selectAll(db, 'leaderboard', LB_FULL, ['user_id']);
       if (r.error) r = await selectAll(db, 'leaderboard', LB_CARGO, ['user_id']);
       if (r.error) r = await selectAll(db, 'leaderboard', LB_BASE, ['user_id']);
       return r;
@@ -485,6 +601,7 @@ Deno.serve(async (req) => {
       nanoLegend: Number((p as any).nano_legend) || 0,
       nanoSlots: Number((p as any).nano_slots) || 0,
       nanoGod: Number((p as any).nano_god) || 0,
+      hulls: Number((p as any).ships) || 0,
       top10: top10.has(p.user_id) ? 1 : 0,
     };
     snap.push({ kind: 'pilot', ref: p.user_id, data: cur, updated_at: now });
@@ -578,6 +695,31 @@ Deno.serve(async (req) => {
     // above continues), and their first snapshot writes all the keys.
     const hadCargo = was.cargo !== undefined;
     const hadNano = was.nanoLegend !== undefined;
+    const hadHulls = was.hulls !== undefined;
+
+    // A NEW HULL IN THE HANGAR. Every hull, cheap ones included — a pilot's
+    // second ship matters to them as much as a Dread does to someone deep, and
+    // the whole point of the card is the art. `ships` is a COUNT, so the rise is
+    // what fires it and `hull_last` is what names it; if an old client publishes
+    // the count without the key the card still posts, just without the sprite.
+    if (hadHulls && cur.hulls > (was.hulls || 0)) {
+      const hkey = String((p as any).hull_last || '');
+      const hArt = shipArt(hkey);
+      const hName = hullName(hkey);
+      events.push({
+        kind: 'hull',
+        line: `**${p.name}** earned ${hName}`,
+        embed: {
+          color: 0x7db8e8,
+          author: { name: '⬡  NEW HULL' },
+          title: `${p.name} took delivery of the ${hName}`,
+          description:
+            quip('hull', 'hl:' + p.user_id + ':' + cur.hulls, { a: '**' + p.name + '**' }) +
+            `\n-# hull ${cur.hulls} in the hangar · level ${cur.level} · zone ${cur.zone}`,
+          ...thumb(hArt),
+        },
+      });
+    }
 
     // SPACE CARGO DEFENSE — the fun ones. First delivery is its own moment;
     // after that, milestone crossings; a first-ever PERFECT run (cargo_best
@@ -585,18 +727,34 @@ Deno.serve(async (req) => {
     if (hadCargo && cur.cargo > (was.cargo || 0)) {
       const first = !(was.cargo || 0);
       const mark = first ? null : crossed(was.cargo || 0, cur.cargo, CARGO_MARKS);
-      if (first || mark !== null) {
+      // TIER 3 AND UP POSTS EVERY TIME. The heavy manifests are the runs worth
+      // watching, and each tier has its own freighter sprite — so the card leads
+      // with the ship that actually made it home. Tiers 1–2 keep the old rule
+      // (first delivery and milestone counts only) so the road runs stay quiet.
+      const ctier = Number((p as any).cargo_tier) || 0;
+      const bigHaul = ctier >= 3;
+      if (first || mark !== null || bigHaul) {
+        const cArt = cargoArt(ctier);
+        const cName = CARGO_NAME[ctier] || (ctier ? 'Cargo ' + ctier : 'a shipment');
         events.push({
           kind: 'cargo',
-          line: first ? `**${p.name}** made their first delivery` : `**${p.name}** hit ${mark} deliveries`,
+          line: first ? `**${p.name}** made their first delivery`
+            : mark !== null ? `**${p.name}** hit ${mark} deliveries`
+            : `**${p.name}** delivered ${cName}`,
           embed: {
             color: 0xffb84d,
-            author: { name: first ? '🚚  FIRST DELIVERY' : '🚚  HAULAGE MILESTONE' },
-            title: first ? `${p.name} got the cargo through` : `${p.name} — ${mark} lifetime deliveries`,
+            author: { name: first ? '🚚  FIRST DELIVERY' : mark !== null ? '🚚  HAULAGE MILESTONE' : '🚚  HEAVY MANIFEST' },
+            title: first ? `${p.name} got the cargo through`
+              : mark !== null ? `${p.name} — ${mark} lifetime deliveries`
+              : `${p.name} brought ${cName} home`,
             description: (first
               ? quip('cargoFirst', 'cg0:' + p.user_id, { a: '**' + p.name + '**' })
-              : quip('cargo', 'cg:' + p.user_id + ':' + mark, { a: '**' + p.name + '**', n: mark as number })) +
+              : mark !== null
+                ? quip('cargo', 'cg:' + p.user_id + ':' + mark, { a: '**' + p.name + '**', n: mark as number })
+                : `**${p.name}** ran **${cName}** through the corridor and docked it at the Citadel.`) +
+              (bigHaul ? `\n-# **${cName}** · flown by hand, no autopilot` : '') +
               `\n-# Space Cargo Defense · ${cur.cargo} delivered lifetime`,
+            ...hero(cArt),
           },
         });
       }
@@ -610,9 +768,13 @@ Deno.serve(async (req) => {
       const first = !(was.nanoLegend || 0);
       const mark = first ? null : crossed(was.nanoLegend || 0, cur.nanoLegend, NANO_MARKS);
       if (first || mark !== null) {
-        // A GIF on the first one and nothing on the milestones: the pull is the
-        // moment, the collection count is a scoreboard.
+        // THE CORE'S OWN HULL as a thumbnail. A Nanocore belongs to a specific
+        // ship, so the card can show which one — the detail that makes it read as
+        // a real pull rather than a counter ticking. The celebration GIF stays as
+        // the hero image on a first pull: art for the object, GIF for the mood.
         const ng = first ? gifFor('nano', 'nc0:' + p.user_id) : null;
+        const nArt = shipArt((p as any).nano_last);
+        const nHull = (p as any).nano_last ? hullName(String((p as any).nano_last)) : '';
         events.push({
           kind: 'nano',
           line: first ? `**${p.name}** pulled their first LEGENDARY Nanocore` : `**${p.name}** holds ${mark} Legendary Nanocores`,
@@ -624,11 +786,13 @@ Deno.serve(async (req) => {
               ? quip('nanoFirst', 'nc0:' + p.user_id, { a: '**' + p.name + '**' })
               : quip('nanoLegend', 'nc:' + p.user_id + ':' + mark, { a: '**' + p.name + '**', n: mark as number })) +
               `\n-# Legendary core · **+25% damage · +25% hull · +50% thrust** guaranteed, plus up to **5** extra buff slots` +
+              (nHull ? `\n-# recovered for the **${nHull}**` : '') +
               (first && legendHolders > 0
                 ? (legendHolders === 1
                   ? `\n-# 🏆 The **FIRST** pilot on this server to recover one. Nobody else has a Legendary core.`
                   : `\n-# The **${ord(legendHolders)}** pilot to recover one · **${NANO_LEGEND_ODDS}%** a crate`)
                 : `\n-# ${cur.nanoLegend} Legendary recovered lifetime · ${NANO_LEGEND_ODDS}% a crate`),
+            ...thumb(nArt),
             ...(ng ? { image: { url: ng } } : {}),
           },
         });
@@ -864,6 +1028,10 @@ Deno.serve(async (req) => {
             ? '-# 🔥 Seven spires exist. This is the one that matters. — 24h shield now up.'
             : '-# 🛡️ 24h attack shield is up. Then it is open again.'),
         ...(vg ? { image: { url: vg } } : {}),
+        // THE SPIRE'S OWN ART. Each Void tier draws a different citadel in game
+        // (VOID_ART), so the card shows the actual fortress that changed hands
+        // alongside the celebration GIF.
+        thumbnail: { url: voidArt(v.tier) },
       },
     });
   }
@@ -884,6 +1052,12 @@ Deno.serve(async (req) => {
 
     const sys = tileName(t.tile_id);
     const held = t.owner_name || 'Someone';
+    // WHERE IT IS. Tile ids are axial hex coordinates, so a capture can state its
+    // exact position on the map — ring, coordinates and sextant — with no extra
+    // column and no lookup. Two pilots reading the channel can tell whether a
+    // fight happened next door or out past the deep-space line.
+    const loc = tileLoc(t.tile_id);
+    const locLine = loc ? `\n\n🗺️ ${loc.text}` : '';
 
     // A tile_id only exists once someone has claimed it, so a row appearing for
     // the first time IS a capture of virgin space — the most common event in the
@@ -898,9 +1072,9 @@ Deno.serve(async (req) => {
           color: COLOR.claim,
           author: { name: '\u2691  SYSTEM CLAIMED' },
           title: `${held} claimed ${sys}`,
-          description: lv > 0
+          description: (lv > 0
             ? `-# first flag planted \u00b7 Rank ${lv} Citadel raised`
-            : '-# unclaimed space, now producing',
+            : '-# unclaimed space, now producing') + locLine,
         },
       });
       continue;
@@ -927,7 +1101,7 @@ Deno.serve(async (req) => {
               : cur.lv > 0
                 ? `> \u{1F3F0} **Rank ${cur.lv} Citadel** taken intact — under a new flag.\n`
                 : `> \u{1F6F0}\uFE0F No fortress here — open ground, and it changed hands.\n`) +
-            '-# \u{1F6E1}\uFE0F 24h shield now up.',
+            '-# \u{1F6E1}\uFE0F 24h shield now up.' + locLine,
           ...(sg ? { image: { url: sg } } : {}),
         },
       });
@@ -939,7 +1113,7 @@ Deno.serve(async (req) => {
           color: COLOR.claim,
           author: { name: '⚑  SYSTEM CLAIMED' },
           title: `${held} claimed ${sys}`,
-          description: '-# unowned space, now producing',
+          description: '-# unowned space, now producing' + locLine,
         },
       });
     } else if (was.owner && !cur.owner) {
@@ -951,7 +1125,7 @@ Deno.serve(async (req) => {
           color: COLOR.lost,
           author: { name: '\u25CB  HOLD RELEASED' },
           title: `\u25CB ${sys.toUpperCase()} IS OPEN`,
-          description: `**${was.name || 'Its holder'}** let it go.\n-# \u{1F3F3}\uFE0F Unowned, undefended, free to take.`,
+          description: `**${was.name || 'Its holder'}** let it go.\n-# \u{1F3F3}\uFE0F Unowned, undefended, free to take.` + locLine,
         },
       });
     }

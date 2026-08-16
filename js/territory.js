@@ -46,6 +46,16 @@
     } catch (e) {}
   }
 
+  // ANY HULL EARNED — same reporting path as the Kaevith one above, widened to
+  // every hull in the game (log_hull validates the key shape, refuses xen keys
+  // and is idempotent per pilot per hull, so this is safe to call on every
+  // acquisition). Fire and forget: a hull is granted whether or not the channel
+  // hears about it.
+  async function logHull(shipKey) {
+    const cl = client(); if (!cl || !myId() || !shipKey) return;
+    try { await cl.rpc('log_hull', { p_ship: String(shipKey) }); } catch (e) {}
+  }
+
   // Fetch the whole shared world → { tileId: { ownerId, ownerName, cooldownUntil, citadel, fleetScore, defense } }
   // PAGED. PostgREST caps every select at 1000 rows and says nothing about it.
   // Once `territory` outgrew 1000 rows each client received a DIFFERENT partial
@@ -157,5 +167,5 @@
       return { ok: !e2 };
     } catch (e) { return { ok: false }; }
   }
-  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe, logRepelled, logXenHull };
+  window.TERRITORY = { enabled, myId, myName, loadAll, claim, release, subscribe, logRepelled, logXenHull, logHull };
 })();

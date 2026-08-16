@@ -542,7 +542,7 @@ Deno.serve(async (req) => {
   ]);
 
   // war_events arrives with war-events.sql; the feed runs fine without it.
-  let war = await db.from('war_events').select('id,kind,tile_id,actor_name,target_name,meta,created_at')
+  let war = await db.from('war_events').select('id,kind,tile_id,actor_id,actor_name,target_name,meta,created_at')
                     .order('id', { ascending: true }).limit(200);
   if (war.error) war = { data: [], error: null } as typeof war;
 
@@ -569,6 +569,22 @@ Deno.serve(async (req) => {
   // Kaevith hull reports, drained from war_events below. Declared out here
   // because the situation report reads them too.
   const hullEvents: any[] = [];
+  // EVERY OTHER HULL. Same reporting path (war_events), same sprite treatment —
+  // see supabase/hull-announce.sql. Kept in its own bucket so the Kaevith card
+  // stays the loud one.
+  const newHullEvents: any[] = [];
+  // Pilots who reported a hull through war_events in THIS run. The
+  // leaderboard-count card below is the unreliable duplicate of the same news
+  // (it needs art columns that lb_upsert keeps dropping), so it stands down for
+  // anyone the reliable path already covered.
+  const warHullActors = new Set<string>();
+  {
+    const wSeen = Number((seen.get('_meta:war') || {}).id) || 0;
+    for (const w of war.data ?? []) {
+      if ((Number(w.id) || 0) <= wSeen) continue;
+      if (w.kind === 'hull_earned' || w.kind === 'xen_hull') warHullActors.add(String((w as any).actor_id || ''));
+    }
+  }
   // FINISHED LEGENDARY CORES. A 5/5 core is the end of the deepest progression
   // in the game — 25 successful upgrades on one item, the last five at 20% —
   // so like a Kaevith hull it gets its own message and is never batched.
@@ -703,7 +719,7 @@ Deno.serve(async (req) => {
     // the whole point of the card is the art. `ships` is a COUNT, so the rise is
     // what fires it and `hull_last` is what names it; if an old client publishes
     // the count without the key the card still posts, just without the sprite.
-    if (hadHulls && cur.hulls > (was.hulls || 0)) {
+    if (hadHulls && cur.hulls > (was.hulls || 0) && !warHullActors.has(String(p.user_id))) {
       const hkey = String((p as any).hull_last || '');
       const hArt = shipArt(hkey);
       const hName = hullName(hkey);
@@ -1238,6 +1254,10 @@ Deno.serve(async (req) => {
         hullEvents.push(w);
         continue;
       }
+      if (w.kind === 'hull_earned') {
+        newHullEvents.push(w);
+        continue;
+      }
       // BIG BET — posted the moment the round settles. Rate limited in SQL
       // (casino_big_bet), so anything arriving here has already earned its place.
       if (w.kind === 'bigbet') {
@@ -1309,6 +1329,33 @@ Deno.serve(async (req) => {
       });
     }
     if (maxId !== seenId) snap.push({ kind: '_meta', ref: 'war', data: { id: maxId }, updated_at: now });
+
+    // ---- ANY HULL EARNED -----------------------------------------------------
+    // The Kaevith card below is the same idea at maximum volume; this is it for
+    // the rest of the fleet. A pilot's second ship matters to them as much as a
+    // Dread does to someone deep, and the art is the whole point of the card.
+    for (const w of newHullEvents) {
+      const m = w.meta || {};
+      const key = String(m.ship || '');
+      const art = shipArt(key);
+      if (!art) continue;
+      const who = String(w.actor_name || 'A pilot');
+      const nm = hullName(key);
+      const nth = Number(m.nth) || 0;
+      await post({
+        content: `### ⬡ ${who} took delivery of the ${nm}`,
+        embeds: [{
+          color: 0x7db8e8,
+          thumbnail: { url: art },
+          author: { name: '⬡  NEW HULL' },
+          title: `${up(who)} — ${nm.toUpperCase()} IN THE HANGAR`,
+          description:
+            quip('hull', 'wh:' + w.id, { a: '**' + who + '**' }) +
+            (nth === 1 ? '\n\n-# 🏆 The **FIRST** of this hull in the fleet.' : ''),
+        }],
+        allowed_mentions: { parse: [] },
+      });
+    }
 
     // ---- KAEVITH HULL EARNED -------------------------------------------------
     // The loudest single-pilot event in the game. Only ~1 zone in 5 is invaded
@@ -1395,6 +1442,9 @@ Deno.serve(async (req) => {
     for (const w of hullEvents) {
       const h = XEN_HULLS[String((w.meta || {}).ship || '')];
       if (h) fresh.push(`◈ **${w.actor_name}** earned the **${h.name}**`);
+    }
+    for (const w of newHullEvents) {
+      fresh.push(`⬡ **${w.actor_name}** earned the **${hullName(String((w.meta || {}).ship || ''))}**`);
     }
     // Finished cores post their own message, so they never reach `events` —
     // add them here or the 3-hour digest would omit the loudest thing in it.

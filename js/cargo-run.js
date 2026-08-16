@@ -65,6 +65,47 @@
   const MIN_SPAWN = 900;      // no hostile ever appears closer than this to the cargo
   const LANE_W = 760;         // ...nor further from the lane than this — the fight stays on the road
   const RING_CAP = 26;        // hard ceiling on live rings — fairness and frame time
+  // ---- THE FRAME GOVERNOR ---------------------------------------------------
+  // A cargo run is the heaviest thing in the game: up to ~42 live hostiles held
+  // on the field permanently, 26 collapsing rings, a dozen void anomalies and a
+  // freighter to protect, all of it at up to 5x sim speed. Those ceilings were
+  // set for fairness — they say nothing about whether the device can draw them —
+  // so on a phone the run ran itself into the ground and the whole experience
+  // went with it.
+  //
+  // FRAME RATE IS NOW THE FIRST CONSTRAINT AND THE CONTENT BENDS TO IT. The run
+  // measures its own smoothed frame time and holds a load level from 1.0 (full
+  // fat) down to 0.35. Slow frames walk it down, recovered frames walk it back
+  // up, with a hold between changes so it cannot oscillate. Every ceiling below
+  // is multiplied by it, so a struggling device gets a thinner stream, fewer
+  // rings and fewer anomalies instead of a slideshow — the run still lasts ten
+  // minutes, the boss still arrives, nothing is skipped.
+  //
+  // The starting level is a guess from the device, so the first ten seconds on a
+  // phone are not the worst ten seconds of the run.
+  const GOV = { lvl: 1, t: 0, floor: 0.35 };
+  function govStart() {
+    let g = 1;
+    try {
+      const cores = navigator.hardwareConcurrency || 4;
+      const px = (window.innerWidth || 900) * (window.innerHeight || 700) * Math.min(2, window.devicePixelRatio || 1);
+      const touch = (navigator.maxTouchPoints || 0) > 0 && (window.innerWidth || 900) < 900;
+      if (touch) g = 0.62;                 // phone / small tablet in portrait
+      if (cores <= 4) g = Math.min(g, 0.62);
+      if (px > 2.6e6) g = Math.min(g, 0.7); // a lot of pixels to fill per frame
+    } catch (e) {}
+    GOV.lvl = g; GOV.t = 0;
+  }
+  // Called once per engine tick with the frame's smoothed dt (seconds).
+  function govTick(dt, fdt) {
+    GOV.t += dt;
+    if (GOV.t < 1.6) return;               // hold: never react to a single frame
+    GOV.t = 0;
+    const ms = (fdt || 0) * 1000;
+    if (ms > 30 && GOV.lvl > GOV.floor) GOV.lvl = Math.max(GOV.floor, GOV.lvl - 0.12);
+    else if (ms < 20 && GOV.lvl < 1) GOV.lvl = Math.min(1, GOV.lvl + 0.06);
+  }
+  const govCap = (n, min) => Math.max(min, Math.round(n * GOV.lvl));
   const RING_BURN = 1.0;      // seconds the collapse burns after the fuse runs out
   // THE RINGS ARE THE PILOT'S PROBLEM, NOT THE FREIGHTER'S. They never target the
   // cargo and never damage it: the freighter cannot dodge, so a ring that could
@@ -211,6 +252,7 @@
     // opened. If the player got here faster than the network, the vector draw
     // covers the gap and the sprite appears the moment it lands.
     run.art = artFor(cfg.tier);
+    govStart();
     warm(cfg.tier).then(() => { if (run) run.art = artFor(cfg.tier); });
     // AUTO OFF — the escort is flown by hand. SPEED IS ALLOWED: update() is handed
     // sim time already multiplied by gameSpeed, so the freighter, the waves and the
@@ -231,6 +273,7 @@
     // WATCHDOG: docking, warping or being towed out of the zone abandons the run.
     if (run.zone !== (G().state.currentDungeon | 0)) return settle(false, 'left');
 
+    govTick(dt, rt._fdt);
     run.t += dt;
     run.prog = clamp(run.t / RUN_S, 0, 1);
 
@@ -295,7 +338,8 @@
     if (run.spawnT > 0) return;
     const p = run.prog;
     const alive = run.refs.reduce((a, e) => a + ((e.dead || e.dying || e.hp <= 0) ? 0 : 1), 0);
-    if (alive >= run.cap) { run.spawnT = 0.8; return; }   // hold at the tier's ceiling
+    // GOVERNED CEILING — the tier's number is the maximum, not a promise. See GOV.
+    if (alive >= govCap(run.cap, 5)) { run.spawnT = 0.8; return; }
     run.wave++;
     // Denser shipments spawn faster AND in bigger groups — Omega V arrives as a
     // stream, not a wave. Level pressure shortens the gap further.
@@ -319,7 +363,7 @@
     // Omega V from a wave into a swarm.
     const extra = Math.max(0, Math.round(mix.length * (run.dens - 1)));
     for (let i = 0; i < extra; i++) mix.push(mix[(Math.random() * mix.length) | 0] || 'raider');
-    const room = Math.max(1, run.cap - alive);
+    const room = Math.max(1, govCap(run.cap, 5) - alive);
     if (mix.length > room) mix.length = room;
 
     let raiders = 0;
@@ -395,7 +439,7 @@
       e.cgT = (e.cgT == null ? rnd(2, 5) : e.cgT) - dt;
       if (e.cgT > 0) continue;
       e.cgT = rnd(6, 9);
-      run.voids.length < 12 && run.voids.push({ x: clamp(c.x + rnd(-260, 260), 60, rt.worldW - 60), y: clamp(c.y - rnd(0, rt.worldH * 0.22), 60, rt.worldH - 60), r: rnd(130, 190), tel: 3, on: 0 });
+      run.voids.length < govCap(12, 4) && run.voids.push({ x: clamp(c.x + rnd(-260, 260), 60, rt.worldW - 60), y: clamp(c.y - rnd(0, rt.worldH * 0.22), 60, rt.worldH - 60), r: rnd(130, 190), tel: 3, on: 0 });
       // ANNOUNCE THE HAZARD ONCE PER RUN. Every caster seeded a new anomaly every
       // 6–9 sim seconds and re-fired this, so the banner's 3.4s hide timer was
       // reset before it could ever fire — a 520px card parked over the middle of
@@ -514,7 +558,7 @@
   // happens to overlap it does nothing to it (see ringTick).
   function layRings(n, tel, r, rt) {
     const ar = rt.archer; if (!ar || ar.dead) return;
-    n = Math.min(n, RING_CAP - run.rings.length);
+    n = Math.min(n, govCap(RING_CAP, 6) - run.rings.length);
     for (let i = 0; i < n; i++) {
       const off = i === 0 ? rnd(0, 70) : rnd(95, 250);
       const ang = Math.random() * Math.PI * 2;
@@ -536,7 +580,7 @@
     run.ringT -= dt;
     if (run.ringT <= 0) {
       run.ringT = plan.gap;
-      if (run.rings.length < RING_CAP) layRings(plan.n, plan.tel, plan.r, rt);
+      if (run.rings.length < govCap(RING_CAP, 6)) layRings(plan.n, plan.tel, plan.r, rt);
     }
     // A LIVING LEADER STILL COSTS YOU. Its volley rides on top of the lane's own,
     // on the sector's tighter fuse — so clearing it visibly thins the sky.
@@ -545,7 +589,7 @@
       run.bossRingT = (run.bossRingT || 0) - dt;
       if (run.bossRingT <= 0) {
         run.bossRingT = cfg.gap * RING_GAP_MUL;
-        if (run.rings.length < RING_CAP) layRings(Math.max(1, Math.round(cfg.n * RING_COUNT_MUL)), cfg.tel, plan.r, rt);
+        if (run.rings.length < govCap(RING_CAP, 6)) layRings(Math.max(1, Math.round(cfg.n * RING_COUNT_MUL)), cfg.tel, plan.r, rt);
       }
     }
   }

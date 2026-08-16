@@ -687,7 +687,7 @@
     { key:'xen1', name:'Kaevith Splinter', cls:'Frigate', price:0, reqKills:0, weapons:1, ammo:1, hull:1, drones:0,
       mods:{ moveSpeed:30, dmgPct:10, critChance:5 },
       tag:'KAEVITH I · SPLINTER', xen:1, xpBonus:8, alienTech:true,
-      desc:'A single shard of Kaevith hullstone flying on a stolen drive — entry-level performance, but the resonance core alone lifts your whole fleet\u2019s XP by 10% per kill.' },
+      desc:'A single shard of Kaevith hullstone flying on a stolen drive — entry-level performance, but the resonance core alone lifts your whole fleet\u2019s XP by 8% per kill.' },
     { key:'xen2', name:'Kaevith Shard', cls:'Cruiser', price:0, reqKills:0, weapons:2, ammo:1, hull:1, drones:0,
       mods:{ dmgPct:20, hpPct:14, critChance:6 },
       tag:'KAEVITH II · SHARD', xen:2, xpBonus:16, alienTech:true,
@@ -703,7 +703,7 @@
     { key:'xen5', name:'Kaevith Godshard', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:30,
       mods:{ hpPct:700, dmgPct:400, multiShot:110, critChance:50, critDamage:320, moveSpeed:60, atkSpeedPct:135, rangePct:210, lifeSteal:3.8 },
       tag:'KAEVITH V · GODSHARD', xen:5, xpBonus:64, alienTech:true,
-      desc:'The Incursion\u2019s flagship — a Dreadnaught-class monolith of living crystal. Its resonance field alone doubles every kill\u2019s XP for the entire fleet.' },
+      desc:'The Incursion\u2019s flagship — a Dreadnaught-class monolith of living crystal. Its resonance field alone lifts every kill\u2019s XP by 64% for the whole fleet.' },
     // ---- THE EMBER CHOIR · ZONE GRIND INCURSION ------------------------------
     // Sister event to the Kaevith Incursion, on the other axis. Kaevith pays XP;
     // the Choir pays BEACON. Every hull carries a `beacon` block — percentages,
@@ -1041,7 +1041,7 @@
         [ { mod:'hpPct', label:'Max HP', per:5, unit:'%' },
           { mod:'lifeSteal', label:'Life Steal', per:0.2, unit:'%' },
           { mod:'hpPct', label:'Plating', per:7, unit:'%' },
-          { mod:'dmgReduce', label:'Resolve', per:1, unit:'%' } ],
+          { mod:'dmgReduce', label:'Resolve', per:0.5, unit:'%' } ],
         { mod:'hpPct', label:'Max HP', per:18, unit:'%' },
         ['Bulwark','Juggernaut','Fortress','Immortal']),
       buildBranch('tactics',

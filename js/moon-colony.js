@@ -96,6 +96,39 @@
       G.save();
     }
     if (s.moon.cur >= s.moon.moons.length) s.moon.cur = 0;
+    // ---- SHAPE REPAIR --------------------------------------------------------
+    // The screen is built from this object with direct property reads, so ONE bad
+    // field anywhere in it threw inside render() and the player got a blank
+    // screen with no way back. Saves do arrive malformed: merged across devices,
+    // written mid-migration, or carrying a building `kind` a later build renamed
+    // (B[kind] undefined → def.ic threw on every single render, which is why the
+    // blank screen hit players with established colonies and never fresh ones).
+    // Everything render() reads is normalised here, once, before it is read.
+    const root = s.moon;
+    if (!Array.isArray(root.moons) || !root.moons.length) root.moons = [newColony()];
+    const CURK = ['gold', 'fuel', 'iron', 'plasma', 'prism'];
+    for (let i = 0; i < root.moons.length; i++) {
+      let m = root.moons[i];
+      if (!m || typeof m !== 'object') { m = root.moons[i] = newColony(); }
+      if (!(m.sectors >= 1)) m.sectors = 1;
+      if (m.sectors > SECTORS.length) m.sectors = SECTORS.length;
+      if (!m.b || typeof m.b !== 'object') m.b = {};
+      Object.keys(m.b).forEach((k) => {
+        const bd = m.b[k];
+        if (!bd || typeof bd !== 'object' || !B[bd.kind]) { delete m.b[k]; return; }
+        if (!(bd.lv >= 1)) bd.lv = 1;
+      });
+      if (!m.stored || typeof m.stored !== 'object') m.stored = {};
+      CURK.forEach((k) => { if (!isFinite(m.stored[k])) m.stored[k] = 0; });
+      if (!Array.isArray(m.log)) m.log = [];
+      if (!isFinite(m.lastCollect)) m.lastCollect = Date.now();
+      if (!isFinite(m.nextRaid)) m.nextRaid = Date.now() + raidGap();
+      if (m.buff && !isFinite(m.buff.until)) m.buff = null;
+    }
+    if (!isFinite(root.cur) || root.cur < 0 || root.cur >= root.moons.length) root.cur = 0;
+    if (!root.lifetime || typeof root.lifetime !== 'object') root.lifetime = {};
+    CURK.forEach((k) => { if (!isFinite(root.lifetime[k])) root.lifetime[k] = 0; });
+    if (!isFinite(root.perm)) root.perm = 0;
     return s.moon;
   }
   const cm = (root) => root.moons[root.cur];
@@ -402,7 +435,20 @@
     const label = ['', 'FRONTIER OUTPOST', 'GROWING COLONY', 'INDUSTRIAL COLONY', 'MINING METROPOLIS'][stage];
     return [(MOONCAT[mi] ? MOONCAT[mi].name.toUpperCase() + ' · ' : '') + label, stage];
   }
+  // NEVER A BLANK SCREEN. Whatever a save throws at the builder below, the player
+  // gets a screen they can read and act on — and the reason lands in the console
+  // instead of vanishing with the frame.
   function render() {
+    try { renderMoon(); } catch (e) {
+      try { console.error('[MOON] render failed', e); } catch (x) {}
+      const body = $('moon-body'); if (!body) return;
+      body.innerHTML = '<div class="mn-start"><div class="mn-start-t">⚠ COLONY UPLINK INTERRUPTED</div>' +
+        '<div class="mn-start-s">The colony is safe and still producing — this screen could not draw it.<br>' +
+        'Reload the game to reconnect. If it keeps happening, send this line to support:<br>' +
+        '<b style="color:#ffcf7a">' + String((e && e.message) || e).slice(0, 160) + '</b></div></div>';
+    }
+  }
+  function renderMoon() {
     const body = $('moon-body'); if (!body) return;
     body.classList.remove('mn-full');
     const root = ensure(); accrueAll(root);
@@ -430,7 +476,7 @@
     // MOON TABS
     html += '<div class="mn-moons">';
     root.moons.forEach((m2, i) => {
-      const mc = MOONCAT[i];
+      const mc = MOONCAT[i] || MOONCAT[MOONCAT.length - 1];
       const pend = Object.values(m2.stored).reduce((a, v) => a + v, 0) > 1;
       const dmg2 = damagedCount(m2);
       html += '<button class="mn-mtab ' + (i === mi ? 'on' : '') + '" data-mn-moon="' + i + '" style="--mh:' + mc.hue + '">' +
@@ -461,7 +507,7 @@
       (allStored.plasma >= 1 ? '<span style="color:#c07bff">✦ ' + fN(allStored.plasma) + '</span>' : '') +
       (allStored.prism >= 1 ? '<span style="color:#ff5a5a">◈ ' + fN(allStored.prism) + '</span>' : '') +
       (storedTotal < 1 ? '<span style="color:#6c8098">production ticking…</span>' : '') + '</div>' +
-      '<div class="mn-c-rate">' + (MOONCAT[mi].name) + ': +' + fN(r.gold) + ' $/h · +' + fN(r.fuel) + ' ⬢/h · +' + fN(r.iron) + ' ◆/h · +' + fN(r.plasma) + ' ✦/h' + (r.prism > 0 ? ' · +' + r.prism.toFixed(1) + ' ◈/h' : '') + '</div>' +
+      '<div class="mn-c-rate">' + ((MOONCAT[mi] || MOONCAT[0]).name) + ': +' + fN(r.gold) + ' $/h · +' + fN(r.fuel) + ' ⬢/h · +' + fN(r.iron) + ' ◆/h · +' + fN(r.plasma) + ' ✦/h' + (r.prism > 0 ? ' · +' + r.prism.toFixed(1) + ' ◈/h' : '') + '</div>' +
       (function () { // time-to-full readout — tells the player when to come back
         if (mm._idle) return '<div class="mn-c-full" style="color:#ffcf7a">⏳ Storage saturated — collect to restart production</div>';
         const leftH = Math.max(0, capH - (Date.now() - mm.lastCollect) / 3600e3);
@@ -515,7 +561,7 @@
               '<button class="mn-b-del" data-mn-del="' + key + '" title="Demolish">✕</button></div></div>';
           } else {
             const cost = maxed ? null : upCost(def, bd.lv);
-            const bias = MOONCAT[mi].bias || {};
+            const bias = (MOONCAT[mi] || {}).bias || {};
             html += '<div class="mn-b t' + tier + '"><div class="mn-b-ic">' + def.ic + '</div>' +
               '<div class="mn-b-m"><div class="mn-b-n">' + def.name + ' <span class="mn-b-lv">Lv ' + bd.lv + '</span>' + (tier > 1 ? '<span class="mn-b-tier">T' + tier + '</span>' : '') + '</div>' +
               '<div class="mn-b-d">' + (def.cat === 'mine' ? '+' + fN(def.rate * Math.pow(bd.lv, 1.12) * (def.out === 'prism' ? 1 : zScale()) * (bias[def.out] || 1) * prodBonus(root, mm)) + ' ' + ({ gold: '$', fuel: '⬢', iron: '◆', plasma: '✦', prism: '◈' })[def.out] + '/h' : def.desc) + '</div>' +
@@ -544,7 +590,7 @@
     }
     // LOG
     if (mm.log.length) {
-      html += '<div class="mn-log"><div class="mn-log-t">COLONY LOG — ' + MOONCAT[mi].name.toUpperCase() + '</div>' + mm.log.map((l) => '<div class="mn-log-r"><span>' + new Date(l.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' + l.txt + '</div>').join('') + '</div>';
+      html += '<div class="mn-log"><div class="mn-log-t">COLONY LOG — ' + (((MOONCAT[mi] || {}).name || 'MOON')).toUpperCase() + '</div>' + mm.log.map((l) => '<div class="mn-log-r"><span>' + new Date(l.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' + l.txt + '</div>').join('') + '</div>';
     }
     // keep the player's scroll position through re-renders (no jump-to-top "reload" feel)
     let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
@@ -554,12 +600,15 @@
     const _oldCv = $('mn-scene-cv');
     body.innerHTML = html;
     const _newCv = $('mn-scene-cv');
-    if (_oldCv && _newCv && window.MOONSCENE) {
-      _newCv.replaceWith(_oldCv);                       // same canvas, same GL/2D context — no restart
-      if (window.MOONSCENE.refresh) window.MOONSCENE.refresh();
-    } else if (window.MOONSCENE) {
-      window.MOONSCENE.mount($('mn-scene-cv'));
-    }
+    // The diorama is decoration: it must never be able to take the screen with it.
+    try {
+      if (_oldCv && _newCv && window.MOONSCENE) {
+        _newCv.replaceWith(_oldCv);                     // same canvas, same GL/2D context — no restart
+        if (window.MOONSCENE.refresh) window.MOONSCENE.refresh();
+      } else if (window.MOONSCENE) {
+        window.MOONSCENE.mount($('mn-scene-cv'));
+      }
+    } catch (e) { try { console.error('[MOON] scene', e); } catch (x) {} }
     wire(body, root, mm);
     if (_sc) _sc.scrollTop = _st;
   }
@@ -597,7 +646,7 @@
       (a.fixed ? '🔧 repair · back online' + (a.to > a.from ? ' · then ' : '') : '') +
       (a.to > a.from ? 'Lv ' + a.from + ' → <b style="color:#7ce0a0">Lv ' + a.to + '</b>' : '') +
       '</i></span></div>').join('');
-    wrap.innerHTML = '<div class="mn-sheet"><div class="mn-sheet-t">⚙ SMART UPGRADE — ' + MOONCAT[root.cur].name.toUpperCase() + '</div>' +
+    wrap.innerHTML = '<div class="mn-sheet"><div class="mn-sheet-t">⚙ SMART UPGRADE — ' + (((MOONCAT[root.cur] || {}).name || 'MOON')).toUpperCase() + '</div>' +
       '<div class="mn-b-d" style="margin:2px 2px 8px">Repairs first, then defense to raid-safe, then the lowest levels — balanced with what you can afford right now.</div>' +
       rows +
       '<div class="mn-pick" style="pointer-events:none;border-color:transparent"><span class="mn-b-ic">Σ</span>' +

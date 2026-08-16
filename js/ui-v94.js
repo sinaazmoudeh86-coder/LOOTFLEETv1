@@ -3230,7 +3230,7 @@
         let extra = '';
         if (wc.key === 'support' && window.ITEMS.supportAura) {
           const au = window.ITEMS.supportAura(it);
-          if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(60, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
+          if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(20, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
         }
         wcHTML = `<div class="ip-wclass" style="color:${wc.color}"><span class="wcx">${wclassIcon(wc)}</span> ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`;
       }
@@ -3693,7 +3693,7 @@
         let extra = '';
         if (wc.key === 'support' && window.ITEMS.supportAura) {
           const au = window.ITEMS.supportAura(item);
-          if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(60, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
+          if (au) extra = `<div class="ip-waura">Fleet aura: <b>+${au.multiShot * 2} Multi-Shot</b> · <b>+${au.regen * 2}%/s</b> hull recovery · <b>−${Math.min(20, au.reduce * 2)}%</b> damage taken · <b>+${au.rangePct * 2}%</b> range <span class="ip-waura-x2">⚠ AEGIS HULLS ONLY</span></div>`;
         }
         return `<div class="ip-wclass" style="color:${wc.color}"><span class="wcx">${wclassIcon(wc)}</span> ${wc.name} · <b>${wc.bonus}</b></div><div class="ip-wdesc">${wc.blurb}</div>${extra}`; })()}
       ${statHTML}${cmpNote}${actions||'<div class="sheet-actions"><button class="btn" data-x>Close</button></div>'}</div></div>`);
@@ -4062,7 +4062,7 @@
       <div class="xen-steps">
         <div class="xs-row"><span class="xs-n">1</span><div><b>They hit harder.</b> <b>+35% hull</b>, <b>+22% damage</b>, and a Kaevith command ship for a boss.</div></div>
         <div class="xs-row"><span class="xs-n">2</span><div><b>Clear one to earn their tech.</b> <b>${lo}%</b> on ring 1 → <b>${hi}%</b> at the rim. Deeper rings pay better odds and bigger hulls.</div></div>
-        <div class="xs-row"><span class="xs-n">3</span><div><b>The reward is fleet-wide XP.</b> Any Kaevith hull lifts every kill’s XP for the whole fleet. All five stack to <b>+250%</b>, no cap.</div></div>
+        <div class="xs-row"><span class="xs-n">3</span><div><b>The reward is fleet-wide XP.</b> Any Kaevith hull lifts every kill’s XP for the whole fleet. All five stack to <b>+${XEN_KEYS.reduce((a, k) => a + ((C.SHIP_BY_KEY[k] || {}).xpBonus || 0), 0)}%</b>, no cap.</div></div>
       </div>
       <div class="lo-sect">The five hulls · entry → Dreadnaught</div>
       <div class="xen-note-rare">Scarcity is in <b>which</b> hull the wreck gives up, not in your chance of a drop. Shares below are for the <b>rim</b>.</div>

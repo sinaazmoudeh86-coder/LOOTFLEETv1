@@ -697,6 +697,17 @@
     // in, the merged one is. A tester who redeems on their phone must not lose
     // access because the desktop copy won the merge.
     if (other.tourBeta) base.tourBeta = 1;
+    // ---- REDEEMED COUPON CODES. A redemption mark is monotonic: once a one-time
+    // code (discord1k's 1,000 ◈, lvl100) is used on ANY device it is used, period.
+    // Not naming this here meant the base pick decided it wholesale — redeem on
+    // the phone, let the stale desktop copy win a merge, and the mark is gone: the
+    // "one per account" giveaway becomes farmable on every conflicted login. Same
+    // union as badge claims, and for the same reason: a lost claim mark is not
+    // lost progress, it is a repeatable reward.
+    if (other.redeemedCodes) {
+      base.redeemedCodes = base.redeemedCodes || {};
+      for (const k in other.redeemedCodes) base.redeemedCodes[k] = base.redeemedCodes[k] || other.redeemedCodes[k];
+    }
     // ---- BADGE CLAIMS. Unioning `claimed` is what PREVENTS a double payout: the
     // claim map is the only thing stopping a rank paying its LootCoins twice, so a
     // lost claim is not just a lost badge, it is a repeatable reward.

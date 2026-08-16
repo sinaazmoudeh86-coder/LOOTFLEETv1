@@ -1323,6 +1323,12 @@
     ctx.translate(x, y); ctx.scale(scale, scale);
 
     const aura = auraOf(equipped);
+    // HULL FOOTPRINT — the drawn sprite size, computed BEFORE the aura passes.
+    // Every halo below used to size itself off hull tier alone (30 + tier*4), so on
+    // a Dreadnaught-class sprite — drawn 2-3x larger by shipScaleOf — the ring sat
+    // INSIDE the artwork and the aura simply vanished. Radii now take the larger of
+    // the tier figure and the hull's real footprint.
+    const _hullR = ((42 + tier * 3) * shipScaleOf(activeShipKey())) * 0.5;
     const facing = (archer.facing != null ? archer.facing : -Math.PI/2);
     const muzzle = archer.muzzle || 0, recoil = archer.recoil || 0;
     const bob = Math.sin((archer.bob || t*3)) * 1.0;
@@ -1330,7 +1336,7 @@
     // shield bubble (legendary+ aura)
     if (aura >= 3) {
       const rc = C.RARITY[aura].color, pulse = 0.55 + 0.45 * Math.sin(t * 4);
-      const r = 20 + tier * 4;
+      const r = Math.max(20 + tier * 4, _hullR * 1.08);
       const sg = ctx.createRadialGradient(0, 0, r*0.5, 0, 0, r);
       sg.addColorStop(0, rgba(rc, 0)); sg.addColorStop(0.8, rgba(rc, 0.10*pulse)); sg.addColorStop(1, rgba(rc, 0.32*pulse));
       ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
@@ -1338,10 +1344,13 @@
     }
 
     // cosmetic aura (premium) — rendered beneath the hull
-    drawCosmeticAura(ctx, cosmeticsState().aura, t, 24 + tier * 4);
+    drawCosmeticAura(ctx, cosmeticsState().aura, t, Math.max(24 + tier * 4, _hullR * 1.15));
 
     // PRISM AURA — significant prismatic halo when this hull carries a Prism Core
-    if (shipHasPrism(activeShipKey())) drawPrismAura(ctx, t, 30 + tier * 4, 1);
+    if (shipHasPrism(activeShipKey())) {
+      const pr = Math.max(30 + tier * 4, _hullR * 1.34);
+      drawPrismAura(ctx, t, pr, Math.min(2.2, Math.max(1, pr / 66)));
+    }
     // VERIDIAN RESONANCE AURA — the damage field made visible: a breathing
     // verdant ring at the aura's true radius (world-space, so drawn unscaled
     // relative to the ship's local frame: radius / scale keeps it accurate).
@@ -1358,7 +1367,7 @@
       ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     }
     // GREEN REACTOR AURA — the Oblivion Final's signature glow
-    if (activeShipKey() === 'oblivionfinal') drawGreenAura(ctx, t, 46 + tier * 5, 1.4);
+    if (activeShipKey() === 'oblivionfinal') drawGreenAura(ctx, t, Math.max(46 + tier * 5, _hullR * 1.3), 1.4);
 
     // orient: art drawn nose-up (-y); rotate so nose points along facing
     ctx.translate(0, bob);

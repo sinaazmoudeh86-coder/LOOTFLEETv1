@@ -1,45 +1,111 @@
-# Loot Fleet — deploy v228 · build 650 · LAUNCH · ASCEND AT THE CAP · CARRIER FIXES · SHIP SCORE REBUILT · TOUR OF DUTY HIDDEN
+# Loot Fleet — deploy v229 · build 654 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v227. Service worker cache is `lootfleet-v650`.
-**Login screen reads `BUILD 650`.**
+Supersedes v228. Service worker cache is `lootfleet-v654`.
+**Login screen reads `BUILD 654`.**
 
-**No SQL. No reset. No migration.** Everything in this release is client-side.
-If v227 never went live, read that folder's DEPLOY.md — its
-`discord-art-publish.sql` sequence still applies and is not repeated here.
+### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
-Carries builds 583–650.
+| what | why |
+|---|---|
+| `supabase/hull-announce.sql` | new `log_hull()` RPC — Discord ship art for EVERY hull, not just Kaevith |
+| redeploy the `discord-feed` Edge Function | it posts the new `hull_earned` card and reads `actor_id` |
 
-### What changed in 646–650
+Everything else is client-side. No reset, no save migration.
 
-- **Ascension is now taken AT the level cap**, not at half of it. The gate walks
-  with the ceiling (150 · 200 · 250 …) and every screen that quoted the old rule
-  was rewritten. One notice fires at the cap, not two.
-- **Gold and Galaxy Resources survive an ascension.** The ledger said they were
-  zeroed; territory survives, so wiping the income it produces was incoherent,
-  and gold only buys hull levels you keep. The keep/lose lists were audited
-  against `ASC_KEEP` and three systems that were already surviving but never
-  listed (Nanocores, Space Cargo Defense, Tour of Duty) are now stated.
-- **Tour of Duty survives an ascension** — keep-listed and given a merge union,
-  so a stale cloud copy cannot un-buy Admiralty or re-arm a claimed reward.
-- **A won citadel changes hands whole.** The capture path was razing natural
-  fortress tiles on handover — permanently, and again on every load — so the
-  winner took a plain tile worth a hundredth of the prize. Rank now resolves
-  through the server row instead of falling back to Rank 1.
-- **Praetorian cannons fire.** `fighterHull()` tested "has bays", which silenced
-  the guns on every gunned carrier.
-- **Ship Score counts the wing.** A carrier's damage never reached `theoryDps`,
-  which drives score, citadel defence, the clone matchup and the offline sim —
-  and the Vanguard was scored on a cannon it does not mount. Also fixed a
-  multi-shot fold that was leaking damage on every build above 100%.
-- **Fighter frame rate** — trail emission is wall-clock rather than game-clock
-  and shares one budget across the wing.
-- **Ship graphics** — Ember Choir, the Monolith siege ladder, Aquila, Corvus and
-  the main ladder's capital tail all drew at or near frigate size.
-- **Missions counters no longer strobe** while numbers climb.
-- **Storm Conduit proc rate halved.**
-- **The settings cog stops hailing you** once you have opened it.
-- **TOUR OF DUTY SHIPS HIDDEN.** See the section below.
+Carries builds 583–654.
+
+### What changed in 654
+
+- **ONE MAP ON EVERY DEVICE.** The arena was sized as `viewport × zone multiplier`,
+  so the world was as big as the screen it was drawn on — while every gameplay
+  distance in the engine is a fixed number of world pixels (fire range 250, loot
+  magnet 620, spawn spreads, beacon rings). A phone therefore got a world a third
+  the width of a desktop one with the same ranges laid over it: hostiles spawned
+  inside magnet range so loot arrived without moving, the same ~55 spawn nodes
+  packed into a quarter of the area, and kills per minute ran far higher than on
+  desktop. It was not a look-and-feel difference, it was a different farming rate.
+  The world is now authored against one reference viewport and has the **same area
+  everywhere**, laid out at the screen's own aspect ratio; zoom carries the
+  difference, eased out on small screens and bounded so sprites stay legible.
+  Desktop is the reference, so desktop is unchanged.
+- **A won citadel is now inherited at ONE choke point.** Every path that flips a
+  tile — ordinary siege, clone-fleet turf war, Void assault, razing claim — ends
+  in `captureSystem()`, and that is where the fortress is inherited now. It used
+  to be inherited only in `captureCitadel()`, so a tile won through the generic
+  siege path (the common case in My Galaxy: the server row carries the rival's
+  citadel but the local waves object never set `playerCit`) handed the winner a
+  plain tile and deleted a Rank 5 fortress. Winning a citadel means owning that
+  citadel, at the rank it was built to. Captured fortresses ignore the build cap.
+- **Moon Colony can no longer show a blank screen.** One bad field anywhere in
+  `state.moon` threw inside the renderer and the screen painted nothing. A save
+  carrying a building `kind` a later build renamed threw on **every** render,
+  which is why it hit established colonies and never fresh ones. Every field the
+  renderer reads is now normalised once before it is read (unknown structures are
+  dropped, indexes clamped, missing stores rebuilt), the diorama can't take the
+  screen with it, and a failed render shows a readable card with the reason.
+- **Damage reduction now actually applies, and is capped at 20%.** It was applied
+  BEFORE the 22%-of-max-hull one-shot clamp, so at endgame — where hits land far
+  above that — the clamp threw the reduced number away and re-imposed the same
+  22%: DR measured as zero, exactly as reported. It now reduces the clamped
+  figure, so it always removes its full share of what you actually take. Ceiling
+  is 20% (`DR_CAP_PCT`), and Pilot Tree / skill nodes drop to **0.5% per node**
+  (Armor and Damage Reduction 1.5–3% → 0.5%, Aegis Lattice 6% → 0.5%, Resolve
+  1% → 0.5%).
+- **XP RATE: the stack was right, one screen was lying.** Ship Ascension's Combat
+  Computer still advertised +0.5% XP per level after the August cut to +0.35%, so
+  a pilot with 175 levels counted 87.5% and was paid 61.25% — the whole 26.3-point
+  gap in the 658.1% vs 631.8% report. The screen now quotes what it pays.
+- **Kaevith copy matches the hulls.** The Incursion briefing computed its stack
+  total from the roster instead of the retired `+250%` (it is **+160%**), the
+  Splinter's blurb quoted 10% for an 8% hull, and the Godshard no longer claims to
+  double XP — it says +64%.
+- **TOUR OF DUTY — buy the level you are standing in.** 1,000 ◈ for a full level,
+  **prorated against progress already made**: at 40/100 XP the rest costs 600 ◈.
+  Bought XP goes through the same award path as earned XP.
+- **TOUR OF DUTY — past 100 it is "100+" and the crates stack.** Levels 101–125
+  were 25 ladder rows and then a hard stop, which capped a pilot who bought levels
+  at 25 crates no matter what they spent. Now every 100 XP past 100 is one more
+  fitting crate, they stack, they are opened in one tap, and there is no ceiling.
+  The season's own XP still funds exactly 25 of them (12,560 earned vs 12,400 for
+  level 125), so nothing about earning the pass changed.
+- **CARGO DEFENSE: frame rate is now the first constraint.** The run held up to
+  ~42 live hostiles, 26 collapsing rings and a dozen anomalies at up to 5× — all
+  numbers set for fairness, none of which asked whether the device could draw
+  them. The run now measures its own frame time and holds a load level (1.0 →
+  0.35) that scales the hostile ceiling, ring cap and anomaly cap live, walking
+  down on slow frames and back up on recovery. Alongside it: sub-steps capped at 3
+  during a run (it is hand-flown, so latency beats sub-step smoothness), the
+  particle budget halved, and the portrait canvas dropped to 12Hz. The run still
+  lasts ten minutes and the boss still arrives — nothing is skipped.
+- **The battle screen survives tabbing away.** iOS Safari hands the canvas back
+  with its CSS box intact but the drawing buffer still at the size it had while
+  hidden, and it changes the device pixel ratio under us; either one painted the
+  arena into one small corner and left the rest of the element blank. The fit
+  guard now checks the **backing store and the DPR**, not just the CSS box,
+  re-fits on `visualViewport` / `pageshow` / rotation, refuses to re-fit to 0×0
+  while hidden, and the frame clears to deep space instead of transparent (which
+  is what showed as white).
+- **XP and combat no longer lose time off the battle screen.** The 50ms frame
+  clamp was throwing the overrun away, so every long frame — a menu doing DOM
+  work, iOS at 30fps, a hot phone — silently deleted sim time, multiplied by five
+  at 5×. The overrun is now banked as debt and paid back, bounded at 1.5s.
+- **Discord shows art for EVERY hull.** Only Kaevith hulls ever had a sprite,
+  because `log_xen_hull()` was the only acquisition anyone reported to the server
+  and it whitelists the five xen keys; the leaderboard-count route needs art
+  columns that competing `lb_upsert` overloads keep dropping. `log_hull()` is the
+  same reliable path widened to every hull, reported from the one choke point both
+  acquisition paths already call. Idempotent per pilot per hull, xen keys refused
+  (they keep their louder card), and the count-based card stands down for anyone
+  the reliable path covered.
+- **Prism aura is visible on a Dreadnaught.** Every halo sized itself from hull
+  tier alone, so on a sprite drawn 2–3× larger the ring sat inside the artwork.
+  Radii now take the larger of the tier figure and the hull's real footprint.
+- **Coupon redemption marks now survive save merges** — `redeemedCodes` joins the
+  merge union (it was decided wholesale by the base pick, so a stale copy winning
+  a conflicted login re-armed every one-time code, including this giveaway).
+- **New coupon: `LF-DISCORD-UNVEIL`** — +1,000 ◈, one redemption per account, for
+  the redesigned Discord server.
 
 ---
 
@@ -68,12 +134,12 @@ drop the three matching guards. The coupon can stay.
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 650 |
+| Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `650` |
-| Update beacon | `version.json` → `build` | `650` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v650` |
-| Project root beacon | root `version.json` (source tree) | `650` |
+| Client constant | `game.html` → `window.LF_BUILD` | `654` |
+| Update beacon | `version.json` → `build` | `654` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v654` |
+| Project root beacon | root `version.json` (source tree) | `654` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1863,7 +1929,17 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 650**.
+1. Login screen reads **BUILD 654**.
+2. **Map parity** — open the game on a phone and on a desktop window side by side.
+   The zone banner, spawn spacing and the distance you must fly to reach loot must
+   read the same; loot must NOT arrive at a standing ship on either.
+3. **Win a citadel tile in My Galaxy.** The tile must show the citadel at the rank
+   the loser held, not a plain tile and not Rank 1.
+4. **Moon Colony opens** on an established colony (build something, reload, open).
+5. **Cargo Defense, Omega V, 5× on a phone.** The hostile stream must thin rather
+   than the frame rate dropping; the ten-minute clock must still land on time.
+6. Tab from Battle → Ships → Battle repeatedly: the arena must refill the canvas
+   every time, never a small corner on white.
 2. Enter a Citadel Siege zone (any zone ending in 7). Fly straight into the
    Citadel and hold there — it must not slide backwards, and must stay on screen.
 3. Jump in and out of a boss dungeon 5–6 times. The ship moves every time, on

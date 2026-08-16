@@ -23,6 +23,8 @@
     'ad4e3bef125286ba6feca86a07a3e7b700829d5e24cf29791dbeaca062c1b190': 'lvl500',
     '29a76145a8bfe2b0721812e86c8db05d745b4b75a325c775b7334bf3994a65f4': 'pro365',
     'f542c4091a26248648e7b83928c99e86dc9cc9f7c888262830a6a165f471202e': 'pro30',
+    // ---- EVENT: the redesigned Discord, Aug 2026 --------------------------
+    'f839bbc7dfcbf2b2f1a84aa8895d93d9e182a527770516284d5eabb7dfdd81bd': 'discord1k',
     // ---- BETA ACCESS ------------------------------------------------------
     // Opens a feature that is SHIPPED BUT HIDDEN so admins can test it on
     // production. See `tourbeta` below.
@@ -97,6 +99,13 @@
       st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
       st.resources.fuel += 1e11; st.resources.iron += 1e11; st.resources.plasma += 1e11;
       if (g.addCredits) g.addCredits(1e11); else st.credits = (st.credits || 0) + 1e11;
+    } },
+    // ONE PER ACCOUNT, deliberately: the Discord unveiling hands the same code to
+    // everyone, and 'repeatable' would let a single player farm it forever.
+    discord1k: { name: '1,000 \u25c8 LootCoins \u2014 new Discord', apply(g) {
+      const st = g.state;
+      if (g.addCredits) g.addCredits(1000); else st.credits = (st.credits || 0) + 1000;
+      return 'Welcome to the new Discord \u2014 1,000 \u25c8 LootCoins are in your wallet';
     } },
     lvl100: { name: 'Account Level 100', apply(g) { if ((g.state.level | 0) < 100 && g.setLevel) g.setLevel(100); } },
     lvl200: { name: 'Account Level 200', apply(g) { if ((g.state.level | 0) < 200 && g.setLevel) g.setLevel(200); } },

@@ -189,3 +189,24 @@
 .tp-rcpt-s{font-size:9.5px;line-height:1.3;color:var(--rc);opacity:.85;margin-top:1px;text-transform:uppercase;letter-spacing:.06em;}
 .tp-rcpt-bar{height:3px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:4px;}
 .tp-rcpt-bar i{display:block;height:100%;background:var(--rc);}
+
+/* ---- BUY THE NEXT LEVEL (hero) ------------------------------------------ */
+.tp-buylv{position:relative;margin:9px auto 0;display:flex;align-items:center;justify-content:center;gap:9px;width:100%;max-width:280px;padding:9px 12px;border:1px solid rgba(255,210,77,.5);border-radius:11px;background:linear-gradient(180deg,rgba(255,210,77,.16),rgba(255,210,77,.05));color:#ffe6a3;font:800 11px/1 'Rajdhani',sans-serif;letter-spacing:.14em;cursor:pointer;}
+.tp-buylv em{font-style:normal;font-weight:800;color:#ffd24d;font-variant-numeric:tabular-nums;letter-spacing:.04em;}
+.tp-buylv.poor{opacity:.5;}
+.tp-buylv:active{transform:translateY(1px);}
+.tp-modal-r em{margin-left:auto;padding-left:10px;font-style:normal;font:700 9.5px/1 'Rajdhani',sans-serif;letter-spacing:.06em;color:#8fa3bd;}
+/* ---- THE 100+ STACK ------------------------------------------------------ */
+.tp-over{margin-top:10px;padding:11px 12px;border:1px dashed #3a3358;border-radius:13px;background:linear-gradient(180deg,rgba(120,90,220,.10),rgba(10,8,20,.4));}
+.tp-over.ready{border-style:solid;border-color:rgba(242,169,60,.6);box-shadow:0 0 20px -10px rgba(242,169,60,.9);}
+.tp-over-h{display:flex;flex-direction:column;gap:3px;}
+.tp-over-h b{font:800 12px/1 'Orbitron',sans-serif;letter-spacing:.1em;color:#ffd8a3;}
+.tp-over-h em{font-style:normal;font:700 9.5px/1.35 'Rajdhani',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#8fa3bd;}
+.tp-over-row{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:9px 0 0;}
+.tp-over-n{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 4px;border:1px solid #24203a;border-radius:9px;background:rgba(10,8,18,.5);}
+.tp-over-n b{font:800 14px/1 'Rajdhani',sans-serif;color:#eef2ff;font-variant-numeric:tabular-nums;}
+.tp-over-n em{font-style:normal;font:700 7.5px/1.2 'Rajdhani',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7f8fb0;text-align:center;}
+.tp-over-ic{font-size:12px;line-height:1;color:#9ad4ff;}
+.tp-over-btn{margin-top:9px;width:100%;padding:10px;border:0;border-radius:11px;font:800 12px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#14100a;background:linear-gradient(180deg,#ffe27a,#f2a93c);cursor:pointer;}
+.tp-over-btn:active{transform:translateY(1px);}
+.tp-over-none{margin-top:8px;font:700 9.5px/1.3 'Rajdhani',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#6f7d99;text-align:center;}

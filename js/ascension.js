@@ -5,7 +5,7 @@
    resource sink.
 
      • Every OWNED hull has four permanent modules:
-         Combat Computer   → +0.5% XP per kill / level
+         Combat Computer   → +0.35% XP per kill / level
          Targeting Matrix  → +1% attack range / level
          Reactor Core      → +1% attack speed / level
          Hull Optimization → +3% hull HP & +0.15 damage reduction / level (DR cap +20)
@@ -43,9 +43,9 @@
   // ---- MODULES ---------------------------------------------------------------
   const MODS = [
     { id: 'cc', name: 'Combat Computer', res: 'plasma',
-      tip: 'Boosts every XP source while flying this hull. +0.5% XP per completed level — stacks with Pro and Pilot Tree bonuses.',
-      bonus: (st) => '+' + (st * 0.5) + '% XP per kill',
-      next:  (st) => '+' + ((st + 1) * 0.5) + '%',
+      tip: 'Boosts every XP source while flying this hull. +0.35% XP per completed level — stacks with Pro and Pilot Tree bonuses.',
+      bonus: (st) => '+' + (Math.round(st * 35) / 100) + '% XP per kill',
+      next:  (st) => '+' + (Math.round((st + 1) * 35) / 100) + '%',
       icon: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 9h6v6H9zM12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5L19 19M19 5l-2.5 2.5M7.5 16.5L5 19"/>' },
     { id: 'tm', name: 'Targeting Matrix', res: 'iron',
       tip: 'Extends your weapons\u2019 engagement radius — open fire before enemies close in. +1% attack range per level.',

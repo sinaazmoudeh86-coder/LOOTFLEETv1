@@ -71,8 +71,20 @@
 
   const XP_PER_LEVEL = 100;
   const MAX_LEVEL = 100;          // the reward ladder ends here
-  const OVER_LEVELS = 25;         // 101–125 pay one item crate each
+  const OVER_LEVELS = 25;         // what the season's own XP funds past it
   const HARD_LEVEL = MAX_LEVEL + OVER_LEVELS;
+  // ---- PAST 100 ------------------------------------------------------------
+  // There is no ceiling any more. Levels 101-125 used to be 25 ladder rows and
+  // then a hard stop at 125, which capped a pilot who bought levels at 25 crates
+  // no matter how much they spent. Past 100 the ladder is ONE repeating step
+  // instead: every 100 XP is another fittings crate, they STACK, and the screen
+  // reads "100+" rather than a level number. The season's own XP still funds
+  // exactly 25 of them (12,560 earned vs 12,400 for level 125) — buying levels is
+  // the only way past that, and now it keeps paying.
+  //
+  // BUYING A LEVEL: 1,000 ◈ for a full 100 XP, PRORATED against progress already
+  // made — 40/100 into a level costs 600 ◈, not 1,000.
+  const LC_PER_XP = 10;
 
   // THE TWO BOARDS ARE THE ONLY XP IN THE SEASON (636). Seasonal challenges are gone:
   // they were a third earning system with its own rules, they credited retroactively so
@@ -127,12 +139,33 @@
     }
     const t = st.tour;
     if (!t.own) t.own = {}; if (!t.claim) t.claim = {};
+    // OVERTIME MIGRATION — 101-125 used to be claimed cell by cell. Fold any keys
+    // a pilot already holds into the single overtime counter so nothing is paid
+    // twice and nothing is lost.
+    if (t.ov == null) {
+      let n = 0;
+      Object.keys(t.claim).forEach((k) => { if ((parseInt(k, 10) || 0) > MAX_LEVEL) n++; });
+      t.ov = n;
+    }
     return t;
   }
   const xp = () => { const t = s(); return t ? (t.xp | 0) : 0; };
-  const level = () => Math.min(HARD_LEVEL, 1 + Math.floor(xp() / XP_PER_LEVEL));
+  const level = () => 1 + Math.floor(xp() / XP_PER_LEVEL);
   const intoLevel = () => xp() % XP_PER_LEVEL;
   const owns = (k) => k === 'enlisted' || !!(s() && s().own[k]);
+  // ---- THE OVERTIME STACK (101+) -------------------------------------------
+  // One crate per level past 100, held as a count rather than a row per level.
+  const overReached = () => Math.max(0, level() - MAX_LEVEL);
+  const overClaimed = () => { const t = s(); return t ? (t.ov | 0) : 0; };
+  const overPending = () => Math.max(0, overReached() - overClaimed());
+  function claimOver() {
+    const t = s(); const n = overPending(); if (!t || n <= 0) return [];
+    t.ov = overClaimed() + n;
+    const lines = openItemCrates(n);
+    lines.forEach((l) => { l.lv = MAX_LEVEL + '+'; });
+    try { G().save(); } catch (e) {}
+    return lines;
+  }
 
   // =========================================================================
   // THE LADDER
@@ -164,7 +197,7 @@
   const ROTATION = ['gold', 'item', 'fuel', 'shard', 'iron', 'item', 'plasma', 'shard'];
 
   function rewardAt(lv) {
-    if (lv > MAX_LEVEL) return { kind: 'item', n: 1, flat: true };   // 101–125
+    if (lv > MAX_LEVEL) return { kind: 'item', n: 1, flat: true };   // the 100+ stack
     if (LANDMARKS[lv]) return LANDMARKS[lv];
     if (LC_LEVELS.indexOf(lv) >= 0) return { kind: 'lc' };
     const r = ROTATION[(lv - 1) % ROTATION.length];
@@ -234,7 +267,11 @@
   function award(n, why) {
     const t = s(); if (!t || !live() || n <= 0) return 0;
     const before = level();
-    t.xp = Math.min(HARD_LEVEL * XP_PER_LEVEL, (t.xp | 0) + Math.round(n));
+    // NO CEILING. This used to clamp at HARD_LEVEL * XP_PER_LEVEL (12,500), which
+    // silently capped the overtime stack at 25 crates however many levels were
+    // bought — the exact thing the 100+ stack exists to remove. The season's own
+    // missions still only fund ~12,560 XP; buying is what goes past it.
+    t.xp = Math.max(0, (t.xp | 0) + Math.round(n));
     try { G().save(); } catch (e) {}
     const after = level();
     // A HIDDEN FEATURE MUST NOT ANNOUNCE ITSELF. XP still accrues for everyone —
@@ -344,15 +381,16 @@
     if (lv > level()) return false;
     if (!owns(k)) return false;
     if (t.claim[claimKey(lv, k)]) return false;
-    // past 100 the cell is the same on every track, so it is claimed ONCE on the
-    // free track rather than three times over
-    if (lv > MAX_LEVEL && k !== 'enlisted') return false;
+    // past 100 there are no per-level cells at all — the overtime crates stack and
+    // are claimed together (claimOver)
+    if (lv > MAX_LEVEL) return false;
     return true;
   }
   function pendingCount() {
     let n = 0;
-    for (let lv = 1; lv <= level(); lv++) TRACKS.forEach((t) => { if (claimable(lv, t.k)) n++; });
-    return n;
+    const top = Math.min(level(), MAX_LEVEL);
+    for (let lv = 1; lv <= top; lv++) TRACKS.forEach((t) => { if (claimable(lv, t.k)) n++; });
+    return n + overPending();
   }
 
   // Grants one cell. Returns a display line, or null.
@@ -451,9 +489,11 @@
 
   function claimAll() {
     const lines = [];
-    for (let lv = 1; lv <= level(); lv++) {
+    const top = Math.min(level(), MAX_LEVEL);
+    for (let lv = 1; lv <= top; lv++) {
       TRACKS.forEach((tr) => { const l = claim(lv, tr.k); if (l) l.forEach((x) => lines.push(x)); });
     }
+    claimOver().forEach((x) => lines.push(x));
     if (lines.length) { try { G().save(); } catch (e) {} render(); }
     return lines;
   }
@@ -500,6 +540,29 @@
   }
   function mult() { return 1 + xpBuffPct() / 100; }
 
+  // ---- BUYING THE NEXT LEVEL ----------------------------------------------
+  // Priced off the XP actually MISSING, so progress already earned is never
+  // charged for twice: 1,000 ◈ buys a whole level, 600 ◈ finishes one sitting at
+  // 40/100. Buying is exactly the same as earning it — the XP goes through
+  // award(), so it can push you through several claim levels and into the
+  // overtime stack like any other XP.
+  function buyLevelCost() { return (XP_PER_LEVEL - intoLevel()) * LC_PER_XP; }
+  function buyLevel() {
+    const t = s(), g = G(); if (!t) return { ok: false };
+    if (!live()) return { ok: false, reason: 'ended' };
+    const need = XP_PER_LEVEL - intoLevel(), cost = need * LC_PER_XP;
+    if ((g.state.credits || 0) < cost) return { ok: false, reason: 'credits', cost };
+    g.state.credits -= cost;
+    const before = level(), xpBefore = xp();
+    award(need, 'bought');
+    // MONEY MOVED, SO CONFIRM THE GOODS. award() can refuse (a season that ended
+    // between the sheet opening and the tap); never take credits for nothing.
+    if (xp() <= xpBefore) { g.state.credits += cost; try { g.save(); } catch (e) {} return { ok: false, reason: 'ended' }; }
+    try { g.save(); } catch (e) {}
+    render();
+    return { ok: true, cost, level: level(), gained: level() - before };
+  }
+
   // ---- BUYING A TRACK -----------------------------------------------------
   function buy(k) {
     const t = s(), g = G(); if (!t || !PRICE[k]) return { ok: false };
@@ -529,7 +592,7 @@
         window.MAIL.push({
           from: 'Fleet Admiralty',
           subj: '\u2726 Tour of Duty \u2014 Season ' + SEASON + ' closed',
-          body: '<p>Your tour is complete at <b>Level ' + level() + '</b>.</p>' +
+          body: '<p>Your tour is complete at <b>Level ' + (level() > MAX_LEVEL ? MAX_LEVEL + '+ (' + overReached() + ' fittings past the ladder)' : level()) + '</b>.</p>' +
             (lines.length
               ? '<p>Everything still outstanding has been issued to you:</p><ul>' +
                 lines.map((l) => '<li>Lv ' + (l.lv || '?') + ' \u2014 ' + esc(l.text || '') +
@@ -543,6 +606,7 @@
 
   window.TOUR = {
     render, s, level, xp, intoLevel, owns, buy, claim, claimAll, pendingCount, pace, betaOn,
+    buyLevel, buyLevelCost, claimOver, overPending, overReached,
     dailyDone, weeklyDone, sweepMissions, award, settle,
     TOUR_DAILY, TOUR_WEEKLY, XP_TOUR_DAILY, XP_TOUR_WEEKLY, missionProgress, boardDone, untilReset,
     xpBuffPct, mult, live, ended, leftText, msLeft,
@@ -585,17 +649,23 @@
   // ---- 1 · HERO: level, progress, time, and ONE line of pace ---------------
   function heroHTML() {
     const lv = level(), pend = pendingCount(), p = pace();
-    const pct = lv >= HARD_LEVEL ? 100 : (intoLevel() / XP_PER_LEVEL * 100);
+    const pct = intoLevel() / XP_PER_LEVEL * 100;
     const onPace = p.projected >= MAX_LEVEL || lv >= MAX_LEVEL;
+    const over = lv > MAX_LEVEL;
+    const cost = buyLevelCost(), afford = (G().state.credits || 0) >= cost;
     return '<div class="tp-hero">' +
       '<div class="tp-hero-rings"><i></i><i></i></div>' +
       '<button class="tp-help" id="tp-help" title="How it works">?</button>' +
       '<div class="tp-hero-tag">TOUR OF DUTY · SEASON ' + SEASON + '</div>' +
       '<div class="tp-hero-t">' + SEASON_NAME + '</div>' +
-      '<div class="tp-lv"><b>' + lv + '</b><em>level</em></div>' +
+      '<div class="tp-lv"><b>' + (over ? MAX_LEVEL + '+' : lv) + '</b><em>' +
+        (over ? overReached() + ' fitting' + (overReached() === 1 ? '' : 's') + ' earned' : 'level') + '</em></div>' +
       '<div class="tp-bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
       '<div class="tp-bar-l"><span>' + intoLevel() + '/' + XP_PER_LEVEL + ' XP</span>' +
         '<span>' + (live() ? leftText() + ' left' : ended() ? 'closed' : 'soon') + '</span></div>' +
+      (live() ? '<button class="tp-buylv' + (afford ? '' : ' poor') + '" id="tp-buylv">' +
+        '<span>BUY ' + (over ? 'THE NEXT FITTING' : 'LEVEL ' + (lv + 1)) + '</span>' +
+        '<em>' + fmt(cost) + ' ◈</em></button>' : '') +
       '<div class="tp-pace1' + (onPace ? ' good' : '') + '">' +
         (lv >= MAX_LEVEL ? 'Level ' + MAX_LEVEL + ' cleared · every level now pays a fitting'
           : onPace ? p.dDone + '/' + TOUR_DAILY.length + ' today · ' + p.daysNeeded + ' more days needed of ' + p.daysLeft + ' left'
@@ -609,18 +679,15 @@
   // this season"; it does not answer "what do I get for playing tonight".
   function nextUpHTML() {
     const lv = level();
-    // the next level that pays anything on a track the pilot holds
-    let target = null;
-    for (let i2 = lv + (intoLevel() ? 1 : 0); i2 <= HARD_LEVEL; i2++) {
-      if (i2 > lv) { target = i2; break; }
-    }
-    if (!target) target = Math.min(HARD_LEVEL, lv + 1);
-    const cells = TRACKS.filter((tr) => owns(tr.k)).map((tr) => ({ tr, v: cellValue(target, tr.k) }))
-      .filter((x) => x.v && !(target > MAX_LEVEL && x.tr.k !== 'enlisted'));
+    const target = lv + 1;
+    const cells = target > MAX_LEVEL
+      ? [{ tr: TRACKS[0], v: { kind: 'item', n: 1 } }]
+      : TRACKS.filter((tr) => owns(tr.k)).map((tr) => ({ tr, v: cellValue(target, tr.k) })).filter((x) => x.v);
     const hull = cells.filter((x) => x.v.kind === 'hull')[0];
     const need = XP_PER_LEVEL - intoLevel();
     return '<div class="tp-next' + (hull ? ' big' : '') + '">' +
-      '<div class="tp-next-h">NEXT · LEVEL ' + target + '<em>' + need + ' XP away</em></div>' +
+      '<div class="tp-next-h">NEXT · ' + (target > MAX_LEVEL ? 'FITTING #' + (target - MAX_LEVEL) : 'LEVEL ' + target) +
+        '<em>' + need + ' XP away</em></div>' +
       (hull
         ? '<div class="tp-next-hull"><img src="ships/ship-' + hull.v.hull + '.png" alt="" decoding="async" onerror="this.remove()">' +
           '<div><div class="tp-next-hn">' + esc(((C().SHIP_BY_KEY || {})[hull.v.hull] || {}).name || hull.v.hull) + '</div>' +
@@ -765,7 +832,7 @@
       return { cls: 'cost', txt: fmt(away) + ' XP', title: fmt(away) + ' XP to reach level ' + lv };
     }
     // the cells that exist on THIS level for tracks the pilot actually holds
-    const mine = TRACKS.filter((tr) => owns(tr.k) && !(lv > MAX_LEVEL && tr.k !== 'enlisted'));
+    const mine = TRACKS.filter((tr) => owns(tr.k));
     const ready = mine.filter((tr) => claimable(lv, tr.k)).length;
     // 2 · something of mine is waiting
     if (ready) return { cls: 'ready', txt: 'CLAIM ' + ready, title: ready + ' reward' + (ready === 1 ? '' : 's') + ' waiting' };
@@ -774,7 +841,7 @@
     // all, so a collected level still advertised CLAIM.
     const allMine = mine.length && mine.every((tr) => t.claim[claimKey(lv, tr.k)]);
     if (allMine) {
-      const locked = TRACKS.filter((tr) => !owns(tr.k) && !(lv > MAX_LEVEL && tr.k !== 'enlisted')).length;
+      const locked = TRACKS.filter((tr) => !owns(tr.k)).length;
       return locked
         ? { cls: 'done', txt: '✓ CLAIMED', title: 'Collected · ' + locked + ' more behind a paid track' }
         : { cls: 'done', txt: '✓ CLAIMED', title: 'Everything on this level collected' };
@@ -793,14 +860,14 @@
       if (TRACKS.some((tr) => claimable(j, tr.k))) firstPending = j;
     }
     const from = _showAll ? 1 : Math.max(1, Math.min(firstPending || (lv - 2), lv - 2) || 1);
-    const to = _showAll ? HARD_LEVEL : Math.min(HARD_LEVEL, lv + 6);
+    const to = _showAll ? MAX_LEVEL : Math.min(MAX_LEVEL, lv + 6);
     let rows = '';
     for (let i2 = from; i2 <= to; i2++) {
       const reached = i2 <= lv;
       const hullRow = TRACKS.some((tr) => cellValue(i2, tr.k).kind === 'hull');
       const pill = rowPill(i2);
       rows += '<div class="tp-row' + (reached ? ' reached' : '') + (i2 === lv ? ' now' : '') +
-          (hullRow ? ' hullrow' : '') + (i2 > MAX_LEVEL ? ' overtime' : '') + '">' +
+          (hullRow ? ' hullrow' : '') + '">' +
         '<div class="tp-lvcol">' +
           '<div class="tp-lvn">' + i2 + '</div>' +
           '<div class="tp-pill ' + pill.cls + '" title="' + esc(pill.title) + '">' + pill.txt + '</div>' +
@@ -808,32 +875,51 @@
         TRACKS.map((tr) => cellHTML(i2, tr)).join('') + '</div>';
     }
     return '<div class="tp-card"><div class="tp-card-h">◈ REWARDS' +
-        '<em>' + (_showAll ? 'all ' + HARD_LEVEL + ' levels' : 'levels ' + from + '–' + to) + '</em></div>' +
+        '<em>' + (_showAll ? 'all ' + MAX_LEVEL + ' levels' : 'levels ' + from + '–' + to) + '</em></div>' +
       '<div class="tp-head"><div class="tp-lvcol"><span class="tp-hlv">LV</span></div>' +
         TRACKS.map((tr) => '<div class="tp-hcell" style="--tc:' + tr.col + '">' + tr.name.slice(0, 4) + '</div>').join('') + '</div>' +
       '<div class="tp-ladder' + (_showAll ? ' all' : '') + '">' + rows + '</div>' +
-      '<button class="tp-toggle" id="tp-toggle">' + (_showAll ? 'Show less' : 'See all ' + HARD_LEVEL + ' levels') + '</button>' +
+      '<button class="tp-toggle" id="tp-toggle">' + (_showAll ? 'Show less' : 'See all ' + MAX_LEVEL + ' levels') + '</button>' +
+      overtimeHTML() +
+      '</div>';
+  }
+
+  // ---- THE 100+ STACK ------------------------------------------------------
+  // One card instead of 25 rows, and it never runs out: every level past 100 adds
+  // a fittings crate to the same pile, and the pile is claimed in one tap.
+  function overtimeHTML() {
+    const reached = overReached(), pend = overPending(), taken = overClaimed();
+    const lv = level();
+    return '<div class="tp-over' + (pend ? ' ready' : '') + '">' +
+      '<div class="tp-over-h"><b>LEVEL ' + MAX_LEVEL + '+</b>' +
+        '<em>every ' + XP_PER_LEVEL + ' XP past ' + MAX_LEVEL + ' · one fitting crate, stacking, no ceiling</em></div>' +
+      '<div class="tp-over-row">' +
+        '<div class="tp-over-n"><span class="tp-over-ic">❖</span><b>' + fmt(pend) + '×</b><em>ready to open</em></div>' +
+        '<div class="tp-over-n"><b>' + fmt(taken) + '×</b><em>already opened</em></div>' +
+        '<div class="tp-over-n"><b>' + (lv > MAX_LEVEL ? intoLevel() + '/' + XP_PER_LEVEL : fmt(Math.max(0, MAX_LEVEL * XP_PER_LEVEL - xp())) ) + '</b>' +
+          '<em>' + (lv > MAX_LEVEL ? 'XP into the next' : 'XP to reach ' + MAX_LEVEL) + '</em></div>' +
+      '</div>' +
+      (pend ? '<button class="tp-over-btn" id="tp-over">OPEN ' + fmt(pend) + ' FITTING CRATE' + (pend === 1 ? '' : 'S') + '</button>'
+            : '<div class="tp-over-none">' + (reached ? 'All caught up — the next fitting lands at level ' + (lv + 1) : 'Unlocks at level ' + MAX_LEVEL) + '</div>') +
       '</div>';
   }
 
   function cellHTML(lv, tr) {
     const v = cellValue(lv, tr.k), t = s(), key = claimKey(lv, tr.k);
     const claimed = !!t.claim[key];
-    const over = lv > MAX_LEVEL && tr.k !== 'enlisted';
     const canClaim = claimable(lv, tr.k);
     const locked = !owns(tr.k);
     const l = cellLine(v);
     return '<div class="tp-cell' + (claimed ? ' claimed' : '') + (canClaim ? ' ready' : '') +
-        (locked ? ' locked' : '') + (over ? ' none' : '') + (l.hull ? ' hull' : '') + '"' +
+        (locked ? ' locked' : '') + (l.hull ? ' hull' : '') + '"' +
         (canClaim ? ' data-claim="' + lv + ':' + tr.k + '"' : '') + ' style="--tc:' + tr.col + '">' +
-      (over ? '<span class="tp-cell-x">—</span>'
-        : l.hull
+      (l.hull
           ? '<img class="tp-cell-art" src="ships/ship-' + l.hull + '.png" alt="" decoding="async" onerror="this.remove()">' +
             '<span class="tp-cell-s">' + esc(l.small) + '</span>'
           : '<span class="tp-cell-ic' + (l.raw ? ' svg' : '') + '" style="color:' + l.col + '">' + l.ic + '</span>' +
             '<span class="tp-cell-l">' + esc(l.big) + '</span>' +
             '<span class="tp-cell-s">' + esc(l.small) + '</span>') +
-      (claimed && !over ? '<span class="tp-cell-tick">✓</span>' : '') +
+      (claimed ? '<span class="tp-cell-tick">✓</span>' : '') +
       '</div>';
   }
 
@@ -853,6 +939,14 @@
     };
     const tg = $('tp-toggle');
     if (tg) tg.onclick = () => { _showAll = !_showAll; render(); };
+    const ov = $('tp-over');
+    if (ov) ov.onclick = () => {
+      const lines = claimOver();
+      render();
+      if (lines.length) receipt('LEVEL ' + MAX_LEVEL + '+', lines);
+    };
+    const bl = $('tp-buylv');
+    if (bl) bl.onclick = confirmBuyLevel;
     const hp = $('tp-help');
     if (hp) hp.onclick = helpSheet;
   }
@@ -863,8 +957,8 @@
   function helpSheet() {
     const p = pace(), zone = progZone();
     const rows = [
-      ['Levels', 'A level costs <b>' + XP_PER_LEVEL + ' XP</b>. There are <b>' + MAX_LEVEL +
-        '</b> with rewards, and <b>' + OVER_LEVELS + ' more</b> past that paying one fitting each.'],
+      ['Levels', 'A level costs <b>' + XP_PER_LEVEL + ' XP</b>. The reward ladder runs to <b>' + MAX_LEVEL +
+        '</b>; past that every level is one <b>fitting crate</b> and there is <b>no ceiling</b>.'],
       ['Where XP comes from', '<b>Only the Tour missions below.</b> Nothing else in the game gives season XP — not the game\u2019s own mission boards, not kills, not levels.'],
       ['Tour dailies', '<b>' + TOUR_DAILY.length + ' missions</b>, <b>+' + XP_TOUR_DAILY + ' XP each</b> (<b>' + XP_DAILY +
         '</b> for all of them). Reset every day at <b>00:00 UTC</b>. Auto-credited — no claiming.'],
@@ -874,6 +968,11 @@
       ['The whole season', '<b>' + fmt(XP_DAILY * WEEKS * 7 + XP_WEEKLY * WEEKS) + ' XP</b> over <b>' + WEEKS +
         ' weeks</b> if you clear everything, against <b>' + fmt((HARD_LEVEL - 1) * XP_PER_LEVEL) +
         '</b> needed for level ' + HARD_LEVEL + '. There is room to miss days.'],
+      ['Past ' + MAX_LEVEL, 'The ladder ends at <b>' + MAX_LEVEL + '</b>. After that every <b>' + XP_PER_LEVEL +
+        ' XP</b> is one more <b>fitting crate</b> — they <b>stack</b>, you open them in one tap, and there is <b>no ceiling</b>. The season’s own XP funds about <b>' +
+        OVER_LEVELS + '</b> of them; buying levels goes further.'],
+      ['Buying a level', '<b>' + fmt(XP_PER_LEVEL * LC_PER_XP) + ' ◈</b> for a full level, and it is <b>prorated</b>: at <b>40/' +
+        XP_PER_LEVEL + ' XP</b> the rest of the level costs <b>' + fmt(60 * LC_PER_XP) + ' ◈</b>. Bought XP is ordinary XP.'],
       ['Your pace', 'Clearing both boards earns about <b>' + p.perDay + ' XP a day</b>. Level ' + MAX_LEVEL +
         ' needs <b>' + fmt(p.need100) + '</b> more — roughly <b>' + p.daysNeeded + ' days</b>, and there are <b>' +
         p.daysLeft + '</b> left' + (p.spare >= 0 ? ', so you have ' + p.spare + ' days of slack.' : '.')],
@@ -942,5 +1041,38 @@
     v.querySelector('[data-x]').onclick = close;
     const ok = v.querySelector('[data-ok]');
     if (ok) ok.onclick = () => { close(); const r = buy(k); if (r.ok && window.UI && window.UI.unlockToast) window.UI.unlockToast('✓ ' + tr.name + ' unlocked'); };
+  }
+  // Buying the level the pilot is standing in. The price is quoted as the XP still
+  // missing x 10, so the sheet always shows exactly what is being paid for.
+  function confirmBuyLevel() {
+    const need = XP_PER_LEVEL - intoLevel(), cost = need * LC_PER_XP;
+    const have = G().state.credits || 0, afford = have >= cost;
+    const lv = level(), over = lv >= MAX_LEVEL;
+    const v = document.createElement('div');
+    v.className = 'tp-veil show';
+    v.innerHTML = '<div class="tp-modal" style="--tc:#ffd24d">' +
+      '<div class="tp-modal-h">' + (over ? 'BUY THE NEXT FITTING' : 'BUY LEVEL ' + (lv + 1)) + '</div>' +
+      '<p>' + (over
+        ? 'Past level ' + MAX_LEVEL + ' each level is one <b>fitting crate</b>, and they stack — there is no ceiling.'
+        : 'Credits the <b>' + need + ' XP</b> you are still missing and claims the level immediately.') + '</p>' +
+      '<div class="tp-modal-r"><span>Missing</span><b>' + need + ' / ' + XP_PER_LEVEL + ' XP</b></div>' +
+      '<div class="tp-modal-r"><span>Price</span><b>◈ ' + fmt(cost) + '</b><em>' + fmt(XP_PER_LEVEL * LC_PER_XP) + ' ◈ a full level</em></div>' +
+      '<div class="tp-modal-r"><span>Balance</span><b style="color:' + (afford ? '#7ce0a0' : '#ff6b78') + '">◈ ' + fmt(have) + '</b></div>' +
+      '<div class="tp-modal-a"><button class="tp-mbtn" data-x>Cancel</button>' +
+      (afford ? '<button class="tp-mbtn go" data-ok>Buy</button>' : '') + '</div></div>';
+    document.body.appendChild(v);
+    const close = () => v.remove();
+    v.addEventListener('click', (e) => { if (e.target === v) close(); });
+    v.querySelector('[data-x]').onclick = close;
+    const ok = v.querySelector('[data-ok]');
+    if (ok) ok.onclick = () => {
+      close();
+      const r = buyLevel();
+      if (r.ok && window.UI && window.UI.unlockToast) {
+        window.UI.unlockToast(level() > MAX_LEVEL
+          ? '✓ Level ' + MAX_LEVEL + '+ · a fitting crate is waiting'
+          : '✓ Tour level ' + level() + ' — rewards ready to claim');
+      }
+    };
   }
 })();

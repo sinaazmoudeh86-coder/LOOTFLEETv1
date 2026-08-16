@@ -321,11 +321,15 @@
     }
     takeHit(dmg, src) {
       if (this.dead || this.invuln > 0) return;
-      // Warden aura damage reduction (set by game.js when stats refresh)
-      if (this.dmgReduce > 0) dmg *= 1 - Math.min(0.8, this.dmgReduce / 100);
       // NO ONE-SHOTS: a single hit can never take more than 22% of max hull.
       // Sustained swarm pressure still kills — burst alone can't delete you.
       if (this.maxHp > 1) dmg = Math.min(dmg, this.maxHp * 0.22);
+      // DAMAGE REDUCTION, AFTER THE CLAMP. It used to run first, which made it
+      // invisible everywhere it mattered: endgame hits land far above 22% of max
+      // hull, so the clamp threw the reduced number away and re-imposed the same
+      // 22%. Reducing the CLAMPED figure means DR always removes its full share of
+      // what you actually take. Ceiling 20% (DR_CAP_PCT in game-v93.js).
+      if (this.dmgReduce > 0) dmg *= 1 - Math.min(0.20, this.dmgReduce / 100);
       this.hp = Math.max(0, this.hp - dmg);
       { const _gs2 = (window.GAME && window.GAME.state && window.GAME.state.gameSpeed) || 1;
         this.hurtFlash = (_gs2 > 2 && this.hurtFlash > 0.15) ? Math.max(this.hurtFlash, 0.5) : 1; }

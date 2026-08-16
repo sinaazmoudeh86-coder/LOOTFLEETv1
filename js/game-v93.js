@@ -19,12 +19,42 @@
   const PICKUP_RADIUS = 26;       // how close to walk to collect loot
   const MAGNET_RADIUS = 620;      // LOOT MAGNET attraction range — drops fly to the player rather than the player to them
   const MAGNET_SPEED = 420;       // base px/s a magnetized drop travels (accelerates as it nears you)
+  // DAMAGE REDUCTION CEILING — 20%, and it is the ONLY ceiling: entities.js
+  // clamps to the same number, so no stack of nodes, cores or auras can read as
+  // more than a fifth of incoming damage removed.
+  const DR_CAP_PCT = 20;
   const FIRE_RANGE = 250;         // auto-fire engagement range
   const NODE_COUNT = 9;           // base spawn nodes per zone (scales up — see nodeCount)
   // Zone-scaled feel: deeper zones get a wider world, more spawns, and a more
   // zoomed-out camera (which also makes the player look smaller).
   function worldMul(zone) { return Math.min(3.4, 1.8 + zone * 0.05); }
   function zoomFor(zone) { return Math.max(0.5, 0.92 - zone * 0.012); }
+  // ---- ONE MAP, EVERY DEVICE -------------------------------------------------
+  // The arena used to be sized as "viewport x worldMul", so the world was as big as
+  // the screen it was drawn on. Every gameplay distance in this file is in WORLD
+  // PIXELS and fixed — fire range 250, loot magnet 620, spawn spreads, beacon rings
+  // — so a phone got a world a third the width of a desktop one with the same
+  // ranges laid over it: enemies spawned inside magnet range (loot arrived without
+  // moving), the same 55 spawn nodes packed into a quarter of the area, and kills
+  // per minute ran far higher than on desktop. It was not a look-and-feel
+  // difference, it was a different game with a different farming rate.
+  //
+  // The world is now authored against ONE reference viewport and has the SAME AREA
+  // on every device, laid out at the screen's own aspect ratio (so nothing is
+  // letterboxed and portrait still reads as portrait). Zoom carries the difference
+  // instead: a small screen eases out to show a workable slice, bounded so sprites
+  // never shrink past legibility. Desktop is the reference, so desktop is unchanged.
+  const REF_W = 1180, REF_H = 720;
+  function fitWorld(zone) {
+    const mul = worldMul(zone);
+    const w = Math.max(1, rt.w || REF_W), h = Math.max(1, rt.h || REF_H);
+    const area = REF_W * REF_H * mul * mul;
+    const aspect = Math.min(2.6, Math.max(0.42, w / h));
+    rt.worldW = Math.round(Math.sqrt(area * aspect));
+    rt.worldH = Math.round(Math.sqrt(area / aspect));
+    const lin = Math.sqrt((w * h) / (REF_W * REF_H));
+    rt.zoom = zoomFor(zone) * Math.min(1, Math.max(0.62, Math.sqrt(lin)));
+  }
   // Zone unlocking — you can reach at most 10 zones ahead of your pilot level, so
   // you can't skip into wildly over-level zones and farm insane loot. Still also
   // ZONE LOOKAHEAD — how far past your level the Grind Zone list unlocks.
@@ -532,7 +562,7 @@
     // Warden arrays mount only on the Aegis — inert anywhere else (legacy saves)
     const aMul = ship.cls === 'Aegis' ? 2 : 0;
     s.regen = Math.min(5, (aura ? aura.regen * aMul : 0) + (pm.regen || 0) + (m.regen || 0) + (nc.regen || 0) + (nf.regen || 0) * C.FLEET.statShare);
-    s.dmgReduce = Math.min(80, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0) + (m.dmgReduce || 0) + (nc.dmgReduce || 0) + (nf.dmgReduce || 0) * C.FLEET.statShare);
+    s.dmgReduce = Math.min(DR_CAP_PCT, (aura ? Math.min(60, aura.reduce * aMul) : 0) + (pm.dmgReduce || 0) + (am.dmgReduce || 0) + (m.dmgReduce || 0) + (nc.dmgReduce || 0) + (nf.dmgReduce || 0) * C.FLEET.statShare);
     if (aura) s.multiShot += aura.multiShot * aMul;
     // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
     const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
@@ -682,7 +712,7 @@
   // Effective HP pool — what an attacker actually has to chew through.
   function myEhp() {
     const s = rt.stats || {};
-    const dr = Math.min(0.85, Math.max(0, (s.dmgReduce || 0) / 100));
+    const dr = Math.min(DR_CAP_PCT / 100, Math.max(0, (s.dmgReduce || 0) / 100));
     return Math.max(1, (s.maxHp || 1) / (1 - dr));
   }
   // ---- THE MATCHUP CONTRACT -------------------------------------------------
@@ -1972,7 +2002,10 @@
   // --------------------------------------------------------------------------
   function burst(x, y, color, n, opts = {}) {
     const pc = rt.particles.length;
-    if (pc > 240) return;                                 // particle budget
+    // PARTICLE BUDGET — halved during a cargo run, where 25-40 hostiles are dying
+    // on a hand-flown escort and every explosion competes with the freighter for
+    // frame time.
+    if (pc > ((rt.cgrun && rt.cgrun.active) ? 120 : 240)) return;
     const speed = (opts.speed ?? 140) * 1.25;
     n = Math.ceil(n * 1.7);                               // more debris everywhere
     if (pc > 160) n = Math.max(1, Math.ceil(n * 0.3));
@@ -2233,7 +2266,25 @@
   // --------------------------------------------------------------------------
   function step(now) {
     let dt = (now - rt.last) / 1000; rt.last = now;
-    if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
+    if (dt < 0) dt = 0;
+    // ---- WALL-CLOCK DEBT -----------------------------------------------------
+    // dt is clamped to 50ms so one slow frame can never teleport the whole
+    // simulation, but the clamp used to THROW THE OVERRUN AWAY. Every frame that
+    // ran long — a menu screen doing heavy DOM work, iOS dropping the page to
+    // 30fps, a hot phone — silently deleted sim time, and at 5× the loss was
+    // multiplied by five. That is the reported "XP and combat slow down when I'm
+    // not on the battle screen": the sim was not paused, it was being shortchanged.
+    // The overrun is now BANKED as debt and paid back over following frames, so
+    // the simulation keeps real time. Bounded at 1.5s (a longer gap is a
+    // background stall, and computeOffline() owns that time, not this loop).
+    const FRAME_CAP = 0.05;
+    if (dt > FRAME_CAP) {
+      if (!document.hidden && dt < 1) rt._lag = Math.min(1.5, (rt._lag || 0) + (dt - FRAME_CAP));
+      dt = FRAME_CAP;
+    } else if (rt._lag > 0) {
+      const pay = Math.min(rt._lag, FRAME_CAP - dt);
+      rt._lag -= pay; dt += pay;
+    }
     // ADAPTIVE TIME-SCALE — simulate gameSpeed× time in as FEW sub-steps as
     // stability allows (each ≤ 50ms of sim time) instead of gameSpeed FULL
     // update passes per frame. 4×/5×/10× used to run 4/5/10 whole sim passes
@@ -2251,7 +2302,12 @@
     rt._fdt = rt._fdt ? rt._fdt * 0.9 + dt * 0.1 : dt;
     const slow = rt._fdt > 0.028;                    // sustained sub-30fps
     const total = dt * Math.max(1, state.gameSpeed | 0);
-    const steps = Math.min(slow ? 3 : 6, Math.max(1, Math.ceil(total / (slow ? 0.06 : 0.035))));
+    // A CARGO RUN IS THE HEAVIEST FRAME IN THE GAME and it is flown by hand, so
+    // input latency matters more than sub-step smoothness: three passes maximum,
+    // whatever the frame time says. cargo-run.js governs the CONTENT of the run
+    // from the same measurement (see GOV there); this governs the SIMULATION.
+    const cg = !!(rt.cgrun && rt.cgrun.active);
+    const steps = Math.min((slow || cg) ? 3 : 6, Math.max(1, Math.ceil(total / ((slow || cg) ? 0.06 : 0.035))));
     const sdt = total / steps;
     for (let i = 0; i < steps; i++) { rt.time += sdt; state.playTime += sdt; update(sdt); }
     // ...and the escort's own tick, once, with the whole frame's sim time.
@@ -2284,6 +2340,10 @@
       if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
       return;
     }
+    // ---- CANVAS FIT GUARD ----------------------------------------------------
+    // draw() owns the fit self-heal (see the block at the top of draw()), which
+    // covers every cause we have seen: a 0-size backing store, a CSS box that
+    // drifted while the screen was hidden, and a device-pixel-ratio change.
     draw();
   }
   // LIVE STALL DETECTOR (Aug 2026). Every fix so far depended on a RELOG to show
@@ -2614,7 +2674,8 @@
     // storm bolts fade fast; flash decays
     if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; { let w = 0; for (let i = 0; i < rt.bolts.length; i++) if (rt.bolts[i].t > 0) rt.bolts[w++] = rt.bolts[i]; rt.bolts.length = w; } const _bc = window.__lfPlayRecovery ? 16 : 80; if (rt.bolts.length > _bc) rt.bolts.splice(0, rt.bolts.length - _bc); }
     if (rt.stormFlash > 0) rt.stormFlash -= dt;
-    if (rt.particles.length > 320) rt.particles.splice(0, rt.particles.length - 320);
+    { const _pcap = (rt.cgrun && rt.cgrun.active) ? 160 : 320;
+      if (rt.particles.length > _pcap) rt.particles.splice(0, rt.particles.length - _pcap); }
     for (const f of rt.floats) f.update(dt); sweepDead(rt.floats);
     if (rt.floats.length > 60) rt.floats.splice(0, rt.floats.length - 60);
 
@@ -2753,10 +2814,24 @@
     else if (!rt._fitT || rt.time - rt._fitT > 0.25) {
       rt._fitT = rt.time;
       const _ow = rt.canvas.offsetWidth, _oh = rt.canvas.offsetHeight;
-      if (_oh > 0 && (Math.abs(_ow - rt.w) > 2 || Math.abs(_oh - rt.h) > 2)) resize();
+      // BACKING STORE, NOT JUST THE CSS BOX. iOS Safari can hand the element back
+      // with its CSS size intact but the drawing buffer still at the size it had
+      // while the screen was hidden (tab to Ships and back), and it changes the
+      // device pixel ratio under us on a zoom or a chrome collapse. Either one
+      // paints the whole arena into one small corner and leaves the rest of the
+      // element blank — the reported broken battle screen — and neither shows up
+      // as CSS-box drift, so both are checked here.
+      const _dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (_oh > 0 && (Math.abs(_ow - rt.w) > 2 || Math.abs(_oh - rt.h) > 2
+                      || Math.abs(rt.canvas.width - Math.round(_ow * _dpr)) > 2
+                      || Math.abs(rt.canvas.height - Math.round(_oh * _dpr)) > 2)) resize();
     }
     const { ctx, w, h } = rt;
-    ctx.clearRect(0, 0, w, h);
+    // OPAQUE BACKDROP, NOT clearRect. A transparent canvas shows whatever is
+    // behind it, and on iOS that is the white page — so any frame that failed to
+    // cover the element (a mid-resize frame, a world smaller than the viewport)
+    // flashed white instead of deep space.
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, w, h);
     // HOME HANGAR (Safe Zone): docked-ship bay scene instead of the space arena
     if (state.currentDungeon < 1) {
       drawHangarScene();
@@ -2889,7 +2964,11 @@
       ctx.globalAlpha = 1;
     }
     drawMinimap(ctx);
-    drawPortrait();
+    // THE PORTRAIT IS A SECOND CANVAS, redrawn every frame. During a cargo run it
+    // is the cheapest thing to give up: 12Hz instead of 60 costs a hand-flown
+    // escort nothing and gives the arena back a whole canvas's worth of work.
+    if (!(rt.cgrun && rt.cgrun.active)) drawPortrait();
+    else if (!rt._prT || rt.time - rt._prT > 0.08) { rt._prT = rt.time; drawPortrait(); }
     // DREADNAUGHT raid-boss phase FX (telegraphs, novas) — drawn over the arena.
     if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — void aura + weak-point FX over the arena.
@@ -3419,6 +3498,14 @@
       const sh = C.SHIP_BY_KEY[key];
       state.lastHull = { key, name: (sh && sh.name) || key, at: Date.now() };
     } catch (e) {}
+    // AND ANNOUNCE IT. Discord showed art for Kaevith hulls only, because
+    // log_xen_hull() was the single acquisition anyone ever reported to the
+    // server; the leaderboard-count route needs art columns that three competing
+    // lb_upsert overloads keep dropping. This reports every hull down the path
+    // that works (supabase/hull-announce.sql). Idempotent per pilot per hull on
+    // the server, so a repeat call posts nothing, and Kaevith keys are refused
+    // here because they already have their own louder card.
+    try { if (window.TERRITORY && window.TERRITORY.logHull) window.TERRITORY.logHull(key); } catch (e) {}
   }
   function shipBuyState(key) {
     const ship = C.SHIP_BY_KEY[key];
@@ -4316,9 +4403,7 @@
     // CINEMATIC: hyperspace warp-in streaks on every combat deploy
     if (state.currentDungeon >= 1) rt.warpT = 0.85;
     // re-fit world size + zoom for this zone (wider & more zoomed-out deeper in)
-    const mul = worldMul(state.currentDungeon);
-    rt.worldW = Math.round(rt.w * mul); rt.worldH = Math.round(rt.h * mul);
-    rt.zoom = zoomFor(state.currentDungeon);
+    fitWorld(state.currentDungeon);
     rt.archer.x = rt.worldW / 2; rt.archer.y = rt.worldH / 2;
     if (rt.siege && rt.siege.active) {
       // SIEGE: no fixed nodes / no boss meter — waves are spawned by updateSiege
@@ -4551,7 +4636,7 @@
     return true;
   }
   // RESONANCE FIELD — every Kaevith hull in the fleet (flagship OR escort) lifts
-  // XP per kill for the WHOLE fleet. Bonuses add, ceiling +100%.
+  // XP per kill for the WHOLE fleet. Bonuses add; there is no local ceiling.
   function xenXpBonus() {
     const keys = [state.ship].concat((state.fleet || []).filter(Boolean));
     const seen = {};
@@ -4564,7 +4649,8 @@
     });
     // No local ceiling. This used to clip at +100%, which meant a pilot holding
     // all five hulls threw away most of what they earned (the roster sums to
-    // +250%). The only XP ceiling now is the combined fleet cap in xpFleetInfo.
+    // +160%: 8 + 16 + 28 + 44 + 64). The only XP ceiling now is the combined
+    // fleet cap in xpFleetInfo.
     return pct;
   }
   function xenXpMult() { return 1 + xenXpBonus() / 100; }
@@ -5476,6 +5562,44 @@
     save();
   }
 
+  // ---- CITADEL INHERITANCE --------------------------------------------------
+  // Answers one question for every capture flow: was there a fortress on this
+  // tile, and at what rank. Nothing here razes, resets or downgrades — the only
+  // outcomes are "you now hold it at rank N" or "there was nothing to hold".
+  //
+  //   NATURAL fortress (t.citadel)  → no state.citadels entry: its multiplier is
+  //                                   baked into t.rate, and an entry would pay it
+  //                                   twice (see ship-panels.js).
+  //   VOID spire (t.void)           → fixed rank-1 entry, as before.
+  //   A RIVAL PLAYER's citadel      → entry at the rank they actually built,
+  //                                   resolved through citadelRankOf() and both
+  //                                   local mirrors, never a flat Rank 1.
+  // A captured fortress deliberately ignores the build cap: it was won, not built.
+  function inheritCitadel(id, tile) {
+    if (!id) return;
+    tile = tile || sysAt(id) || {};
+    if (!state.citadels) state.citadels = {};
+    const mirror = (state.rivalCitadels && state.rivalCitadels[id]) || null;
+    const real = (rt.realTiles && rt.realTiles[id]) || null;
+    const rk = (() => { try { return citadelRankOf(id) || null; } catch (e) { return null; } })();
+    const hadRival = !!(mirror || (real && (real.citadel || real.citadelLv)));
+    if (state.rivalCitadels) delete state.rivalCitadels[id];
+    if (tile.void) {
+      if (!state.citadels[id]) state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(3)), builtAt: Date.now(), lv: 1, void: true };
+      return;
+    }
+    if (tile.citadel) return;                       // natural fortress: paid through t.rate
+    if (!hadRival) return;                          // plain tile — nothing to inherit
+    const lv = Math.max(1, Math.min(CITADEL_LV_MAX,
+      (rk && rk.lv) || (mirror && mirror.lv) || (real && real.citadelLv) || 1));
+    const cur = state.citadels[id];
+    if (cur && (cur.lv || 1) >= lv) return;         // already yours at that rank or better
+    state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(lv)),
+                           builtAt: (cur && cur.builtAt) || Date.now(), lv, captured: true };
+    bumpLife('cits', 1);
+    pushFeed('You seized the Rank ' + lv + ' citadel on ' + (tile.name || 'a system') + ' — intact, under your flag');
+  }
+
   function captureSystem() {
     const k = state.currentSystem, tile = sysAt(k);
     if (!tile) { rt.siege = null; return; }
@@ -5501,8 +5625,16 @@
     }
     accrueResources();   // settle earnings BEFORE ownership changes — new rate applies from now
     state.ownedSystems[k] = true;
-    // VOID ZONE — the tile's fixed citadel comes WITH the conquest (no builds, no upgrades)
-    if (tile.void) { if (!state.citadels) state.citadels = {}; if (!state.citadels[k]) state.citadels[k] = { score: Math.round(score() * citadelDefenseMult(3)), builtAt: Date.now(), lv: 1, void: true }; }
+    // THE FORTRESS COMES WITH THE TILE. ONE CHOKE POINT, NO EXCEPTIONS.
+    // Every path that flips a tile to you ends here — the ordinary siege, the
+    // clone-fleet turf war, the Void citadel assault, a razing claim — so the
+    // citadel is inherited HERE rather than in the individual callers. It used to
+    // be inherited only in captureCitadel(), so a tile won through the generic
+    // siege path (the common case in My Galaxy: the server row carries the rival's
+    // citadel but the local waves object never set playerCit) handed the winner a
+    // plain tile and quietly deleted a Rank 5 fortress. Winning a citadel now
+    // always means OWNING that citadel, at the rank it was built to.
+    inheritCitadel(k, tile);
     // your fresh capture is attack-shielded for 24 h
     if (!state.tileCd) state.tileCd = {};
     state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + 24 * 3600 * 1000);
@@ -5929,23 +6061,19 @@
       (rk && rk.lv) ||
       (state.rivalCitadels && state.rivalCitadels[id] && state.rivalCitadels[id].lv) ||
       (rt.realTiles && rt.realTiles[id] && rt.realTiles[id].citadelLv) || 1));
-    if (state.rivalCitadels) delete state.rivalCitadels[id];
     // NOTHING IS DEMOLISHED. razeCitadelTile() used to run here "to strip natural
     // siege status", but it also stamps razedCitadels and divides the tile's rate
     // by CITADEL_RATE_MULT — permanently, and again on every load. Winning a
     // rival's natural fortress therefore handed the victor a plain tile worth a
     // hundredth of the prize they fought for. A won citadel changes hands whole.
     rt.razingClaim = true;                            // conquest earned — the tile is yours, no take-back
-    captureSystem();                                  // claims the tile + tows home
-    // A NATURAL fortress keeps paying through t.rate, so it must NOT also get a
-    // state.citadels entry — that would multiply the same fortress twice (see
-    // ship-panels.js). A player-BUILT citadel is the entry, at the rank it was.
-    if (!natural) {
-      if (!state.citadels) state.citadels = {};
-      state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(lv)), builtAt: Date.now(), lv, captured: true };
+    captureSystem();                                  // claims the tile + inherits the fortress + tows home
+    // THE ENTRY IS WRITTEN BY inheritCitadel(), inside captureSystem(). It used to
+    // be written here, which is why only this one flow ever inherited a rank.
+    if (natural) {
+      bumpLife('cits', 1);                            // FORTRESS DYNASTY badge
+      pushFeed('You seized the Citadel on ' + (t.name || 'a system') + ' — intact, under your flag');
     }
-    bumpLife('cits', 1);                              // FORTRESS DYNASTY badge
-    pushFeed('You seized the ' + (natural ? 'Citadel' : 'Rank ' + lv + ' citadel') + ' on ' + (t.name || 'a system') + ' — intact, under your flag');
     // publish: the fortress still stands, at full rank, under YOUR flag now
     if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, citadelLv: natural ? CITADEL_LV_MAX : lv, fleetScore: Math.round(score() * citadelDefenseMult(lv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
     save();
@@ -6596,13 +6724,16 @@
   // INIT
   // --------------------------------------------------------------------------
   function resize() {
-    const c = rt.canvas, cw = c.offsetWidth, ch = c.offsetHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const c = rt.canvas; if (!c || !rt.ctx) return;
+    const cw = c.offsetWidth, ch = c.offsetHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    // A HIDDEN CANVAS HAS NO BOX. Re-fitting to 0×0 destroys the backing store and
+    // leaves the last good fit unrecoverable; keep what we had until it is on
+    // screen again (the fit guard in step() picks it up on the first live frame).
+    if (!cw || !ch) return;
     c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr);
     rt.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     rt.w = cw; rt.h = ch;
-    const mul = worldMul(state.currentDungeon);
-    rt.worldW = Math.round(cw * mul); rt.worldH = Math.round(ch * mul);
-    rt.zoom = zoomFor(state.currentDungeon);
+    fitWorld(state.currentDungeon);
     if (rt.archer && (rt.archer.x === 0 || rt.archer.x > rt.worldW)) { rt.archer.x = rt.worldW/2; rt.archer.y = rt.worldH/2; }
     // SNAP THE CAMERA. resize() rebuilds the world box and the zoom, which moves
     // the camera's TARGET without the ship having moved at all — and update()
@@ -6655,6 +6786,18 @@
     resize();
     initPortrait();
     window.addEventListener('resize', () => { resize(); });
+    // iOS Safari changes the drawable box without a window resize: its own chrome
+    // collapsing, a rotation settling, or the page being restored from the back /
+    // forward cache. All three end in the same broken-canvas state, so all three
+    // re-fit explicitly rather than waiting for the ~8Hz guard in step().
+    try {
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => resize());
+        window.visualViewport.addEventListener('scroll', () => resize());
+      }
+    } catch (e) {}
+    window.addEventListener('pageshow', () => resize());
+    window.addEventListener('orientationchange', () => setTimeout(resize, 250));
 
     // assign heat (start week) for new accounts
     if (state.startWeek == null) { state.startWeek = currentWeek(); save(); }

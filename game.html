@@ -1109,7 +1109,7 @@ window.__lfErr=[];
 <script src="js/territory.js?v=652"></script>
 <script src="js/payments-v91.js?v=492"></script>
 <script src="js/game-v93.js?v=655"></script>
-<script src="js/ui-v94.js?v=656"></script>
+<script src="js/ui-v94.js?v=659"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
 <script src="js/fx-aaa.js?v=421"></script>
@@ -1129,7 +1129,7 @@ window.__lfErr=[];
 <script src="js/shipworks.js?v=431"></script>
 <script src="js/starforge.js?v=421"></script>
 <script src="js/pilot-ascension.js?v=646"></script>
-<script src="js/season-pass.js?v=656"></script>
+<script src="js/season-pass.js?v=660"></script>
 <script src="js/sim-pilots.js?v=421"></script>
 <script src="js/ranks-boards.js?v=597"></script>
 <script src="js/rank-rewards.js?v=421"></script>
@@ -1160,7 +1160,7 @@ window.__lfErr=[];
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 656;
+  window.LF_BUILD = 660;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1374,7 +1374,8 @@ window.__lfErr=[];
     function pascGate(){ try{ if(window.PASCEND&&PASCEND.gateLv) return PASCEND.gateLv()|0; }catch(e){} return LOCKS.pasc; }
     // Features that are BUILT but not launched. Each returns true once the
     // account is allowed to see it at all (see the beta codes in js/redeem.js).
-    const BETA={ tour:function(){ try{ return !!(window.GAME&&window.GAME.state&&window.GAME.state.tourBeta); }catch(e){ return false; } } };
+    // TOUR OF DUTY LAUNCHED (build 659) — on for everyone from Level 1, no code.
+    const BETA={ tour:function(){ return true; } };
     function sync(){ const L=lvl();
       let nextNeed=Infinity, lockedN=0;
       // TOUR OF DUTY — unclaimed rewards on the card, so a finished level is never

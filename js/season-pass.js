@@ -82,9 +82,9 @@
   // exactly 25 of them (12,560 earned vs 12,400 for level 125) — buying levels is
   // the only way past that, and now it keeps paying.
   //
-  // BUYING A LEVEL: 1,000 ◈ for a full 100 XP, PRORATED against progress already
-  // made — 40/100 into a level costs 600 ◈, not 1,000.
-  const LC_PER_XP = 10;
+  // BUYING A LEVEL: 3,000 ◈ for a full 100 XP, PRORATED against progress already
+  // made — 40/100 into a level costs 1,800 ◈, not 3,000.
+  const LC_PER_XP = 30;
 
   // THE TWO BOARDS ARE THE ONLY XP IN THE SEASON (636). Seasonal challenges are gone:
   // they were a third earning system with its own rules, they credited retroactively so
@@ -258,13 +258,13 @@
   // XP AWARDS — one funnel, so a source can never pay twice in a period.
   // `dq`/`wq` latch the day and week a board has already paid for.
   // =========================================================================
-  // ---- BETA GATE (re-armed build 656 — needs more testing before launch) ------
-  // Four doors all read this one flag: the Command card hides itself (game.html
-  // BETA.tour), the screen refuses to open (ui-v94 showScreen), the ship sheet's
-  // Tour button hides (ui-v94), and the level-up toast stays quiet (below).
-  // Admins open it with LF-TOUR-BETA-ACCESS (js/redeem.js). Season XP still
-  // accrues for everyone while hidden, so nobody arrives at launch behind.
-  function betaOn() { try { return !!(G() && G().state && G().state.tourBeta); } catch (e) { return false; } }
+  // ---- LAUNCHED (build 659) ---------------------------------------------------
+  // Every door that ever read the beta flag is open for everyone from Level 1.
+  // betaOn() stays exported so old callers can't break. NOTE ON ASCENSION: the
+  // Tour NEVER resets — 'tour' (xp, levels, claims, paid tracks) and 'tourBeta'
+  // are both in ASC_KEEP (game-v93.js), and the account merge unions them — so
+  // ascending, relogging or switching devices cannot touch season progress.
+  function betaOn() { return true; }
   function award(n, why) {
     const t = s(); if (!t || !live() || n <= 0) return 0;
     const before = level();
@@ -464,12 +464,25 @@
   const SHARD_POOL = () => (C().SHIPS || []).filter((sh) =>
     !sh.unreleased && !sh.celestial && !sh.alienTech && !sh.emberTech && !sh.event
     && sh.key !== 'aeternum' && (sh.tier == null || sh.tier >= 0));
+  // WEIGHTED BY LADDER POSITION — the pick used to be uniform, which made a
+  // Titan Sina shard exactly as common as a Frigate shard (players were pulling
+  // 3 Sina shards in ~15 crates). Weight now decays 18% per rung of the pool
+  // (config order = progression order), floored at 1.5: the first hulls carry
+  // ~100x the weight of the apex tail, so crates mostly finish early hulls and
+  // an apex shard is a real event (~0.3% a crate), not a fifth of every haul.
+  function shardWeights(pool) {
+    const w = pool.map((_, i) => Math.max(1.5, 100 * Math.pow(0.82, i)));
+    return { w, sum: w.reduce((a, b) => a + b, 0) };
+  }
   function openShardCrates(n) {
     const g = G(), pool = SHARD_POOL(), out = [];
+    const { w, sum } = shardWeights(pool);
     if (!pool.length) return [{ ic: '\u25c8', col: '#8fa3bd', text: n + ' shard' + (n === 1 ? '' : 's') }];
     g.state.shipParts = g.state.shipParts || {};
     for (let i = 0; i < n; i++) {
-      const sh = pool[(Math.random() * pool.length) | 0];
+      let r = Math.random() * sum, pi = 0;
+      while (pi < w.length - 1 && (r -= w[pi]) > 0) pi++;
+      const sh = pool[pi];
       const have = g.state.shipParts[sh.key] = (g.state.shipParts[sh.key] | 0) + 1;
       // THE SHIP'S OWN ART, not a diamond. A shard is meaningless without knowing
       // which hull it is toward, and the name alone makes 5 shards a wall of text.
@@ -543,8 +556,8 @@
 
   // ---- BUYING THE NEXT LEVEL ----------------------------------------------
   // Priced off the XP actually MISSING, so progress already earned is never
-  // charged for twice: 1,000 ◈ buys a whole level, 600 ◈ finishes one sitting at
-  // 40/100. Buying is exactly the same as earning it — the XP goes through
+  // charged for twice: 3,000 ◈ buys a whole level, 1,800 ◈ finishes one sitting
+  // at 40/100. Buying is exactly the same as earning it — the XP goes through
   // award(), so it can push you through several claim levels and into the
   // overtime stack like any other XP.
   function buyLevelCost() { return (XP_PER_LEVEL - intoLevel()) * LC_PER_XP; }

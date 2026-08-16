@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 656 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v229 · build 660 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v656`.
-**Login screen reads `BUILD 656`.**
+Supersedes v228. Service worker cache is `lootfleet-v660`.
+**Login screen reads `BUILD 660`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -13,7 +13,25 @@ Supersedes v228. Service worker cache is `lootfleet-v656`.
 
 Everything else is client-side. No reset, no save migration.
 
-Carries builds 583–656.
+Carries builds 583–660.
+
+### What changed in 660
+
+- **Shard crates are weighted by the ladder now.** The hull pick was uniform, so
+  an apex Titan Sina shard was as common as a Frigate shard. Weight decays 18%
+  per rung (floor 1.5): early hulls dominate the haul, an apex shard is ~0.3% a
+  crate.
+
+### What changed in 659
+
+- **TOUR OF DUTY IS LAUNCHED — for real this time.** All four beta doors are gone:
+  the Command card shows for everyone from Level 1 (no level lock), the screen
+  opens, its hulls buy, the toast speaks. No code needed; `LF-TOUR-BETA-ACCESS`
+  now redeems as a harmless no-op. Level price stands at 3,000 ◈, prorated.
+- **Tour progress is ascension-proof and merge-proof** (verified, not new code):
+  `tour` and `tourBeta` sit in ASC_KEEP so a Pilot Ascension carries the whole
+  pass across untouched, and the account merge unions xp/own/claim so no device
+  or relog can regress it.
 
 ### What changed in 656
 
@@ -81,8 +99,8 @@ Carries builds 583–656.
   total from the roster instead of the retired `+250%` (it is **+160%**), the
   Splinter's blurb quoted 10% for an 8% hull, and the Godshard no longer claims to
   double XP — it says +64%.
-- **TOUR OF DUTY — buy the level you are standing in.** 1,000 ◈ for a full level,
-  **prorated against progress already made**: at 40/100 XP the rest costs 600 ◈.
+- **TOUR OF DUTY — buy the level you are standing in.** 3,000 ◈ for a full level,
+  **prorated against progress already made**: at 40/100 XP the rest costs 1,800 ◈.
   Bought XP goes through the same award path as earned XP.
 - **TOUR OF DUTY — past 100 it is "100+" and the crates stack.** Levels 101–125
   were 25 ladder rows and then a hard stop, which capped a pilot who bought levels
@@ -132,24 +150,8 @@ Carries builds 583–656.
 
 ## ⚠ TOUR OF DUTY IS DARK IN THIS RELEASE
 
-The season pass is built, tested and shipped in this folder, but **no player can
-see or reach it.** Four doors, all reading `state.tourBeta`:
-
-| door | file |
-|---|---|
-| Command card is not rendered | `game.html` → `BETA.tour` |
-| `showScreen('tour')` refuses | `js/ui-v94.js` |
-| Its hulls read "not yet available" | `js/ui-v94.js` ship sheet |
-| Level-up toast stays quiet | `js/season-pass.js` → `betaOn()` |
-
-Admins open it by redeeming **`LF-TOUR-BETA-ACCESS`** in ⚙ Settings ▸ Coupon
-code. Repeatable, and the flag survives ascension and save merges.
-
-Season XP still accrues for everyone while it is hidden — deliberately, so
-nobody who plays through the beta window arrives at launch behind.
-
-**To launch it for everyone:** make `BETA.tour` return true in `game.html` and
-drop the three matching guards. The coupon can stay.
+The season pass is LIVE for every player from Level 1 as of build 660 — no gate,
+no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ---
 
@@ -157,10 +159,10 @@ drop the three matching guards. The coupon can stay.
 
 | Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `656` |
-| Update beacon | `version.json` → `build` | `656` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v656` |
-| Project root beacon | root `version.json` (source tree) | `656` |
+| Client constant | `game.html` → `window.LF_BUILD` | `660` |
+| Update beacon | `version.json` → `build` | `660` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v660` |
+| Project root beacon | root `version.json` (source tree) | `660` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1950,7 +1952,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 656**.
+1. Login screen reads **BUILD 660**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

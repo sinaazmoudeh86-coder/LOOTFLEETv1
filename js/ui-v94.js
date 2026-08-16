@@ -159,11 +159,7 @@
     // mail button or a bookmarked route. Tour of Duty is built and shipped but
     // hidden until an admin redeems the beta code in ⚙ Settings (js/redeem.js);
     // the Command card hides itself, and this is the door behind it.
-    if (name === 'tour') {
-      let on = false;
-      try { on = !!(G.state && G.state.tourBeta); } catch (e) {}
-      if (!on) return;
-    }
+    // Tour of Duty LAUNCHED (build 659) — the screen opens for everyone.
     screen = name;
     // A Pro offer that fired mid-combat waits here for a quiet screen.
     if (name !== 'battle') { try { window.PROOFFER && PROOFFER.flush(); } catch (e) {} }
@@ -2838,8 +2834,7 @@
       // in js/redeem.js). Until it opens, the hull reads exactly like any other
       // unreleased one — no route, no button pointing at a screen that refuses to
       // open — and switches back to the real Tour copy the moment it does.
-      let _tourOn = false;
-      try { _tourOn = !!(G.state && G.state.tourBeta); } catch (e) {}
+      const _tourOn = true;   // Tour of Duty LAUNCHED (build 659)
       if (_tourOn) {
         action = `<button class="ship-btn buy" data-go-tour="1">✦ Tour</button>`;
         lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Earned on the <b>Tour of Duty</b> ladder — <b>level ${ship.tour.lv}</b> of the <b>${ship.tour.track}</b> track. Never sold, and no blueprint.</span></div>`;

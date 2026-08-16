@@ -4,18 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#05070d">
-<title>Loot Fleet — Idle Space ARPG</title>
-<meta name="description" content="Loot Fleet is a free idle space-ARPG. Farm infinite loot, evolve your fleet from frigate to titan carrier, and conquer a living galaxy. Play in your browser at lootfleet.com.">
+<title>Loot Fleet — Free Idle Space ARPG in Your Browser</title>
+<meta name="description" content="Free idle space ARPG in your browser. Auto-battle endless zones, farm loot across 14 rarity tiers, launch fighter carriers, colonize moons, and conquer a 1,950-tile living galaxy against real players. No download — play free at lootfleet.com.">
+<link rel="canonical" href="https://lootfleet.com/">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Loot Fleet">
-<meta property="og:title" content="Loot Fleet — Idle Space ARPG">
-<meta property="og:description" content="Farm the galaxy, evolve your fleet, climb the leaderboard. Play free in your browser.">
+<meta property="og:title" content="Loot Fleet — Free Idle Space ARPG">
+<meta property="og:description" content="47 hulls, fighter carriers, moon colonies, PvP raids, and a living 1,950-tile galaxy. Play free in your browser — no download.">
 <meta property="og:url" content="https://lootfleet.com">
 <meta property="og:image" content="https://lootfleet.com/icon-512.png">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Loot Fleet — Free Idle Space ARPG">
+<meta name="twitter:description" content="47 hulls, fighter carriers, moon colonies, PvP raids, a living galaxy. Free in your browser.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"VideoGame","name":"Loot Fleet","url":"https://lootfleet.com/","description":"Free idle space ARPG in the browser: auto-battle endless zones, farm 14 rarity tiers of loot, evolve 47 hulls including fighter carriers, colonize moons, and conquer a living 1,950-tile galaxy against real players.","genre":["Idle","ARPG","Space","Incremental"],"gamePlatform":"Web browser","playMode":["SinglePlayer","MultiPlayer"],"applicationCategory":"Game","offers":{"@type":"Offer","price":"0","priceCurrency":"USD","availability":"https://schema.org/InStock"},"publisher":{"@type":"Organization","name":"Loot Fleet","url":"https://lootfleet.com/"}}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -25,7 +29,7 @@
     --line:#26324a; --line-2:#37475f;
     --gold:#f2b24b; --gold-2:#ffd07a; --cyan:#5fd1ff;
     --text:#eaf0fa; --muted:#93a2ba; --muted-2:#647189;
-    --c-common:#9aa7b8;--c-uncommon:#46d27a;--c-rare:#4fa6ff;--c-epic:#b87bff;--c-legendary:#ffa838;--c-mythic:#ff5168;--c-ancient:#23d8c6;--c-divine:#ffd450;--c-cosmic:#ff62d2;--c-void:#9a6bff;--c-eternal:#8e9dff;--c-primordial:#ffd070;
+    --c-common:#9aa7b8;--c-uncommon:#46d27a;--c-rare:#4fa6ff;--c-epic:#b87bff;--c-legendary:#ffa838;--c-mythic:#ff5168;--c-ancient:#23d8c6;--c-divine:#ffd450;--c-cosmic:#ff62d2;--c-void:#9a6bff;--c-eternal:#8e9dff;--c-primordial:#ffd070;--c-relic:#c061ff;--c-artifact:#ff2330;
     --disp:'Orbitron','Rajdhani',sans-serif; --ui:'Rajdhani','Segoe UI',sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -340,7 +344,7 @@
   .ships-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
   .ship-tile{position:relative;background:linear-gradient(180deg,#131c2b,#0e1521);border:1px solid var(--line);border-radius:14px;padding:14px 10px 12px;text-align:center;transition:transform .15s,border-color .15s,box-shadow .15s;}
   .ship-tile:hover{transform:translateY(-4px);border-color:var(--tc);box-shadow:0 16px 34px rgba(0,0,0,.45);}
-  .ship-tile img{width:88px;height:88px;object-fit:cover;border-radius:11px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));}
+  .ship-tile img{width:88px;height:88px;object-fit:contain;border-radius:11px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));}
   .ship-tile .tn{font-family:var(--disp);font-weight:700;font-size:12.5px;margin-top:9px;color:var(--text);letter-spacing:.01em;}
   .ship-tile .tt{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--tc);margin-top:3px;}
   .ship-tile .tnum{position:absolute;top:9px;left:11px;font-family:var(--disp);font-weight:900;font-size:13px;color:var(--tc);opacity:.55;}
@@ -531,7 +535,7 @@
       <div>
         <span class="eyebrow"><span class="pip"></span>Free · Browser · No download</span>
         <h1 class="hero-title"><span class="g">Farm the galaxy.</span><br><span class="a">Build the fleet.</span></h1>
-        <p class="hero-sub">An idle space-ARPG where the loot never stops. Auto-battle through endless zones, chase 11 tiers of gear, and evolve a single frigate into a titan carrier that conquers a living galaxy — even while you're away.</p>
+        <p class="hero-sub">An idle space-ARPG where the loot never stops. Auto-battle through endless zones, chase 14 rarity tiers of gear, launch fighter wings, and evolve a lone frigate into a carrier fleet that conquers a living galaxy — even while you're away.</p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="game.html">▸ Play free</a>
           <a class="btn btn-ghost" href="game.html">Log in</a>
@@ -610,7 +614,7 @@
               <div class="lt-row" style="--rc:#ffa838;--d:0s"><i class="lt-gem"></i><div class="lt-info"><b>Annihilator Array</b><span>LEGENDARY · Weapon</span></div><em>+38%</em></div>
               <div class="lt-row" style="--rc:#ff5168;--d:.55s"><i class="lt-gem"></i><div class="lt-info"><b>Bloodrage Core</b><span>MYTHIC · Hull · Life-steal</span></div><em>+61%</em></div>
               <div class="lt-row" style="--rc:#b87bff;--d:1.1s"><i class="lt-gem"></i><div class="lt-info"><b>Phase Coils</b><span>EPIC · Ammo · Multi-shot</span></div><em>+17%</em></div>
-              <div class="lt-row lt-new" style="--rc:#ffd070;--d:1.65s"><i class="lt-gem"></i><div class="lt-info"><b>Dawnforge Relic</b><span>PRIMORDIAL · Drone Bay</span></div><em>+214%</em></div>
+              <div class="lt-row lt-new" style="--rc:#ff2330;--d:1.65s"><i class="lt-gem"></i><div class="lt-info"><b>Worldrender Core</b><span>ARTIFACT · Drone Bay</span></div><em>+214%</em></div>
               <div class="sl-cta">✦ SHIP SCORE <b id="ltPow">398.1T</b> ↑</div>
             </div>
             <!-- 4 · MOON COLONY -->
@@ -661,7 +665,7 @@
   <!-- RARITY STRIP -->
   <section class="rarity">
     <div class="wrap">
-      <div class="rarity-head">Eleven rarity tiers — from Common to Primordial</div>
+      <div class="rarity-head">Fourteen rarity tiers — from Common to Artifact</div>
       <div class="chips" id="chips"></div>
     </div>
   </section>
@@ -670,9 +674,13 @@
   <section class="block" id="ships" style="padding-top:40px;">
     <div class="wrap">
       <div class="sec-eyebrow">Command the fleet</div>
-      <h2 class="sec-title">Twenty-two hulls to master</h2>
-      <p class="sec-lead">Evolve from a scrappy Frigate to the final-class Titan Sina — every hull adds weapons, plating, and drone bays. The endgame hulls can't even be bought with gold.</p>
+      <h2 class="sec-title">Forty-seven hulls to master</h2>
+      <p class="sec-lead">Evolve from a scrappy Frigate through fighter carriers and Dread-class monsters to the Celestial Corvus — every hull adds weapons, plating, and bays. The endgame hulls can't be bought with gold at all.</p>
       <div class="ships-grid" id="shipsGrid"></div>
+      <div class="sec-eyebrow" style="margin-top:44px;">Earned, never sold</div>
+      <h3 class="sec-title" style="font-size:clamp(20px,2.6vw,26px);">Incursion &amp; event hulls</h3>
+      <p class="sec-lead" style="margin-bottom:28px;">Twenty-one more hulls no shop carries — won from the Kaevith Incursion, the Ember Choir, Monolith sieges, and world events. Kaevith resonance lifts the whole fleet's XP, permanently.</p>
+      <div class="ships-grid" id="evtGrid"></div>
     </div>
   </section>
 
@@ -686,12 +694,12 @@
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l3 6 6 .9-4.5 4.3L18 20l-6-3-6 3 1.5-6.8L3 8.9 9 8z"/></svg></div>
           <h3>Infinite Loot</h3>
-          <p>Procedural gear across 12 glowing rarities and six slots, with rare life-steal and multi-shot rolls. The chase scales forever.</p>
+          <p>Procedural gear across 14 glowing rarities and six slots, with rare life-steal and multi-shot rolls. The chase scales forever.</p>
         </div>
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l7 4v6c0 4-3 7-7 10-4-3-7-6-7-10V6z"/><path d="M12 7v8M8.5 11h7"/></svg></div>
           <h3>Evolve Your Fleet</h3>
-          <p>Earn blueprints from zone bosses and grow from a nimble frigate to a drone-launching titan carrier — ten hulls, each with its own fit.</p>
+          <p>Earn blueprints from zone bosses and grow from a nimble frigate to a fighter-launching celestial carrier — 47 hulls, each with its own fit.</p>
         </div>
         <div class="feat">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4"/><ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(60 12 12)"/></svg></div>
@@ -728,6 +736,21 @@
           <h3>Galaxy Supply</h3>
           <p>Skip the RNG: buy the exact gear tier you want with farmed resources — every crate a guaranteed drop at your zone depth.</p>
         </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2 5h6l-5 4 2 6-5-3.6L7 18l2-6-5-4h6z"/></svg></div>
+          <h3>Fighter Carriers</h3>
+          <p>Carrier hulls launch autonomous fighter wings — five marques, from swarming Talons to siege-breaking Reapers — that pick their own targets while you fly.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h13l4-5-4-5H3l3 5z"/><path d="M8 21l2-4M14 21l2-4"/></svg></div>
+          <h3>Cargo Defense</h3>
+          <p>Escort a freighter by hand through ten minutes of collapsing rings and boarding swarms — the one fight autopilot can't fly for you.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l4 7-4 13-4-13z"/><path d="M4 9l8 0M12 9l8 0" stroke-linecap="round"/></svg></div>
+          <h3>The Kaevith Incursion</h3>
+          <p>Alien fleets invade your zones. Clear them for a shot at five crystal hulls whose resonance lifts the whole fleet's XP — permanently, no cap.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -739,7 +762,7 @@
       <h2 class="sec-title">Drop in, gear up, push deeper</h2>
       <div class="steps">
         <div class="step"><h3>Auto-battle</h3><p>Deploy to a zone and your fleet fights on its own. Tune speed up to 10× and let the kills — and loot — pour in.</p></div>
-        <div class="step"><h3>Equip the best</h3><p>Auto-equip upgrades, auto-sell the junk, and watch your Hero Power climb. Bigger numbers, deeper zones.</p></div>
+        <div class="step"><h3>Equip the best</h3><p>Auto-equip upgrades, auto-sell the junk, and watch your Ship Score climb. Bigger numbers, deeper zones.</p></div>
         <div class="step"><h3>Push the frontier</h3><p>Beat bosses for blueprints, warp to new systems, and chase the rarities that only the deepest zones can drop.</p></div>
       </div>
     </div>
@@ -779,7 +802,19 @@
     <a href="guides/ships-and-fleet.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
       <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">Ships</div>
       <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Hull Tier List &amp; Fleet Building</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5">Frigate to Mothership, plus 5-ship fleets.</div></a>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Frigate to Celestial Corvus, plus 5-ship fleets.</div></a>
+    <a href="guides/loot-rarity.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">Loot</div>
+      <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Loot &amp; Rarity — All 14 Tiers Explained</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Drop rates, affixes, and what to keep.</div></a>
+    <a href="guides/weapon-classes.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">Combat</div>
+      <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Weapon Classes &amp; Loadouts</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Every weapon class, slot by slot, and when to fly each.</div></a>
+    <a href="guides/zones-and-citadels.html" style="display:block;background:var(--panel,#131a28);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--gold);text-transform:uppercase">Progression</div>
+      <div style="font-family:var(--disp);font-size:15px;font-weight:700;margin:7px 0 7px;color:#fff;line-height:1.35">Zones, Bosses &amp; Citadels</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Push deeper, farm smarter, hold ground.</div></a>
   </div>
   <p style="margin-top:16px"><a href="guides.html" style="color:var(--cyan,#5fd1ff);font-weight:700">All guides →</a></p>
 </section>
@@ -808,11 +843,11 @@
 <script>
   // rarity chips
   (function(){
-    const R=[['Common','--c-common'],['Uncommon','--c-uncommon'],['Rare','--c-rare'],['Epic','--c-epic'],['Legendary','--c-legendary'],['Mythic','--c-mythic'],['Ancient','--c-ancient'],['Divine','--c-divine'],['Cosmic','--c-cosmic'],['Void','--c-void'],['Eternal','--c-eternal'],['Primordial','--c-primordial']];
+    const R=[['Common','--c-common'],['Uncommon','--c-uncommon'],['Rare','--c-rare'],['Epic','--c-epic'],['Legendary','--c-legendary'],['Mythic','--c-mythic'],['Ancient','--c-ancient'],['Divine','--c-divine'],['Cosmic','--c-cosmic'],['Void','--c-void'],['Eternal','--c-eternal'],['Primordial','--c-primordial'],['Relic','--c-relic'],['Artifact','--c-artifact']];
     const root=getComputedStyle(document.documentElement);
     const el=document.getElementById('chips');
     el.innerHTML=R.map(([n,v])=>{const c=root.getPropertyValue(v).trim();return '<span class="chip" style="color:'+c+'"><span class="d" style="background:'+c+'"></span>'+n+'</span>';}).join('');
-    // the FULL hull roster — [img key, name, tag, tier color]
+    // the MAIN LADDER — [img key, name, tag, tier color] (kept in step with js/config-v2.js)
     const SHP=[
       ['frigate','Frigate','Tier 1','#7ed957'],
       ['interceptor','Interceptor','Tier 2','#4db8ff'],
@@ -826,6 +861,10 @@
       ['supercarrier','Super Carrier','Tier 9','#c479ff'],
       ['titan','Titan Carrier','Flagship','#5fb0ff'],
       ['mothership','Mothership','Faction Vessel','#ffd450'],
+      ['vanguard','Vanguard','Fighter Escort','#7db8e8'],
+      ['praetorian','Dread Praetorian','Fighter Carrier','#e06bff'],
+      ['titanaquila','Titan Aquila','Titan Fighter Carrier','#5fb0ff'],
+      ['corvus','Celestial Corvus','Celestial Carrier','#ffd450'],
       ['oblivionspear','Oblivion Spear','Oblivion T1','#ff62d2'],
       ['oblivionspearalpha','Oblivion Spear Alpha','Oblivion Alpha','#9a6bff'],
       ['oblivionfinal','Oblivion Final','Final Hull','#46d27a'],
@@ -837,8 +876,34 @@
       ['dread6','Dread Omega','Dread Omega','#ff3034'],
       ['titansina','Titan Sina','Final Class','#f4f7ff']
     ];
+    const EVT=[
+      ['xen1','Kaevith Splinter','Kaevith I','#b87bff'],
+      ['xen2','Kaevith Shard','Kaevith II','#b87bff'],
+      ['xen3','Kaevith Glaive','Kaevith III','#b87bff'],
+      ['xen4','Kaevith Sovereign','Kaevith IV','#b87bff'],
+      ['xen5','Kaevith Godshard','Kaevith V','#b87bff'],
+      ['emb1','Ember Mote','Ember Choir I','#ff8a5c'],
+      ['emb2','Cinder Acolyte','Ember Choir II','#ff8a5c'],
+      ['emb3','Ashen Cantor','Ember Choir III','#ff8a5c'],
+      ['emb4','Molten Herald','Ember Choir IV','#ff8a5c'],
+      ['emb5','Choirmaster Vhorn','Ember Choir V','#ff8a5c'],
+      ['monolith1','Monolith Shard','Monolith Siege I','#8e9dff'],
+      ['monolith2','Monolith Bastion','Monolith Siege II','#8e9dff'],
+      ['monolith3','Monolith Siegebreaker','Monolith Siege III','#8e9dff'],
+      ['monolith4','Monolith Apex','Monolith Siege IV','#8e9dff'],
+      ['aeternum','The Aeternum','World Event','#ffd450'],
+      ['eternum','Eternum','World Event','#ffd450'],
+      ['chromafang','Chroma Fang','Chroma Line','#ff62d2'],
+      ['chromaregent','Chroma Regent','Chroma Line','#ff62d2'],
+      ['voidmaw','Voidmaw','Void Event','#9a6bff'],
+      ['veridian','Veridian','Event Hull','#46d27a'],
+      ['frostyfrost','FrostyFrost','Community Hull','#5fd1ff']
+    ];
     const sg=document.getElementById('shipsGrid');
-    if(sg) sg.innerHTML=SHP.map((s,i)=>'<div class="ship-tile" style="--tc:'+s[3]+'"><span class="tnum">'+(i+1)+'</span><img src="ships/ship-'+s[0]+'.png" alt="'+s[1]+'" loading="lazy"><div class="tn">'+s[1]+'</div><div class="tt">'+s[2]+'</div></div>').join('');
+    const tile=(s,i)=>'<div class="ship-tile" style="--tc:'+s[3]+'"><span class="tnum">'+(i+1)+'</span><img src="ships/ship-'+s[0]+'.png" alt="'+s[1]+' — '+s[2]+'" loading="lazy"><div class="tn">'+s[1]+'</div><div class="tt">'+s[2]+'</div></div>';
+    if(sg) sg.innerHTML=SHP.map(tile).join('');
+    const eg=document.getElementById('evtGrid');
+    if(eg) eg.innerHTML=EVT.map(tile).join('');
     document.getElementById('yr').textContent=new Date().getFullYear();
   })();
 
@@ -913,7 +978,7 @@
     var cap=document.getElementById('devCapTxt'), dotsEl=document.getElementById('devDots');
     var CAPS={Battle:'Auto-battle bullet-hell zones — loot pours in',
               Galaxy:'Conquer a living hex galaxy in the Turf War',
-              Loot:'Endless drops across 12 rarity tiers',
+              Loot:'Endless drops across 14 rarity tiers',
               Moon:'Your moon colony mines 24/7 — defend it',
               Rank:'Climb the weekly Fleet Rank ladder'};
     var idx=0, timer=null;

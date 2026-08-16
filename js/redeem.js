@@ -135,7 +135,7 @@
     tourbeta: { name: 'TOUR OF DUTY — beta access', repeatable: true, apply(g) {
       g.state.tourBeta = 1;
       try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
-      return 'The Long Watch is open — find it on the Command screen';
+      return 'Tour of Duty is already live for everyone — no code needed';
     } },
   };
   async function sha256(s) {

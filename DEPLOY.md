@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 654 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v229 · build 656 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v654`.
-**Login screen reads `BUILD 654`.**
+Supersedes v228. Service worker cache is `lootfleet-v656`.
+**Login screen reads `BUILD 656`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -13,7 +13,28 @@ Supersedes v228. Service worker cache is `lootfleet-v654`.
 
 Everything else is client-side. No reset, no save migration.
 
-Carries builds 583–654.
+Carries builds 583–656.
+
+### What changed in 656
+
+- **TOUR OF DUTY IS BACK BEHIND THE BETA GATE** — it was launched in 655 and
+  re-armed the same day for more testing. All four doors read `state.tourBeta`
+  again; `LF-TOUR-BETA-ACCESS` opens them. Season XP still accrues for everyone
+  while hidden, so nobody arrives at launch behind.
+- **TOUR.setXp(n) console repair + XP correction epoch.** Hard-sets season XP,
+  stamps `tour.xf`, drops claim marks above the new level, clamps the overtime
+  counter, saves and pushes. The merge honours the NEWER `xf` outright (xp, ov,
+  claims), so a downward correction survives conflicted logins instead of the
+  old "higher xp wins" rule resurrecting leaked test XP.
+- **RENDER LOD GOVERNOR — the ×10 cargo-run slideshow.** Three levels driven by
+  smoothed frame time (0 full · 1 trimmed · 2 survival), one step per 0.8s so it
+  never flaps. What each level sheds, in cost order: the **full-canvas CSS
+  grade** (saturate/contrast/brightness recomposited every frame at device
+  resolution — the biggest fixed cost on the screen), the wide under-pass stroke
+  of every projectile trail, then at survival: single-stroke trails, no bloom
+  halos, no lightning shadowBlur, crit-only floats, and the vignette overlay.
+  Float spawn cadence and caps tighten under load. Everything walks back up the
+  moment frames recover. The simulation is never touched — only paint.
 
 ### What changed in 654
 
@@ -136,10 +157,10 @@ drop the three matching guards. The coupon can stay.
 
 | Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `654` |
-| Update beacon | `version.json` → `build` | `654` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v654` |
-| Project root beacon | root `version.json` (source tree) | `654` |
+| Client constant | `game.html` → `window.LF_BUILD` | `656` |
+| Update beacon | `version.json` → `build` | `656` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v656` |
+| Project root beacon | root `version.json` (source tree) | `656` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1929,7 +1950,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 654**.
+1. Login screen reads **BUILD 656**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

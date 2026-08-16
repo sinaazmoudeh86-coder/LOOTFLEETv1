@@ -683,11 +683,28 @@
     // stale copy can neither un-buy Admiralty nor re-arm a claimed reward.
     if (other.tour && (!base.tour || (other.tour.s | 0) === (base.tour.s | 0))) {
       base.tour = base.tour || { s: other.tour.s | 0, xp: 0, own: {}, claim: {}, dq: -1, wq: -1, settled: 0 };
-      base.tour.xp = Math.max(base.tour.xp | 0, other.tour.xp | 0);
+      // XP CORRECTION EPOCH (`xf`). "XP takes the higher value" makes a DOWNWARD
+      // repair impossible: TOUR.setXp() lowers one copy and the next conflicted
+      // login merges the old higher figure straight back. A repair stamps `xf`
+      // (ms clock); the copy with the NEWER stamp owns xp, the overtime counter
+      // and the claim map OUTRIGHT — that is the entire point of the repair —
+      // and equal stamps (the normal case: both 0) keep the old max/union rules.
+      const bf = base.tour.xf || 0, of = other.tour.xf || 0;
+      if (of > bf) {
+        // the other copy carries a newer repair: adopt its xp/ov/claims outright
+        base.tour.xp = other.tour.xp | 0; base.tour.ov = other.tour.ov | 0;
+        base.tour.claim = Object.assign({}, other.tour.claim || {}); base.tour.xf = of;
+      } else if (bf === of) {
+        base.tour.xp = Math.max(base.tour.xp | 0, other.tour.xp | 0);
+        base.tour.ov = Math.max(base.tour.ov | 0, other.tour.ov | 0);
+      }
+      // bf > of: base holds the repair — other's stale xp/ov/claims are ignored
       base.tour.settled = Math.max(base.tour.settled | 0, other.tour.settled | 0);
       base.tour.dq = Math.max(base.tour.dq | 0, other.tour.dq | 0);
       base.tour.wq = Math.max(base.tour.wq | 0, other.tour.wq | 0);
-      ['own', 'claim'].forEach((f) => {
+      // own (paid tracks) always unions; claim only merges between EQUAL repair
+      // epochs — across epochs the newer repair owns the claim map (see above)
+      (bf === of ? ['own', 'claim'] : ['own']).forEach((f) => {
         if (!other.tour[f]) return;
         base.tour[f] = base.tour[f] || {};
         for (const k in other.tour[f]) if (!base.tour[f][k]) base.tour[f][k] = other.tour[f][k];

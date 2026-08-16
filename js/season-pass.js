@@ -258,11 +258,12 @@
   // XP AWARDS — one funnel, so a source can never pay twice in a period.
   // `dq`/`wq` latch the day and week a board has already paid for.
   // =========================================================================
-  // ---- BETA GATE ------------------------------------------------------------
-  // Tour of Duty ships in the build but stays dark until an admin redeems the
-  // beta code in ⚙ Settings (see `tourbeta` in js/redeem.js). Three doors, all
-  // reading this one flag: the Command card hides itself (game.html), the screen
-  // refuses to open (ui-v94 showScreen), and the level-up toast stays quiet.
+  // ---- BETA GATE (re-armed build 656 — needs more testing before launch) ------
+  // Four doors all read this one flag: the Command card hides itself (game.html
+  // BETA.tour), the screen refuses to open (ui-v94 showScreen), the ship sheet's
+  // Tour button hides (ui-v94), and the level-up toast stays quiet (below).
+  // Admins open it with LF-TOUR-BETA-ACCESS (js/redeem.js). Season XP still
+  // accrues for everyone while hidden, so nobody arrives at launch behind.
   function betaOn() { try { return !!(G() && G().state && G().state.tourBeta); } catch (e) { return false; } }
   function award(n, why) {
     const t = s(); if (!t || !live() || n <= 0) return 0;
@@ -547,6 +548,25 @@
   // award(), so it can push you through several claim levels and into the
   // overtime stack like any other XP.
   function buyLevelCost() { return (XP_PER_LEVEL - intoLevel()) * LC_PER_XP; }
+  // ---- ADMIN REPAIR (console: TOUR.setXp(n)) --------------------------------
+  // Hard-sets season XP and stamps the correction epoch `xf` — without the stamp
+  // a DOWNWARD repair cannot survive: the merge rule takes the higher xp, so the
+  // old figure returns on the next conflicted login (account.js honours xf).
+  // Drops claim marks above the new level and clamps the overtime counter so
+  // nothing stays claimed or pre-opened for levels no longer reached, then saves
+  // and pushes so the cloud copy is corrected immediately.
+  function setXp(n) {
+    const t = s(); if (!t) return false;
+    t.xp = Math.max(0, Math.round(+n || 0));
+    t.xf = Date.now();
+    const lv = level();
+    if ((t.ov | 0) > Math.max(0, lv - MAX_LEVEL)) t.ov = Math.max(0, lv - MAX_LEVEL);
+    Object.keys(t.claim || {}).forEach((k) => { if ((parseInt(k, 10) || 0) > lv) delete t.claim[k]; });
+    try { G().save(); } catch (e) {}
+    try { if (window.ACCOUNT && window.ACCOUNT.publishNow) window.ACCOUNT.publishNow(); } catch (e) {}
+    try { render(); } catch (e) {}
+    return { xp: t.xp, level: lv, over: overReached() };
+  }
   function buyLevel() {
     const t = s(), g = G(); if (!t) return { ok: false };
     if (!live()) return { ok: false, reason: 'ended' };
@@ -605,7 +625,7 @@
   }
 
   window.TOUR = {
-    render, s, level, xp, intoLevel, owns, buy, claim, claimAll, pendingCount, pace, betaOn,
+    render, s, level, xp, intoLevel, owns, buy, claim, claimAll, pendingCount, pace, betaOn, setXp,
     buyLevel, buyLevelCost, claimOver, overPending, overReached,
     dailyDone, weeklyDone, sweepMissions, award, settle,
     TOUR_DAILY, TOUR_WEEKLY, XP_TOUR_DAILY, XP_TOUR_WEEKLY, missionProgress, boardDone, untilReset,

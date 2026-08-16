@@ -1591,7 +1591,7 @@
     // window crit; the final chunk always flushes on the killing blow.
     e._fbSum = (e._fbSum || 0) + _dmg;
     if (p.crit) e._fbCrit = true;
-    if ((killed || rt.time - (e._fbT || 0) >= 0.25) && rt.floats.length < 22) {
+    if ((killed || rt.time - (e._fbT || 0) >= (rt.lod ? 0.45 : 0.25)) && rt.floats.length < (rt.lod ? 12 : 22)) {
       // rt.dmgShow lets an event render hits in ITS units. The alliance raid
       // transmits in POWER units, not raw combat damage — without this the
       // player watches 300T crits fly off and is then told the whole run
@@ -2301,6 +2301,20 @@
     // three passes: slightly coarser motion, but the sim keeps real time.
     rt._fdt = rt._fdt ? rt._fdt * 0.9 + dt * 0.1 : dt;
     const slow = rt._fdt > 0.028;                    // sustained sub-30fps
+    // ---- RENDER LOD GOVERNOR -----------------------------------------------
+    // Three levels, driven by the same smoothed frame time the sub-stepper uses:
+    //   0 full fat · 1 trimmed (no CSS grade, thin trails, fewer floats)
+    //   2 survival (single-stroke trails, no bloom, crit floats only).
+    // One step per 0.8s so it never flaps; recovery walks back the same way.
+    // Spending the frame budget on the SIMULATION is the point — at x10 in a
+    // wave-36 cargo run the sim is the game, the bloom is not.
+    if (!rt._lodT || rt.time - rt._lodT > 0.8) {
+      rt._lodT = rt.time;
+      const ms = (rt._fdt || 0.016) * 1000, cur = rt.lod | 0;
+      if (ms > 34) rt.lod = Math.min(2, cur + 1);
+      else if (ms > 24) rt.lod = Math.min(2, Math.max(1, cur));
+      else if (ms < 17 && cur > 0) rt.lod = cur - 1;
+    }
     const total = dt * Math.max(1, state.gameSpeed | 0);
     // A CARGO RUN IS THE HEAVIEST FRAME IN THE GAME and it is flown by hand, so
     // input latency matters more than sub-step smoothness: three passes maximum,
@@ -2826,6 +2840,20 @@
                       || Math.abs(rt.canvas.width - Math.round(_ow * _dpr)) > 2
                       || Math.abs(rt.canvas.height - Math.round(_oh * _dpr)) > 2)) resize();
     }
+    if (R.setLOD) R.setLOD(rt.lod | 0);
+    // THE CSS GRADE IS THE SINGLE BIGGEST FIXED COST ON THIS SCREEN: a
+    // saturate/contrast/brightness filter over the full canvas, recomposited by
+    // the browser EVERY frame at device resolution, win or lose. At LOD 1+ the
+    // inline style overrides it to none; the deep-space vignette overlay
+    // (#arena-wrap::after) follows at LOD 2.
+    if ((rt.lod | 0) !== rt._lodCss) {
+      rt._lodCss = rt.lod | 0;
+      try {
+        rt.canvas.style.filter = rt._lodCss ? 'none' : '';
+        const aw = document.getElementById('arena-wrap');
+        if (aw) aw.classList.toggle('perf-lean', rt._lodCss >= 2);
+      } catch (e) {}
+    }
     const { ctx, w, h } = rt;
     // OPAQUE BACKDROP, NOT clearRect. A transparent canvas shows whatever is
     // behind it, and on iOS that is the white page — so any frame that failed to
@@ -2880,7 +2908,7 @@
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       for (const b of rt.bolts) {
         const a = Math.pow(Math.max(0, b.t / b.life), 0.6);   // slow perceived fade — bolts linger
-        ctx.shadowColor = '#7fd6ff'; ctx.shadowBlur = 22 * a;
+        ctx.shadowColor = '#7fd6ff'; ctx.shadowBlur = rt.lod ? 0 : 22 * a;   // shadowBlur is the priciest stroke a 2D context draws
         ctx.strokeStyle = 'rgba(110,200,255,' + (0.75 * a) + ')'; ctx.lineWidth = b.w * 2.1;
         ctx.beginPath(); ctx.moveTo(b.pts[0][0], b.pts[0][1]);
         for (let i = 1; i < b.pts.length; i++) ctx.lineTo(b.pts[i][0], b.pts[i][1]);

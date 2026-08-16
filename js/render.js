@@ -590,6 +590,12 @@
   const SINA_COLS = ['255,80,80','255,170,60','255,235,90','120,255,130','80,210,255','150,130,255','255,110,235'];
   // hulls whose cannons fire full-rainbow streaks (Titan Sina + the Chroma line)
   const RAINBOW_TRACER = { titansina: 1, chromafang: 1, chromaregent: 1 };
+  // ---- RENDER LOD (set per frame by the game loop's governor) --------------
+  // 0 full · 1 trimmed · 2 survival. The projectile pass is the hottest loop in
+  // the file — up to 240 bolts x (trail segments x 2 strokes + bloom) — so this
+  // is where the levels bite hardest.
+  let _LOD = 0;
+  function setLOD(v) { _LOD = v | 0; }
   function drawArrow(ctx, p) {
     const wt = p.drone ? 'drone' : (WSTYLE[p.wtype] ? p.wtype : 'gatling');
     const st = WSTYLE[wt];
@@ -602,13 +608,24 @@
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
-    for (let i = 1; i < p.trail.length; i++) {
+    if (_LOD >= 2) {
+      // SURVIVAL — the whole trail is ONE stroke tail→head. Reads as a tracer,
+      // costs 1/14th of the full pass.
+      const n = p.trail.length;
+      if (n > 1) {
+        ctx.strokeStyle = `rgba(${tCol},0.45)`;
+        ctx.lineWidth = (p.crit ? 3.2 : st.trailW) + 0.6;
+        ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y); ctx.lineTo(p.trail[n-1].x, p.trail[n-1].y); ctx.stroke();
+      }
+    } else for (let i = 1; i < p.trail.length; i++) {
       const k = i / p.trail.length;
       const a = k * (p.crit ? 0.85 : (wt === 'missile' ? 0.5 : 0.7));
-      // wide soft glow under-pass
-      ctx.strokeStyle = `rgba(${tCol},${a * 0.35})`;
-      ctx.lineWidth = (p.crit ? 8 : st.trailW * 2.4) * k + 1.5;
-      ctx.beginPath(); ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
+      if (!_LOD) {
+        // wide soft glow under-pass — the first thing shed under load
+        ctx.strokeStyle = `rgba(${tCol},${a * 0.35})`;
+        ctx.lineWidth = (p.crit ? 8 : st.trailW * 2.4) * k + 1.5;
+        ctx.beginPath(); ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y); ctx.stroke();
+      }
       // bright core
       ctx.strokeStyle = `rgba(${tCol},${a})`;
       ctx.lineWidth = (p.crit ? 3.6 : st.trailW) * k + 0.6;
@@ -618,9 +635,12 @@
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
     const cs = (p.crit ? 1.45 : 1) * 1.6;            // bigger, beefier shots
     // additive bloom halo around every bolt head
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5;
-    ctx.fillStyle = 'rgba(' + tCol + ',1)';
-    ctx.beginPath(); ctx.arc(0, 0, 6 * cs, 0, 7); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    if (_LOD < 2) {
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = 'rgba(' + tCol + ',1)';
+      ctx.beginPath(); ctx.arc(0, 0, 6 * cs, 0, 7); ctx.fill();
+    }
     ctx.globalAlpha = 0.85; ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(0, 0, 2.2 * cs, 0, 7); ctx.fill(); ctx.restore();
     // (all projectile styles below use layered alpha shapes — NO shadowBlur,
@@ -988,6 +1008,8 @@
     ctx.globalAlpha = 1;
   }
   function drawFloat(ctx, f) {
+    // survival LOD: the small routine numbers go quiet, crits and banners stay
+    if (_LOD >= 2 && !f.crit && (f.size || 0) < 20) return;
     const a = Math.max(0, f.life / f.maxLife);
     ctx.globalAlpha = a;
     setFont(ctx, '800 ' + f.size + 'px Rajdhani, sans-serif'); ctx.textAlign = 'center'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
@@ -1761,6 +1783,7 @@
   }
 
   window.RENDER = {
+    setLOD,
     drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawParticleGlow, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon, skinnedShip, drawCosmeticAura,
     gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES, shipScaleOf,
   };

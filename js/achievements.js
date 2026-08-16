@@ -17,17 +17,23 @@
   const fmt = (n) => { try { return Gm().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n) + ''; } };
 
   // ---- 10 GRADES (each = 10% of a chain's ranks) + LC paid per rank ---------
+
+  // ---- LOOTCOIN PAYOUT PASS · Aug 2026 -------------------------------------
+  // Every LootCoin REWARD in the game was halved in one pass (build 614). Badge-grade payouts halved. BRONZE stays at 1 — it is
+  // already the floor and a 0 would read as a broken reward.
+  // Prices, costs and pack sizes were NOT touched — only what the game HANDS OUT.
+  // ---------------------------------------------------------------------------
   const GRADES = [
     { name: 'BRONZE',      col: '#cd8a4a', lc: 1 },
-    { name: 'STEEL',       col: '#8fa2b8', lc: 3 },
-    { name: 'SILVER',      col: '#dbe4ef', lc: 6 },
-    { name: 'GOLD',        col: '#ffd24d', lc: 12 },
-    { name: 'PLATINUM',    col: '#a8ecff', lc: 25 },
-    { name: 'DIAMOND',     col: '#6fd2ff', lc: 50 },
-    { name: 'MASTER',      col: '#b08cff', lc: 100 },
-    { name: 'GRANDMASTER', col: '#ff8ad0', lc: 200 },
-    { name: 'CELESTIAL',   col: '#c77bff', lc: 400 },
-    { name: 'TITAN',       col: '#ff5a68', lc: 800 },
+    { name: 'STEEL',       col: '#8fa2b8', lc: 2 },
+    { name: 'SILVER',      col: '#dbe4ef', lc: 3 },
+    { name: 'GOLD',        col: '#ffd24d', lc: 6 },
+    { name: 'PLATINUM',    col: '#a8ecff', lc: 13 },
+    { name: 'DIAMOND',     col: '#6fd2ff', lc: 25 },
+    { name: 'MASTER',      col: '#b08cff', lc: 50 },
+    { name: 'GRANDMASTER', col: '#ff8ad0', lc: 100 },
+    { name: 'CELESTIAL',   col: '#c77bff', lc: 200 },
+    { name: 'TITAN',       col: '#ff5a68', lc: 400 },
   ];
 
   // ---- lifetime stat readers ------------------------------------------------

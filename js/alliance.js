@@ -52,13 +52,13 @@
   ];
   // ---- weekly ops: 3 seeded missions from live save counters ------------------
   const OPS = [
-    { id: 'k1', r: 'common', ic: '☠', txt: 'Destroy {N} enemies',            n: 1200,  m: 'kills',  pts: 10, lc: 20 },
-    { id: 'k2', r: 'rare',   ic: '☠', txt: 'Destroy {N} enemies',            n: 6000,  m: 'kills',  pts: 25, lc: 50 },
-    { id: 'k3', r: 'epic',   ic: '☠', txt: 'Destroy {N} enemies',            n: 18000, m: 'kills',  pts: 60, lc: 120 },
-    { id: 'w1', r: 'common', ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 2,     m: 'waves',  pts: 10, lc: 20 },
-    { id: 'w2', r: 'rare',   ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 6,     m: 'waves',  pts: 25, lc: 50 },
-    { id: 'c1', r: 'rare',   ic: '⛏', txt: 'Add {N} colony structure levels', n: 4,    m: 'colony', pts: 25, lc: 50 },
-    { id: 'z1', r: 'epic',   ic: '▲', txt: 'Unlock {N} new zones',           n: 2,     m: 'zones',  pts: 60, lc: 120 },
+    { id: 'k1', r: 'common', ic: '☠', txt: 'Destroy {N} enemies',            n: 1200,  m: 'kills',  pts: 10, lc: 10 },
+    { id: 'k2', r: 'rare',   ic: '☠', txt: 'Destroy {N} enemies',            n: 6000,  m: 'kills',  pts: 25, lc: 25 },
+    { id: 'k3', r: 'epic',   ic: '☠', txt: 'Destroy {N} enemies',            n: 18000, m: 'kills',  pts: 60, lc: 60 },
+    { id: 'w1', r: 'common', ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 2,     m: 'waves',  pts: 10, lc: 10 },
+    { id: 'w2', r: 'rare',   ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 6,     m: 'waves',  pts: 25, lc: 25 },
+    { id: 'c1', r: 'rare',   ic: '⛏', txt: 'Add {N} colony structure levels', n: 4,    m: 'colony', pts: 25, lc: 25 },
+    { id: 'z1', r: 'epic',   ic: '▲', txt: 'Unlock {N} new zones',           n: 2,     m: 'zones',  pts: 60, lc: 60 },
   ];
   const wkKey = () => { const d = new Date(); const t = new Date(d.getFullYear(), 0, 1); return d.getFullYear() + '-' + Math.ceil(((d - t) / 864e5 + t.getDay() + 1) / 7); };
   // RANK LADDER — 'officer' is the legacy name for elder (pre-migration rows)

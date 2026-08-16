@@ -1,7 +1,7 @@
 /* =============================================================================
    pilot-ascension.js — LOOTFLEET · PILOT ASCENSION (prestige)
    -----------------------------------------------------------------------------
-   The endless loop. At half the level cap the pilot may ascend: the account
+   The endless loop. At the level cap the pilot may ascend: the account
    resets to Level 1 in exchange for PERMANENT account-wide power.
 
      • ASCENSION POINTS are earned from the run you're giving up — pilot level is
@@ -11,8 +11,9 @@
      • THE WHOLE FLEET is carried across — every hull you own, and everything the
        SHIPYARD built into it: upgrade levels AND each hull's SHIP ASCENSION
        (module tiers + stars). What the pilot was CARRYING — fitted equipment,
-       cargo, Starforge tempers — is surrendered. You pick the flagship you fly
-       out in.
+       cargo, Starforge tempers — is surrendered. Gold and Galaxy Resources are
+       NOT: the wallet and the territory income ride across (Aug 2026). You pick
+       the flagship you fly out in.
      • ASCENSION STARS (one per ascension) sit next to the pilot name and gate
        the three ASCENSION-EXCLUSIVE loot tiers — Ascendant (★1), Celestial
        (★20), Paragon (★50). Those tiers cannot drop for an un-ascended pilot at
@@ -35,19 +36,108 @@
   // when it's there so the two can never drift.
   const CAP_BASE = (() => { try { return C().LEVEL_CAP_BASE || 150; } catch (e) { return 150; } })();
   const CAP_STEP = (() => { try { return C().LEVEL_CAP_PER_STAR || 50; } catch (e) { return 50; } })();
-  // THE GATE IS HALF THE LEVEL CAP. The cap is 150 +50 per star, so the gate
-  // walks up with it: 75 · 100 · 125 · 150 · 175… A flat Level 100 shipped in 505
-  // and is reverted here. A fixed number does not mean a fixed ASK: at ★0 it made
-  // the pilot climb two thirds of their 150 ceiling, while a ★5 pilot cleared it a
-  // quarter of the way up a 400 ceiling — the same requirement got softer every
-  // star until ascending was something you passed on the way to somewhere else.
-  // Half the cap states one rule that reads the same in every run: climb to the
-  // middle of your ceiling, then choose. Kept as a function so the whole game
-  // reads the gate from one place.
+  // THE GATE IS THE LEVEL CAP (Aug 2026). The cap is 150 +50 per star, so the gate
+  // walks up with it: 150 · 200 · 250 · 300… Half the cap shipped before this and
+  // is reverted here. Ascending mid-run meant the last half of every ceiling was
+  // dead ground — XP you could still earn but had no reason to, because the payout
+  // for banking it was smaller than the payout for starting over. The cap states
+  // one rule with no dead ground in it: finish the run, then choose. It also lines
+  // the gate up with the wall the loop exists to break — at the cap XP stops
+  // accruing, and that is exactly the moment ascension opens. Kept as a function
+  // so the whole game reads the gate from one place.
   function capLv() { try { return C().levelCap(); } catch (e) { return CAP_BASE + CAP_STEP * stars(); } }
-  function gateLv() { return Math.max(1, Math.round(capLv() / 2)); }
+  function gateLv() { return Math.max(1, capLv() | 0); }
   const PT_MULT = 10;   // ascension point payout multiplier (see preview())
   const MAX_RANK = 25;
+
+  // ===========================================================================
+  // THE ASCENSION STAR CAP — a weekly ceiling, driven purely by the clock.
+  //
+  //     cap = 10 + 1 × (whole weeks since Mon 10 Aug 2026, 00:00 UTC)
+  //
+  // NO SERVER, NO CONFIG PUSH, NO DEV ACTION, EVER. It is arithmetic on
+  // Date.now(), so it raises itself every Monday for as long as the game exists
+  // and keeps raising if nobody ever touches this file again. There is nothing to
+  // schedule and nothing that can be forgotten — which is the whole point: a cap
+  // that needs a human to lift it is a cap that eventually strands players.
+  //
+  // WHY A CAP AT ALL. Ascension is the deepest progression in the game: each star
+  // raises the level ceiling +50 and is the dominant term in save-merge weight.
+  // A pilot who can chain ascensions in one sitting burns through content that is
+  // meant to unfold over months, and lands in an endgame with nothing left. The
+  // weekly ladder paces it — you can always ascend, right up to the cap, and the
+  // cap moves every week whether you were online or not.
+  //
+  // The epoch is deliberately IN THE PAST (the Monday before this shipped) so
+  // week 0 is the launch week and the first raise is the following Monday. UTC
+  // throughout, so the raise is the same instant for every player on earth.
+  const STAR_CAP_BASE = 10;                        // ceiling in the launch week
+  const STAR_CAP_STEP = 1;                         // added every week, forever
+  const STAR_CAP_EPOCH = Date.UTC(2026, 7, 10);    // Mon 10 Aug 2026 00:00 UTC
+  const WEEK_MS = 604800000;
+  // THE SERVER'S CLOCK, NOT THE DEVICE'S. A weekly ceiling read off Date.now() is
+  // raised by ten weeks by setting the phone forward ten weeks — the ceiling would
+  // be decoration. SERVERTIME anchors on the backend's own Date header, ticks on
+  // monotonic performance.now() so an in-session clock change does nothing, and
+  // holds at the last server-verified instant when it cannot reach the backend
+  // (so the ceiling freezes rather than inflating). See js/servertime.js.
+  const ST = () => window.SERVERTIME;
+  function tnow() { const s = ST(); return s ? s.now() : Date.now(); }
+  function clockTrusted() { const s = ST(); return !!(s && s.trusted()); }
+  function clockUsable() { const s = ST(); return s ? !!s.usable() : true; }
+  function clockMode() { const s = ST(); return s ? s.mode() : 'device'; }
+  function capWeeks() { return Math.max(0, Math.floor((tnow() - STAR_CAP_EPOCH) / WEEK_MS)); }
+  function starCap() { return STAR_CAP_BASE + STAR_CAP_STEP * capWeeks(); }
+  function nextRaiseAt() { return STAR_CAP_EPOCH + (capWeeks() + 1) * WEEK_MS; }
+  function nextCap() { return starCap() + STAR_CAP_STEP; }
+  function starsLeft() { return Math.max(0, starCap() - stars()); }
+  function atStarCap() { return stars() >= starCap(); }
+  // "3d 04h" — the wait, never a bare timestamp: a countdown reads the same in
+  // every timezone and needs no explaining.
+  function untilRaise() {
+    const ms = Math.max(0, nextRaiseAt() - tnow());
+    const d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000),
+          m = Math.floor(ms % 3600000 / 60000), s = Math.floor(ms % 60000 / 1000);
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    // Seconds appear inside the last hour, where they are the difference between
+    // "soon" and "watch it happen"; a multi-day wait does not need them ticking.
+    return d > 0 ? d + 'd ' + p(h) + 'h ' + p(m) + 'm'
+         : h > 0 ? p(h) + 'h ' + p(m) + 'm ' + p(s) + 's'
+         : p(m) + 'm ' + p(s) + 's';
+  }
+  // FORMATTED IN UTC, NOT LOCAL TIME. The boundary IS a UTC instant, and the copy
+  // beside this says "every Monday" — formatted locally, Mon 00:00 UTC renders as
+  // "Sunday" for every player west of Greenwich, so the card contradicted itself
+  // across all of the Americas. The countdown is timezone-proof either way; this
+  // label has to name the same day the mechanic does.
+  // How far through the current UTC week we are — drives the countdown bar.
+  function weekPct() {
+    const start = STAR_CAP_EPOCH + capWeeks() * WEEK_MS;
+    return Math.max(0, Math.min(100, (tnow() - start) / WEEK_MS * 100));
+  }
+  // The live block: big countdown, target, and an honest word on the clock itself.
+  // Rendered as one node so a 1s tick can replace it without touching the card.
+  function countdownHTML() {
+    const m = clockMode(), st = ST() ? ST().state() : null;
+    const note = m === 'server'
+      ? '● server time · synced'
+      : m === 'held'
+        ? '○ can’t reach the server — held at the last confirmed week. Reconnect to advance.'
+        : (st && st.syncing) ? '○ syncing with the server…'
+        : '○ device clock — not yet verified against the server';
+    return '<div class="pa-cd' + (m === 'server' ? '' : ' cold') + '">' +
+        '<div class="pa-cd-l">★' + nextCap() + ' unlocks in</div>' +
+        '<div class="pa-cd-t">' + untilRaise() + '</div>' +
+        '<div class="pa-cd-w">' + raiseDateText() + '</div>' +
+        '<div class="pa-cd-s">' + note + '</div>' +
+      '</div>';
+  }
+  function raiseDateText() {
+    try {
+      return new Date(nextRaiseAt()).toLocaleDateString(undefined,
+        { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' }) + ' UTC';
+    } catch (e) { return 'next Monday UTC'; }
+  }
 
   function st() {
     const s = G() && G().state; if (!s) return null;
@@ -96,7 +186,12 @@
   // Eight permanent multipliers. Rank cost = rank number (1,2,3…), so rank 25
   // costs 25 points and a fully-maxed perk is 325 points — many ascensions deep.
   const PERKS = [
-    { k: 'xp',    ic: '◈', name: 'Neural Uplink',    sub: 'EXP Gain',        per: 8,  col: '#7ce0ff', desc: 'Every source of experience pays more — kills, missions, bosses, offline.' },
+    // PROGRESSION NOTE (Aug 2026) — 8 → 5 per rank. XP bonuses were cut across the
+    // whole game so the summed bonus lands near +400 for a maxed account instead
+    // of +600; see the FLEET XP RATE block in game-v93.js. At rank 25 this is
+    // +125% rather than +200%, and it is still the single largest XP source a
+    // pilot can buy.
+    { k: 'xp',    ic: '◈', name: 'Neural Uplink',    sub: 'EXP Gain',        per: 5,  col: '#7ce0ff', desc: 'Every source of experience pays more — kills, missions, bosses, offline.' },
     { k: 'loot',  ic: '❖', name: 'Salvage Doctrine', sub: 'Loot Find',       per: 6,  col: '#7ce0a0', desc: 'Raises the chance a wreck drops anything at all.' },
     { k: 'gold',  ic: '●', name: 'Prize Courts',     sub: 'Gold Gain',       per: 10, col: '#f2b24b', desc: 'More gold from every kill, sale and salvage.' },
     { k: 'boss',  ic: '☠', name: 'Siege Protocols',  sub: 'Boss Damage',     per: 12, col: '#ff6b78', desc: 'Bonus damage to bosses, dreadnaughts, citadels and clone fleets.' },
@@ -159,7 +254,24 @@
     // it, and the note text is rewritten from the same multiplier.
     rows.forEach((r) => { r.pts *= PT_MULT; if (r.cap) r.cap *= PT_MULT; });
     const total = rows.reduce((a, r) => a + r.pts, 0);
-    return { rows, total, lvl, score, zone, tiles, badges, wing, eligible: lvl >= gateLv() };
+    // THREE GATES: the level gate, the weekly star ceiling, and a verified clock.
+    // The clock is a gate because a star is permanent and the ceiling is the only
+    // thing pacing it — granting one against an unverified clock is exactly the
+    // hole the ceiling exists to close. It is not a punishment for being offline:
+    // ascending publishes to the server regardless, so anyone who can bank the
+    // star can reach the backend.
+    const atCapNow = atStarCap();
+    // USABLE, not TRUSTED. Requiring a verified anchor would lock every player out
+    // of a permanent progression action the moment the time endpoint is unreachable
+    // — or before the migration is run at all. `usable` is true once a sync has been
+    // ATTEMPTED, so the only thing this blocks is the half-second before the first
+    // reply, and the ceiling still applies on whatever clock we ended up with.
+    // clockMode() says which, and the card tells the player plainly.
+    const clockOk = clockUsable();
+    return { rows, total, lvl, score, zone, tiles, badges, wing,
+             eligible: lvl >= gateLv() && !atCapNow && clockOk,
+             levelMet: lvl >= gateLv(), atCap: atCapNow, clockOk,
+             starCap: starCap(), starsLeft: starsLeft() };
   }
 
   // ---- RARITY UNLOCKS --------------------------------------------------------
@@ -174,7 +286,7 @@
     const body = $('pasc-body'); if (!body) return;
     const S = G().state, p = st();
     const sub = $('pasc-sub');
-    if (sub) sub.innerHTML = p.stars ? badge(null, p.stars, { tier: true }) + ' · ' + fmt(points()) + ' pts' : 'Level ' + fmt(S.level) + ' / ' + gateLv();
+    if (sub) sub.innerHTML = p.stars ? badge(null, p.stars, { tier: true }) + ' · ' + fmt(points()) + ' pts' : 'Level ' + fmt(S.level) + ' / ' + fmt(gateLv());
     body.innerHTML =
       '<div class="pa-tabs">' +
         '<button class="pa-tab' + (tab === 'ascend' ? ' on' : '') + '" data-patab="ascend">✦ Ascend</button>' +
@@ -201,22 +313,24 @@
         '<span class="pa-calc-h">' + r.note + (r.cap ? ' · max ' + r.cap : '') + '</span>' +
       '</div>').join('');
 
-    const ctaTop = locked
-      ? '<div class="pa-locked">Ascension opens at <b>Level ' + gate + '</b> — halfway to your Lv ' + fmt(cap) + ' ceiling. There is no rush: every level past ' + gate + ' makes the payout bigger.</div>'
+    const ctaTop = pv.atCap
+      ? '<div class="pa-locked">You are at this week’s ceiling of <b>★' + pv.starCap + '</b>. It rises to <b>★' + nextCap() + '</b> on <b>' + raiseDateText() + '</b> — <b>' + untilRaise() + '</b> from now. Nothing is lost by waiting: keep climbing and the payout you bank grows the whole time.</div>'
+      : locked
+      ? '<div class="pa-locked">Ascension opens at <b>Level ' + fmt(gate) + '</b> — your Lv ' + fmt(cap) + ' ceiling. You are <b>' + fmt(Math.max(0, gate - (S.level | 0))) + '</b> level' + (gate - (S.level | 0) === 1 ? '' : 's') + ' short. Every level you climb on the way also makes the payout bigger.</div>'
       : '<div class="pa-cta">' +
-          // THE CHOICE, stated before the button. Reaching the gate is not an
+          // THE CHOICE, stated before the button. Reaching the cap is not an
           // instruction to ascend — it is the point at which both roads open, and
           // the pilot should be able to read the trade in one glance.
           '<div class="pa-fork">' +
-            '<div class="pa-fork-h">You are past the gate — both roads are open</div>' +
+            '<div class="pa-fork-h">You are at the ceiling — both roads are open</div>' +
             '<div class="pa-fork-2">' +
               '<div class="pa-fork-o"><span class="pa-fork-k">✦ ASCEND NOW</span>' +
                 '<b>+' + pv.total + ' pt' + (pv.total === 1 ? '' : 's') + ' · +1 ★</b>' +
                 '<em>Ceiling rises to Lv ' + fmt(cap + CAP_STEP) + '. The run restarts at Level 1; the fleet comes with you.</em></div>' +
-              '<div class="pa-fork-o"><span class="pa-fork-k">△ KEEP CLIMBING</span>' +
-                '<b>' + (atCap ? 'at the ceiling' : toCap + ' level' + (toCap === 1 ? '' : 's') + ' to Lv ' + fmt(cap)) + '</b>' +
+              '<div class="pa-fork-o"><span class="pa-fork-k">△ KEEP PLAYING</span>' +
+                '<b>' + (atCap ? 'Lv ' + fmt(cap) + ' · XP stopped' : toCap + ' level' + (toCap === 1 ? '' : 's') + ' to Lv ' + fmt(cap)) + '</b>' +
                 '<em>' + (atCap
-                  ? 'XP has stopped accruing — there is nothing left to gain by waiting.'
+                  ? 'Kills still pay gold, resources, loot and events — but your level will not move again until you ascend.'
                   : 'Every level adds to the payout, so the points you bank grow with the climb.') + '</em></div>' +
             '</div>' +
           '</div>' +
@@ -224,7 +338,7 @@
             '<div class="pa-cta-n"><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '<br>+ 1 ★</em></div>' +
             '<div class="pa-cta-sum">' +
               '<div class="pa-cta-k">✓ <b>Your whole fleet comes with you</b> — every hull, every hull upgrade level, and every Ship Ascension</div>' +
-              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level, items and gold (the Pilot Tree stays)</div>' +
+              '<div class="pa-cta-l">✕ <b>The pilot run resets</b> — level and items (gold, resources and the Pilot Tree stay)</div>' +
             '</div>' +
           '</div>' +
           '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button>' +
@@ -236,21 +350,47 @@
         '<div class="pa-hero-star">✦</div>' +
         (p.stars ? '<div class="pa-hero-cur">' + badge(null, p.stars, { tier: true }) + '<span class="pa-hero-n">Ascension ' + p.stars + '</span></div>' : '') +
         '<div class="pa-hero-t">PILOT ASCENSION</div>' +
-        '<div class="pa-hero-s">' + (locked
-          ? 'Reach <b>Level ' + gate + '</b> to unlock — you are Level ' + fmt(S.level)
+        '<div class="pa-hero-s">' + (pv.atCap
+          ? 'At this week’s ceiling — <b>★' + pv.starCap + '</b>. Rises to <b>★' + nextCap() + '</b> in <b>' + untilRaise() + '</b>.'
+          : locked
+          ? 'Reach the <b>Lv ' + fmt(gate) + ' cap</b> to unlock — you are Level ' + fmt(S.level)
           : 'Trade the <b>pilot’s</b> run for permanent power. Your <b>fleet keeps everything the shipyard built</b>.') + '</div>' +
-        (locked ? '<div class="pa-lvbar"><i style="width:' + Math.min(100, S.level / gate * 100).toFixed(1) + '%"></i></div>' +
-          '<div class="pa-lvbar-l"><span>Lv ' + fmt(S.level) + '</span><span>' + Math.max(0, gate - (S.level | 0)) + ' to go</span><span>Lv ' + gate + '</span></div>' : '') +
+        (locked && !pv.atCap ? '<div class="pa-lvbar"><i style="width:' + Math.min(100, S.level / gate * 100).toFixed(1) + '%"></i></div>' +
+          '<div class="pa-lvbar-l"><span>Lv ' + fmt(S.level) + '</span><span>' + fmt(Math.max(0, gate - (S.level | 0))) + ' to go</span><span>Lv ' + fmt(gate) + '</span></div>' : '') +
       '</div>' +
 
       ctaTop +
+
+      // ---- THE WEEKLY STAR CEILING ------------------------------------------
+      // Stated in full every time, because a ceiling nobody can see reads as a
+      // bug the moment it stops you.
+      '<div class="pa-card pa-starcap' + (pv.atCap ? ' hot' : '') + '">' +
+        '<div class="pa-card-h">✦ THIS WEEK’S STAR CEILING<em>' + (pv.atCap ? 'reached' : pv.starsLeft + ' left') + '</em></div>' +
+        '<div class="pa-sc-row">' +
+          '<div class="pa-sc-now"><b>★' + stars() + '</b><em>you are here</em></div>' +
+          '<div class="pa-sc-arrow">→</div>' +
+          '<div class="pa-sc-cap"><b>★' + pv.starCap + '</b><em>this week’s cap</em></div>' +
+          '<div class="pa-sc-arrow">→</div>' +
+          '<div class="pa-sc-next"><b>★' + nextCap() + '</b><em>' + raiseDateText() + '</em></div>' +
+        '</div>' +
+        // The bar fills across the CURRENT WEEK, not the whole ladder — it is a
+        // countdown bar, so it has to answer "how much of this week is gone".
+        '<div class="pa-sc-bar"><i style="width:' + weekPct().toFixed(2) + '%"></i></div>' +
+        '<div class="pa-sc-clock" id="pa-sc-clock" data-live="1">' + countdownHTML() + '</div>' +
+        '<p class="pa-note">Ascension has a ceiling that <b>rises on its own every week</b>. It started at <b>★' + STAR_CAP_BASE + '</b> and goes up <b>+' + STAR_CAP_STEP + ' star every Monday (00:00 UTC)</b>, forever — no update needed, and it climbs whether you play that week or not. ' +
+          (pv.atCap
+            ? 'You have used the last star available this week. The next one unlocks in <b>' + untilRaise() + '</b>.'
+            : 'You can ascend <b>' + pv.starsLeft + ' more time' + (pv.starsLeft === 1 ? '' : 's') + '</b> before you meet it. The next star arrives in <b>' + untilRaise() + '</b> regardless.') +
+        '</p>' +
+      '</div>' +
 
       // THE CALCULATOR — always visible, always live
       // THE WALL — the single clearest reason to ascend, stated before the maths
       '<div class="pa-card">' +
         '<div class="pa-card-h">▲ YOUR LEVEL CEILING<em>' + (atCap ? 'reached' : 'raised by ascending') + '</em></div>' +
         '<p class="pa-note">The pilot record has a hard cap. It is <b>' + fmt(CAP_BASE) + '</b> with no stars and rises <b>+' + CAP_STEP + ' per Ascension Star</b> — ' +
-          'this is the wall the prestige loop exists to break. <b>At the cap XP stops accruing entirely</b>: kills still pay gold, resources and loot, but your level will not move again until you ascend.</p>' +
+          'this is the wall the prestige loop exists to break. <b>At the cap XP stops accruing entirely</b>: kills still pay gold, resources and loot, but your level will not move again until you ascend. ' +
+          '<b>The cap is also the gate</b> — ascension opens the moment you reach it.</p>' +
         '<div class="pa-caps">' +
           [0, 1, 2, 3].map((k) => {
             const st = stars() + k, cp = CAP_BASE + CAP_STEP * st;
@@ -269,10 +409,10 @@
 
       '<div class="pa-card">' +
         '<div class="pa-card-h">◈ ASCENSION POINT CALCULATOR<em>live</em></div>' +
-        '<p class="pa-note">Points are earned from the run you give up. Every line below is counted the moment you ascend — <b>push further before you commit and the payout grows</b>.</p>' +
+        '<p class="pa-note">Points are earned from the run you give up. Every line below is counted the moment you ascend — <b>your level is settled at the cap, but zones, systems and badges keep adding to it</b> for as long as you keep flying.</p>' +
         '<div class="pa-calc">' + calcRows + '</div>' +
         '<div class="pa-calc-tot"><span>YOU WILL RECEIVE</span><b>' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + ' + 1 ★</em></div>' +
-        (pv.eligible ? '<div class="pa-hint">Every <b>125</b> pilot levels is another <b>' + PT_MULT + '</b> points. At Lv ' + fmt((Math.floor(pv.lvl / 125) + 1) * 125) + ' this becomes <b>' + (pv.total + PT_MULT) + '</b>.</div>' : '') +
+        ((Math.floor(pv.lvl / 125) + 1) * 125 <= cap ? '<div class="pa-hint">Every <b>125</b> pilot levels is another <b>' + PT_MULT + '</b> points. At Lv ' + fmt((Math.floor(pv.lvl / 125) + 1) * 125) + ' this becomes <b>' + (pv.total + PT_MULT) + '</b>.</div>' : '') +
       '</div>' +
 
       // WHAT HAPPENS — the warning, itemised
@@ -283,7 +423,6 @@
           '<div class="pa-led lose"><div class="pa-led-h">✕ RESET TO ZERO</div><ul>' +
             '<li>Pilot Level → <b>1</b> (and all skill points)</li>' +
             '<li><b>Every item you own</b> — equipped, in the bag, and stowed on escorts</li>' +
-            '<li>Gold &amp; all Galaxy resources</li>' +
             '<li>All Starforge hardpoint tempers &amp; purity</li>' +
             '<li>Your wing — escorts disband (the hulls stay in the hangar, fully upgraded)</li>' +
           '</ul></div>' +
@@ -299,10 +438,16 @@
             // prismFleet / moon) — the confirm gate had been corrected but this
             // screen had not, so it warned players off a cost that no longer
             // exists. Anything claimed here must be checked against ASC_KEEP.
+            // GOLD AND GALAXY RESOURCES SURVIVE (Aug 2026) — see the ASC_KEEP
+            // block in game-v93.js. They were listed under RESET TO ZERO here.
+            '<li><b>Your gold and every Galaxy Resource</b> — the wallet rides across intact</li>' +
             '<li><b>Your whole galaxy</b> — every claimed system, citadel and Void spire stays yours</li>' +
             '<li><b>Home Citadel</b> — pads, towers and defences, still earning</li>' +
             '<li><b>Moon Colony</b> — every building keeps producing</li>' +
             '<li><b>Prism</b> — rigs, ingots and forged Prism Cores</li>' +
+            '<li><b>Nanocores</b> — every core, slot and rolled buff</li>' +
+            '<li><b>Tour of Duty</b> — season level, XP and anything you bought</li>' +
+            '<li><b>Space Cargo Defense</b> — lifetime record and today’s runs</li>' +
             '<li><b>Season 1: Voidmaw</b> — Event Coins, ❖ Voidmaw Parts, best stage and season rank</li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
             '<li><b>A higher level ceiling</b> — +' + CAP_STEP + ' max pilot level, every time</li>' +
@@ -399,7 +544,28 @@
       '</div>';
   }
 
+  // ONE INTERVAL FOR THE WHOLE MODULE, and it only touches the countdown node.
+  // Re-rendering the tab every second would fight the player's scroll position and
+  // rebuild the calculator for nothing; replacing one element's innerHTML does not.
+  // It also self-stops when the node leaves the DOM, so switching tabs or closing
+  // the screen cannot leave a timer running against a detached tree.
+  let _cdTimer = null;
+  function startCountdown() {
+    if (_cdTimer) return;
+    _cdTimer = setInterval(() => {
+      const el = $('pa-sc-clock');
+      if (!el || !el.isConnected) { clearInterval(_cdTimer); _cdTimer = null; return; }
+      const before = capWeeks();
+      el.innerHTML = countdownHTML();
+      const bar = el.parentNode && el.parentNode.querySelector('.pa-sc-bar i');
+      if (bar) bar.style.width = weekPct().toFixed(2) + '%';
+      // THE BOUNDARY CROSSED WHILE THEY WATCHED — re-render the whole tab so the
+      // new ceiling, the star count and the ascend button all update together.
+      if (capWeeks() !== before) render();
+    }, 1000);
+  }
   function wire(body) {
+    if (body.querySelector('#pa-sc-clock')) startCountdown();
     body.querySelectorAll('[data-patab]').forEach((b) => b.onclick = () => { tab = b.dataset.patab; render(); });
     body.querySelectorAll('[data-perk]').forEach((b) => b.onclick = () => buyPerk(b.dataset.perk));
     const go = $('pa-begin'); if (go) go.onclick = ascendFlow;
@@ -449,7 +615,21 @@
   // level, currency, items, the tree those items feed.
   // ===========================================================================
   function ascendFlow() {
-    const pv = preview(); if (!pv.eligible) return;
+    const pv = preview();
+    // The cap is enforced HERE as well as in the button state — the flow is also
+    // reachable from the gate toast, and a ceiling that only exists in the UI is
+    // not a ceiling.
+    if (pv.atCap) {
+      try { G().toast ? G().toast('✦ ★' + pv.starCap + ' is this week’s ceiling — ★' + nextCap() + ' in ' + untilRaise()) : 0; } catch (e) {}
+      return;
+    }
+    if (!pv.clockOk) {
+      // Try once more before refusing — a dropped first sync is the common case.
+      try { if (ST()) ST().sync(true); } catch (e) {}
+      try { G().toast ? G().toast('○ Checking the clock — one moment, then try again.') : 0; } catch (e) {}
+      return;
+    }
+    if (!pv.eligible) return;
     const S = G().state, o = overlay(); o.className = 'show';
     const key = S.ship, sh = C().SHIP_BY_KEY[key] || {};
     const nt = nextTierAt();
@@ -463,6 +643,7 @@
       ['\u2b22', '<b>All ' + hulls + ' hull' + (hulls === 1 ? '' : 's') + '</b> \u2014 upgrade levels and Ship Ascensions intact'],
       ['\u25c7', '<b>Your Pilot Tree</b> \u2014 every node and every Dread Core'],
       ['\u2691', tiles ? '<b>All ' + tiles + ' system' + (tiles === 1 ? '' : 's') + '</b> \u2014 citadels and Void spires stay yours' : 'Any territory you hold'],
+      ['$', '<b>Your gold and every Galaxy Resource</b> \u2014 the wallet is untouched'],
       ['\u25d0', 'Moon Colony, Home Citadel and Prism \u2014 still producing'],
       ['\u2756', 'Season 1: Voidmaw \u2014 Event Coins, parts and best stage'],
       ['\u2b21', 'Badges, career totals and mission boards'],
@@ -472,7 +653,6 @@
     if (hasAxiom) keep.splice(1, 0, ['\u229b', '<b>Evolving Paragon Cannon</b> \u2014 the only item you keep, rescaled to Level 1']);
     const lose = [
       ['\u25b2', '<b>Level ' + fmt(S.level) + ' \u2192 1</b> and Zone ' + fmt(zone) + ' progress'],
-      ['$', fmt(S.gold || 0) + ' gold and every resource'],
       ['\u2756', (hasAxiom ? 'Every other item' : 'Every item') + ' \u2014 equipped, in the bag, and Starforge tempers'],
       ['\u27a4', 'Your wing disbands \u2014 escort slots re-earn with level'],
     ];
@@ -493,7 +673,7 @@
       '<div class="pa-flag"><img src="ships/ship-' + key + '.png" alt="">' +
         '<div><b>' + (sh.name || 'Your flagship') + '</b><em>You warp out in the hull you\u2019re flying \u2014 swap any time in the Hangar</em></div></div>' +
       '<label class="pa-ack"><input type="checkbox" id="pa-ack">' +
-        '<span class="pa-ack-t">I understand \u2014 back to <b>Level 1</b>, and I lose my <b>gold and every item</b>.</span></label>' +
+        '<span class="pa-ack-t">I understand \u2014 back to <b>Level 1</b>, and I lose <b>every item I am carrying</b>.</span></label>' +
       '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
       '<button class="pa-btn danger" id="pa-do" disabled>\u2726 ASCEND</button></div>' +
     '</div>';
@@ -519,6 +699,9 @@
     const o = overlay(), sh = C().SHIP_BY_KEY[key] || {};
     const fromLvl = G().state.level | 0;
     const newStars = stars() + 1;
+    // Server-stamped, so the ladder can be audited later (one star per UTC week
+    // since the epoch) without a schema change now. tnow() is the trusted clock.
+    const ascAt = Math.floor(tnow());
     const unlocked = ascTiers().find((r) => r.ascReq === newStars) || null;
     o.className = 'show cine';
     o.innerHTML =
@@ -605,7 +788,13 @@
   }
 
   // ---- BOOT ------------------------------------------------------------------
+  // A late first sync must repaint: the card renders before the anchor lands, so
+  // without this it would sit on "syncing…" until the next tab switch.
+  try { if (window.SERVERTIME) window.SERVERTIME.onSync(() => { if ($('pa-sc-clock')) render(); }); } catch (e) {}
+
   window.PASCEND = {
+    starCap, starsLeft, atStarCap, nextCap, nextRaiseAt, untilRaise, capWeeks,
+    clockTrusted, clockUsable, clockMode, serverNow: tnow, weekPct,
     render, stars, points, mult, preview, PERKS, rank, perkPct,
     beaconMods,
     badge, plain, tierOf, starOf, tierDef, gateLv, capLv,

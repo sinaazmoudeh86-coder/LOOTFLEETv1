@@ -118,8 +118,63 @@
     { key: 'support', name: 'Warden Array',     glyph: '✚', color: '#7ce0a0',
       bonus: 'Fleet Heal & Buffs',
       blurb: 'Support emitter array. Projects a fleet-wide aura: extra Multi-Shot, hull recovery, damage reduction and weapon range. Mounts ONLY on the Aegis support hull.' },
+    // FIGHTER BAY — a launch rack, not a gun. It is registered here beside the
+    // cannons on purpose: a squadron is an ordinary Cannon-slot item and rides the
+    // whole existing pipeline (drops, rarity, rerolls, salvage, auto-equip, saves).
+    // What it does when equipped lives in fighters.js.
+    { key: 'fighter', name: 'Fighter Bay',      glyph: '\u227a', color: '#ffb457',
+      bonus: 'Launches Heavy Fighters',
+      blurb: 'A launch rack rather than a gun. Racks autonomous Heavy Fighters that leave the hull, choose their own targets and swarm them until nothing is left inside the carrier\u2019s engagement envelope. Mounts ONLY on Fighter Carrier hulls \u2014 and those hulls mount nothing else.' },
   ];
   const WCLASS_BY_KEY = {}; WEAPON_CLASSES.forEach((w) => WCLASS_BY_KEY[w.key] = w);
+
+  // ---------------------------------------------------------------------------
+  // FIGHTER MARQUES — the Fighter Bay's answer to cannon classes.
+  //
+  // A cannon class gives one signature STAT and a projectile look. A marque does
+  // that AND reshapes the craft, because a fighter is a thing that flies rather
+  // than a bolt that travels: it scales speed, attack cadence, per-strike damage,
+  // orbit radius and the carrier's engagement envelope. That is the axis of
+  // choice the class was missing — two Legendary bays now play nothing alike.
+  //
+  // Kept in a SEPARATE array from WEAPON_CLASSES deliberately: weaponClassOf()
+  // hash-resolves legacy cannons by indexing that array, so a marque sitting in
+  // it would eventually be handed to a bow.
+  //
+  // rateMul x dmgMul is held near 1.0 across the set, so a marque is a SHAPE and
+  // not a power level — the Maul trades uptime for weight, the Swarm the reverse.
+  // ---------------------------------------------------------------------------
+  const FIGHTER_CLASSES = [
+    { key: 'f_talon', name: 'Talon Interceptor', glyph: '≺', color: '#7fd1ff',
+      bonus: '+Crit Chance', stat: 'critChance', per: [3, 1.2],
+      craft: { dmgMul: 0.80, rateMul: 1.25, speedMul: 1.35, rangeMul: 1.00, orbitMul: 0.72 },
+      blurb: 'A stripped hot-rod of a fighter. Faster than anything else that fits a bay, knifing in on a tight orbit and cycling its guns quicker — lighter per strike, but on target far more of the time and finding the weak seam far more often.' },
+    { key: 'f_maul', name: 'Maul Gunship', glyph: '◆', color: '#ff8a5c',
+      bonus: '+Crit Damage', stat: 'critDamage', per: [9, 4],
+      craft: { dmgMul: 1.75, rateMul: 0.70, speedMul: 0.85, rangeMul: 1.00, orbitMul: 1.18 },
+      blurb: 'An armoured weapons platform with wings. Slow to line up and slow to cycle, but every pass lands like a capital shell — the marque you fit when one thing in front of you has to die.' },
+    { key: 'f_lance', name: 'Lance Strike Wing', glyph: '⟩', color: '#ffd24d',
+      bonus: '+Engagement Range', stat: null, per: [0, 0],
+      craft: { dmgMul: 0.90, rateMul: 1.00, speedMul: 1.10, rangeMul: 1.55, orbitMul: 1.55 },
+      blurb: 'Long-legged patrol fighters that push the carrier’s engagement envelope half again as far and hold a wide orbit. The marque that lets a hull with no business near the fight still reach it.' },
+    { key: 'f_reaper', name: 'Reaper Wing', glyph: '✡', color: '#7ce0a0',
+      bonus: '+Life Steal', stat: 'lifeSteal', per: [0.5, 0.22],
+      craft: { dmgMul: 1.00, rateMul: 1.00, speedMul: 1.00, rangeMul: 1.00, orbitMul: 1.00 },
+      blurb: 'Siphon-rigged fighters that route a share of everything they tear off back to the carrier. No edge in speed or weight — it simply keeps alive a hull that cannot run away.' },
+    { key: 'f_swarm', name: 'Swarm Vector', glyph: '⋔', color: '#c98cff',
+      bonus: '+Multi-Shot', stat: 'multiShot', per: [1.2, 0.6],
+      craft: { dmgMul: 0.62, rateMul: 1.50, speedMul: 1.20, rangeMul: 1.00, orbitMul: 0.88 },
+      blurb: 'Cheap, fast and firing constantly. Each hit is slight, but the sheer number of them makes every per-hit effect you own — Multi-Shot, cryo, life steal, the singularity — proc far more often.' },
+    // LEGACY — bays that dropped before the marques existed. Never picked for a
+    // new drop; kept so an old fitting still resolves to a name and a blurb.
+    { key: 'fighter', name: 'Fighter Bay', glyph: '≺', color: '#ffb457',
+      bonus: 'Launches Heavy Fighters', stat: null, per: [0, 0], legacy: true,
+      craft: { dmgMul: 1, rateMul: 1, speedMul: 1, rangeMul: 1, orbitMul: 1 },
+      blurb: 'A launch rack rather than a gun — it holds one autonomous Heavy Fighter that leaves the hull, chooses its own target and swarms it inside the carrier’s engagement envelope.' },
+  ];
+  const FCLASS_BY_KEY = {}; FIGHTER_CLASSES.forEach((f) => FCLASS_BY_KEY[f.key] = f);
+  const FCLASS_POOL = FIGHTER_CLASSES.filter((f) => !f.legacy);
+  function pickFighterClass() { return FCLASS_POOL[(Math.random() * FCLASS_POOL.length) | 0]; }
   // class arsenals: name pools per quality bucket (budget → mid → high → elite)
   const WCLASS_NAMES = {
     laser: [
@@ -158,12 +213,88 @@
       ['Sanctuary Array X', 'Warden Prime Lattice', 'Bastion Halo', 'Custodian Field Rig'],
       ['Archangel Lattice', 'Eternal Warden Array', 'Sovereign Halo Prime', 'Pantheon Field Omega'],
     ],
+    fighter: [
+      ['Mk I Sortie Rack', 'Kestrel Bay', 'Light Launch Rail', 'Hangar Rack A'],
+      ['Talon Sortie Bay', 'Shrike Rack', 'Vector Launch Bay', 'Skirmish Hangar'],
+      ['Heavy Fighter Squadron', 'Falcon Wing Bay', 'Reaper Sortie Bay', 'Strike Wing Rack'],
+      ['Apex Fighter Wing', 'Warhawk Squadron', 'Sovereign Launch Bay', 'Blacktalon Wing'],
+    ],
+    f_talon: [
+      ['TL-1 Kestrel', 'Skitter Interceptor', 'Needle Mk I', 'Dart Rack'],
+      ['Shrike Interceptor', 'Quickblade Wing', 'Razorwing TL-4', 'Splinter Flight'],
+      ['Talon Ascendant', 'Hornet Prime', 'Wraithwing', 'Stiletto Wing'],
+      ['Blacktalon Apex', 'Ghostblade Flight', 'Seraph Interceptor', 'Zephyr Prime'],
+    ],
+    f_maul: [
+      ['MG-1 Hammerhead', 'Slug Gunship', 'Anvil Mk I', 'Bruiser Rack'],
+      ['Maul Gunship', 'Sledge Wing', 'Ironjaw MG-4', 'Breaker Flight'],
+      ['Warhammer Gunship', 'Siegemaul', 'Bastion Wing', 'Ruinbringer'],
+      ['Maul Sovereign', 'Godhammer Flight', 'Cataclysm Gunship', 'Worldbreaker Wing'],
+    ],
+    f_lance: [
+      ['LN-1 Outrider', 'Pilgrim Wing', 'Reach Mk I', 'Ranger Rack'],
+      ['Lance Strike Wing', 'Longspear Flight', 'Horizon LN-4', 'Vanguard Patrol'],
+      ['Lance Ascendant', 'Farstrike Wing', 'Meridian Flight', 'Skyreach Wing'],
+      ['Lance Sovereign', 'Endless Horizon', 'Starlance Prime', 'Infinity Patrol'],
+    ],
+    f_reaper: [
+      ['RP-1 Leech', 'Siphon Wing', 'Tick Mk I', 'Drain Rack'],
+      ['Reaper Wing', 'Bloodletter Flight', 'Vampire RP-4', 'Harvest Wing'],
+      ['Reaper Ascendant', 'Soulfeeder Flight', 'Carrion Wing', 'Exsanguine'],
+      ['Reaper Sovereign', 'Deathless Wing', 'Eternal Harvest', 'Grave Sovereign'],
+    ],
+    f_swarm: [
+      ['SW-1 Midge', 'Gnat Vector', 'Cloud Mk I', 'Chaff Rack'],
+      ['Swarm Vector', 'Locust Flight', 'Hive SW-4', 'Tempest Vector'],
+      ['Swarm Ascendant', 'Plague Vector', 'Maelstrom Flight', 'Nova Swarm'],
+      ['Swarm Sovereign', 'Infinite Hive', 'Ruin Vector', 'Endless Tempest'],
+    ],
   };
+  // A BAY'S RARITY IS ITS WHOLE TUNING AXIS. Better squadrons hit harder, cycle
+  // faster and reach further — but never launch MORE craft. Capacity belongs to
+  // the hull (`fighterCapacity`), so a bay cannot out-scale the ship carrying it.
+  // RARITY REACHES DAMAGE EXACTLY ONCE, through the stat lines — the same route a
+  // cannon's rarity takes. This used to multiply damage a SECOND time here:
+  //
+  //     dmgMul:  (1 + r * 0.22) * k.dmgMul
+  //     rateMul: (1 + r * 0.05) * k.rateMul
+  //
+  // A bay's stat lines already feed `attackDamage`, which is the figure fighter damage
+  // is computed FROM, so those terms were a fighter-only bonus with no cannon
+  // equivalent — and they compounded. It was deliberate when the class shipped ("rarity
+  // drives the wing's DPS twice over"), but it is incompatible with the DPS anchor added
+  // in 640, and rarity won: the wing measured 1.10× cannon at Common, 3.3× at r6 and
+  //  8.95× at r16 — worse than the 7.6× the anchor was introduced to fix. The very first
+  // bay upgrade broke the balance.
+  //
+  // So DPS terms carry the marque SHAPE only. RANGE and SPEED keep their rarity scaling:
+  // neither is damage, and a better bay reaching further and flying faster is the kind of
+  // upgrade that cannot compound into the DPS anchor.
+  function fighterSpec(item) {
+    const r = (item && item.rarity) || 0;
+    const k = ((item && FCLASS_BY_KEY[item.wclass]) || FCLASS_BY_KEY.fighter).craft;
+    return {
+      // Rarity is back on dmgMul, but it is now a RELATIVE WEIGHT, not a bonus:
+      // fighters.js normalises these across the fitted wing so the total stays pinned
+      // to CONFIG.FIGHTER.dpsVsCannon while a better bay still out-damages a worse one
+      // beside it. Removing the term outright (641) held the anchor but made a Legendary
+      // bay fly identically to a Common one, which left bay rarity with no purpose.
+      dmgMul:   (1 + r * 0.22) * k.dmgMul,
+      rateMul:  k.rateMul,
+      rangeMul: (1 + r * 0.06) * k.rangeMul,
+      speedMul: (1 + r * 0.04) * k.speedMul,
+      orbitMul: k.orbitMul,
+    };
+  }
   // Resolve an item's weapon class. New drops carry `wclass`; legacy weapons
   // (incl. old firearm-named saves) map deterministically from their id so the
   // same item always shows — and fires — the same class.
   function weaponClassOf(item) {
+    if (item && item.wclass && FCLASS_BY_KEY[item.wclass]) return FCLASS_BY_KEY[item.wclass];
     if (item && item.wclass && WCLASS_BY_KEY[item.wclass]) return WCLASS_BY_KEY[item.wclass];
+    // a bay from before the marques resolves to the generic entry rather than
+    // falling through to the cannon hash below
+    if (item && item.slot === 'fighter') return FCLASS_BY_KEY.fighter;
     const h = item ? ((item.id || 0) * 7 + (item.name ? item.name.length : 0)) : 0;
     // floor + abs the hash so a non-integer/negative id can never index out of the
     // array (which would yield undefined and crash any tooltip reading wc.color).
@@ -186,6 +317,9 @@
   }
 
   // Weighted class roll — near-even odds, with Plasma Projectors slightly rarer.
+  // `fighter` is deliberately absent: it is not a cannon class a bow can roll,
+  // it is the class every FIGHTER-slot item has. Bays reach the loot table
+  // through SLOT_KEYS instead, like any other fitting.
   const WCLASS_WEIGHTS = { laser: 1, gatling: 1, missile: 1, rail: 1, plasma: 0.75, support: 1 };
   function pickWeaponClass() {
     const total = WEAPON_CLASSES.reduce((a, w) => a + (WCLASS_WEIGHTS[w.key] || 1), 0);
@@ -209,10 +343,13 @@
   // ---------------------------------------------------------------------------
   // GENERATE a single item dropped in `dungeon`.
   // ---------------------------------------------------------------------------
-  function generate(dungeon, forceRarity) {
+  // `forceSlot` asks for a specific slot instead of a random one. Only used by
+  // callers handing out a KNOWN fitting — a Fighter Carrier is delivered with its
+  // bays already filled, and it cannot roll for them.
+  function generate(dungeon, forceRarity, forceSlot) {
     const rarityIdx = forceRarity != null ? forceRarity : rollRarity(dungeon);
     const rar = C.RARITY[rarityIdx];
-    const slotKey = C.SLOT_KEYS[(Math.random() * C.SLOT_KEYS.length) | 0];
+    const slotKey = (forceSlot && C.SLOTS[forceSlot]) ? forceSlot : C.SLOT_KEYS[(Math.random() * C.SLOT_KEYS.length) | 0];
     const slot = C.SLOTS[slotKey];
 
     const scale = C.dungeonScale(dungeon);   // geometric power of this zone
@@ -257,7 +394,18 @@
 
     // ---- WEAPON CLASS: primaries get a class, class name + signature bonus ----
     let wclass = null, name;
-    if (slotKey === 'bow') {
+    // A FIGHTER BAY IS ALWAYS THE FIGHTER CLASS — there is nothing to roll. Its
+    // damage line is what the craft in that bay hits for, so rarity drives the
+    // wing's DPS directly as well as through the hull's own stat total.
+    if (slotKey === 'fighter') {
+      const fc = pickFighterClass();
+      wclass = fc.key;
+      name = pickWeaponName(fc.key, rarityIdx);
+      // the bay's damage line is what the craft in it hits for
+      stats.attackDamage = Math.round((((stats.attackDamage || 0)) + 3 + rarityIdx * 1.6) * 10) / 10;
+      // ...plus the marque's signature stat, the same shape a cannon class uses
+      if (fc.stat) stats[fc.stat] = Math.round((((stats[fc.stat] || 0)) + fc.per[0] + rarityIdx * fc.per[1]) * 10) / 10;
+    } else if (slotKey === 'bow') {
       const wc = pickWeaponClass();
       wclass = wc.key;
       name = pickWeaponName(wc.key, rarityIdx);
@@ -296,9 +444,15 @@
   // contribution from the score (new-format weapons only — legacy items never
   // received bonuses), and credit Warden arrays for their uncounted aura.
   function classAdjustPower(item, p) {
-    if (item.slot !== 'bow' || !item.wclass) return p;
+    if ((item.slot !== 'bow' && item.slot !== 'fighter') || !item.wclass) return p;
     const r = item.rarity || 0;
     switch (item.wclass) {
+      case 'fighter': return p - 0.9 * (3 + 1.6 * r);                  // damage line + the wing itself
+      case 'f_talon':  return p - 0.9 * (3 + 1.6 * r) - 0.8 * (3 + 1.2 * r);
+      case 'f_maul':   return p - 0.9 * (3 + 1.6 * r) - 0.35 * (9 + 4 * r);
+      case 'f_lance':  return p - 0.9 * (3 + 1.6 * r);
+      case 'f_reaper': return p - 0.9 * (3 + 1.6 * r) - 2.4 * (0.5 + 0.22 * r);
+      case 'f_swarm':  return p - 0.9 * (3 + 1.6 * r) - 0.8 * (1.2 + 0.6 * r);
       case 'laser':   return p - 0.9 * (2 + 0.8 * r);                 // attackSpeed bonus
       case 'gatling': return p - 0.8;                                  // +1 multiShot
       case 'rail':    return p - 0.28 * (15 + 3 * r);                  // critDamage bonus
@@ -370,5 +524,5 @@
     return null;
   }
 
-  window.ITEMS = { generate, rollRarity, rarityChances, rarityWeights, rarityBlockedBy, itemPower, compare, weaponClassOf, supportAura, WEAPON_CLASSES };
+  window.ITEMS = { generate, rollRarity, rarityChances, rarityWeights, rarityBlockedBy, itemPower, compare, weaponClassOf, supportAura, fighterSpec, WEAPON_CLASSES, FIGHTER_CLASSES };
 })();

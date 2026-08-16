@@ -55,7 +55,9 @@
       { k: 'rate',  name: 'Fire Rate',        min: 1,   max: 5,   mod: 'atkSpeedPct' },
       { k: 'multi', name: 'Multi Shot',       min: 1,   max: 5,   mod: 'multiShot' },
       { k: 'dr',    name: 'Damage Reduction', min: 1,   max: 5,   mod: 'dmgReduce' },
-      { k: 'xp',    name: 'XP Gain',          min: 3,   max: 10,  mod: 'xp' },
+      // PROGRESSION NOTE (Aug 2026) — 3–10 → 2–6, part of the game-wide XP
+      // reduction (see the FLEET XP RATE block in game-v93.js).
+      { k: 'xp',    name: 'XP Gain',          min: 2,   max: 6,   mod: 'xp' },
     ],
     // Values step in 0.1 and are WEIGHTED toward the floor: v = min + range·rᵏ.
     // k = 2.6 puts ~70% of rolls in the bottom third of the range and makes the

@@ -753,7 +753,7 @@
     if (shipHasPrism(key)) drawPrismAura(ctx, t + x * 0.13, ds * 0.7, 0.7);
     if (key === 'oblivionfinal') drawGreenAura(ctx, t + x * 0.13, ds * 0.8, 0.9);
     // (no under-ship engine-glow blob — it read as a "reflection" beside each escort)
-    if (im) ctx.drawImage(im, -ds / 2, -ds / 2, ds, ds);
+    if (im) { const k = fitK(im, ds), dw = srcW(im) * k, dh = srcH(im) * k; ctx.drawImage(im, -dw / 2, -dh / 2, dw, dh); }
     else { ctx.fillStyle = '#9fb4d6'; ctx.beginPath(); ctx.moveTo(0, -ds * 0.4); ctx.lineTo(ds * 0.3, ds * 0.3); ctx.lineTo(-ds * 0.3, ds * 0.3); ctx.closePath(); ctx.fill(); }
     // Aegis repair pulse — expanding green ring
     if (healPulse > 0) {
@@ -1007,7 +1007,15 @@
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
     dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, aeternum:5, eternum:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2,
-    xen1:0, xen2:1, xen3:2, xen4:4, xen5:5 };
+    xen1:0, xen2:1, xen3:2, xen4:4, xen5:5, vanguard:4, praetorian:5,
+    // Ladders that were never added to either table and so drew at tier 0 — a
+    // frigate silhouette for a Celestial carrier and for every alliance siege
+    // hull. EMBER CHOIR mirrors the Kaevith ladder rung for rung (same five
+    // classes); MONOLITH is the four-rung alliance ladder; the two unreleased
+    // fighter carriers sit with their class peers.
+    emb1:0, emb2:1, emb3:2, emb4:4, emb5:5,
+    monolith1:1, monolith2:2, monolith3:4, monolith4:5,
+    titanaquila:5, corvus:5 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
   // THE AETERNUM is not a ship at all but an artificial WORLD, so it draws larger
   // than anything else in the game. It had no entry before, which meant a
@@ -1015,9 +1023,45 @@
   // THE ETERNUM is the Celestial class ABOVE the Titan Sina — 1.5× the Titan on
   // every stat line — and it was missing here too, so the game's final hull flew
   // at frigate scale. It draws larger than the Titan Sina, as the class implies.
-  const SHIP_SCALE = { oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
+  const SHIP_SCALE = {
+    // ---- THE MAIN LADDER'S CAPITAL TAIL -----------------------------------
+    // Sprite size is (42 + tier*3) * shipScaleOf(key), and tier tops out at 5 —
+    // so every hull from the Dreadnought up to the Mothership drew at 57px while
+    // the Dread branch beside them drew at 171–251px. A 4× cliff at the exact
+    // point the ladder hands off, which is why a Mothership looked like a
+    // gunboat next to the Dread Omega it precedes. The tail now climbs into the
+    // Dread branch instead of stepping off it. Frigate through Cruiser stay at
+    // ×1: they ARE the reference silhouette.
+    heavycruiser:1.08, destroyer:1.15, battleship:1.22, veridian:1.22, dreadnought:1.3,
+    carrier:1.5, aegis:1.5, supercarrier:1.8, titan:2.1, mothership:2.4,
+    // RELEASED TIER-5 CAPITALS. All three sat at ×1 — the same omission as the
+    // Praetorian, on hulls players actually fly today. The Voidmaw is the Season 1
+    // event flagship and its own config calls it above Mothership-grade; the
+    // Chroma Regent is a premium LootCoin capital; FrostyFrost is Carrier-class
+    // event tech. They belong between the Mothership and the Dread ladder.
+    voidmaw:2.8, chromaregent:2.8, frostyfrost:2.6,
+    oblivionspear:2, oblivionspearalpha:2.2, oblivionfinal:4,
     dread1:3, dread2:3.2, dread3:3.4, dread4:3.6, dread5:3.8, dread6:4, titansina:4.4, eternum:5.2, aeternum:4.8,
-    xen1:0.85, xen2:1, xen3:1.3, xen4:1.7, xen5:2.6 };
+    xen1:0.85, xen2:1, xen3:1.3, xen4:1.7, xen5:2.6, vanguard:2.4,
+    // DREAD PRAETORIAN — Dread-class, so it flies at Dread-class size. Missing
+    // from this table it fell through to ×1 and the apex carrier drew at FRIGATE
+    // scale in combat, smaller than the Vanguard it outranks. A shade above the
+    // Dread Omega (4), below the Titan Sina (4.4), which is where the class sits.
+    praetorian:4.2,
+    // ---- THE REST OF THE AUDIT (Aug 2026) ---------------------------------
+    // Only hulls that draw LARGER than the base sprite belong in this table: the
+    // main ladder (frigate → mothership) is sized by HULL_VIS tier alone and is
+    // correct at ×1. These are the ones that are NOT on that ladder and were
+    // still falling through to it:
+    //   • EMBER CHOIR (emb1-5) — the Kaevith ladder's twin, five classes deep,
+    //     and in neither table. Mirrors xen1-5 exactly, as its classes do.
+    //   • MONOLITH (1-4) — the alliance siege ladder, Cruiser through Carrier.
+    //   • TITAN AQUILA — Titan-class, a rung above the Titan Sina (4.4).
+    //   • CELESTIAL CORVUS — Celestial-class, between Aeternum (4.8) and
+    //     Eternum (5.2); the largest carrier hull in the game by bay count.
+    emb1:0.85, emb2:1, emb3:1.3, emb4:1.7, emb5:2.6,
+    monolith1:1.2, monolith2:1.6, monolith3:2.2, monolith4:3,
+    titanaquila:4.5, corvus:5 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';
@@ -1048,16 +1092,35 @@
   // so keying by the resulting color keeps this cache bounded (≈ hulls × tiers ×
   // skins) instead of leaking a fresh canvas on every single hull upgrade over a
   // long idle session.
+  // SPRITE ART IS NOT SQUARE. Ship art runs from near-square to 176×512 (the
+  // Vanguard), and every draw site here used to force it into a ds×ds box — so
+  // every hull was stretched, and the tall ones were unrecognisable. fitW/fitH
+  // scale the real dimensions to fit the box on its longer axis.
+  function srcW(im) { return (im && (im.naturalWidth || im.width)) || 1; }
+  function srcH(im) { return (im && (im.naturalHeight || im.height)) || 1; }
+  function fitK(im, box) { const w = srcW(im), h = srcH(im); return box / (w > h ? w : h); }
+
   const LVL_TINT_CACHE = {};
   function lvlTint(img, key, lv, skin, col) {
     if (!img) return img;
     if (!/^#[0-9a-f]{6}$/i.test(col || '')) return img;
+    // NOT YET DECODED — hand back the original and cache NOTHING. srcW/srcH fall
+    // back to 1 on an image that has not loaded, which would build (and then
+    // permanently cache) a 1×1 canvas: the hull would render as a single pixel for
+    // the rest of the session. The old `img.width || 96` hid this by guessing 96.
+    if (img instanceof HTMLImageElement && !img.naturalWidth) return img;
     const id = key + ':' + (col || '') + ':' + (skin || 'stock');
     if (LVL_TINT_CACHE[id]) return LVL_TINT_CACHE[id];
-    const S = img.width || 96;
+    // LETTERBOXED, NOT SQUASHED. The canvas stays square so the skin/stripe
+    // geometry below and every ds×ds call site keep working unchanged, but the
+    // sprite is centred inside it at its true aspect instead of being stretched
+    // to fill — which is what flattened tall hulls into blobs.
+    const iw = srcW(img), ih = srcH(img);
+    const S = (iw > ih ? iw : ih) || 96;
     const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
     const cx = cv.getContext('2d');
-    cx.drawImage(img, 0, 0, S, S);
+    { const k = S / (iw > ih ? iw : ih), dw = iw * k, dh = ih * k;
+      cx.drawImage(img, 0, 0, iw, ih, (S - dw) / 2, (S - dh) / 2, dw, dh); }
     // TINT THE HULL, NOT ITS GLOW. This was a flat 42% fill through `source-atop`,
     // which paints EVERY pixel the sprite owns — including the wide, soft bloom
     // the capital-ship art carries around itself. On a Dread Omega, drawn at 4×
@@ -1090,7 +1153,10 @@
     const cv = (!animated ? document.createElement('canvas') : (SKIN_CACHE._anim || (SKIN_CACHE._anim = document.createElement('canvas'))));
     cv.width = S; cv.height = S;
     const cx = cv.getContext('2d');
-    cx.drawImage(im, 0, 0, S, S);
+    // letterboxed for the same reason as lvlTint — `source-atop` below only
+    // paints where the sprite actually is, so the skins are unaffected
+    { const iw = srcW(im), ih = srcH(im), k = S / (iw > ih ? iw : ih), dw = iw * k, dh = ih * k;
+      cx.drawImage(im, 0, 0, iw, ih, (S - dw) / 2, (S - dh) / 2, dw, dh); }
     cx.globalCompositeOperation = 'source-atop';
     if (skin === 'prismatic') {
       const off = (t * 60) % 360;
@@ -1318,7 +1384,8 @@
       const _lv = (window.GAME && GAME.state && GAME.state.shipLevels && GAME.state.shipLevels[activeShipKey()]) || 1;
       const _tcol = (window.shipLvlColor && _lv >= 3) ? window.shipLvlColor(_lv) : null;
       const _drawn = _tcol ? lvlTint(_skinned, activeShipKey(), _lv, cosmeticsState().skin, _tcol) : _skinned;
-      ctx.drawImage(_drawn, -ds / 2, -ds / 2 + recoil * 1.4, ds, ds);
+      { const k = fitK(_drawn, ds), dw = srcW(_drawn) * k, dh = srcH(_drawn) * k;
+        ctx.drawImage(_drawn, -dw / 2, -dh / 2 + recoil * 1.4, dw, dh); }
       // (no floating muzzle-flash dot — fire feedback comes from the spark particles)
     } else {
       ctx.rotate(facing + Math.PI / 2);
@@ -1664,7 +1731,7 @@
       ctx.translate(slot.x, slot.y - 6 + bob);
       ctx.scale(shipScale, shipScale);
       const _hi = shipImg(slot.ship.key);
-      if (_hi) { const ds = 30 + tier * 3; ctx.drawImage(_hi, -ds / 2, -ds / 2, ds, ds); }
+      if (_hi) { const ds = 30 + tier * 3, k = fitK(_hi, ds), dw = srcW(_hi) * k, dh = srcH(_hi) * k; ctx.drawImage(_hi, -dw / 2, -dh / 2, dw, dh); }
       else drawShip(ctx, tier, slot.ship.equipped || {}, t, 0);
       ctx.restore();
       // name plate

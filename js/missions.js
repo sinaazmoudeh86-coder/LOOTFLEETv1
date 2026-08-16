@@ -18,41 +18,48 @@
   // MISSION POOL — id, name, blurb, metric, target(level,zone), reward(level,zone)
   // ---------------------------------------------------------------------------
   const dayScale = (z) => Math.max(1, Math.pow(z, 1.15));
+
+  // ---- LOOTCOIN PAYOUT PASS · Aug 2026 -------------------------------------
+  // Every LootCoin REWARD in the game was halved in one pass (build 614). Mission board payouts halved at the POOL definition, so daily,
+  // weekly and monthly all follow — scaleRw() multiplies these, it does not replace
+  // them. The two “all boards clear” bonuses went 100 → 50 with them.
+  // Prices, costs and pack sizes were NOT touched — only what the game HANDS OUT.
+  // ---------------------------------------------------------------------------
   const POOL = [
     { id: 'kills1',  ic: '⌖', name: 'Clear the Lanes',    blurb: 'Destroy {N} enemy ships',            m: 'kills',  n: (l, z) => 150 + Math.round(l * 6),        rw: (l, z) => ({ gold: Math.round(900 * dayScale(z)) }) },
-    { id: 'kills2',  ic: '☄', name: 'Full Sweep',         blurb: 'Destroy {N} enemy ships',            m: 'kills',  n: (l, z) => 400 + Math.round(l * 14),       rw: (l, z) => ({ gold: Math.round(1500 * dayScale(z)), lc: 10 }) },
-    { id: 'boss1',   ic: '◈', name: 'Decapitation Strike', blurb: 'Destroy {N} bosses',                m: 'bosses', n: () => 2,                                  rw: (l, z) => ({ iron: Math.round(120 * dayScale(z)), lc: 10 }) },
-    { id: 'boss2',   ic: '♛', name: 'Warlord Purge',      blurb: 'Destroy {N} bosses',                 m: 'bosses', n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(90 * dayScale(z)), lc: 15 }) },
+    { id: 'kills2',  ic: '☄', name: 'Full Sweep',         blurb: 'Destroy {N} enemy ships',            m: 'kills',  n: (l, z) => 400 + Math.round(l * 14),       rw: (l, z) => ({ gold: Math.round(1500 * dayScale(z)), lc: 5 }) },
+    { id: 'boss1',   ic: '◈', name: 'Decapitation Strike', blurb: 'Destroy {N} bosses',                m: 'bosses', n: () => 2,                                  rw: (l, z) => ({ iron: Math.round(120 * dayScale(z)), lc: 5 }) },
+    { id: 'boss2',   ic: '♛', name: 'Warlord Purge',      blurb: 'Destroy {N} bosses',                 m: 'bosses', n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(90 * dayScale(z)), lc: 8 }) },
     { id: 'gold1',   ic: '$', name: 'War Chest',          blurb: 'Earn {N} gold from combat',          m: 'gold',   n: (l, z) => Math.round(4000 * dayScale(z)), rw: (l, z) => ({ fuel: Math.round(220 * dayScale(z)) }) },
-    { id: 'fuel1',   ic: '⬢', name: 'Fuel Skimmer',       blurb: 'Scavenge {N} fuel',                  m: 'fuel',   n: (l, z) => Math.round(60 * dayScale(z)),   rw: (l, z) => ({ iron: Math.round(80 * dayScale(z)), lc: 5 }) },
-    { id: 'iron1',   ic: '◆', name: 'Iron Harvest',       blurb: 'Scavenge {N} iron',                  m: 'iron',   n: (l, z) => Math.round(40 * dayScale(z)),   rw: (l, z) => ({ plasma: Math.round(60 * dayScale(z)), lc: 5 }) },
-    { id: 'plas1',   ic: '✦', name: 'Plasma Rush',        blurb: 'Scavenge {N} plasma',                m: 'plasma', n: (l, z) => Math.round(30 * dayScale(z)),   rw: (l, z) => ({ gold: Math.round(1200 * dayScale(z)), lc: 5 }) },
+    { id: 'fuel1',   ic: '⬢', name: 'Fuel Skimmer',       blurb: 'Scavenge {N} fuel',                  m: 'fuel',   n: (l, z) => Math.round(60 * dayScale(z)),   rw: (l, z) => ({ iron: Math.round(80 * dayScale(z)), lc: 3 }) },
+    { id: 'iron1',   ic: '◆', name: 'Iron Harvest',       blurb: 'Scavenge {N} iron',                  m: 'iron',   n: (l, z) => Math.round(40 * dayScale(z)),   rw: (l, z) => ({ plasma: Math.round(60 * dayScale(z)), lc: 3 }) },
+    { id: 'plas1',   ic: '✦', name: 'Plasma Rush',        blurb: 'Scavenge {N} plasma',                m: 'plasma', n: (l, z) => Math.round(30 * dayScale(z)),   rw: (l, z) => ({ gold: Math.round(1200 * dayScale(z)), lc: 3 }) },
     { id: 'xp1',     ic: '▲', name: 'Flight Hours',       blurb: 'Gain {N} account levels',            m: 'levels', n: (l) => l < 40 ? 2 : 1,                    rw: (l, z) => ({ fuel: Math.round(150 * dayScale(z)), iron: Math.round(60 * dayScale(z)) }) },
-    { id: 'zone1',   ic: '⌬', name: 'Push the Frontier',  blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 3,                                  rw: (l, z) => ({ gold: Math.round(1100 * dayScale(z)), lc: 5 }) },
+    { id: 'zone1',   ic: '⌬', name: 'Push the Frontier',  blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 3,                                  rw: (l, z) => ({ gold: Math.round(1100 * dayScale(z)), lc: 3 }) },
     { id: 'time1',   ic: '◷', name: 'On Patrol',          blurb: 'Fly {N} minutes of combat',          m: 'mins',   n: () => 15,                                 rw: (l, z) => ({ fuel: Math.round(180 * dayScale(z)) }) },
-    { id: 'loot1',   ic: '⬡', name: 'Salvage Run',        blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 12 + Math.min(18, Math.round(l / 4)), rw: (l, z) => ({ iron: Math.round(70 * dayScale(z)), lc: 5 }) },
-    { id: 'kills3',  ic: '⛬', name: 'Ace of the Sector',  blurb: 'Destroy {N} enemy ships',            m: 'kills',  n: (l, z) => 800 + Math.round(l * 20),       rw: (l, z) => ({ gold: Math.round(2600 * dayScale(z)), lc: 15 }) },
-    { id: 'boss3',   ic: '⚑', name: 'Super Heavy',        blurb: 'Destroy {N} bosses',                 m: 'bosses', n: () => 8,                                  rw: (l, z) => ({ fuel: Math.round(260 * dayScale(z)), plasma: Math.round(80 * dayScale(z)), lc: 15 }) },
-    { id: 'gold2',   ic: '⛁', name: 'Deep Pockets',       blurb: 'Earn {N} gold from combat',          m: 'gold',   n: (l, z) => Math.round(12000 * dayScale(z)), rw: (l, z) => ({ iron: Math.round(140 * dayScale(z)), lc: 10 }) },
-    { id: 'zone2',   ic: '✈', name: 'Long Haul',          blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 6,                                  rw: (l, z) => ({ plasma: Math.round(110 * dayScale(z)), lc: 10 }) },
+    { id: 'loot1',   ic: '⬡', name: 'Salvage Run',        blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 12 + Math.min(18, Math.round(l / 4)), rw: (l, z) => ({ iron: Math.round(70 * dayScale(z)), lc: 3 }) },
+    { id: 'kills3',  ic: '⛬', name: 'Ace of the Sector',  blurb: 'Destroy {N} enemy ships',            m: 'kills',  n: (l, z) => 800 + Math.round(l * 20),       rw: (l, z) => ({ gold: Math.round(2600 * dayScale(z)), lc: 8 }) },
+    { id: 'boss3',   ic: '⚑', name: 'Super Heavy',        blurb: 'Destroy {N} bosses',                 m: 'bosses', n: () => 8,                                  rw: (l, z) => ({ fuel: Math.round(260 * dayScale(z)), plasma: Math.round(80 * dayScale(z)), lc: 8 }) },
+    { id: 'gold2',   ic: '⛁', name: 'Deep Pockets',       blurb: 'Earn {N} gold from combat',          m: 'gold',   n: (l, z) => Math.round(12000 * dayScale(z)), rw: (l, z) => ({ iron: Math.round(140 * dayScale(z)), lc: 5 }) },
+    { id: 'zone2',   ic: '✈', name: 'Long Haul',          blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 6,                                  rw: (l, z) => ({ plasma: Math.round(110 * dayScale(z)), lc: 5 }) },
     { id: 'time2',   ic: '☉', name: 'Double Shift',       blurb: 'Fly {N} minutes of combat',          m: 'mins',   n: () => 45,                                 rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), fuel: Math.round(200 * dayScale(z)) }) },
-    { id: 'loot2',   ic: '❖', name: 'Cargo Bay Bulge',    blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 30 + Math.min(30, Math.round(l / 3)), rw: (l, z) => ({ gold: Math.round(1800 * dayScale(z)), lc: 10 }) },
+    { id: 'loot2',   ic: '❖', name: 'Cargo Bay Bulge',    blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 30 + Math.min(30, Math.round(l / 3)), rw: (l, z) => ({ gold: Math.round(1800 * dayScale(z)), lc: 5 }) },
     // ---- FEATURE-GATED MISSIONS — only issued once the feature is unlocked (req = min level) ----
-    { id: 'gal1',    ic: '⬢', name: 'Land Grab',          blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 2,                                  rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 10 }), req: 25 },
-    { id: 'gal2',    ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 20 }), req: 25 },
-    { id: 'moon1',   ic: '☾', name: 'Colony Shipment',    blurb: 'Collect {N} resources from your Moon Colony', m: 'moon', n: (l, z) => Math.round(1500 * dayScale(z)), rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), lc: 10 }), req: 30 },
-    { id: 'moon2',   ic: '⛏', name: 'Colony Foreman',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 3,                              rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 15 }), req: 30 },
-    // ---- SPACE CARGO DEFENSE — gated on the event itself (★20), not a level.
+    { id: 'gal1',    ic: '⬢', name: 'Land Grab',          blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 2,                                  rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 5 }), req: 25 },
+    { id: 'gal2',    ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 10 }), req: 25 },
+    { id: 'moon1',   ic: '☾', name: 'Colony Shipment',    blurb: 'Collect {N} resources from your Moon Colony', m: 'moon', n: (l, z) => Math.round(1500 * dayScale(z)), rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), lc: 5 }), req: 30 },
+    { id: 'moon2',   ic: '⛏', name: 'Colony Foreman',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 3,                              rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 8 }), req: 30 },
+    // ---- SPACE CARGO DEFENSE — gated on the event itself (★3), not a level.
     // Deliveries are capped at 2/day base, so targets are counted in RUNS, not
     // the usual ×38 tier ladder (see the clamp in buildList).
-    { id: 'cargo1',  ic: '⛟', name: 'Escort Contract',    blurb: 'Deliver {N} cargo shipment(s) to the Citadel', m: 'cargo', n: () => 1,             rw: (l, z) => ({ gold: Math.round(4000 * dayScale(z)), lc: 30 }), gate: () => cargoOpen() },
+    { id: 'cargo1',  ic: '⛟', name: 'Escort Contract',    blurb: 'Deliver {N} cargo shipment(s) to the Citadel', m: 'cargo', n: () => 1,             rw: (l, z) => ({ gold: Math.round(4000 * dayScale(z)), lc: 15 }), gate: () => cargoOpen() },
     // ---- NANOCORES — gated on the system itself (Lv 50), not a board level.
-    { id: 'nano1',   ic: '◈', name: 'Core Requisition',   blurb: 'Open {N} Nanocore Crate(s)',                   m: 'nanoOpen', n: () => 1,   rw: (l, z) => ({ gold: Math.round(5000 * dayScale(z)), lc: 25 }), gate: () => nanoOpen() },
-    { id: 'nano2',   ic: '⬢', name: 'Bench Time',         blurb: 'Land {N} successful core upgrade(s)',          m: 'nanoUp',   n: () => 2,   rw: (l, z) => ({ plasma: Math.round(150 * dayScale(z)), lc: 20 }), gate: () => nanoOpen() },
-    { id: 'nano3',   ic: '✧', name: 'Spin the Lattice',   blurb: 'Reroll extra buffs {N} time(s)',               m: 'nanoRoll', n: () => 2,   rw: (l, z) => ({ iron: Math.round(180 * dayScale(z)), lc: 20 }), gate: () => nanoOpen() },
-    { id: 'cargo2',  ic: '✦', name: 'Pristine Manifest',  blurb: 'Deliver {N} shipment(s) at 90%+ integrity',    m: 'cargoClean', n: () => 1,        rw: (l, z) => ({ plasma: Math.round(200 * dayScale(z)), lc: 45 }), gate: () => cargoOpen() },
+    { id: 'nano1',   ic: '◈', name: 'Core Requisition',   blurb: 'Open {N} Nanocore Crate(s)',                   m: 'nanoOpen', n: () => 1,   rw: (l, z) => ({ gold: Math.round(5000 * dayScale(z)), lc: 13 }), gate: () => nanoOpen() },
+    { id: 'nano2',   ic: '⬢', name: 'Bench Time',         blurb: 'Land {N} successful core upgrade(s)',          m: 'nanoUp',   n: () => 2,   rw: (l, z) => ({ plasma: Math.round(150 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
+    { id: 'nano3',   ic: '✧', name: 'Spin the Lattice',   blurb: 'Reroll extra buffs {N} time(s)',               m: 'nanoRoll', n: () => 2,   rw: (l, z) => ({ iron: Math.round(180 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
+    { id: 'cargo2',  ic: '✦', name: 'Pristine Manifest',  blurb: 'Deliver {N} shipment(s) at 90%+ integrity',    m: 'cargoClean', n: () => 1,        rw: (l, z) => ({ plasma: Math.round(200 * dayScale(z)), lc: 23 }), gate: () => cargoOpen() },
   ];
-  // the event unlocks at Pilot Ascension ★20 — no level ever opens it
+  // the event unlocks at Pilot Ascension ★3 — no level ever opens it
   function cargoOpen() { try { return !!(window.CARGO && window.CARGO.unlocked && window.CARGO.unlocked()); } catch (e) { return false; } }
   // Nanocores opens at Level 50 — asked through the module so the gate lives in
   // exactly one place (NANO.CFG.gate).
@@ -362,7 +369,7 @@
       '<div class="mh-s">10 fresh orders every ' + cfg.word + ' · ⟳ resets in <b data-msn-cd>' + fmtLeft(cfg.left()) + '</b></div>' +
       (tier > 1 ? '<div class="mh-s"><b style="color:#ffd24d">All rewards ×' + G.formatNum(rwMult(tier)) + '</b> this tier · targets up steeply</div>'
                 : '<div class="mh-s">Clear the board to unlock <b>Tier 2</b> — rewards ×2</div>') +
-      '</div><div class="mh-ring" style="--p:' + (doneN / 10 * 360) + 'deg"><span>' + doneN + '<i>/10</i></span></div></div>';
+      '</div><div class="mh-ring" data-msn-ring style="--p:' + (doneN / 10 * 360) + 'deg"><span data-msn-ringn>' + doneN + '<i>/10</i></span></div></div>';
     const readyN = b.list.filter((m) => m.done >= m.n && !m.claimed).length;
     if (readyN > 0) html += '<button class="msn-claimall" data-claimall="1">✓ CLAIM ALL COMPLETED <i>' + readyN + '</i></button>';
     if (cfg.id === 'd') html += veridianBanner(); // ⌘ VERIDIAN — 1,000-lifetime-missions reward hull
@@ -371,26 +378,63 @@
       const rw = scaleRw(def.rw(lvl, z), tier, cfg);
       const pct = Math.min(100, mi.done / mi.n * 100);
       const done = mi.done >= mi.n;
-      html += '<div class="msn-card ' + (mi.claimed ? 'claimed' : done ? 'ready' : '') + '">' +
+      html += '<div class="msn-card ' + (mi.claimed ? 'claimed' : done ? 'ready' : '') + '" data-msn-row="' + i + '">' +
         '<div class="msn-ic">' + def.ic + '</div>' +
         '<div class="msn-mid"><div class="msn-n">' + def.name + '</div>' +
         '<div class="msn-b">' + def.blurb.replace('{N}', '<b>' + G.formatNum(mi.n) + '</b>') + '</div>' +
-        '<div class="msn-bar"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="msn-prog">' + G.formatNum(Math.min(mi.done, mi.n)) + ' / ' + G.formatNum(mi.n) + '</div>' +
+        '<div class="msn-bar"><i data-msn-fill style="width:' + pct + '%"></i></div>' +
+        '<div class="msn-prog" data-msn-prog>' + G.formatNum(Math.min(mi.done, mi.n)) + ' / ' + G.formatNum(mi.n) + '</div>' +
         '<div class="msn-rw">' + rwChips(rw) + '</div></div>' +
         (mi.claimed ? '<div class="msn-done">✓</div>'
           : done ? '<button class="msn-claim" data-claim="' + i + '">CLAIM</button>'
           : '') + '</div>';
     });
     const allDone = doneN >= 10;
-    const bonusRw = scaleRw({ lc: 100, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) }, tier, cfg);
+    const bonusRw = scaleRw({ lc: 50, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) }, tier, cfg);
     html += '<div class="msn-bonus ' + (b.allClaimed ? 'claimed' : allDone ? 'ready' : '') + '">' +
       '<div class="mb-glow"></div><div class="mb-ic">▣</div>' +
       '<div class="msn-mid"><div class="msn-n">COMMANDER\'S CRATE · ' + cfg.label + ' TIER ' + tier + '</div>' +
       '<div class="msn-b">Clear all 10 · <b>' + claimedN + '/10 claimed</b> · claiming unlocks <b>TIER ' + (tier + 1) + '</b> (rewards ×2)</div>' +
       '<div class="msn-rw">' + rwChips(bonusRw) + '</div></div>' +
-      (b.allClaimed ? '<div class="msn-done">✓</div>' : allDone ? '<button class="msn-claim gold" data-bonus="1">CLAIM</button>' : '<div class="msn-lockp">' + doneN + '/10</div>') + '</div>';
+      (b.allClaimed ? '<div class="msn-done">✓</div>' : allDone ? '<button class="msn-claim gold" data-bonus="1">CLAIM</button>' : '<div class="msn-lockp" data-msn-lockp>' + doneN + '/10</div>') + '</div>';
     return html;
+  }
+  // ---------------------------------------------------------------------------
+  // IN-PLACE PROGRESS PATCH — the 1s tick moves counters CONSTANTLY while you fly.
+  // Rebuilding the board's innerHTML on every one of those ticks is what made the
+  // numbers strobe: each swap threw away the live nodes, so the bars could not
+  // animate (a brand-new element with an inline width has nothing to transition
+  // FROM), the scroll position had to be restored by hand a frame later, and a
+  // claim button could be replaced under a thumb mid-tap. Counters now write
+  // straight into the existing nodes, and the DOM is only rebuilt when the board
+  // STRUCTURE changes — a mission completing, a claim, a tier-up, a reset.
+  // ---------------------------------------------------------------------------
+  function structSig(cfg, b) {
+    return TAB + '|' + (b.tier || 1) + '|' + (b.allClaimed ? 1 : 0) + '|' +
+      b.list.map((m) => m.id + (m.done >= m.n ? 'D' : '') + (m.claimed ? 'C' : '')).join(',');
+  }
+  function patchBoard(body, cfg, b) {
+    const rows = body.querySelectorAll('[data-msn-row]');
+    if (rows.length !== b.list.length) return false;
+    rows.forEach((row) => {
+      const mi = b.list[+row.dataset.msnRow]; if (!mi) return;
+      const fill = row.querySelector('[data-msn-fill]');
+      const prog = row.querySelector('[data-msn-prog]');
+      const w = Math.min(100, mi.done / mi.n * 100).toFixed(2) + '%';
+      if (fill && fill.style.width !== w) fill.style.width = w;
+      const txt = G.formatNum(Math.min(mi.done, mi.n)) + ' / ' + G.formatNum(mi.n);
+      if (prog && prog.textContent !== txt) prog.textContent = txt;
+    });
+    const doneN = b.list.filter((m) => m.done >= m.n).length;
+    const ring = body.querySelector('[data-msn-ring]');
+    if (ring) ring.style.setProperty('--p', (doneN / 10 * 360) + 'deg');
+    const rn = body.querySelector('[data-msn-ringn]');
+    if (rn && rn.firstChild) rn.firstChild.nodeValue = doneN;
+    const lp = body.querySelector('[data-msn-lockp]');
+    if (lp) lp.textContent = doneN + '/10';
+    const cd = body.querySelector('[data-msn-cd]');
+    if (cd) cd.textContent = fmtLeft(cfg.left());
+    return true;
   }
   function render() {
     const body = $('missions-body'); if (!body) return;
@@ -406,10 +450,20 @@
       html += boardHtml(cfg, b);
       if (sub) sub.textContent = cfg.label.charAt(0) + cfg.label.slice(1).toLowerCase() + ' · Tier ' + (b.tier || 1) + ' · ' + b.list.filter((m) => m.done >= m.n).length + '/10 · resets ' + fmtLeft(cfg.left());
     }
+    // FLICKER GUARD 1 — a board whose STRUCTURE is unchanged never swaps DOM.
+    // Only the moving numbers are written into the live nodes (see patchBoard).
+    if (cfg && b) {
+      const sig = structSig(cfg, b);
+      if (body._msnSig === sig && body._msnHtml && patchBoard(body, cfg, b)) {
+        if (sub) sub.textContent = cfg.label.charAt(0) + cfg.label.slice(1).toLowerCase() + ' · Tier ' + (b.tier || 1) + ' · ' + b.list.filter((m) => m.done >= m.n).length + '/10 · resets ' + fmtLeft(cfg.left());
+        return;
+      }
+      body._msnSig = sig;
+    } else body._msnSig = null;
     // preserve scroll through re-renders
     let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
     const _st = _sc ? _sc.scrollTop : 0;
-    // FLICKER GUARD — identical content (timers aside) skips the DOM swap
+    // FLICKER GUARD 2 — identical content (timers aside) skips the DOM swap
     if (body._msnHtml === html) return;
     body._msnHtml = html;
     body.innerHTML = html;
@@ -462,8 +516,19 @@
           if (d) payout(scaleRw(d.rw(lvl, z), tier, cfg));
         }
       });
-      const bonusRw = scaleRw({ lc: 100, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) }, tier, cfg);
+      const bonusRw = scaleRw({ lc: 50, fuel: Math.round(300 * dayScale(z)), iron: Math.round(200 * dayScale(z)), plasma: Math.round(150 * dayScale(z)) }, tier, cfg);
       b.allClaimed = true; payout(bonusRw);
+      // TOUR OF DUTY no longer takes XP from THIS board (634). The season has its own
+      // daily and weekly missions on its own screen, and paying from both would double
+      // its budget. The calls are left in place because TOUR.dailyDone/weeklyDone are
+      // now deliberate no-ops — a browser serving a cached copy of either file still
+      // cannot pay twice.
+      try {
+        if (window.TOUR) {
+          if (cfg.id === 'd') window.TOUR.dailyDone();
+          else if (cfg.id === 'w') window.TOUR.weeklyDone();
+        }
+      } catch (e) {}
       const tl = $('toast-layer');
       if (tl) {
         const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ffd24d';

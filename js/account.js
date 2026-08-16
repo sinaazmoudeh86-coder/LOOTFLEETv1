@@ -562,6 +562,186 @@
       base.lifeStats = base.lifeStats || {};
       for (const k in other.lifeStats) base.lifeStats[k] = Math.max(base.lifeStats[k] || 0, other.lifeStats[k] || 0);
     }
+    // =========================================================================
+    // BUILT INFRASTRUCTURE — the other half of the rule this function states.
+    //
+    // The union list above covers ENTITLEMENTS (hulls, blueprints, purchases,
+    // cosmetics, nanocores, lifetime counters, the ascension record). It did NOT
+    // cover anything the pilot BUILT: hull upgrade levels, Ship Ascension modules,
+    // the Pilot Tree, Starforge tempers, the Moon Colony, Prism, badge claims and
+    // territory. Every one of those was decided WHOLESALE by the base pick, so the
+    // losing copy's version was simply gone.
+    //
+    // That contradicts two things the game states in writing: this function's own
+    // rule ("KEPT is anything you BUILT"), and the Pilot Ascension screen, which
+    // promises "every hull, every hull upgrade level, and every Ship Ascension"
+    // survives. And the base pick cannot be relied on to protect them: one
+    // ascension star is 5e6 of weight, so a fleet-wide difference of dozens of hull
+    // levels sits deep inside the ×1.3 tie band and loses to a stale `lastSave`.
+    //
+    // EVERYTHING BELOW IS MONOTONIC BY CONSTRUCTION — these values only ever go up
+    // through play, and nothing in the game refunds them — so `Math.max` is exact,
+    // not a guess, and merging twice produces the same numbers.
+    //
+    // NONE OF IT IS CLEARED BY A PILOT ASCENSION OR THE EPOCH RESET, which is why
+    // these unions run unguarded — checked against ASC_KEEP and the PASC_EPOCH
+    // migration one by one. TERRITORY IS THE EXCEPTION and carries an `el === ec`
+    // guard; see the note on it below. Anything added here later must be checked the
+    // same way: if a reset destroys it, unioning it undoes the reset.
+    //
+    // DELIBERATELY NOT UNIONED: gold, credits, resources, dreadCores and Prism
+    // ingots. Those are SPENDABLE WALLETS, and maxing a wallet against a copy that
+    // has not spent yet is the duplication bug the `pasc.pts` block above exists to
+    // undo. They stay with the base copy.
+
+    // ---- hull upgrade levels: one number per hull, bought with gold, never refunded
+    if (other.shipLevels) {
+      base.shipLevels = base.shipLevels || {};
+      for (const k in other.shipLevels) base.shipLevels[k] = Math.max(base.shipLevels[k] | 0, other.shipLevels[k] | 0);
+    }
+    // ---- SHIP ASCENSION: per hull, per module { t: tier, s: stars, l: level }.
+    // Depth decides and the module is taken WHOLE — tier, then stars, then level —
+    // the same rule the nanocore merge above uses, so a half-merged module can never
+    // exist (a high tier paired with another copy's star count is not a state the
+    // game can produce).
+    if (other.ascension) {
+      base.ascension = base.ascension || {};
+      for (const sh in other.ascension) {
+        const om = other.ascension[sh] || {};
+        const bm = base.ascension[sh] = base.ascension[sh] || {};
+        for (const id in om) {
+          const o = om[id], b = bm[id];
+          if (!o) continue;
+          if (!b) { bm[id] = o; continue; }
+          const deeper = (o.t | 0) !== (b.t | 0) ? (o.t | 0) > (b.t | 0)
+            : (o.s | 0) !== (b.s | 0) ? (o.s | 0) > (b.s | 0)
+            : (o.l | 0) > (b.l | 0);
+          if (deeper) bm[id] = o;
+        }
+      }
+    }
+    // ---- kills per hull: strictly monotonic counters, and hull unlocks are gated
+    // on them (`reqKills`), so a regression can RE-LOCK a hull the pilot has earned.
+    if (other.shipKills) {
+      base.shipKills = base.shipKills || {};
+      for (const k in other.shipKills) base.shipKills[k] = Math.max(base.shipKills[k] | 0, other.shipKills[k] | 0);
+    }
+    // ---- STARFORGE tempers: `lv` per slot is the paid, permanent part. `heat`,
+    // `pur` and `rr` are live forge state for the CURRENT attempt and belong to one
+    // timeline — unioning those would invent a forge session that never happened.
+    if (other.forge) {
+      base.forge = base.forge || { v: other.forge.v };
+      for (const k in other.forge) {
+        const o = other.forge[k];
+        if (!o || typeof o !== 'object') continue;
+        const b = base.forge[k];
+        if (!b) { base.forge[k] = o; continue; }
+        if ((o.lv | 0) > (b.lv | 0)) { b.lv = o.lv | 0; }
+      }
+    }
+    // ---- PILOT TREE node ranks. Bought with Dread Cores, and cores are a wallet we
+    // do not touch — so in the rare case two devices spent offline into different
+    // nodes, the union can leave a pilot with slightly more tree than they paid for.
+    // That is the same bounded, one-time, non-repeating trade the `pasc` block makes
+    // ("keep the perks and record the debt"), and it is the right way round: losing
+    // an entire Pilot Tree to a stale login is unrecoverable, an extra node is not.
+    if (other.pilot && other.pilot.nodes) {
+      base.pilot = base.pilot || {};
+      base.pilot.nodes = base.pilot.nodes || {};
+      for (const n in other.pilot.nodes) base.pilot.nodes[n] = Math.max(base.pilot.nodes[n] | 0, other.pilot.nodes[n] | 0);
+    }
+    // ---- PRISM: refinery level and career bests only. `ingots` is a wallet.
+    if (other.prism) {
+      base.prism = base.prism || {};
+      base.prism.refinery = Math.max(base.prism.refinery | 0, other.prism.refinery | 0);
+      base.prism.best = Math.max(base.prism.best | 0, other.prism.best | 0);
+      base.prism.core = Math.max(base.prism.core | 0, other.prism.core | 0);
+    }
+    // ---- MOON COLONY: structure levels and sector count per moon, plus the
+    // lifetime ledger. `stored` is uncollected output (a wallet) and the raid timer
+    // belongs to one timeline, so both stay with base.
+    if (other.moon && Array.isArray(other.moon.moons)) {
+      base.moon = base.moon || { moons: [] };
+      base.moon.moons = base.moon.moons || [];
+      other.moon.moons.forEach((om, i) => {
+        const bm = base.moon.moons[i];
+        if (!bm) { base.moon.moons[i] = om; return; }
+        bm.sectors = Math.max(bm.sectors | 0, om.sectors | 0);
+        const bb = bm.b = bm.b || {}, ob = om.b || {};
+        for (const k in ob) bb[k] = Math.max(bb[k] | 0, ob[k] | 0);
+      });
+      if (other.moon.lifetime) {
+        base.moon.lifetime = base.moon.lifetime || {};
+        for (const k in other.moon.lifetime) base.moon.lifetime[k] = Math.max(base.moon.lifetime[k] || 0, other.moon.lifetime[k] || 0);
+      }
+      base.moon.perm = Math.max(base.moon.perm | 0, other.moon.perm | 0);
+    }
+    // ---- TOUR OF DUTY (season pass). Named here because a system NOT in this
+    // union is decided wholesale by the base pick — and the pass is bought with
+    // real money. XP and the settled counter take the HIGHER value; `own` (the
+    // paid tracks) and `claim` (what has already been paid out) are unioned, so a
+    // stale copy can neither un-buy Admiralty nor re-arm a claimed reward.
+    if (other.tour && (!base.tour || (other.tour.s | 0) === (base.tour.s | 0))) {
+      base.tour = base.tour || { s: other.tour.s | 0, xp: 0, own: {}, claim: {}, dq: -1, wq: -1, settled: 0 };
+      base.tour.xp = Math.max(base.tour.xp | 0, other.tour.xp | 0);
+      base.tour.settled = Math.max(base.tour.settled | 0, other.tour.settled | 0);
+      base.tour.dq = Math.max(base.tour.dq | 0, other.tour.dq | 0);
+      base.tour.wq = Math.max(base.tour.wq | 0, other.tour.wq | 0);
+      ['own', 'claim'].forEach((f) => {
+        if (!other.tour[f]) return;
+        base.tour[f] = base.tour[f] || {};
+        for (const k in other.tour[f]) if (!base.tour[f][k]) base.tour[f][k] = other.tour[f][k];
+      });
+    }
+    // BETA ACCESS is sticky and one-way: if EITHER copy of the save has been let
+    // in, the merged one is. A tester who redeems on their phone must not lose
+    // access because the desktop copy won the merge.
+    if (other.tourBeta) base.tourBeta = 1;
+    // ---- BADGE CLAIMS. Unioning `claimed` is what PREVENTS a double payout: the
+    // claim map is the only thing stopping a rank paying its LootCoins twice, so a
+    // lost claim is not just a lost badge, it is a repeatable reward.
+    if (other.achieve) {
+      base.achieve = base.achieve || {};
+      ['seen', 'claimed'].forEach((f) => {
+        if (!other.achieve[f]) return;
+        base.achieve[f] = base.achieve[f] || {};
+        for (const k in other.achieve[f]) base.achieve[f][k] = Math.max(base.achieve[f][k] | 0, other.achieve[f][k] | 0);
+      });
+    }
+    // ---- TERRITORY — THE ONE UNION HERE THAT MUST BE EPOCH-GUARDED.
+    // Tiles are unioned and a citadel is kept at its HIGHER rank, because a lost
+    // merge could otherwise demolish a Rank 5 fortress — five build-and-rank-up
+    // cycles of fuel, iron and plasma, and worth more since a sieged citadel now
+    // changes hands intact at full rank.
+    //
+    // BUT ONLY WITHIN ONE TIMELINE. Unlike every other union above, territory is
+    // state the epoch-1 reset DELIBERATELY DESTROYS: the PASC_EPOCH migration in
+    // game-v93.js clears ownedSystems, citadels, rivalCitadels, tileCd and
+    // razedCitadels outright, and the reset toast tells players the galaxy is wiped
+    // for every pilot. Unioning across epochs restores every tile and citadel from
+    // the wiped timeline — which is precisely the failure the epoch was introduced
+    // to stop ("without an epoch the 0-star save loses to the pre-reset cloud copy
+    // and the reset is undone at the next login, on every device, forever"). It
+    // would also fight supabase/reset-territory.sql and the `_turfRepub2` latch,
+    // whose job is keeping old holdings out of the truncated `territory` table.
+    //
+    // Same guard the pasc and pilot-level unions already use. When the epochs
+    // differ, the reset has run on `base` and its empty galaxy is the correct answer.
+    if (el === ec) {
+      if (other.ownedSystems) {
+        base.ownedSystems = base.ownedSystems || {};
+        for (const id in other.ownedSystems) if (!base.ownedSystems[id]) base.ownedSystems[id] = other.ownedSystems[id];
+      }
+      if (other.citadels) {
+        base.citadels = base.citadels || {};
+        for (const id in other.citadels) {
+          const o = other.citadels[id], b = base.citadels[id];
+          if (!o) continue;
+          if (!b || (o.lv | 0) > (b.lv | 0)) base.citadels[id] = o;
+        }
+      }
+    }
+    // =========================================================================
     if (other.cosmetics && other.cosmetics.owned) {
       base.cosmetics = base.cosmetics || { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
       base.cosmetics.owned = base.cosmetics.owned || {};
@@ -603,6 +783,14 @@
     return null;
   }
 
+  // ⚙ COG PING — ONE unread dot, cleared for good the first time the sheet is
+  // opened. Persisted outside the save so it survives a reset and never re-arms.
+  const COG_SEEN = 'lf_cog_seen';
+  function cogSeen() { try { return localStorage.getItem(COG_SEEN) === '1'; } catch (e) { return true; } }
+  function clearCogDot() {
+    try { localStorage.setItem(COG_SEEN, '1'); } catch (e) {}
+    try { document.querySelectorAll('.acct-btn .acct-dot').forEach((d) => d.remove()); } catch (e) {}
+  }
   // ---- top-bar account control (name + sign out) ----------------------------
   function refreshBar() {
     const sb = document.getElementById('statusbar');
@@ -615,6 +803,7 @@
       b.className = 'acct-btn';
       sb.appendChild(b);
       b.addEventListener('click', () => {
+        clearCogDot();
         if (window.UI && window.UI.openAccountSheet) { window.UI.openAccountSheet(); return; }
         const nm = (session() || {}).name || 'this account';
         if (confirm('Sign out of ' + nm + '?')) {
@@ -626,7 +815,7 @@
     b.classList.add('cog');
     b.title = (s.name || 'Operator') + ' · account & settings';
     b.setAttribute('aria-label', 'Account & settings');
-    b.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="acct-dot"></span>';
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' + (cogSeen() ? '' : '<span class="acct-dot"></span>');
   }
   window.addEventListener('load', () => setTimeout(refreshBar, 200));
 
@@ -645,5 +834,5 @@
     refreshBar();
     return true;
   }
-  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, publishNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, casOn: () => _casOn };
+  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, publishNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, clearCogDot, casOn: () => _casOn };
 })();

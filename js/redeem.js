@@ -23,6 +23,10 @@
     'ad4e3bef125286ba6feca86a07a3e7b700829d5e24cf29791dbeaca062c1b190': 'lvl500',
     '29a76145a8bfe2b0721812e86c8db05d745b4b75a325c775b7334bf3994a65f4': 'pro365',
     'f542c4091a26248648e7b83928c99e86dc9cc9f7c888262830a6a165f471202e': 'pro30',
+    // ---- BETA ACCESS ------------------------------------------------------
+    // Opens a feature that is SHIPPED BUT HIDDEN so admins can test it on
+    // production. See `tourbeta` below.
+    '7f96669af9a455f4146ef636eb98acc7ce439bb6d35496438a62c60a83c6920d': 'tourbeta',
     // ---- legacy (plaintext lost — kept alive for codes already issued) ---
     '7154891c38981a593183a2bd5056954c602702768d17bc16db7f729c366c9c28': 'allships',
     'c85be0226b8210972b976cd432ef2f7b930cc7744a61fc20c8a2e1b7049b3ea3': 'cur100b',
@@ -108,6 +112,21 @@
     pro30: { name: 'LootFleet Pro — 30 days', repeatable: true, apply(g) {
       if (g.grantPro) g.grantPro(30); else g.state.proUntil = Math.max(Date.now(), g.state.proUntil || 0) + 30 * 86400000;
       return 'Pro active until ' + new Date(g.state.proUntil).toLocaleDateString();
+    } },
+    // ---- BETA ACCESS: TOUR OF DUTY -----------------------------------------
+    // The season pass ships in the build but is HIDDEN from every player: the
+    // Command card is not rendered and the screen refuses to open. This code is
+    // the only way in, so admins can run it on production against real saves
+    // before it goes public.
+    //
+    // REPEATABLE on purpose — it is an access switch, not a grant, and a tester
+    // who lands on a save without the flag needs to be able to turn it back on.
+    // Nothing about the pass is granted here: XP, levels and track purchases all
+    // behave exactly as they will at launch.
+    tourbeta: { name: 'TOUR OF DUTY — beta access', repeatable: true, apply(g) {
+      g.state.tourBeta = 1;
+      try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
+      return 'The Long Watch is open — find it on the Command screen';
     } },
   };
   async function sha256(s) {

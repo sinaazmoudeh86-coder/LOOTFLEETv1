@@ -104,12 +104,20 @@
 
   function loadoutFor(p, rank, total) {
     if (p._loadout) return p._loadout;
+    // SIX SLOTS, AND ONLY THESE SIX. `generate()` now also rolls `fighter` (Fighter
+    // Bay) from SLOT_KEYS, which no rival loadout has a place for — those rolls
+    // simply cost loop iterations and, before the guard was raised, could leave the
+    // display short. Rejected here rather than by widening the display.
     const eq = { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null };
     let guard = 0, filled = 0;
-    while (filled < 6 && guard < 120) {
+    while (filled < 6 && guard < 200) {
       guard++;
       const it = ITEMS.generate(p.zone, rarityForRank(rank || total, total || 1));
-      if (!eq[it.slot]) { eq[it.slot] = it; filled++; }
+      // `=== null` NOT `!eq[...]`: a slot the loadout does not have reads
+      // undefined, which is also falsy — so a rolled Fighter Bay was being ADDED as
+      // a seventh key and counted as filled. Rivals then displayed a launch bay on
+      // hulls that cannot mount one. Only the six real, still-empty slots take an item.
+      if (eq[it.slot] === null) { eq[it.slot] = it; filled++; }
     }
     p._loadout = eq;
     return eq;

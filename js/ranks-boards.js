@@ -210,9 +210,9 @@
     // sim pilots were credited with more hulls than exist in the game.
     const ships = Math.max(1, Math.min(SIM_HULL_CAP, Math.floor(lv / 12) + Math.floor(st * 1.4) + Math.floor(r() * 3)));
 
-    // HAULAGE — Cargo Defense opens at Pilot Ascension ★20 and rations two runs
-    // a day, so even a veteran sim's count stays believable (and ★19 hauls zero).
-    p.cargo = st >= 20 ? Math.max(1, Math.floor(career * 0.6 * (0.4 + r() * 0.8))) : 0;
+    // HAULAGE — Cargo Defense opens at Pilot Ascension ★3 and rations two runs a
+    // day, so even a veteran sim's count stays believable (and ★2 hauls zero).
+    p.cargo = st >= 3 ? Math.max(1, Math.floor(career * 0.6 * (0.4 + r() * 0.8))) : 0;
     p.cargo_best = p.cargo ? Math.min(100, 58 + Math.floor(r() * 43)) : 0;
     // MISSIONS — a board a day, give or take, across the whole career
     const missions = Math.floor(career * (0.55 + r() * 0.75));

@@ -155,6 +155,15 @@
     // data-screen) BEFORE mutating any state, so a bad name can never crash.
     const sc = (name && name !== 'battle') ? $('screen-' + name) : null;
     if (name !== 'battle' && !sc) return;
+    // UNLAUNCHED FEATURES CANNOT BE REACHED, not even by a stale deep link, a
+    // mail button or a bookmarked route. Tour of Duty is built and shipped but
+    // hidden until an admin redeems the beta code in ⚙ Settings (js/redeem.js);
+    // the Command card hides itself, and this is the door behind it.
+    if (name === 'tour') {
+      let on = false;
+      try { on = !!(G.state && G.state.tourBeta); } catch (e) {}
+      if (!on) return;
+    }
     screen = name;
     // A Pro offer that fired mid-combat waits here for a quiet screen.
     if (name !== 'battle') { try { window.PROOFFER && PROOFFER.flush(); } catch (e) {} }
@@ -174,6 +183,7 @@
     else if (name === 'mail') { if (window.MAIL) window.MAIL.render(); }
     else if (name === 'voidzone') { if (window.VOIDZ) window.VOIDZ.render(); }
     else if (name === 'cargo') { if (window.CARGO) window.CARGO.render(); }
+    else if (name === 'tour') { if (window.TOUR) window.TOUR.render(); }
     else if (name === 'forge') { if (window.STARFORGE) window.STARFORGE.render(); }
     else if (name === 'pasc') { if (window.PASCEND) window.PASCEND.render(); }
     else if (name === 'dread') { if (window.DREAD) window.DREAD.renderHunt(); }
@@ -371,7 +381,7 @@
       const isSuper = wz.bossSpawned && wz.super;
       const cit = wz.citadel;
       const citE = cit && wz.bossSpawned && G.getCitadel ? G.getCitadel() : null;
-      const wv = wz.bossSpawned ? (wz.clone ? '⚔ ENEMY CLONE FLEET' : isSuper ? 'SUPER BOSS' : cit ? '⛴ RAZE THE CITADEL' : 'BOSS') : (cit ? 'ASSAULT ' : 'WAVE ') + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
+      const wv = wz.bossSpawned ? (wz.clone ? '⚔ ENEMY CLONE FLEET' : isSuper ? 'SUPER BOSS' : cit ? (wz.playerCit ? '⛴ TAKE THE CITADEL' : '⛴ RAZE THE CITADEL') : 'BOSS') : (cit ? 'ASSAULT ' : 'WAVE ') + Math.min(wz.wave, wz.total) + ' / ' + wz.total;
       el['sg-fill'].style.width = (citE ? Math.max(0, citE.hp / citE.maxHp * 100) : Math.min(100, ((wz.bossSpawned ? wz.total : wz.wave - 1) / wz.total) * 100)) + '%';
       // SIEGE CLOCK — only shown once the final defender is up and the clock runs
       const clk = (wz.timed && wz.bossSpawned && wz.limitT != null) ? Math.max(0, Math.ceil(wz.limitT)) : null;
@@ -459,7 +469,7 @@
       pills[i].classList.toggle('active', G.state.gameSpeed === tier.mult);
       pills[i].classList.toggle('lc-lock', !!(locked && tier.lootcoins));
       pills[i].classList.toggle('pro-lock', !!(locked && tier.pro));
-      pills[i].innerHTML = `<span>${tier.label}</span>` + (locked ? (tier.pro ? '<span class="spd-pro">PRO</span>' : LC_ICON) : '');
+      pills[i].innerHTML = `<span>${tier.label}</span>` + (locked ? (tier.pro ? '<span class="spd-pro">PRO</span>' : window._lcIcon()) : '');
     });
   }
   // ==========================================================================
@@ -467,6 +477,11 @@
   // password reset, text-alert signup, sign out.
   // ==========================================================================
   function openAccountSheet() {
+    // ⚙ THE COG PING STANDS DOWN ON FIRST OPEN. The dot was drawn unconditionally,
+    // so it hailed every player from install and never cleared no matter how often
+    // they answered it — a notification that means nothing teaches people to ignore
+    // the ones that do.
+    try { if (window.ACCOUNT && window.ACCOUNT.clearCogDot) window.ACCOUNT.clearCogDot(); } catch (e) {}
     const s = (window.AUTH && window.AUTH.session && window.AUTH.session()) || {};
     const cloud = s.method === 'Supabase';
     const pro = G.isPro && G.isPro();
@@ -654,11 +669,11 @@
     const sh = C.SHIP_BY_KEY[key];
     const have = G.getCredits ? G.getCredits() : 0;
     const afford = have >= price;
-    const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Unlock ${sh.name}</div><div class="sheet-body">
+    const sheet = showSheet(`<div class="sheet-head">${window._lcIcon()} Unlock ${sh.name}</div><div class="sheet-body">
       <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">${sh.desc}</p>
       <div class="ip-stat"><span class="ip-sname">Fast-track</span><span class="v">No blueprint · no kill requirement · yours instantly</span></div>
-      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${price.toLocaleString()} LootCoins</span></div>
-      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${Math.floor(have).toLocaleString()}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${window._lcIcon()} ${price.toLocaleString()} LootCoins</span></div>
+      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${window._lcIcon()} ${Math.floor(have).toLocaleString()}</span></div>
       ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
       <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
         <button class="btn gold" data-ok>${afford ? 'Unlock ' + sh.name : 'Get LootCoins'}</button></div></div>`);
@@ -673,10 +688,10 @@
   function openSpeedBuy(tier) {
     const have = G.getCredits ? G.getCredits() : 0;
     const afford = have >= tier.lootcoins;
-    const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Unlock ${tier.label} Speed</div><div class="sheet-body">
+    const sheet = showSheet(`<div class="sheet-head">${window._lcIcon()} Unlock ${tier.label} Speed</div><div class="sheet-body">
       <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">Permanent ${tier.label} battle speed — the fastest tier LootCoins can buy. One-time unlock.</p>
-      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${tier.lootcoins} LootCoins</span></div>
-      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${window._lcIcon()} ${tier.lootcoins} LootCoins</span></div>
+      <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${window._lcIcon()} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
       ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
       <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
         <button class="btn gold" data-ok>${afford ? 'Unlock ' + tier.label : 'Get LootCoins'}</button></div></div>`);
@@ -1019,10 +1034,12 @@
         if (cta) cta.addEventListener('click', openProSheet);
       }
     }
-    // XP rate — from the one source of truth (GAME.xpFleetInfo): base 100%
-    // (500% on Pro) + every bonus as a flat % of base, summed then multiplied,
-    // TOTAL capped at 1000%. The chip flags the cap so the hero screen and the
-    // My Ship pill can never tell different stories.
+    // XP rate — from the one source of truth (GAME.xpFleetInfo): ONE SUM.
+    //   100 + 400 (Pro) + every other bonus added, bonuses capped at +500,
+    //   total capped at 1000. Nothing multiplies anything else.
+    // The chip names WHICH ceiling is biting (bonus vs total), so the hero screen
+    // and the My Ship pill can never tell different stories — and so a pilot past
+    // the bonus ceiling is told, rather than silently losing the overflow.
     {
       const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
       const xpChip = xi
@@ -2493,14 +2510,37 @@
     // LootCoins must wear the REAL coin mark here too. This row used to draw a
     // plain orange disc (◉), which reads as "some resource" and matches nothing
     // else in the game — every other price uses the hex-coin SVG.
-    if (c.credits) row.push('<span class="mega-c">' + (window.lootCoinSVG ? lootCoinSVG(13) : LC_ICON) + ' ' + c.credits.toLocaleString() + '</span>');
+    if (c.credits) row.push('<span class="mega-c">' + (window.lootCoinSVG ? lootCoinSVG(13) : window._lcIcon()) + ' ' + c.credits.toLocaleString() + '</span>');
     add('#ff5a6a', '◇', c.dreadCores);
     return '<span class="mega-cost' + (big ? ' big' : '') + '">' + row.join('') + '</span>';
   }
   // (unused since the unified shipCard — kept only because its span borders live grid code)
+  // HARDPOINT CHIPS — only the mounts a hull actually HAS.
+  // ⚔ cannons · ▲ fighter bays · ⊕ munitions · ⛨ hull · ◎ drone bays
+  // A zero is never printed: "⚔0 ⊕0 ⛨2" on the Vanguard read as a broken ship
+  // rather than a carrier that trades every gun for four launch bays. Fighter bays
+  // had no chip at all, so the one thing that defines the class was invisible.
+  // `hull` is the only mount every hull in the game has, so it always shows.
+  const HP_MOUNTS = [
+    ['weapons',         '⚔', 'cannon hardpoint'],
+    ['fighterCapacity', '▲', 'fighter bay'],
+    ['ammo',            '⊕', 'munitions slot'],
+    ['hull',            '⛨', 'hull slot', true],
+    ['drones',          '◎', 'drone bay'],
+  ];
+  function hardpointChips(ship, mode) {
+    return HP_MOUNTS.map(([k, ic, label, always]) => {
+      const n = ship[k] | 0;
+      if (!n && !always) return '';
+      const t = n + ' ' + label + (n === 1 ? '' : 's');
+      if (mode === 'chip') return '<span class="lo-chip' + (k === 'drones' ? ' drone' : '') + '" title="' + t + '">' + ic + ' ' + n + (k === 'drones' ? ' bay' + (n === 1 ? '' : 's') : '') + '</span>';
+      if (mode === 'tile') return '<span' + (k === 'drones' ? ' class="dr"' : '') + ' title="' + t + '">' + ic + n + '</span>';
+      return ic + ' ' + n;
+    }).filter(Boolean).join(mode === 'text' ? ' · ' : '');
+  }
   function purchaseShipCard(key) {const ship = C.SHIP_BY_KEY[key];
     const cls = 'sc-' + ship.cls.toLowerCase();
-    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span><span class="lo-chip drone">◎ ${ship.drones} bays</span>`;
+    const layout = hardpointChips(ship, 'chip');
     const mods = modSummary(ship.mods);
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     const active = G.state.ship === key;
@@ -2509,7 +2549,7 @@
     if (active) action = `<span class="ship-badge active">● ACTIVE</span>`;
     else if (owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
     else if (lvl < reqL) { action = `<span class="ship-badge locked">🔒</span>`; body = `<div class="ship-lock"><span class="lk-ic">🔒</span><span>Reach <b>account Level ${reqL}</b> to purchase — you're Level <b>${lvl}</b></span></div>`; }
-    else { action = `<button class="ship-btn buy lcbuy" data-lc-final="${key}">${LC_ICON} ${price.toLocaleString()}</button>`; body = `<div class="ship-lock ready"><span class="lk-ic">◈</span><span>Available now · <b>${price.toLocaleString()} LootCoins</b></span></div>`; }
+    else { action = `<button class="ship-btn buy lcbuy" data-lc-final="${key}">${window._lcIcon()} ${price.toLocaleString()}</button>`; body = `<div class="ship-lock ready"><span class="lk-ic">◈</span><span>Available now · <b>${price.toLocaleString()} LootCoins</b></span></div>`; }
     let upg = '';
     if (owned && G.shipUpInfo) {
       const u = G.shipUpInfo(key); const tcol = (window.shipLvlColor ? window.shipLvlColor(u.level) : '#9aa7b8');
@@ -2560,12 +2600,25 @@
   function tileBadge(key, ship) {
     const owned = !!(G.state.ownedShips && G.state.ownedShips[key]);
     if (owned) return '';
+    // `unreleased` FIRST, ahead of every route-describing flag. Every line below
+    // this one names a way to GET the hull; `unreleased` is the statement that no
+    // way exists, so it has to win outright — a hull can legitimately carry both
+    // (the Corvus is `celestial: true` because that drives its tier, aura and
+    // plating, and `celestial` sat two checks above `unreleased`, so its tile
+    // advertised "✦ Cargo Defense" and sent players to grind an event for a hull
+    // that cannot drop). Ordering it last only worked for hulls whose sole route
+    // flags were `build`/`megaCost`; first is the rule that keeps holding.
+    if (ship.unreleased) return '◈ SOON';
+    // A ROUTE, so it is named — same position as `unreleased` (ahead of every other
+    // route flag) because a Tour hull can also be Dread- or Titan-class and would
+    // otherwise be described by whichever generic flag came first.
+    if (ship.tour) return '✦ Tour of Duty';
     if (ship.event) return '❖ Season 1';
     if (ship.celestial) return '✦ Cargo Defense';
     if (ship.alienTech) return '◈ Kaevith';
     if (ship.emberTech) return '✦ Choir';
     if (ship.missionShip) return '⌘ 1,000 Missions';
-    if (ship.purchase) return `${LC_ICON}${(ship.purchase.lc || 0).toLocaleString()}`;
+    if (ship.purchase) return `${window._lcIcon()}${(ship.purchase.lc || 0).toLocaleString()}`;
     if (ship.build) return '⚒ Build';
     if (ship.megaCost) { const lv = G.state.level || 1; return lv >= (ship.reqLevel || 1) ? '◇ Acquire' : '🔒 Lv' + ship.reqLevel; }
     const st = G.shipBuyState ? G.shipBuyState(key) : {};
@@ -2584,35 +2637,48 @@
     // wears the same pill with a lance-green identity instead of rainbow; the
     // Eternum sits ABOVE both in celestial blue and, uniquely, can be OWNED
     // while still un-flyable — so its tile states the licence.
-    if (key === 'titansina' || key === 'aeternum' || key === 'eternum') {
+    // The Titan Aquila joins them (609) — a Titan-class hull in a 3-up thumbnail
+    // grid read as a mid-tier purchase. It reuses the Sina's tracer beams (it fires
+    // the same full-spectrum tracers) with its own chip and callout.
+    if (key === 'titansina' || key === 'aeternum' || key === 'eternum' || key === 'titanaquila' || key === 'corvus') {
       const aet = key === 'aeternum', etr = key === 'eternum';
+      // The two fighter apexes share the portrait-art treatment (st-aql).
+      const aql = key === 'titanaquila' || key === 'corvus', crv = key === 'corvus';
       const fly = (etr && G.canFlyShip) ? G.canFlyShip('eternum') : { ok: true };
       const beams = etr
         ? '<i class="etr-beam"></i><i class="etr-beam b2"></i><i class="etr-beam b3"></i><i class="etr-beam b4"></i><i class="etr-beam b5"></i><i class="etr-aura"></i>'
         : aet
         ? '<i class="aet-lance"></i><i class="aet-ring"></i><i class="aet-ring r2"></i>'
+        : aql
+        ? ''
         : '<i class="sina-beam"></i><i class="sina-beam b2"></i><i class="sina-beam b3"></i><i class="sina-beam b4"></i>';
       const chip = etr ? '<span class="apex-chip etr">CELESTIAL CLASS</span>'
-        : aet ? '<span class="apex-chip aet">ASCENSION CLASS</span>' : '<span class="apex-chip sina">FINAL CLASS</span>';
+        : aet ? '<span class="apex-chip aet">ASCENSION CLASS</span>'
+        : crv ? '<span class="apex-chip etr">CELESTIAL CLASS · CARRIER</span>'
+        : aql ? '<span class="apex-chip sina">TITAN CLASS · CARRIER</span>' : '<span class="apex-chip sina">FINAL CLASS</span>';
       const callout = etr
         ? '1.5× THE TITAN SINA · FIVE DEATH BEAMS · CELESTIAL AURA'
         : aet
         ? 'AN ARTIFICIAL WORLD · THE LANCE ALIGNS · THE LANE IS ERASED'
+        : crv
+        ? 'ELEVEN FIGHTER BAYS · 25 FITTED SLOTS · HALF SPEED'
+        : aql
+        ? 'FIVE CANNONS · SEVEN FIGHTER BAYS · 21 FITTED SLOTS'
         : '2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS';
       const lic = (etr && owned && !fly.ok)
         ? '<div class="etr-lic">🔒 LICENCE INCOMPLETE — ' + fly.need.map((n) => n.k === 'cargo' ? (G.formatNum(n.have) + ' / 1,000 cargo runs secured') : n.k === 'missions' ? (G.formatNum(n.have) + ' / 1,000 successful missions') : n.k === 'stars' ? ('★' + n.have + ' / 50') : 'Titan Sina required').join(' · ') + '</div>'
         : (etr && !owned ? '<div class="etr-lic">✦ Recovered only from an OMEGA CARGO V manifest — Cargo Defense</div>' : '');
-      return `<button class="ship-tile st-sina ${etr ? 'st-etr ' : ''}${aet ? 'st-aet ' : ''}${stateCls}" data-ship-tile="${key}">
+      return `<button class="ship-tile st-sina ${etr ? 'st-etr ' : ''}${aet ? 'st-aet ' : ''}${aql ? 'st-aql ' : ''}${stateCls}" data-ship-tile="${key}">
         <div class="sts-art">
           ${beams}
-          <img src="ships/ship-${key}.png" alt="" decoding="async">
+          <img src="ships/ship-${key}.png" alt="" loading="lazy" decoding="async">
           ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}
         </div>
         <div class="sts-meta">
           <div class="st-name">${ship.name} ${chip}</div>
           <div class="sts-callout">${callout}</div>
           ${lic}
-          <div class="st-stats"><span>⚔${ship.weapons}</span><span>⊕${ship.ammo}</span><span>⛨${ship.hull}</span><span class="dr">◎${ship.drones}</span></div>
+          <div class="st-stats">${hardpointChips(ship, 'tile')}</div>
           ${owned ? '' : `<div class="st-badge">${badge}</div>`}
         </div>
       </button>`;
@@ -2622,7 +2688,7 @@
         ${active ? '<span class="st-flag">● ACTIVE</span>' : (owned && lvl ? `<span class="st-lvl">Lv ${lvl}</span>` : '')}</div>
       <div class="st-name">${ship.name}</div>
       <div class="st-cls">${ship.cls}</div>
-      <div class="st-stats"><span>⚔${ship.weapons}</span><span>⊕${ship.ammo}</span><span>⛨${ship.hull}</span>${ship.drones ? `<span class="dr">◎${ship.drones}</span>` : ''}</div>
+      <div class="st-stats">${hardpointChips(ship, 'tile')}</div>
       ${owned ? '' : `<div class="st-badge">${badge}</div>`}
     </button>`;
   }
@@ -2661,13 +2727,20 @@
     { cls: 'Aegis', accent: '#7ce0a0', pick: (s) => s.cls === 'Aegis',
       role: 'The support hull — it keeps the rest of the fleet alive.',
       benefit: 'The <b>only</b> hull that mounts Warden arrays, at <b>double</b> their listed regen and damage reduction. As an escort an Aegis fires nothing — it pulses <b>repairs</b> instead.' },
-    { cls: 'Celestial', accent: '#5b7cff', pick: (s) => s.key === 'eternum',
-      role: 'Celestial Class — the hull that comes after Titan.',
+    // Key OR the CELESTIAL tag — the Corvus joined the tier in 611, and a hardcoded
+    // key had already dropped the Aquila into plain Carrier once (609).
+    { cls: 'Celestial', accent: '#5b7cff', pick: (s) => s.key === 'eternum' || /^CELESTIAL/.test(s.tag || ''),
+      role: 'Celestial Class — the hulls that come after Titan.',
       benefit: 'One and a half times the Titan Sina on every line, five continuous <b>death beams</b> and a standing <b>celestial aura</b>. Recovered only from Space Cargo Defense, and it will not launch without the licence: 1,000 missions, ★50, and a Titan Sina in the hangar.' },
-    { cls: 'Titan', accent: '#ffd24d', pick: (s) => s.key === 'titansina',
-      role: 'A class of one. Nothing else in the game is built to this scale.',
-      benefit: 'The single largest hull ever fielded — every stat line on it is an order above Dread-class. There is no upgrade path beyond it.' },
-    { cls: 'Dread', accent: '#ff4d6d', pick: (s) => !!s.megaCost,
+    // Matched from the TITAN- tag, not a single key: the Titan Aquila joined the
+    // tier in 609 and a hardcoded key silently dropped it into plain Carrier.
+    { cls: 'Titan', accent: '#ffd24d', pick: (s) => s.key === 'titansina' || /^TITAN/.test(s.tag || ''),
+      role: 'Built to a scale nothing else in the game approaches.',
+      benefit: 'Every stat line is an order above Dread-class. The <b>Sina</b> is pure gunship — full-zone range, full-spectrum tracers. The <b>Aquila</b> is the apex carrier: five cannons and seven fighter bays, twenty-one fitted slots. There is no upgrade path beyond either.' },
+    // `megaCost` OR an explicit Dread tag — the Praetorian is Dread-class but has
+    // no cost yet (unreleased), and picking on megaCost alone dropped it into the
+    // plain Carrier bucket beside the Super Carrier.
+    { cls: 'Dread', accent: '#ff4d6d', pick: (s) => !!s.megaCost || /^DREAD-CLASS/.test(s.tag || ''),
       role: 'Dread-class — the apex hulls, priced in Dread Cores rather than gold.',
       benefit: 'The heaviest weapon mounts and drone bays in the game. Every one is an endgame commitment: you buy these instead of upgrading, not as well as. As an escort a Dread fires <b>railguns</b>.' },
     { cls: 'Carrier', accent: '#b15cff', pick: (s) => s.cls === 'Carrier',
@@ -2736,6 +2809,7 @@
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
     sheet.querySelectorAll('[data-go-galaxy]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('galaxy'); }));
     sheet.querySelectorAll('[data-go-zones]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('zones'); }));
+    sheet.querySelectorAll('[data-go-tour]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('tour'); }));
     sheet.querySelectorAll('[data-go-missions]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('missions'); }));
     sheet.querySelectorAll('[data-go-alliance]').forEach((b) => b.addEventListener('click', () => { closeSheet(); if (window.SOCIAL && window.SOCIAL.setTab) window.SOCIAL.setTab('alliance'); showScreen('social'); toast('⬡ Monolith Shipyard is in the store below', '#7ff2e0'); }));
   }
@@ -2747,12 +2821,37 @@
     const ship = C.SHIP_BY_KEY[key];
     const st = G.shipBuyState(key);
     const cls = 'sc-' + ship.cls.toLowerCase();
-    const layout = `<span class="lo-chip">⚔ ${ship.weapons}</span><span class="lo-chip">⊕ ${ship.ammo}</span><span class="lo-chip">⛨ ${ship.hull}</span>` +
-      (ship.drones ? `<span class="lo-chip drone">◎ ${ship.drones} bay${ship.drones>1?'s':''}</span>` : '');
+    const layout = hardpointChips(ship, 'chip');
     const mods = modSummary(ship.mods);
     let action = '', lock = '';
     if (st.active) action = `<span class="ship-badge active">● ACTIVE</span>`;
     else if (st.owned) action = `<button class="ship-btn switch" data-ship-switch="${key}">Switch</button>`;
+    // UNRELEASED WINS THE WHOLE CHAIN, right after owned/active. Every branch below
+    // describes a way to GET the hull — event parts, a Cargo manifest, a Kaevith
+    // clear, a LootCoin price, a build order. `unreleased` says no way exists, so it
+    // cannot sit in the middle: the Corvus carries `celestial: true` for its tier
+    // and aura, and a later position let the Cargo Defense copy win. It also has to
+    // precede the price fallthrough at the end, which would otherwise render a
+    // "$ 0" buy button for a hull with no price at all.
+    else if (ship.tour) {
+      // The ladder that awards this hull is itself unlaunched (see the beta code
+      // in js/redeem.js). Until it opens, the hull reads exactly like any other
+      // unreleased one — no route, no button pointing at a screen that refuses to
+      // open — and switches back to the real Tour copy the moment it does.
+      let _tourOn = false;
+      try { _tourOn = !!(G.state && G.state.tourBeta); } catch (e) {}
+      if (_tourOn) {
+        action = `<button class="ship-btn buy" data-go-tour="1">✦ Tour</button>`;
+        lock = `<div class="ship-lock ready"><span class="lk-ic">✦</span><span>Earned on the <b>Tour of Duty</b> ladder — <b>level ${ship.tour.lv}</b> of the <b>${ship.tour.track}</b> track. Never sold, and no blueprint.</span></div>`;
+      } else {
+        action = `<span class="ship-badge locked">◈</span>`;
+        lock = `<div class="ship-lock"><span class="lk-ic">◈</span><span><b>Not yet available.</b> This hull is finished and flight-ready — how you earn it is still being decided. It cannot be bought, built or earned at any price yet.</span></div>`;
+      }
+    }
+    else if (ship.unreleased) {
+      action = `<span class="ship-badge locked">◈</span>`;
+      lock = `<div class="ship-lock"><span class="lk-ic">◈</span><span><b>Not yet available.</b> This hull is finished and flight-ready — how you earn it is still being decided. It cannot be bought, built or earned at any price yet.</span></div>`;
+    }
     else if (ship.event) {
       // SEASON 1 — assembled from event parts, never sold
       const need = 100, have = Math.min(need, (G.state.shipParts && G.state.shipParts[key]) | 0);
@@ -2808,7 +2907,7 @@
       ? `<button class="ship-btn buy res" data-ship-buy="${key}">${resCostChips(ship.resPrice)}</button>`
       : `<button class="ship-btn buy" data-ship-buy="${key}"><span class="coin">$</span> ${G.formatNum(ship.price)}</button>`;
     else action = `<span class="ship-badge locked">🔒</span>`;
-    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build && !ship.alliance && !ship.alienTech) {
+    if (!lock && !st.owned && !st.unlocked && !ship.event && !ship.missionShip && !ship.purchase && !ship.megaCost && !ship.build && !ship.alliance && !ship.alienTech && !ship.unreleased && !ship.tour) {
       if (!st.hasBlueprint) {
         const z = st.bpZone, reach = z <= G.state.highestUnlocked;
         lock = `<div class="ship-lock"><span class="lk-ic">◷</span><span>Recover the <b>Blueprint</b> — defeat the <b>boss</b> in <b>${zoneName(z)}</b> (Zone ${z})</span>` +
@@ -2881,7 +2980,7 @@
   };
   function wclassIcon(wc) { return WCLASS_ICONS[wc.key] || ('<span class="wci">' + wc.glyph + '</span>'); }
   function itemIcon(it) {
-    if (it && it.slot === 'bow' && window.ITEMS && window.ITEMS.weaponClassOf) {
+    if (it && (it.slot === 'bow' || it.slot === 'fighter') && window.ITEMS && window.ITEMS.weaponClassOf) {
       const wc = window.ITEMS.weaponClassOf(it);
       return `<span class="sci" style="color:${wc.color};filter:drop-shadow(0 0 5px ${wc.color}88)">${wclassIcon(wc)}</span>`;
     }
@@ -2892,12 +2991,37 @@
   // —— LOOTCOIN —— the premium micro-transaction currency. One unique mark used
   // everywhere it appears: a hex coin, gold → violet, with a loot-gem facet cut
   // into the center (echoes the loot-drop gems players chase in combat).
-  const LC_ICON = '<svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".55" stop-color="#f2a93c"/><stop offset="1" stop-color="#b86adf"/></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg)" stroke="#2a1808" stroke-width="1.1"/><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"/><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg)"/><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"/></svg>';
+  // THE LOOTCOIN ICON HAS ONE SOURCE: the chip in the top bar (game.html), which
+  // declares <linearGradient id="lf-lcg"> in the initial HTML. Every other coin in the
+  // game references that one def.
+  //
+  // Two earlier attempts were worse. Each icon carrying its own <defs id="lcg"> put
+  // dozens of duplicate ids in the document, and browsers resolve url(#lcg) against the
+  // FIRST match — so every coin silently shared one definition anyway. Minting a unique
+  // id per call then broke whenever a caller stored the string and printed it twice.
+  // Pointing at a def that is already in the markup removes the whole class: nothing to
+  // duplicate, nothing to inject, and it exists before the first paint rather than after
+  // DOMContentLoaded.
+  const LC_GRAD_ID = 'lf-lcg';
+  const LC_ICON_RAW = '<svg class="lc" viewBox="0 0 24 24">' +
+    '<path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#' + LC_GRAD_ID + ')" stroke="#2a1808" stroke-width="1.1"/>' +
+    '<path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"/>' +
+    '<path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#' + LC_GRAD_ID + ')"/>' +
+    '<path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"/></svg>';
+  Object.defineProperty(window, '_lcIcon', { value: () => LC_ICON_RAW, configurable: true });
+  // THE ONE PUBLIC ACCESSOR. `window.lootCoinSVG(px)` was already being called in three
+  // places in this file and was never defined anywhere — every one of those calls fell
+  // through to a ◈ text glyph. Now it exists, so any module can render the real coin at
+  // any size without copying markup.
+  Object.defineProperty(window, 'lootCoinSVG', {
+    value: (px) => px ? LC_ICON_RAW.replace('class="lc"', 'class="lc" style="width:' + px + 'px;height:' + px + 'px"') : LC_ICON_RAW,
+    configurable: true,
+  });
   function renderStore() {
     let html = hangarTabsHTML(storeCat);
     // ALWAYS-VISIBLE LootCoins storefront entry (App Review 2.1(b): IAPs must be
     // locatable in-app — Hangar ▸ top banner ▸ pack sheet).
-    html += `<button class="lc-store-cta" data-getlc>${LC_ICON}<span><b>Get LootCoins</b><i>Packs: 25,000 · 50,000 · 75,000 · 100,000</i></span><em>SHOP ›</em></button>`;
+    html += `<button class="lc-store-cta" data-getlc>${window._lcIcon()}<span><b>Get LootCoins</b><i>Packs: 25,000 · 50,000 · 75,000 · 100,000</i></span><em>SHOP ›</em></button>`;
     const cur = C.SHIP_BY_KEY[G.state.ship];
 
     if (storeCat === 'ships') {
@@ -2913,14 +3037,25 @@
             <div class="ho-main">
               <div class="ho-name">${sh.name}</div>
               <div class="ho-desc">${offer.key === 'carrier' ? 'Skip the grind — instant drone-bay command.' : 'The ultimate hull. Skip the entire chain.'}</div>
-              <button class="ho-buy">${LC_ICON}${offer.lc.toLocaleString()} · Unlock now</button>
+              <button class="ho-buy">${window._lcIcon()}${offer.lc.toLocaleString()} · Unlock now</button>
             </div>
             <img class="ho-ship" src="ships/ship-${offer.key}.png" alt="">
           </div>`;
         }
       }
-      html += `<div class="sec-blurb">Buy hulls with gold. Each unlocks only after you recover its <b>blueprint</b> from a zone boss and prove yourself in the previous hull. <b style="color:#5fa8ff">Tap any hull</b> for full stats.</div>`;
-      html += shipRoster();
+      html += `<div class="sec-blurb-anchor"></div><div class="sec-blurb">Buy hulls with gold. Each unlocks only after you recover its <b>blueprint</b> from a zone boss and prove yourself in the previous hull. <b style="color:#5fa8ff">Tap any hull</b> for full stats.</div>`;
+      // GUARDED. The roster walks all 44 hulls and every one of them reads live
+      // account state (owned, blueprints, upgrade level, build progress, licence).
+      // A throw anywhere in that walk used to take the entire Hangar down with it,
+      // which is indistinguishable from a crash to the player — and it left them
+      // with no route back. Now the tab still renders and says so.
+      try { html += shipRoster(); }
+      catch (e) {
+        try { console.error('shipRoster failed', e); } catch (e2) {}
+        html += '<div class="sec-blurb" style="border-color:#ff6b78;color:#ffb0b8">'
+          + 'The hull roster could not be drawn on this account. Everything else works — '
+          + 'please report this so it can be fixed.</div>';
+      }
       html += '</div>';
     }
 
@@ -2935,12 +3070,12 @@
           { key: 'titansina', lc: 1000000, tag: '✦ FINAL CLASS', desc: 'The hero ship — 2× the Dread Omega, zone-wide range, full-spectrum rainbow tracers.' },
         ];
         html += `<div class="store-sec">${storeHead(STORE_ICONS.ship, 'LootCoin Fleet', 'Direct purchase · no blueprint')}`;
-        html += `<div class="sec-blurb">Bought outright with ${LC_ICON} LootCoins — no blueprint, no kill chain, no level gate. Yours instantly.</div>`;
+        html += `<div class="sec-blurb-anchor"></div><div class="sec-blurb">Bought outright with ${window._lcIcon()} LootCoins — no blueprint, no kill chain, no level gate. Yours instantly.</div>`;
         LC_FLEET.forEach((offer) => {
           const sh = C.SHIP_BY_KEY[offer.key]; if (!sh) return;
           const owned = !!(G.state.ownedShips && G.state.ownedShips[offer.key]);
           const btn = owned ? '<span class="ho-buy owned">✓ OWNED</span>'
-            : `<button class="ho-buy">${LC_ICON}${offer.lc.toLocaleString()} · Unlock now</button>`;
+            : `<button class="ho-buy">${window._lcIcon()}${offer.lc.toLocaleString()} · Unlock now</button>`;
           html += `<div class="hero-offer lcf ${owned ? 'lcf-flat' : ''} ${offer.key === 'titansina' ? 'ho-sina' : ''}" ${owned ? '' : `data-lcship="${offer.key}" data-lcprice="${offer.lc}"`}>
             <div class="ho-tag">${offer.tag}</div>
             <div class="ho-main">
@@ -3003,8 +3138,8 @@
           ${gain !== null && !has ? `<div class="ax-delta ${gain >= 0 ? 'up' : 'dn'}">${gain >= 0 ? '▲ +' + G.formatNum(gain) + '%' : '▼ ' + gain + '%'} damage vs your equipped weapon</div>` : ''}
           ${has
             ? `<div class="ax-owned">✓ OWNED — the only item you keep through an ascension<span>It rescales to Level 1 with you, then climbs again</span></div>`
-            : `<button class="ax-buy${afford2 ? '' : ' cant'}" id="ax-buy">${LC_ICON} ${G.formatNum(ax.PRICE)} — CLAIM IT</button>
-               ${afford2 ? '' : `<div class="ax-short">You have ${LC_ICON} ${G.formatNum(lcHave)}</div>`}`}
+            : `<button class="ax-buy${afford2 ? '' : ' cant'}" id="ax-buy">${window._lcIcon()} ${G.formatNum(ax.PRICE)} — CLAIM IT</button>
+               ${afford2 ? '' : `<div class="ax-short">You have ${window._lcIcon()} ${G.formatNum(lcHave)}</div>`}`}
         </div></div>`;
       }
       // —— COSMIC JACKPOT CACHE removed from the market (July 2026) ——
@@ -3019,13 +3154,13 @@
             <div class="sc-ico ${rc(pit.rarity)}" style="border-color:${pr.color}">${itemIcon(pit)}</div>
             <div class="sc-main"><div class="sc-name ${rc(pit.rarity)}">${pit.name} ${G.shopIsUpgrade(pit)?'<span class="ic-tag up" style="vertical-align:2px">▲ UP</span>':''}</div>
               <div class="sc-desc">${pr.name} · ${C.SLOTS[pit.slot].name} · matched to your level</div></div>
-            <button class="sc-buy lc" data-lcm="prim:0" ${sold?'disabled':''}>${sold?'CLAIMED':LC_ICON+G.formatNum(C2.prim)}</button></div>
+            <button class="sc-buy lc" data-lcm="prim:0" ${sold?'disabled':''}>${sold?'CLAIMED':window._lcIcon()+G.formatNum(C2.prim)}</button></div>
           <div class="lcv-hint">Tap the item for full stats</div>
         </div></div>`;
       }
       {
         html += `<div class="store-sec">${storeHead(STORE_ICONS.cosmetics, 'Cosmic Cache · LootCoins', `⟳ <span id="lc-cos-cd">${fmtT(G.lcCosmicTimeLeft())}</span>`)}`;
-        html += `<div class="sec-blurb">Guaranteed <b style="color:#ff6ad5">Cosmic</b> gear rolled for your level · new stock every hour.</div>`;
+        html += `<div class="sec-blurb-anchor"></div><div class="sec-blurb">Guaranteed <b style="color:#ff6ad5">Cosmic</b> gear rolled for your level · new stock every hour.</div>`;
         lm.cosmic.items.forEach((it, i) => {
           if (!it) return;
           const bought = lm.cosmic.bought.includes(i), r = C.RARITY[it.rarity];
@@ -3033,14 +3168,14 @@
             <div class="sc-ico ${rc(it.rarity)}" style="border-color:${r.color}">${itemIcon(it)}</div>
             <div class="sc-main"><div class="sc-name ${rc(it.rarity)}">${it.name} ${G.shopIsUpgrade(it)?'<span class="ic-tag up" style="vertical-align:2px">▲ UP</span>':''}</div>
               <div class="sc-desc">${r.name} · ${C.SLOTS[it.slot].name}</div></div>
-            <button class="sc-buy lc" data-lcm="cosmic:${i}" ${bought?'disabled':''}>${bought?'Sold':LC_ICON+G.formatNum(C2.cosmic)}</button></div>`;
+            <button class="sc-buy lc" data-lcm="cosmic:${i}" ${bought?'disabled':''}>${bought?'Sold':window._lcIcon()+G.formatNum(C2.cosmic)}</button></div>`;
         });
         html += '</div>';
       }
       const sh = G.getShop(); const tl = G.shopTimeLeft(); const mm = Math.floor(tl/60), ss = tl%60;
       const price = sh.price != null ? sh.price : G.shopItemPrice();
       html += `<div class="store-sec">${storeHead(STORE_ICONS.market, 'Black Market · Gold', `${mm}:${ss<10?'0':''}${ss}`)}`;
-      html += `<div class="sec-blurb">Gear upgrades · fixed price this rotation.</div>`;
+      html += `<div class="sec-blurb-anchor"></div><div class="sec-blurb">Gear upgrades · fixed price this rotation.</div>`;
       sh.items.forEach((it, i) => {
         if (!it) return;
         const bought = sh.bought.includes(i), r = C.RARITY[it.rarity];
@@ -3090,7 +3225,7 @@
       let cmpNote = '';
       if (equipped) { const better = G.itemPower(it) > G.itemPower(equipped); cmpNote = `<div class="ip-cmp">vs equipped: <span style="color:${better?'var(--good)':'var(--bad)'}">${better?'Upgrade ▲':'Not an upgrade ▼'}</span></div>`; }
       let wcHTML = '';
-      if (it.slot === 'bow' && window.ITEMS.weaponClassOf) {
+      if ((it.slot === 'bow' || it.slot === 'fighter') && window.ITEMS.weaponClassOf) {
         const wc = window.ITEMS.weaponClassOf(it);
         let extra = '';
         if (wc.key === 'support' && window.ITEMS.supportAura) {
@@ -3118,10 +3253,10 @@
       const sold = kind === 'cosmic' ? lm.cosmic.bought.includes(idx) : lm.prim.bought;
       const have = G.getCredits(), afford = have >= price;
       const r = C.RARITY[it.rarity];
-      const sheet = showSheet(`<div class="sheet-head">${LC_ICON} ${kind === 'cosmic' ? 'Cosmic Cache' : 'Primordial Vault'}</div><div class="sheet-body">
+      const sheet = showSheet(`<div class="sheet-head">${window._lcIcon()} ${kind === 'cosmic' ? 'Cosmic Cache' : 'Primordial Vault'}</div><div class="sheet-body">
         ${marketDetailHTML(it)}
-        <div class="ip-stat" style="margin-top:8px"><span class="ip-sname">Price</span><span class="v">${sold ? '✓ Already claimed this rotation' : LC_ICON + ' ' + G.formatNum(price) + ' LootCoins'}</span></div>
-        ${sold ? '' : `<div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>`}
+        <div class="ip-stat" style="margin-top:8px"><span class="ip-sname">Price</span><span class="v">${sold ? '✓ Already claimed this rotation' : window._lcIcon() + ' ' + G.formatNum(price) + ' LootCoins'}</span></div>
+        ${sold ? '' : `<div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${window._lcIcon()} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>`}
         ${sold || afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
         <div class="sheet-actions"><button class="btn" data-x>${sold ? 'Close' : 'Cancel'}</button>
           ${sold ? '' : `<button class="btn gold" data-ok>${afford ? 'Buy — to Loot hold' : 'Get LootCoins'}</button>`}</div></div>`);
@@ -3143,13 +3278,13 @@
         if (lm.jackpot && lm.jackpot.bought) { toast('Jackpot already pulled this rotation', '#c77bff'); return; }
         const price = (G.LC_PRICES || {}).jackpot || 1000000;
         const have = G.getCredits(), afford = have >= price;
-        const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Cosmic Jackpot</div><div class="sheet-body">
+        const sheet = showSheet(`<div class="sheet-head">${window._lcIcon()} Cosmic Jackpot</div><div class="sheet-body">
           <div class="jkpt-confirm">
             <div class="jkpt-chest big"><div class="jkpt-chest-glow"></div><span class="jkpt-chest-ic">🎁</span></div>
             <p class="jkpt-cline">One high-roll pull. Value lands <b>between Cosmic and Eternal</b> — with a <b style="color:#ffd24d">0.2%</b> shot at the final two tiers (<b style="color:#c061ff">Relic</b> / <b style="color:#ff2330">Artifact</b>).</p>
           </div>
-          <div class="ip-stat" style="margin-top:8px"><span class="ip-sname">Price</span><span class="v">${LC_ICON} ${G.formatNum(price)} LootCoins</span></div>
-          <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${LC_ICON} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
+          <div class="ip-stat" style="margin-top:8px"><span class="ip-sname">Price</span><span class="v">${window._lcIcon()} ${G.formatNum(price)} LootCoins</span></div>
+          <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${window._lcIcon()} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
           ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
           <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
             <button class="btn gold" data-ok>${afford ? 'Pull the Jackpot' : 'Get LootCoins'}</button></div></div>`);
@@ -3283,9 +3418,9 @@
   function openCredits() {
     const packs = window.PAYMENTS ? window.PAYMENTS.PACKS : [];
     const conf = window.PAYMENTS && window.PAYMENTS.configured();
-    const rows = packs.map((p) => `<div class="fp-pick" data-sku="${p.sku}"><div class="fpp-m"><div class="fpp-n">${LC_ICON}${p.credits.toLocaleString()} LootCoins${p.bonus ? ` <span class="pk-tag">+${p.bonus}% BONUS</span>` : ''}${p.tag ? ` <span class="pk-tag hot">${p.tag}</span>` : ''}</div><div class="fpp-d">one-time purchase · Apple Pay / Google Pay / card</div></div><span class="fpp-go">$${p.usd}</span></div>`).join('');
-    const heroCoin = LC_ICON.replace(/lcg/g, 'lcg3').replace('class="lc"', 'class="lc lch-coin"');
-    const sheet = showSheet(`<div class="sheet-head">${LC_ICON} Get LootCoins</div><div class="sheet-body">
+    const rows = packs.map((p) => `<div class="fp-pick" data-sku="${p.sku}"><div class="fpp-m"><div class="fpp-n">${window._lcIcon()}${p.credits.toLocaleString()} LootCoins${p.bonus ? ` <span class="pk-tag">+${p.bonus}% BONUS</span>` : ''}${p.tag ? ` <span class="pk-tag hot">${p.tag}</span>` : ''}</div><div class="fpp-d">one-time purchase · Apple Pay / Google Pay / card</div></div><span class="fpp-go">$${p.usd}</span></div>`).join('');
+    const heroCoin = window._lcIcon().replace('class="lc"', 'class="lc lch-coin"');
+    const sheet = showSheet(`<div class="sheet-head">${window._lcIcon()} Get LootCoins</div><div class="sheet-body">
       <div class="lc-hero">
         <div class="lch-glow"></div>
         <i class="lch-sp s1"></i><i class="lch-sp s2"></i><i class="lch-sp s3"></i><i class="lch-sp s4"></i><i class="lch-sp s5"></i>
@@ -3331,7 +3466,7 @@
     const sheet = showSheet(`<div class="sheet-head">Acquire ${ship.name}</div><div class="sheet-body">
       <p style="margin-bottom:8px">${ship.desc}</p>
       ${ship.perk ? `<div class="ship-perk" style="margin-bottom:9px">${ship.perk}</div>` : ''}
-      <div class="ip-stat"><span class="ip-sname">Hardpoints</span><span class="v">⚔ ${ship.weapons} · ⊕ ${ship.ammo} · ⛨ ${ship.hull}${ship.drones?` · ◎ ${ship.drones}`:''}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Hardpoints</span><span class="v">${hardpointChips(ship, 'text')}</span></div>
       ${priceRows}
       ${afford?'':`<p style="font-size:11px;color:var(--bad);margin-top:6px">Not enough ${st.resPrice?'Galaxy Resources':'gold'} yet.</p>`}
       <div class="sheet-actions"><button class="btn" data-x>Cancel</button>
@@ -3485,7 +3620,10 @@
     }).join('');
     const eq = p.isMe ? G.state.equipped : LB.loadoutFor(p, p.rank, total);
     let grid = '';
-    C.SLOT_KEYS.forEach((slot) => {
+    // Only the slots this loadout MODELS. SLOT_KEYS grew a `fighter` entry, and a
+    // rival loadout has no launch bay — rendering one printed a permanently empty
+    // Fighter Bay row on every pilot on the board.
+    C.SLOT_KEYS.filter((s) => s in eq).forEach((slot) => {
       const it = eq[slot], def = C.SLOTS[slot];
       grid += `<div class="lo-slot ${it?bl(it.rarity):''}"><div class="lo-ic ${it?rc(it.rarity):''}">${it?itemIcon(it):def.icon}</div>
         <div style="min-width:0"><div class="lo-nm ${it?rc(it.rarity):''}">${it?it.name:'—'}</div><div class="lo-r">${it?C.RARITY[it.rarity].name:'empty'}</div></div></div>`;
@@ -3550,7 +3688,7 @@
     const sheet = showSheet(`<div id="item-pop"><div class="sheet-body">
       <div class="ip-name ${rc(item.rarity)}">${item.name}</div>
       <div class="ip-type">${r.name} · ${C.SLOTS[item.slot].name} · ${item.axiom ? `Zone ${item.dungeon} <b class="ip-evo">· grows as you push deeper</b>` : `Zone ${item.dungeon}`}</div>
-      ${(function(){ if (item.slot !== 'bow' || !window.ITEMS.weaponClassOf) return '';
+      ${(function(){ if ((item.slot !== 'bow' && item.slot !== 'fighter') || !window.ITEMS.weaponClassOf) return '';
         const wc = window.ITEMS.weaponClassOf(item);
         let extra = '';
         if (wc.key === 'support' && window.ITEMS.supportAura) {
@@ -4130,7 +4268,7 @@
     const go = sheet.querySelector('[data-asc]');
     if (go) go.addEventListener('click', () => { closeSheet(); try { showScreen('pasc'); if (window.PASCEND) window.PASCEND.render(); } catch (e) {} });
   }
-  // THE GATE IS OPEN — fired once per star, the moment the pilot passes half their
+  // THE GATE IS OPEN — fired once per star, the moment the pilot reaches their
   // level cap. It is an OPTION, not an instruction: the two roads get equal weight
   // and equal space, and nothing here is styled as the recommended one.
   function showAscendGate(gate, cap) {
@@ -4141,20 +4279,20 @@
     const sheet = showSheet(`<div id="asc-gate-pop">
       <div class="wreck-skull" style="color:#e05bff">✦</div>
       <div class="wreck-title" style="color:#e05bff">ASCENSION UNLOCKED</div>
-      <div class="wreck-by">You reached Level ${gate} — halfway to your Lv ${cap} ceiling. The pilot run can now be traded in.</div>
+      <div class="wreck-by">You reached <b>Level ${G.formatNum(gate)}</b> — the ceiling for ★${stars}. The pilot run can now be traded in.</div>
       <div style="margin-top:12px;display:grid;gap:9px">
         <div style="border:1px solid rgba(224,91,255,.32);background:rgba(224,91,255,.07);border-radius:11px;padding:11px 13px">
           <div style="font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#e05bff;margin-bottom:6px">✦ ASCEND NOW</div>
-          <div style="font-size:12.5px;line-height:1.55;color:#f2d4ff">Bank <b>+${pts} ascension point${pts === 1 ? '' : 's'}</b> and <b>+1 ★</b>. Your ceiling rises to <b>Lv ${(cap | 0) + 50}</b>. The pilot run restarts at Level 1 — <b>your whole fleet comes with you</b>.</div>
+          <div style="font-size:12.5px;line-height:1.55;color:#f2d4ff">Bank <b>+${pts} ascension point${pts === 1 ? '' : 's'}</b> and <b>+1 ★</b>. Your ceiling rises to <b>Lv ${G.formatNum((cap | 0) + 50)}</b>. The pilot run restarts at Level 1 — <b>your whole fleet comes with you</b>.</div>
         </div>
         <div style="border:1px solid var(--line-2,#37475f);border-radius:11px;padding:11px 13px">
-          <div style="font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#8fa3bd;margin-bottom:6px">△ KEEP CLIMBING</div>
+          <div style="font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#8fa3bd;margin-bottom:6px">△ KEEP PLAYING</div>
           <div style="font-size:12.5px;line-height:1.55;color:var(--muted,#93a2ba)">${toCap > 0
-            ? `<b style="color:#cfe0f5">${toCap} more level${toCap === 1 ? '' : 's'}</b> to the Lv ${cap} cap. Nothing expires, and every level you add makes the ascension payout bigger.`
-            : `You are already at the Lv ${cap} cap — XP has stopped accruing, so waiting no longer adds anything.`}</div>
+            ? `<b style="color:#cfe0f5">${toCap} more level${toCap === 1 ? '' : 's'}</b> to the Lv ${G.formatNum(cap)} cap. Nothing expires, and every level you add makes the ascension payout bigger.`
+            : `You are at the Lv ${G.formatNum(cap)} cap. Kills still pay gold, resources, loot and events — but <b style="color:#cfe0f5">XP has stopped accruing</b>, so your level will not move again until you ascend.`}</div>
         </div>
       </div>
-      <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Keep climbing</button><button class="btn primary" data-asc>✦ Review ascension</button></div></div>`);
+      <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Later</button><button class="btn primary" data-asc>✦ Review ascension</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const go = sheet.querySelector('[data-asc]');
     if (go) go.addEventListener('click', () => { closeSheet(); try { showScreen('pasc'); if (window.PASCEND) window.PASCEND.render(); } catch (e) {} });

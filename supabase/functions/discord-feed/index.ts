@@ -40,8 +40,9 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 // Version marker — echoed in every response and the bootstrap message, so a
 // deploy is verifiable from the cron log:
 //   select content from net._http_response order by created desc limit 3;
-// must show {"ok":true,"ver":570,...}. If ver is missing, the old build runs.
-const FEED_VER = 570;
+// must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
+// this number equal to the client build that ships the function.
+const FEED_VER = 592;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -706,13 +707,19 @@ Deno.serve(async (req) => {
       const hkey = String((p as any).hull_last || '');
       const hArt = shipArt(hkey);
       const hName = hullName(hkey);
+      // NAMED vs UNNAMED. hullName('') falls back to the phrase "a new hull",
+      // which cannot take an article — "took delivery of the a new hull" is what
+      // shipped when hull_last arrived empty. The key is missing whenever a
+      // client is older than the publish path or the row's write dropped it, so
+      // both forms have to read correctly.
+      const named = !!hkey;
       events.push({
         kind: 'hull',
-        line: `**${p.name}** earned ${hName}`,
+        line: named ? `**${p.name}** earned the ${hName}` : `**${p.name}** earned a new hull`,
         embed: {
           color: 0x7db8e8,
           author: { name: '⬡  NEW HULL' },
-          title: `${p.name} took delivery of the ${hName}`,
+          title: named ? `${p.name} took delivery of the ${hName}` : `${p.name} took delivery of a new hull`,
           description:
             quip('hull', 'hl:' + p.user_id + ':' + cur.hulls, { a: '**' + p.name + '**' }) +
             `\n-# hull ${cur.hulls} in the hangar · level ${cur.level} · zone ${cur.zone}`,

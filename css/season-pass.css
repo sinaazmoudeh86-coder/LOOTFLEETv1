@@ -1,0 +1,191 @@
+/* TOUR OF DUTY — season pass.
+   Rebuilt 630: the ladder used to sit fifth behind 634 words of explanation. Now the
+   order is next reward → milestones → tracks → ladder, and every rule lives in one
+   "?" sheet. Layout does the explaining. */
+#screen-tour .scr-body{padding:12px 12px 26px;}
+
+/* Command-menu card accent. */
+.mega-card.cmd-tour .mc-ic.mc-tour{background:radial-gradient(120% 120% at 30% 20%,#2a3357,#121729);border-color:#3d4a78;color:#ffd24d;}
+.mega-card.cmd-tour{border-color:#3d4a78;}
+.mega-card.cmd-tour .mc-n{color:#fff;}
+
+/* ---- 1 · HERO ----------------------------------------------------------- */
+.tp-hero{position:relative;overflow:hidden;text-align:center;padding:15px 14px 13px;border:1px solid #2a2140;border-radius:15px;background:radial-gradient(120% 130% at 50% -10%,#1d2440,#0b0e1a 78%);margin-bottom:9px;}
+.tp-hero-rings{position:absolute;inset:0;pointer-events:none;}
+.tp-hero-rings i{position:absolute;left:50%;top:-40%;width:170%;padding-bottom:170%;transform:translateX(-50%);border-radius:50%;border:1px solid rgba(120,160,255,.09);}
+.tp-hero-rings i:nth-child(2){width:120%;padding-bottom:120%;top:-15%;border-color:rgba(255,210,77,.08);}
+.tp-help{position:absolute;top:10px;right:10px;z-index:2;width:26px;height:26px;border:1px solid #3d4a78;border-radius:50%;background:rgba(61,74,120,.25);color:#9fb0c4;font:800 13px/1 'Rajdhani',sans-serif;cursor:pointer;}
+.tp-help:active{transform:translateY(1px);}
+.tp-hero-tag{position:relative;font:700 8.5px/1 'Rajdhani',sans-serif;letter-spacing:.2em;color:#7f8fb0;}
+.tp-hero-t{position:relative;font:800 22px/1.05 'Rajdhani',sans-serif;letter-spacing:.09em;color:#ffd24d;margin-top:4px;}
+.tp-lv{position:relative;display:flex;align-items:baseline;justify-content:center;gap:6px;margin-top:8px;}
+.tp-lv b{font:800 38px/1 'Rajdhani',sans-serif;color:#fff;}
+.tp-lv em{font:700 9px/1 'Rajdhani',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#8d9bb8;font-style:normal;}
+.tp-bar{position:relative;height:7px;border-radius:5px;background:rgba(255,255,255,.09);overflow:hidden;margin:8px auto 0;max-width:280px;}
+.tp-bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#3f6fd8,#7cc0ff 60%,#ffd24d);}
+.tp-bar-l{display:flex;justify-content:space-between;max-width:280px;margin:4px auto 0;font:700 8.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#7f8fb0;}
+.tp-pace1{position:relative;margin:9px auto 0;max-width:300px;font:700 10px/1.3 'Rajdhani',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#ffcf7a;}
+.tp-pace1.good{color:#7ce0a0;}
+.tp-claimall{position:relative;margin-top:10px;width:100%;max-width:280px;padding:10px;border:0;border-radius:11px;font:800 12px/1 'Rajdhani',sans-serif;letter-spacing:.16em;color:#14100a;background:linear-gradient(180deg,#ffe27a,#f2a93c);cursor:pointer;box-shadow:0 6px 18px rgba(242,169,60,.3);}
+.tp-claimall:active{transform:translateY(1px);}
+
+/* ---- 2 · NEXT UP -------------------------------------------------------- */
+.tp-next{border:1px solid #2a2140;border-radius:13px;background:linear-gradient(180deg,rgba(124,192,255,.07),rgba(255,255,255,.015));padding:11px;margin-bottom:9px;}
+.tp-next-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font:800 10.5px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#cfe0ff;margin-bottom:9px;}
+.tp-next-h em{font:700 9px/1 'Rajdhani',sans-serif;letter-spacing:.08em;color:#7f8fb0;font-style:normal;text-transform:uppercase;}
+.tp-next-hull{display:flex;align-items:center;gap:11px;padding:8px 9px;margin-bottom:8px;border:1px solid #ffd24d;border-radius:11px;background:radial-gradient(120% 140% at 20% 30%,rgba(255,210,77,.22),rgba(255,210,77,.04) 70%);}
+.tp-next-hull img{flex:none;width:64px;height:58px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(255,210,77,.55));}
+.tp-next-hn{font:800 14px/1.1 'Rajdhani',sans-serif;letter-spacing:.03em;color:#fff;}
+.tp-next-hs{font:700 9px/1.3 'Rajdhani',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#ffd24d;margin-top:3px;}
+.tp-next-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:7px;}
+.tp-next-c{display:flex;flex-direction:column;align-items:center;gap:1px;padding:9px 5px;border:1px solid #2a2140;border-left:2px solid var(--tc);border-radius:10px;background:rgba(255,255,255,.02);}
+.tp-next-ic{font-size:15px;line-height:1;}
+.tp-next-c b{font:800 14px/1.1 'Rajdhani',sans-serif;color:#fff;font-variant-numeric:tabular-nums;}
+.tp-next-c em{font:700 8px/1.2 'Rajdhani',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8d9bb8;font-style:normal;text-align:center;}
+.tp-next-none{grid-column:1/-1;text-align:center;font-size:11px;color:#8d9bb8;padding:8px;}
+
+/* ---- TOUR MISSIONS: the season's own boards ------------------------------ */
+.tp-bd{margin-bottom:9px;}
+.tp-bd:last-child{margin-bottom:0;}
+.tp-bd-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.tp-bd-h b{font:800 9.5px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#7cc0ff;}
+.tp-bd-h span{font:700 8.5px/1 'Rajdhani',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7f8fb0;}
+.tp-msn{display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid #241f39;border-radius:9px;background:rgba(255,255,255,.015);margin-bottom:5px;}
+.tp-msn:last-child{margin-bottom:0;}
+.tp-msn.done{border-color:#2e6f4a;background:rgba(46,111,74,.14);}
+.tp-msn-ic{flex:none;width:20px;text-align:center;font-size:13px;color:#9fb0c4;}
+.tp-msn.done .tp-msn-ic{color:#7ce0a0;}
+.tp-msn-m{flex:1;min-width:0;}
+.tp-msn-n{font:800 10.5px/1.2 'Rajdhani',sans-serif;letter-spacing:.03em;color:#dbe4f2;}
+.tp-msn-t{font-size:10px;line-height:1.35;color:#8d9bb8;margin-top:1px;}
+.tp-msn-t b{color:#e9f0ff;}
+.tp-msn-bar{height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:5px;}
+.tp-msn-bar i{display:block;height:100%;background:linear-gradient(90deg,#3f6fd8,#7cc0ff);}
+.tp-msn.done .tp-msn-bar i{background:#7ce0a0;}
+.tp-msn-r{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px;}
+.tp-msn-r b{font:700 9.5px/1 'Rajdhani',sans-serif;color:#c3cede;font-variant-numeric:tabular-nums;}
+.tp-msn-r em{font:700 8px/1 'Rajdhani',sans-serif;letter-spacing:.05em;color:#7cc0ff;font-style:normal;}
+.tp-msn.done .tp-msn-r em{color:#7ce0a0;}
+.tp-msn-tick{font-size:13px;color:#7ce0a0;}
+
+/* ---- 3 · MILESTONES ---------------------------------------------------- */
+.tp-miles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:9px;}
+.tp-mile{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 5px 8px;border:1px solid #2a2140;border-radius:12px;background:rgba(255,255,255,.02);text-align:center;}
+.tp-mile.hull{border-color:#7a6320;background:radial-gradient(120% 130% at 50% 20%,rgba(255,210,77,.14),rgba(255,255,255,.015) 72%);}
+.tp-mile.done{opacity:.62;}
+.tp-mile .tp-mile-art{width:66px;max-width:66px;height:46px;object-fit:contain;filter:drop-shadow(0 0 9px rgba(255,210,77,.45));}
+.tp-mile-ic{height:44px;display:flex;align-items:center;font-size:24px;line-height:1;}
+.tp-mile-lv{font:800 9px/1 'Rajdhani',sans-serif;letter-spacing:.12em;color:#7f8fb0;margin-top:3px;}
+.tp-mile-n{font:800 10.5px/1.2 'Rajdhani',sans-serif;letter-spacing:.02em;color:#e9f0ff;}
+.tp-mile-t{font:700 7.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;color:#ffd24d;margin-top:2px;}
+.tp-mile-tick{position:absolute;top:5px;right:6px;font-size:10px;color:#7ce0a0;}
+
+/* ---- 4 · TRACKS: value pills + a real CTA ------------------------------- */
+.tp-trk{display:flex;flex-direction:column;gap:8px;}
+.tp-trkc{border:1px solid #2a2140;border-left:3px solid var(--tc);border-radius:12px;padding:10px 11px;background:rgba(255,255,255,.02);}
+.tp-trkc.have{background:color-mix(in oklab,var(--tc) 10%,transparent);border-color:var(--tc);}
+.tp-trkc-h{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:8px;}
+.tp-trkc-h b{font:800 12px/1 'Rajdhani',sans-serif;letter-spacing:.13em;color:var(--tc);}
+.tp-trkc-p{display:inline-flex;align-items:center;gap:4px;font:800 11px/1 'Rajdhani',sans-serif;color:#ffd66a;border:1px solid #4a3a20;background:rgba(242,169,60,.14);border-radius:20px;padding:4px 9px;font-variant-numeric:tabular-nums;}
+.tp-trkc-p svg{width:12px;height:12px;display:block;}
+.tp-trkc-on{font:800 9.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;color:#7ce0a0;border:1px solid #2e6f4a;background:rgba(46,111,74,.2);border-radius:20px;padding:4px 9px;}
+.tp-trkc-free{font:800 9.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;color:#8fa3bd;border:1px solid #2a2140;border-radius:20px;padding:4px 9px;}
+/* value pills — what the money actually buys, computed from the ladder */
+.tp-vp{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px;}
+.tp-vpill{display:inline-flex;align-items:center;gap:5px;font:700 9.5px/1 'Rajdhani',sans-serif;letter-spacing:.03em;color:#c3cede;border:1px solid #241f39;border-radius:7px;padding:4px 7px;background:rgba(255,255,255,.015);font-variant-numeric:tabular-nums;}
+.tp-vpill i{font-style:normal;font-size:11px;color:var(--tc);line-height:1;}
+.tp-vpill i.svg{display:inline-flex;}
+.tp-vpill i.svg svg{width:11px;height:11px;display:block;}
+.tp-vpill.hull{border-color:#ffd24d;background:rgba(255,210,77,.12);color:#fff;}
+.tp-vpill.hull i{color:#ffd24d;}
+/* the CTA — the only purchase on this screen, so it looks like one */
+.tp-cta{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:11px;border:0;border-radius:10px;font:800 11.5px/1 'Rajdhani',sans-serif;letter-spacing:.13em;color:#14100a;background:linear-gradient(180deg,#ffe27a,#f2a93c);cursor:pointer;box-shadow:0 5px 16px rgba(242,169,60,.26);}
+.tp-cta svg{width:14px;height:14px;display:block;}
+.tp-cta:active{transform:translateY(1px);}
+.tp-cta.on{background:transparent;border:1px solid #2e6f4a;color:#7ce0a0;box-shadow:none;cursor:default;letter-spacing:.1em;font-size:10px;}
+/* ---- 5 · LADDER -------------------------------------------------------- */
+.tp-card{border:1px solid #24203a;border-radius:13px;background:rgba(255,255,255,.02);padding:11px;margin-bottom:11px;}
+.tp-card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font:800 10.5px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:#c9d6ea;margin-bottom:9px;}
+.tp-card-h em{font:700 9px/1 'Rajdhani',sans-serif;letter-spacing:.08em;color:#7f8fb0;font-style:normal;text-transform:uppercase;}
+.tp-head,.tp-row{display:grid;grid-template-columns:52px repeat(3,1fr);gap:5px;align-items:stretch;}
+.tp-lvcol{display:flex;flex-direction:column;gap:3px;}
+.tp-hlv{font:700 8.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;color:#6f7d99;align-self:center;padding-bottom:5px;margin-top:auto;}
+/* STATE AND COST, per level. Row opacity alone said "not yet" without saying how far. */
+.tp-pill{flex:none;text-align:center;padding:3px 2px;border-radius:6px;font:800 7.5px/1.15 'Rajdhani',sans-serif;letter-spacing:.04em;border:1px solid transparent;font-variant-numeric:tabular-nums;}
+.tp-pill.cost{border-color:#2a2140;color:#7f8fb0;}
+.tp-pill.ready{border-color:#f2a93c;background:linear-gradient(180deg,#ffe27a,#f2a93c);color:#14100a;}
+.tp-pill.done{border-color:#2a3f34;background:rgba(46,111,74,.12);color:#6aa887;}
+.tp-pill.part{border-color:#2a2140;background:transparent;color:#6f7d99;}
+.tp-head{margin-bottom:6px;}
+.tp-hcell{font:800 8.5px/1 'Rajdhani',sans-serif;letter-spacing:.1em;color:var(--tc);text-align:center;padding:4px 2px;border-bottom:2px solid var(--tc);}
+/* windowed by default, so no inner scroll at all; expanded it scrolls and declares
+   its own flex per the fit-guard contract */
+.tp-ladder{display:flex;flex-direction:column;gap:5px;}
+.tp-ladder.all{max-height:min(56vh,470px);overflow-y:auto;overscroll-behavior:contain;padding-right:2px;}
+.tp-row{opacity:.55;}
+.tp-row.reached{opacity:1;}
+.tp-row.now .tp-lvn{background:#ffd24d;color:#151007;border-color:#ffd24d;}
+.tp-row.overtime .tp-lvn{border-style:dashed;}
+.tp-row.hullrow{position:relative;padding:3px 0;border-radius:11px;background:linear-gradient(90deg,rgba(255,210,77,.10),rgba(255,210,77,.02) 55%,transparent);box-shadow:0 0 0 1px rgba(255,210,77,.22) inset;}
+.tp-row.hullrow .tp-lvn{border-color:#ffd24d;color:#ffd24d;}
+.tp-lvn{flex:1;display:flex;align-items:center;justify-content:center;border:1px solid #2a2140;border-radius:7px;font:800 12px/1 'Rajdhani',sans-serif;color:#9fb0c4;font-variant-numeric:tabular-nums;}
+.tp-cell{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-height:52px;padding:5px 3px;border:1px solid #24203a;border-radius:9px;background:rgba(255,255,255,.02);text-align:center;}
+.tp-cell-ic{font-size:12px;line-height:1;}
+.tp-cell-l{font:800 11.5px/1.15 'Rajdhani',sans-serif;color:#e9f0ff;font-variant-numeric:tabular-nums;}
+.tp-cell-s{font:700 7.5px/1.15 'Rajdhani',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#8d9bb8;margin-top:1px;}
+.tp-cell.locked{opacity:.42;border-style:dashed;}
+.tp-cell.none{opacity:.22;}
+.tp-cell-x{color:#5b6480;font-size:12px;}
+.tp-cell.claimed{opacity:.5;}
+.tp-cell-tick{position:absolute;top:2px;right:4px;font-size:9px;color:#7ce0a0;}
+.tp-cell.ready{cursor:pointer;border-color:var(--tc);box-shadow:0 0 0 1px var(--tc) inset,0 0 12px color-mix(in oklab,var(--tc) 35%,transparent);animation:tpPulse 1.9s ease-in-out infinite;}
+.tp-cell.ready:active{transform:translateY(1px);}
+@keyframes tpPulse{0%,100%{box-shadow:0 0 0 1px var(--tc) inset,0 0 8px color-mix(in oklab,var(--tc) 25%,transparent);}50%{box-shadow:0 0 0 1px var(--tc) inset,0 0 18px color-mix(in oklab,var(--tc) 55%,transparent);}}
+/* hull cells: the ship, in a portrait frame. EAGER + reserved box — a 0×0 lazy image
+   inside a scrollport can never intersect, so it needed height to load and only got
+   height by loading. */
+.tp-cell.hull{border-color:#ffd24d;background:radial-gradient(120% 130% at 50% 15%,rgba(255,210,77,.26),rgba(255,210,77,.05) 72%);min-height:96px;padding:6px 3px 7px;overflow:hidden;}
+.tp-cell.hull::before{content:'';position:absolute;left:50%;top:44%;width:120px;height:120px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,210,77,.4),transparent 62%);pointer-events:none;animation:tpHullGlow 2.8s ease-in-out infinite;}
+.tp-cell.hull .tp-cell-art{position:relative;z-index:1;width:86%;height:68px;object-fit:contain;filter:drop-shadow(0 3px 7px rgba(0,0,0,.65)) drop-shadow(0 0 10px rgba(255,210,77,.6));}
+.tp-cell.hull .tp-cell-s{position:relative;z-index:1;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8);}
+.tp-cell.hull.claimed::before{animation:none;opacity:.35;}
+@keyframes tpHullGlow{0%,100%{opacity:.5;}50%{opacity:.95;}}
+.tp-toggle{margin-top:9px;width:100%;padding:9px;border:1px solid #33284f;border-radius:10px;background:transparent;color:#9fb0c4;font:800 10px/1 'Rajdhani',sans-serif;letter-spacing:.12em;cursor:pointer;}
+.tp-toggle:active{transform:translateY(1px);}
+@media (prefers-reduced-motion:reduce){.tp-cell.ready,.tp-cell.hull::before{animation:none;}}
+@media (max-width:380px){.tp-head,.tp-row{gap:4px;grid-template-columns:46px repeat(3,1fr);}.tp-pill{font-size:7px;}.tp-cell-l{font-size:10px;}.tp-cell-s{font-size:7px;}.tp-cell.hull{min-height:84px;}.tp-cell.hull .tp-cell-art{height:56px;}.tp-mile-n{font-size:9.5px;}}
+
+/* an inline coin SVG needs a box; a text glyph does not */
+.tp-cell-ic.svg,.tp-next-ic.svg,.tp-rcpt-ic.svg,.tp-mile-ic.svg{display:inline-flex;align-items:center;justify-content:center;}
+.tp-cell-ic.svg svg,.tp-next-ic.svg svg,.tp-rcpt-ic.svg svg,.tp-mile-ic.svg svg{display:block;}
+.tp-track-s svg,.tp-modal-r svg,.tp-help-r b svg{width:11px;height:11px;vertical-align:-1px;}
+
+/* ---- MODALS ------------------------------------------------------------ */
+.tp-veil{position:fixed;inset:0;z-index:1400;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(6,8,14,.74);backdrop-filter:blur(3px);}
+.tp-modal{width:100%;max-width:340px;max-height:86vh;overflow-y:auto;border:1px solid var(--tc);border-radius:15px;background:#111524;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+.tp-modal-h{font:800 13px/1 'Rajdhani',sans-serif;letter-spacing:.14em;color:var(--tc);margin-bottom:10px;}
+.tp-modal p{font-size:12px;line-height:1.55;color:#cbd6e6;margin:0 0 11px;}
+.tp-modal p b{color:#fff;}
+.tp-modal-r{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid #241f39;font-size:11.5px;color:#8d9bb8;}
+.tp-modal-r b{color:#e9f0ff;font-variant-numeric:tabular-nums;}
+.tp-modal-a{display:flex;gap:8px;margin-top:13px;}
+.tp-mbtn{flex:1;padding:10px;border:1px solid #33284f;border-radius:10px;background:transparent;color:#c3cede;font:800 10.5px/1 'Rajdhani',sans-serif;letter-spacing:.09em;cursor:pointer;}
+.tp-mbtn.go{border-color:var(--tc);background:var(--tc);color:#14100a;}
+
+/* help sheet — a definition list, not paragraphs */
+.tp-help-l{display:flex;flex-direction:column;gap:8px;}
+.tp-help-r{display:grid;grid-template-columns:74px 1fr;gap:9px;align-items:baseline;}
+.tp-help-r b{font:800 9px/1.3 'Rajdhani',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#ffd24d;}
+.tp-help-r span{font-size:11px;line-height:1.45;color:#a7b4cb;text-wrap:pretty;}
+.tp-help-r span b{color:#e9f0ff;text-transform:none;letter-spacing:0;font-size:11px;}
+
+/* receipt */
+.tp-rcpt{display:flex;flex-direction:column;gap:5px;max-height:50vh;overflow-y:auto;}
+.tp-rcpt-r{display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid #241f39;border-left:2px solid var(--rc);border-radius:8px;background:rgba(255,255,255,.02);}
+.tp-rcpt-ic{flex:none;width:26px;text-align:center;font-size:15px;color:var(--rc);line-height:1;}
+.tp-rcpt-art{flex:none;width:34px;height:26px;object-fit:contain;filter:drop-shadow(0 0 6px color-mix(in oklab,var(--rc) 60%,transparent));}
+.tp-rcpt-m{flex:1;min-width:0;}
+.tp-rcpt-n{font:800 11.5px/1.25 'Rajdhani',sans-serif;letter-spacing:.02em;color:#e9f0ff;}
+.tp-rcpt-s{font-size:9.5px;line-height:1.3;color:var(--rc);opacity:.85;margin-top:1px;text-transform:uppercase;letter-spacing:.06em;}
+.tp-rcpt-bar{height:3px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:4px;}
+.tp-rcpt-bar i{display:block;height:100%;background:var(--rc);}

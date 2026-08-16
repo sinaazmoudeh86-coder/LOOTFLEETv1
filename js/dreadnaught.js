@@ -75,7 +75,9 @@
   const UTILITY = [
     { key: 'lootQuality', label: 'Loot Quality', unit: '%', lo: 4, hi: 8, util: true },
     { key: 'goldFind', label: 'Gold Find', unit: '%', lo: 5, hi: 10, util: true },
-    { key: 'xpGain', label: 'XP Gain', unit: '%', lo: 4, hi: 8, util: true },
+    // PROGRESSION NOTE (Aug 2026) — 4–8 → 3–5 per node, part of the game-wide XP
+    // reduction (see the FLEET XP RATE block in game-v93.js).
+    { key: 'xpGain', label: 'XP Gain', unit: '%', lo: 3, hi: 5, util: true },
     { key: 'pickupRadius', label: 'Loot Pickup Radius', unit: '%', lo: 6, hi: 12, util: true },
   ];
   // rare / legendary nodes — strong combat combos + flavour; some carry a flag.

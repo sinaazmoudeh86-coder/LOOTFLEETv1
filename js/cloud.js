@@ -188,6 +188,7 @@
   let _lbNoLadder = false, _lbLadderRetryAt = 0;
   let _lbNoCargo = false, _lbCargoRetryAt = 0;
   let _lbNoNano = false, _lbNanoRetryAt = 0;
+  let _lbNoArt = false, _lbArtRetryAt = 0, _lbArtWarned = false;
   function lbFail(where, err) {
     _lbFails++;
     // A row that never publishes makes the player INVISIBLE on Ranks while they
@@ -244,6 +245,7 @@
       if (_lbNoLadder && Date.now() > _lbLadderRetryAt) _lbNoLadder = false;
       if (_lbNoCargo && Date.now() > _lbCargoRetryAt) _lbNoCargo = false;
       if (_lbNoNano && Date.now() > _lbNanoRetryAt) _lbNoNano = false;
+      if (_lbNoArt && Date.now() > _lbArtRetryAt) _lbNoArt = false;
 
       // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
       // p_asc. Folding them into the p_asc attempt would mean a server with
@@ -255,9 +257,47 @@
         p_tile_rev: bignum(p.tile_rev),
         p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
       } : null;
-      // NANOCORE COLUMNS are the newest tier and try FIRST, degrading on their
-      // own flag: a server with cargo-ladder.sql but not nanocore-ladder.sql
-      // keeps publishing haulage and every other ladder untouched.
+      // ART FIELDS are the newest rung (discord-art-publish.sql) and try FIRST.
+      // WHY THIS RUNG EXISTS AT ALL: the columns were added, the client computed
+      // hull_last / nano_last / cargo_tier, and the feed selected them by name —
+      // but lb_upsert enumerates its params, so the widest overload silently
+      // discarded all three. Every row kept an empty hull_last, and the NEW HULL
+      // card posted with no sprite and the title "the a new hull". A card firing
+      // with no art is the symptom of a dropped WRITE, not a dropped read.
+      const art = (p.hull_last !== undefined || p.nano_last !== undefined || p.cargo_tier !== undefined) ? {
+        p_hull_last: String(p.hull_last || '').slice(0, 32),
+        p_nano_last: String(p.nano_last || '').slice(0, 32),
+        p_cargo_tier: Math.max(0, Math.min(5, p.cargo_tier | 0)),
+      } : null;
+      if (art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && p.nano_legend !== undefined && !_lbNoArt) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+            p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
+            base, ladder, art));
+        if (!error) { _lbFails = 0; return; }
+        if (!isLegacy(error)) { lbFail('art', error); return; }
+        // FIVE MINUTES, NOT SIX HOURS. Every other rung backs off for six hours
+        // because a missing migration is a standing fact about that server. This
+        // rung is different: it is the one being rolled out, so its failure is
+        // usually "the SQL has not run YET" or "PostgREST has not reloaded its
+        // schema cache yet" — both measured in minutes. A six-hour back-off meant
+        // the client kept publishing without art long after the server was fixed,
+        // and only a page reload could clear it. That turned a two-step deploy
+        // into an ordering puzzle: reload the schema BEFORE the browser, or the
+        // flag simply set itself again.
+        _lbNoArt = true; _lbArtRetryAt = Date.now() + 5 * 60 * 1000;
+        if (!_lbArtWarned) {
+          _lbArtWarned = true;
+          try {
+            console.warn('[LOOTFLEET] leaderboard art fields rejected — hull_last / nano_last / cargo_tier are NOT being published, so Discord cards post without art. '
+              + 'Run supabase/discord-art-publish.sql, then "notify pgrst, \'reload schema\';". Retrying automatically every 5 minutes. '
+              + 'Inspect with CLOUD.lbState().');
+          } catch (e) {}
+        }
+      }
+      // NANOCORE COLUMNS — the rung below ART, degrading on their own flag: a
+      // server with cargo-ladder.sql but not nanocore-ladder.sql keeps publishing
+      // haulage and every other ladder untouched.
       if (ladder && !_lbNoLadder && !_lbNoCargo && p.nano_legend !== undefined && !_lbNoNano) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
@@ -353,6 +393,23 @@
       return { ok: true };
     } catch (e) { return { ok: false, reason: (e && e.message) || 'network' }; }
   }
+  // MY OWN ROW, FETCHED DIRECTLY BY user_id — not scanned out of a board slice.
+  // The boards are `limit(100)`, and the season board spans the whole season, so
+  // a mid-table pilot simply is not in the array: "no row of mine" and "my row is
+  // rank 101" look identical to a caller filtering _cl.season. Anything that needs
+  // the player's own server figures — the local-record floor, the missing-row
+  // republish — has to ask for the row by id or it silently no-ops for exactly the
+  // players it was written for.
+  async function sdMine(season) {
+    try {
+      if (!enabled) return null;
+      const u = await getUser(); const id = u && u.id; if (!id) return null;
+      const { data, error } = await client.from('sdread_scores')
+        .select('user_id,name,season,day,best_day,total,stage')
+        .eq('user_id', id).eq('season', season || 1).maybeSingle();
+      return error ? null : (data || null);
+    } catch (e) { return null; }
+  }
   async function sdDaily(season, day, n) {
     try {
       if (!enabled) return null;
@@ -376,5 +433,16 @@
 
   window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, providers, deleteAccountData, getUser, pull, pullMeta, push,
     pullSave, pushSave, saveConflict, claimSession, touchSession, onSessionRow,
-    lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason };
+    lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason, sdMine,
+    // Which rungs of the publish ladder are currently degraded, and when each
+    // re-arms. One line in the console instead of reading source to find out why
+    // a column is not moving.
+    lbState: () => ({
+      art:    { off: _lbNoArt,    retryIn: Math.max(0, Math.round((_lbArtRetryAt    - Date.now()) / 1000)) },
+      nano:   { off: _lbNoNano,   retryIn: Math.max(0, Math.round((_lbNanoRetryAt   - Date.now()) / 1000)) },
+      cargo:  { off: _lbNoCargo,  retryIn: Math.max(0, Math.round((_lbCargoRetryAt  - Date.now()) / 1000)) },
+      ladder: { off: _lbNoLadder, retryIn: Math.max(0, Math.round((_lbLadderRetryAt - Date.now()) / 1000)) },
+      asc:    { off: _lbNoAsc,    retryIn: Math.max(0, Math.round((_lbAscRetryAt    - Date.now()) / 1000)) },
+      fails: _lbFails,
+    }) };
 })();

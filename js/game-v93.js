@@ -134,6 +134,21 @@
     // here means an ascension (which wipes the fleet to nothing) cannot re-arm
     // the offer and let the same account collect it twice.
     'discordJoin',
+    // GOLD AND GALAXY RESOURCES SURVIVE ASCENSION (Aug 2026). Both used to be
+    // zeroed, and both zeroings had stopped making sense:
+    //   • GALAXY RESOURCES are produced by TERRITORY, and territory explicitly
+    //     survives ("the fleet resets, the map you conquered does not"). Wiping
+    //     the output of infrastructure the pilot keeps is the same contradiction
+    //     the Moon Colony block above was written to fix — and with a large
+    //     empire the wipe was undone by a single offline cycle anyway, so it
+    //     punished small holders and no one else.
+    //   • GOLD buys HULL UPGRADE LEVELS, which are kept in full. Zeroing the
+    //     wallet while keeping everything it bought taxed nothing but the
+    //     player's timing — spend before you ascend, or lose it.
+    // The ascension ledger in pilot-ascension.js states this; keep the two in
+    // step. `lastResTick` rides across with them so the first post-ascension
+    // load cannot re-pay income that was already settled.
+    'gold', 'resources', 'lastResTick',
     // MOON COLONY SURVIVES ASCENSION (Aug 2026). The colony is infrastructure
     // BUILT on the moons, not the pilot's run — mines, storage and defences that
     // keep producing while the account is offline. Wiping it made ascending cost
@@ -160,7 +175,18 @@
     // clock, not the pilot's run, so ascending mid-season must not cost a player
     // their standing in it.
     'sdread', 'season', 'shipParts',
-    // SPACE CARGO DEFENSE SURVIVES ASCENSION. The event is GATED on ★20, so it
+    // TOUR OF DUTY SURVIVES ASCENSION. The season pass runs on the SEASON clock,
+    // not the pilot's run: its levels are bought with real money (Admiralty) and
+    // earned from daily/weekly boards that keep their own reset timers. Wiping it
+    // on ascension zeroed a paid track mid-season and reset the 125-level ladder
+    // — an ascension must cost the pilot's run, never the season they paid for.
+    // Its own claim map rides across too, so nothing can be claimed twice.
+    'tour',
+    // …AND THE KEY THAT LETS YOU SEE IT. `tourBeta` is the admin access switch
+    // for the unlaunched season pass (js/redeem.js). It is an entitlement, not
+    // run progress — an ascension must not revoke a tester's access mid-test.
+    'tourBeta',
+    // SPACE CARGO DEFENSE SURVIVES ASCENSION. The event is GATED on ★3, so it
     // only exists for ascended pilots — wiping it would reset the lifetime record
     // (deliveries, best condition, Eternums recovered) on exactly the action that
     // qualifies you for it, and hand back today's spent runs for free.
@@ -348,7 +374,13 @@
     state.pasc.stars = (state.pasc.stars | 0) + 1;
     state.pasc.pts = (state.pasc.pts | 0) + Math.max(0, pts | 0);
     state.pasc.legacy = legacy.key;
-    state.pasc.hist = (state.pasc.hist || []).concat([{ lvl: before.lvl, pts: Math.max(0, pts | 0), ship: before.ship, at: Date.now() }]).slice(-40);
+    // `at` IS SERVER TIME when it is available. The weekly star ceiling is verified
+    // against the backend clock (see js/servertime.js), so the record of when each
+    // star was taken has to be on the same clock — otherwise the history could not
+    // be used to audit the ladder later, which is the point of keeping it.
+    state.pasc.hist = (state.pasc.hist || []).concat([{ lvl: before.lvl, pts: Math.max(0, pts | 0), ship: before.ship,
+      at: Math.floor((window.SERVERTIME ? window.SERVERTIME.now() : Date.now())),
+      srv: !!(window.SERVERTIME && window.SERVERTIME.trusted()) }]).slice(-40);
     // TUTORIALS OFF FOR GOOD. `coach` rides across in ASC_KEEP, but a pilot who
     // ascended before finishing it would still be coached on the way back up —
     // and every gated moment re-fires as the new run re-crosses its level gate.
@@ -515,11 +547,23 @@
     s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0) + (nc.atkSpeedPct||0)) / 100);
     s.shipLevel = _hl + 1;
     s.critChance = Math.min(100, s.critChance);
-    // MEATY FIRE (Jul 2026): past 2.2 shots/s and 200% multishot, extra rate
+    // MEATY FIRE (Jul 2026): past 2.2 shots/s and 100% multishot, extra rate
     // FOLDS INTO DAMAGE — identical DPS, a fraction of the projectiles. At
     // Lv100+ the screen stops being a hose of rounds; every shell lands huge.
     if (s.attacksPerSec > 2.2) { s.attackDamage *= s.attacksPerSec / 2.2; s.attacksPerSec = 2.2; }
-    if (s.multiShot > 200) { s.attackDamage *= (1 + s.multiShot / 100) / 3; s.multiShot = 200; }
+    // THE MULTI-SHOT FOLD WAS LEAKING DAMAGE, TWICE OVER (Aug 2026).
+    //   1. It only fired above 200, but the clamp below cuts multishot at 100 —
+    //      so every build between 101% and 200% simply LOST the excess with no
+    //      compensation at all.
+    //   2. Above 200 it folded, set multishot to 200, and the clamp immediately
+    //      halved that to 100 — the fold had been written against a survivor of
+    //      200 and was never re-derived when the ceiling moved, so a large part
+    //      of what it folded in was taken straight back out.
+    // One rule now, DPS-preserving against the theoryDps model below: what is
+    // kept is 1 + 100/100 × 0.6 = 1.6, so the excess folds in at the ratio of the
+    // real term to that. Hits the carriers hardest because they carry the biggest
+    // multishot mods in the game (Praetorian 456%, Aquila 950%, Corvus 1425%).
+    if (s.multiShot > 100) { s.attackDamage *= (1 + s.multiShot / 100 * 0.6) / 1.6; s.multiShot = 100; }
     s.lifeSteal = Math.min(19, s.lifeSteal);   // global ceiling — was 95 before the 80% sustain cut
     s.multiShot = Math.min(100, s.multiShot);
     s.maxHp = s.health;
@@ -530,12 +574,42 @@
     // sweeps. Everything past the cap did nothing useful anyway: the ship already
     // outruns every enemy and projectile in the game long before ×10.
     s.moveSpeed = Math.min(1000, s.moveSpeed);
-    s.moveSpeedPx = 92 * (s.moveSpeed / 100);
+    // `speedMult` is a flat multiplier on the finished figure rather than a
+    // moveSpeed mod, so "75% slower than the reference hull" stays exactly that
+    // whatever else is stacking speed — and can never drive the value negative.
+    s.moveSpeedPx = 92 * (s.moveSpeed / 100) * ((C.SHIP_BY_KEY[state.ship] || {}).speedMult || 1);
     // weapon range — hull mod + fleet share + Warden aura all extend it
     s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0) + (m.rangePct || 0)) / 100);
+    // THE SAME MULTIPLIER, EXPOSED. Weapon Range comes from the skill tree, the
+    // pilot tree, hull mods, gear and the Warden aura, and every one of them was
+    // reaching a cannon and nothing else. A Fighter Carrier's reach IS its
+    // engagement envelope, so the wing has to grow on the identical figure or a
+    // range build silently does nothing for the entire class.
+    s.rangeMul = FIRE_RANGE > 0 ? s.fireRange / FIRE_RANGE : 1;
     s.fleetSize = esc.length;
     const critMult = 1 + (s.critChance / 100) * (s.critDamage / 100);
-    s.theoryDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
+    // ---- THROUGHPUT: CANNONS + THE WING ------------------------------------
+    // `cannonDps` is the classic model — one hull, one gun battery. It is also
+    // the unit the fighter wing is denominated in, so both are derived from it.
+    //
+    // A GUN-LESS CARRIER SCORES NO CANNON. The Vanguard mounts none (weapons: 0)
+    // and fires none (see fighterHull), yet it still scored a full cannon line
+    // off its base attack damage — a phantom weapon — while the four craft that
+    // are its entire armament counted for nothing. Both halves were wrong and
+    // they partly cancelled, which is why it went unnoticed.
+    const cannonDps = s.attackDamage * s.attacksPerSec * critMult * (1 + s.multiShot / 100 * 0.6);
+    const gunless = !!(ship.fighterCapacity && !(ship.weapons | 0));
+    let wingRatio = 0;
+    try { if (window.FIGHTERS && window.FIGHTERS.dpsRatio) wingRatio = window.FIGHTERS.dpsRatio(true) || 0; } catch (e) {}
+    s.cannonDps = gunless ? 0 : cannonDps;
+    s.wingDps = cannonDps * wingRatio;          // exact: the wing is anchored to cannon DPS
+    s.wingRatio = wingRatio;
+    s.bays = (ship.fighterCapacity | 0);
+    // FLOOR OF 1. A gun-less carrier with every bay empty legitimately produces
+    // no damage at all, and theoryDps is a DIVISOR in the offline sim, the clone
+    // matchup and the tile-defence maths — a literal zero there is a divide-by-zero
+    // or an infinite time-to-kill, not a weak ship.
+    s.theoryDps = Math.max(1, s.cannonDps + s.wingDps);
     // never emit a non-finite stat — one Infinity here poisons hp, dps, offline
     // sim lethality and the published score all at once
     for (const k in s) if (typeof s[k] === 'number' && !isFinite(s[k])) s[k] = (k === 'maxHp' || k === 'health') ? 100 : 1;
@@ -738,22 +812,37 @@
     return Math.max(flat, Math.floor(fraction));
   }
   // ---- FLEET XP RATE ----------------------------------------------------------
-  // Aug 2026 rework: XP bonuses no longer compound off each other. There is ONE
-  // base rate — 100%, or 200% on LootFleet Pro — and every bonus is a flat % OF
-  // THAT BASE. Bonuses ADD together, then scale the base:
-  //     total = base × (1 + Σ bonuses / 100)
-  // e.g. base 100% + VIP 2% + Neural Uplink 200% + Godshard 100% → 402% rate.
-  // On Pro the same bonuses pay double, because they multiply a 200% base.
+  // ONE SUM. NOTHING MULTIPLIES ANYTHING ELSE.
   //
-  // HARD CAP 1000% (Aug 2026). Additive stacking removed the runaway compounding,
-  // but it did not bound the total — a fully-built account could still push the
-  // rate somewhere the level curve was never designed against. The TOTAL rate is
-  // now capped at 1000% (10× normal). The cap applies to the total, not to any
-  // one source, so it is reached from whatever combination the pilot built.
-  // Pro's 500% base counts toward it: a member starts halfway up and has 500
-  // points of bonus headroom, which xpFleetInfo() reports honestly rather than
-  // quietly discarding the overflow.
-  const XP_RATE_CAP = 1000;
+  //     rate% = 100  +  Pro(+400 if a member)  +  min(500, Σ every other bonus)
+  //     rate% is then hard-capped at 1000.
+  //
+  // The three numbers line up on purpose: 100 + 400 + 500 IS 1000, so the ceiling
+  // is exactly "base, plus Pro, plus every bonus maxed" and nothing a pilot earns
+  // is ever silently thrown away.
+  //
+  // WHY THIS CHANGED (Aug 2026). The previous formula was
+  //     total = base × (1 + Σ bonuses / 100)
+  // with base = 500 on Pro. That reads as additive but it is not: the base
+  // MULTIPLIES the summed bonuses, so on Pro every +1% a pilot earned was worth
+  // +5 points of rate. A Pro member with a maxed Neural Uplink (+200%) sat at
+  // 500 × 3 = 1500%, i.e. 500 points PAST the cap, and every node, VIP level and
+  // Kaevith hull bought after that did literally nothing. That is the reported
+  // "bonuses stack past the 1000% cap" — they did stack past it, and the overflow
+  // was discarded. It also made the cap trivial to hit: Pro's own base spent half
+  // of it before a single bonus, so Pro + one big perk was already at the ceiling.
+  //
+  // Pro's headline is untouched: 100 + 400 = 500% = the advertised 5× XP. What it
+  // no longer does is quintuple everything else the pilot owns.
+  //
+  // Every source was also cut at its own definition (see PROGRESSION NOTE in
+  // pilot-ascension.js, config-v2.js Kaevith hulls, nanocores.js, ascension.js
+  // and dreadnaught.js) so the summed bonus lands near +400 for a maxed account
+  // rather than +600 — the cap is a backstop, not a routine.
+  const XP_BASE_PCT = 100;      // every pilot, always
+  const XP_PRO_PCT = 400;       // LootFleet Pro, as FLAT POINTS (100+400 = the 5× sold)
+  const XP_BONUS_CAP = 500;     // ceiling on the SUM of all other bonuses
+  const XP_RATE_CAP = 1000;     // ceiling on the total = 100 + 400 + 500
   function xpSources() {
     const safe = (fn) => { try { const v = fn(); return isFinite(v) && v > 0 ? v : 1; } catch (e) { return 1; } };
     const out = [];
@@ -765,20 +854,32 @@
     add('Nanocore', safe(() => (window.NANO ? window.NANO.mult('xp') : 1)));
     add('Combat Computer', safe(() => (window.ASCEND && window.ASCEND.xpMult ? window.ASCEND.xpMult() : 1)));
     add('Kaevith Resonance', safe(() => xenXpMult()));
+    // TOUR OF DUTY — the level-50 cells, one per track, and only the ones actually
+    // CLAIMED. Additive percentage points like every other source, so the three
+    // tracks stack to +8.5% and the whole stack still answers to one cap.
+    add('Tour of Duty', safe(() => (window.TOUR ? window.TOUR.mult() : 1)));
     return out;
   }
-  // { basePct, buffPct, pct, rawPct, capped, cap, mult, sources, pro } — pct is
-  // the TOTAL rate actually paid (100 = normal, no bonuses), rawPct is what the
-  // stack would have paid uncapped, and `capped` says the two differ.
+  // { basePct, buffPct, bonusPct, pct, rawPct, capped, bonusCapped, cap, bonusCap,
+  //   headroom, mult, sources, pro }
+  //   basePct  — your starting rate before bonuses: 100, or 500 on Pro
+  //   buffPct  — every other bonus added up, UNCAPPED (what you have earned)
+  //   bonusPct — what of that actually counts (buffPct clipped to XP_BONUS_CAP)
+  //   pct      — the TOTAL rate actually paid
+  //   rawPct   — what the stack would pay with no ceilings at all
+  //   capped   — pct is lower than rawPct, i.e. something is being clipped
   function xpFleetInfo() {
     const src = xpSources();
     const pro = isPro();
-    const basePct = pro ? 100 * PRO_PERKS.xpMult : 100;
+    const basePct = XP_BASE_PCT + (pro ? XP_PRO_PCT : 0);
     const buffPct = Math.round(src.reduce((a, s) => a + s.pct, 0) * 10) / 10;
-    const rawPct = Math.round(basePct * (1 + buffPct / 100) * 10) / 10;
-    const pct = Math.min(XP_RATE_CAP, rawPct);
-    return { sources: src, pro, basePct, buffPct, rawPct, pct, capped: rawPct > XP_RATE_CAP,
-             cap: XP_RATE_CAP, headroom: Math.max(0, XP_RATE_CAP - rawPct), mult: pct / 100 };
+    const bonusPct = Math.min(XP_BONUS_CAP, buffPct);
+    const rawPct = Math.round((basePct + buffPct) * 10) / 10;
+    const pct = Math.min(XP_RATE_CAP, Math.round((basePct + bonusPct) * 10) / 10);
+    return { sources: src, pro, basePct, buffPct, bonusPct, rawPct, pct,
+             capped: rawPct > pct, bonusCapped: buffPct > XP_BONUS_CAP,
+             cap: XP_RATE_CAP, bonusCap: XP_BONUS_CAP,
+             headroom: Math.max(0, XP_BONUS_CAP - buffPct), mult: pct / 100 };
   }
   // XP MULTIPLIER, CACHED — gainXp() runs on EVERY KILL.
   // The full stack it used to walk per kill — xpSources() building a fresh array
@@ -824,33 +925,40 @@
       state.level += gained;
       state.skillPoints += gained * C.SKILLS.pointsPerLevel;
       onLevelUp(gained);
-      maybeAscendGate();
+      const gateShown = maybeAscendGate();
       if (state.level >= cap) {
         state.xp = 0; state.capNotified = cap; save();
-        if (window.UI && window.UI.showLevelCap) window.UI.showLevelCap(cap);
+        // ONE SHEET, NOT TWO. The gate now IS the cap, so both notices fire on the
+        // same level-up. The ascension sheet is the fuller of the two (it states
+        // the wall AND the payout), so the plain cap sheet stands down when it ran.
+        if (!gateShown && window.UI && window.UI.showLevelCap) window.UI.showLevelCap(cap);
       }
     }
   }
-  // THE ASCENSION GATE ANNOUNCEMENT — fires the moment a pilot crosses half their
-  // level cap, which is where ascending becomes possible. Once PER STAR: the gate
-  // moves up with every ascension (75 · 100 · 125 · 150…), so each new run earns
-  // the notice again, and the flag is stamped with the star count that saw it.
+  // THE ASCENSION GATE ANNOUNCEMENT — fires the moment a pilot reaches their level
+  // cap, which is where ascending becomes possible. Once PER STAR: the gate moves
+  // up with every ascension (150 · 200 · 250 · 300…), so each new run earns the
+  // notice again, and the flag is stamped with the star count that saw it.
   // Never a nag beyond that — it states the choice once and gets out of the way.
+  // Returns true when it announced, so the caller can suppress the duplicate
+  // level-cap sheet that would otherwise open in the same instant.
   function maybeAscendGate() {
     let gate = 0, stars = 0;
     try {
-      if (!window.PASCEND || !window.PASCEND.gateLv) return;
+      if (!window.PASCEND || !window.PASCEND.gateLv) return false;
       gate = window.PASCEND.gateLv() | 0;
       stars = window.PASCEND.stars() | 0;
-    } catch (e) { return; }
-    if (!gate || (state.level | 0) < gate) return;
-    if (!state.pasc) return;
-    if (state.pasc.gateSeen === stars) return;   // already announced for this star
+    } catch (e) { return false; }
+    if (!gate || (state.level | 0) < gate) return false;
+    if (!state.pasc) return false;
+    if (state.pasc.gateSeen === stars) return false;   // already announced for this star
     state.pasc.gateSeen = stars;
     save();
     if (window.UI && window.UI.showAscendGate) {
       setTimeout(() => { try { window.UI.showAscendGate(gate, C.levelCap()); } catch (e) {} }, 700);
+      return true;
     }
+    return false;
   }
   function onLevelUp(gained) {
     refreshStats();
@@ -1112,6 +1220,8 @@
   // --------------------------------------------------------------------------
   // COMBAT
   // --------------------------------------------------------------------------
+  // Reused bridge object for fighters.js — see _fx below.
+  const _fxo = { rt: null, state: null, C, E, hit: null, nearby: null };
   function nearestEnemy(maxDist) {
     let best = null, bd = (maxDist || Infinity) ** 2;
     for (const e of rt.enemies) {
@@ -1304,7 +1414,9 @@
         if (++hits >= 5) break;
       }
     }
-    rt.particles.push(new E.Particle(src.x, src.y, { vx: 0, vy: 0, life: 0.2, size: 22, color: 'rgba(201,160,255,0.45)', glow: true, drag: 1 }));
+    // one splash bloom, and only while there is room — this fires on EVERY landed
+    // hit, so an unbudgeted push here is a particle per fighter strike
+    if (rt.particles.length < 280) rt.particles.push(new E.Particle(src.x, src.y, { vx: 0, vy: 0, life: 0.2, size: 22, color: 'rgba(201,160,255,0.45)', glow: true, drag: 1 }));
   }
   // ---- ASCENSION: STORM CONDUIT --------------------------------------------
   // Chain-lightning proc rolled PER SECOND of combat (not per attack):
@@ -1385,6 +1497,9 @@
     }
     rt.particles.push(new E.Particle(x2, y2, { vx: 0, vy: 0, life: 0.6, size: 26, color: '#eaf9ff', glow: true, drag: 1 }));
   }
+  // hoisted function declarations, bound once
+  _fxo.hit = function (p) { return resolveHit(p); };
+  _fxo.nearby = function (n, primary) { return nearbyEnemies(n, primary); };
   function resolveHit(p) {
     const e = p.target;
     if (!e || e.dead) return;
@@ -1888,7 +2003,7 @@
     // FLEET-AWARE (Jul 2026): a drop that upgrades ANY escort's fitting is kept
     // too — auto-sell must never scrap gear the rest of the fleet needs.
     for (const sh of fleetShips()) {
-      if (!canMountWeapon(item, sh.cls)) continue;
+      if (!canMountWeapon(item, sh.key)) continue;
       const fit = (state.fittings || {})[sh.key] || {};
       const eT = C.shipSlots(sh.key).filter((sk) => C.slotBase(sk) === item.slot);
       for (const t of eT) { const e = fit[t]; if (!e || I.itemPower(item) > I.itemPower(e)) return true; }
@@ -2324,7 +2439,11 @@
     a.attackTimer -= dt;
     if (!a.dead && a.attackTimer <= 0) {
       const tgt = nearestEnemy(rt.stats.fireRange || FIRE_RANGE);
-      if (tgt) { fire(tgt); a.attackTimer = 1 / Math.max(0.1, rt.stats.attacksPerSec); }
+      // FIGHTER CARRIERS DO NOT FIRE. Suppressing it here rather than zeroing the
+      // hull's damage keeps attackDamage meaningful — it is what every fighter's
+      // hit scales off, so the stat still drives the ship, just not a bolt.
+      if (tgt && fighterHull()) a.attackTimer = 0.5;
+      else if (tgt) { fire(tgt); a.attackTimer = 1 / Math.max(0.1, rt.stats.attacksPerSec); }
     }
     // ASCENSION: Storm Conduit — per-second chain-lightning proc
     stormTick(dt);
@@ -2360,6 +2479,8 @@
 
     // carrier drones: orbit the ship and fire on nearby enemies
     updateDrones(dt);
+    // fighter bays: autonomous craft that LEAVE the ship and swarm targets
+    try { if (window.FIGHTERS) window.FIGHTERS.update(dt); } catch (e) {}
     // STANDING DAMAGE AURA — any hull with `dpsAura` burns everything near it,
     // scaling with the pilot's own DPS. Veridian 0.35 (resonance), Eternum 0.9
     // (the celestial field). `dpsAura:true` on old configs reads as 0.35.
@@ -2700,6 +2821,7 @@
     for (const es of (rt.escorts || [])) R.drawEscort(ctx, es.key, es.x, es.y, rt.time, es.heal);
     R.drawArcher(ctx, rt.archer.x, rt.archer.y, 1.5, rt.archer, state.equipped, rt.time);
     for (const dr of rt.drones) R.drawDrone(ctx, dr.x, dr.y, rt.time, dr.face, dr.flash);
+    try { if (window.FIGHTERS) window.FIGHTERS.draw(ctx); } catch (e) {}
     for (const p of rt.projectiles) R.drawArrow(ctx, p);
     for (const b of rt.ebolts) R.drawEnemyBolt(ctx, b);
     for (const f of rt.floats) R.drawFloat(ctx, f);
@@ -3037,14 +3159,30 @@
 
   // WARDEN ARRAYS mount ONLY on the Aegis support hull — the fleet aura is its
   // entire reason to exist. Everything else refuses the fitting.
-  function canMountWeapon(item, cls) {
-    if (!item || item.slot !== 'bow' || !I.weaponClassOf) return true;
-    return I.weaponClassOf(item).key !== 'support' || cls === 'Aegis';
+  // TAKES A SHIP KEY, not a class name. A Fighter Carrier files under cls
+  // 'Carrier' like every other capital hull — the hangar buckets by cls, and cls
+  // also picks escort weapon type and accent — so the launch bay cannot be a
+  // class string. `fighterCapacity` is the real signal and the key is what
+  // resolves it.
+  function canMountWeapon(item, shipKey) {
+    if (!item || !I.weaponClassOf) return true;
+    const sh = C.SHIP_BY_KEY[shipKey] || {};
+    // FIGHTER BAYS now enforce themselves STRUCTURALLY: a Heavy Fighter is a
+    // `fighter`-slot item, and only a hull with `fighterCapacity` exposes
+    // `fighter` slots — while the Vanguard declares `weapons: 0` and so has no
+    // cannon hardpoint to refuse. This guard is the backstop for the paths that
+    // pool items by slot before checking the ship (auto-equip, auto-sell).
+    if (item.slot === 'fighter') return !!sh.fighterCapacity;
+    if (item.slot !== 'bow') return true;
+    return I.weaponClassOf(item).key !== 'support' || sh.cls === 'Aegis';
   }
   function equip(item, targetSlot) {
     const idx = state.inventory.indexOf(item); if (idx === -1) return;
-    if (!canMountWeapon(item, (C.SHIP_BY_KEY[state.ship] || {}).cls)) {
-      if (window.UI) window.UI.unlockToast('⚠ Warden arrays mount ONLY on the Aegis support hull');
+    if (!canMountWeapon(item, state.ship)) {
+      if (window.UI) {
+        window.UI.unlockToast(item.slot === 'fighter' ? '⚠ Heavy Fighters fit ONLY in a Fighter Bay — fly a Fighter Carrier'
+          : '⚠ Warden arrays mount ONLY on the Aegis support hull');
+      }
       return false;
     }
     const base = item.slot;
@@ -3118,11 +3256,11 @@
       let pool = [];
       targets.forEach((t) => { if (state.equipped[t]) { pool.push(state.equipped[t]); state.equipped[t] = null; } });
       state.inventory = state.inventory.filter((it) => { if (it.slot === base) { pool.push(it); return false; } return true; });
-      const flagCls = (C.SHIP_BY_KEY[state.ship] || {}).cls;
+      const flagKey = state.ship;
       pool = [...new Set(pool)];
       // Aegis-only weapons can't sit on other hulls — send them back to the bag
-      const reject = pool.filter((it) => !canMountWeapon(it, flagCls));
-      pool = pool.filter((it) => canMountWeapon(it, flagCls)).sort((a, b) => I.itemPower(b) - I.itemPower(a));
+      const reject = pool.filter((it) => !canMountWeapon(it, flagKey));
+      pool = pool.filter((it) => canMountWeapon(it, flagKey)).sort((a, b) => I.itemPower(b) - I.itemPower(a));
       reject.forEach((it) => state.inventory.push(it));
       targets.forEach((t, i) => { state.equipped[t] = pool[i] || null; });
       pool.slice(targets.length).forEach((it) => state.inventory.push(it));
@@ -3141,8 +3279,8 @@
         targets.forEach((t) => { if (fit[t]) { pool.push(fit[t]); fit[t] = null; } });
         state.inventory = state.inventory.filter((it) => { if (it.slot === base) { pool.push(it); return false; } return true; });
         pool = [...new Set(pool)];
-        const eReject = pool.filter((it) => !canMountWeapon(it, sh.cls));
-        pool = pool.filter((it) => canMountWeapon(it, sh.cls)).sort((a, b) => I.itemPower(b) - I.itemPower(a));
+        const eReject = pool.filter((it) => !canMountWeapon(it, sh.key));
+        pool = pool.filter((it) => canMountWeapon(it, sh.key)).sort((a, b) => I.itemPower(b) - I.itemPower(a));
         eReject.forEach((it) => state.inventory.push(it));
         targets.forEach((t, i) => { fit[t] = pool[i] || null; });
         pool.slice(targets.length).forEach((it) => state.inventory.push(it));
@@ -3309,7 +3447,13 @@
   // true for any hull with no bpZone and killsMet is trivially true at reqKills 0,
   // so a price-0 award hull (Veridian, the Eternum, event/faction drops) would
   // otherwise read as "unlocked and affordable" and hand itself over for free.
-  function awardOnly(s) { return !!(s && (s.celestial || s.missionShip || s.event || s.alienTech || s.emberTech || s.flyReq)); }
+  // `unreleased` joins this list: a hull with no price, no megaCost and no build
+  // order otherwise reads as "unlocked and affordable" and hands itself over for
+  // free — the exact failure this guard exists for.
+  // `tour` joins for the same reason `unreleased` did: a hull with no price, no
+  // megaCost and no build order reads as "unlocked and affordable" and hands itself
+  // over for free. Both are award-only routes, like missionShip and event.
+  function awardOnly(s) { return !!(s && (s.celestial || s.missionShip || s.event || s.alienTech || s.emberTech || s.flyReq || s.unreleased || s.tour)); }
   function buyShip(key) {
     const ship = C.SHIP_BY_KEY[key];
     if (!ship || state.ownedShips[key]) return { ok: false, reason: 'owned' };
@@ -3340,6 +3484,33 @@
   // Directly grant a hull (used by the secret Mothership unlock). Marks it owned,
   // recovers its blueprint, and seeds its kill counter so it shows as a fully
   // unlocked, switchable ship in the hangar.
+  // A FIGHTER CARRIER ARRIVES FLYABLE. Every other hull can be flown the moment
+  // you own it; a bare Fighter Carrier cannot, because with no bay fitted it has
+  // literally no weapon — no cannon hardpoint to fall back on and no craft to
+  // launch. So one is delivered with every bay filled with a COMMON fighter.
+  //
+  // Common on purpose: it is the floor, not a gift. The whole progression of the
+  // class is replacing these with better marques and rarities, and seeding
+  // anything higher would skip the first several hours of that. They roll at the
+  // pilot's current depth so the stat lines are honest for where they are.
+  //
+  // Only ever fills EMPTY bays, so it can never overwrite a fitting.
+  function seedFighterBays(key) {
+    const sh = C.SHIP_BY_KEY[key]; if (!sh || !(sh.fighterCapacity | 0)) return 0;
+    if (!state.fittings) state.fittings = {};
+    const live = (key === state.ship);
+    const fit = live ? state.equipped : (state.fittings[key] || (state.fittings[key] = {}));
+    const zone = Math.max(1, (state.currentDungeon | 0) || 1);
+    const slots = C.shipSlots(key);
+    let n = 0;
+    for (let i = 0; i < slots.length; i++) {
+      const sk = slots[i];
+      if (C.slotBase(sk) !== 'fighter' || fit[sk]) continue;
+      try { fit[sk] = I.generate(zone, 0, 'fighter'); n++; } catch (e) {}
+    }
+    if (n && live) refreshStats();
+    return n;
+  }
   function grantShip(key) {
     const ship = C.SHIP_BY_KEY[key];
     if (!ship || state.ownedShips[key]) return false;
@@ -3347,6 +3518,7 @@
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
     markHullEarned(key);
     if (ship.bpZone != null) { if (!state.blueprints) state.blueprints = {}; state.blueprints[key] = true; }
+    seedFighterBays(key);          // a carrier is delivered with its wing aboard
     save();
     if (window.UI) window.UI.refreshAll();
     return true;
@@ -3396,6 +3568,15 @@
     return true;
   }
   function shipDroneCount() { const s = C.SHIP_BY_KEY[state.ship]; return s ? (s.drones || 0) : 0; }
+  // A GUN-LESS CARRIER — bays and NO cannon hardpoint. Its damage leaves the ship.
+  //
+  // This used to be "has bays", which was true when the Vanguard (weapons: 0) was
+  // the only carrier in the game. The Dread Praetorian carries FOUR cannons
+  // alongside six bays, and the Aquila and Corvus five — the whole point of the
+  // Dread-class carrier is that it gives up nothing — so the old test silenced
+  // every gun on the apex hull the moment it launched fighters. The cannons are
+  // what `weapons` declares, so that is what the test reads.
+  function fighterHull() { const s = C.SHIP_BY_KEY[state.ship]; return !!(s && s.fighterCapacity && !(s.weapons | 0)); }
 
   // ---- DRONES (carrier bays) -----------------------------------------------
   // Clamp the loaded-drone count to the active hull's bay capacity, then
@@ -5167,7 +5348,7 @@
       if (!state.tileCd) state.tileCd = {};
       state.tileCd[rt.waves.claimTile] = Date.now() + 24 * 3600 * 1000;
       if (rt.waves.playerCit) {
-        captureCitadel(rt.waves.claimTile);      // rival's fortress razed → the tile flips to you
+        captureCitadel(rt.waves.claimTile);      // rival's fortress taken INTACT → the tile flips to you
       } else {
         // NPC CITADEL — TAKEN INTACT (Jul 2026): no razing. The fortress, its
         // output and the tile all flip to you; these tiles can't be built on.
@@ -5241,7 +5422,10 @@
           // CLONE FLEET DOWN — the citadel behind it powers up. Phase 2 begins.
           s.clone = false; s.thenCitadel = false; s.citadel = true;
           s.bossSpawned = false; s.pendingBoss = true; s.spawnT = 2.4; s.graceT = null; s.limitT = null;
-          if (window.UI) { window.UI.siegeEvent('citadel', s); window.UI.unlockToast(s.timed ? '⚔ Their fleet is down — RAZE THE CITADEL in ' + s.timed + 's' : '⚔ Their fleet is down — now RAZE THE CITADEL'); }
+          // TAKE, not raze, once the defender is a PLAYER's fortress — it changes
+          // hands whole now, so the prompt must not promise rubble.
+          if (window.UI) { const _v = s.playerCit ? 'TAKE THE CITADEL' : 'RAZE THE CITADEL';
+            window.UI.siegeEvent('citadel', s); window.UI.unlockToast(s.timed ? '⚔ Their fleet is down — ' + _v + ' in ' + s.timed + 's' : '⚔ Their fleet is down — now ' + _v); }
           return;
         }
         // ENEMY CLONE FLEET DOWN — the zone flips to you.
@@ -5332,7 +5516,7 @@
       window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, (tile.void || tile.citadel) ? { citadel: true, citadelLv: citadelLevel(k) || 1, fleetScore: Math.round(score()), force: razing, defense: defenseSnapshot() } : razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
-          rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, fleetScore: res.row.fleet_score || 0, defense: res.row.defense || null };
+          rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, citadelLv: (res.row.citadel_lv | 0) || citadelLevel(k) || 0, fleetScore: res.row.fleet_score || 0, defense: res.row.defense || null };
         } else if (!razing && res.reason && /protected|cooldown/i.test(res.reason)) {
           // RACE LOST — another operator sealed the claim first (never for a
           // citadel you just razed — that tile is yours by conquest)
@@ -5722,23 +5906,48 @@
       e.hp = Math.min(e.maxHp, e.hp + e.cloneRegen * dt);      // absolute HP/s, pre-capped
     }
   }
-  // Won a citadel siege vs a PLAYER-built citadel — you TAKE their fortress
-  // (Jul 2026): it is not destroyed. The captured citadel drops ONE rank
-  // (never below Rank 1) and now stands under your flag.
+  // Won a citadel siege — you TAKE the fortress, INTACT AND AT ITS FULL RANK
+  // (Aug 2026). No citadel is ever destroyed by a siege any more.
+  //
+  // It used to change hands one rank lower, which quietly made the whole
+  // structure worth attacking and never worth building: a Rank 5 fortress is
+  // four rank-ups of fuel, iron and plasma on top of the build, and the pilot who
+  // paid for all of it handed the winner a Rank 4. Taking it whole means the
+  // investment survives the change of flag, and a maxed citadel is now the prize
+  // it looks like rather than a consolation.
   function captureCitadel(id) {
-    const prevLv = Math.max(1, ((state.rivalCitadels && state.rivalCitadels[id] && state.rivalCitadels[id].lv) ||
-      (rt.realTiles && rt.realTiles[id] && rt.realTiles[id].citadelLv) || 2) - 1);   // unknown rank → captured at Rank 1
+    const t = sysAt(id) || {};
+    const natural = !!t.citadel;   // a seeded fortress tile: its ×mult is baked into t.rate
+    // THE RANK COMES ACROSS WITH THE FORTRESS. citadelRankOf() is the one resolver
+    // that already knows every source of a rival's rank (the live server row, the
+    // local rival mirror, and "an unreported rank on a NATURAL fortress is a full
+    // one"), so the winner inherits what the loser actually built instead of the
+    // Rank 1 the old inline fallback handed out whenever the mirror held a bare
+    // score number.
+    const rk = (() => { try { return citadelRankOf(id) || null; } catch (e) { return null; } })();
+    const lv = Math.max(1, Math.min(CITADEL_LV_MAX,
+      (rk && rk.lv) ||
+      (state.rivalCitadels && state.rivalCitadels[id] && state.rivalCitadels[id].lv) ||
+      (rt.realTiles && rt.realTiles[id] && rt.realTiles[id].citadelLv) || 1));
     if (state.rivalCitadels) delete state.rivalCitadels[id];
-    razeCitadelTile(id);                              // strip any natural-citadel siege status (no-op on normal tiles)
+    // NOTHING IS DEMOLISHED. razeCitadelTile() used to run here "to strip natural
+    // siege status", but it also stamps razedCitadels and divides the tile's rate
+    // by CITADEL_RATE_MULT — permanently, and again on every load. Winning a
+    // rival's natural fortress therefore handed the victor a plain tile worth a
+    // hundredth of the prize they fought for. A won citadel changes hands whole.
     rt.razingClaim = true;                            // conquest earned — the tile is yours, no take-back
     captureSystem();                                  // claims the tile + tows home
-    // the fortress changes hands, downgraded one rank
-    if (!state.citadels) state.citadels = {};
-    state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(prevLv)), builtAt: Date.now(), lv: prevLv, captured: true };
+    // A NATURAL fortress keeps paying through t.rate, so it must NOT also get a
+    // state.citadels entry — that would multiply the same fortress twice (see
+    // ship-panels.js). A player-BUILT citadel is the entry, at the rank it was.
+    if (!natural) {
+      if (!state.citadels) state.citadels = {};
+      state.citadels[id] = { score: Math.round(score() * citadelDefenseMult(lv)), builtAt: Date.now(), lv, captured: true };
+    }
     bumpLife('cits', 1);                              // FORTRESS DYNASTY badge
-    pushFeed('You seized the citadel on ' + ((sysAt(id) || {}).name || 'a system') + ' — now Rank ' + prevLv + ' under your flag');
-    // publish: the fortress still stands — under YOUR flag now
-    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, citadelLv: prevLv, fleetScore: Math.round(score() * citadelDefenseMult(prevLv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
+    pushFeed('You seized the ' + (natural ? 'Citadel' : 'Rank ' + lv + ' citadel') + ' on ' + (t.name || 'a system') + ' — intact, under your flag');
+    // publish: the fortress still stands, at full rank, under YOUR flag now
+    if (window.TERRITORY && window.TERRITORY.enabled()) { try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 1440, { citadel: true, citadelLv: natural ? CITADEL_LV_MAX : lv, fleetScore: Math.round(score() * citadelDefenseMult(lv)), force: true, defense: defenseSnapshot() }); } catch (e) {} }
     save();
   }
   // Permanently demote a NATURAL citadel siege tile to a plain, buildable tile
@@ -5909,19 +6118,25 @@
     return Math.max(1, ceiling - 2);
   }
   // FrostyFrost anywhere in the fleet (flagship or escort) — memoized 500ms
+  // MEMOISED ON THE SIM CLOCK, NOT THE WALL CLOCK. Both of these are called from
+  // resolveHit — once per landed hit — and a fighter wing multiplies that count
+  // several times over (bays × rate × multi-shot fan × sub-steps). performance.now()
+  // is a real call, not a field read, so it was the one unavoidable cost on the
+  // hottest path in the game. rt.time is already advanced by the step loop and is
+  // exact for a cache TTL.
   function frostAboard() {
-    const n = performance.now();
-    if (rt._frostChk == null || n - (rt._frostT || 0) > 500) {
+    const n = rt.time;
+    if (rt._frostChk == null || n - (rt._frostT || 0) > 0.5) {
       rt._frostT = n;
       rt._frostChk = state.ship === 'frostyfrost' || (typeof fleetShips === 'function' && fleetShips().some((f) => f.key === 'frostyfrost'));
     }
     return rt._frostChk;
   }
-  // VOIDMAW anywhere in the fleet (flagship or escort) — memoized 500ms.
+  // VOIDMAW anywhere in the fleet (flagship or escort) — memoized 0.5 sim-seconds.
   // Powers the SINGULARITY proc: stun + a collapsing black hole (see resolveHit).
   function voidmawAboard() {
-    const n = performance.now();
-    if (rt._vmChk == null || n - (rt._vmT || 0) > 500) {
+    const n = rt.time;
+    if (rt._vmChk == null || n - (rt._vmT || 0) > 0.5) {
       rt._vmT = n;
       rt._vmChk = state.ship === 'voidmaw' || (typeof fleetShips === 'function' && fleetShips().some((f) => f.key === 'voidmaw'));
     }
@@ -6333,7 +6548,16 @@
     for (let i = 0; i < kills; i++) {
       if (Math.random() < dropP * (isSwarmZone(d) ? SWARM_DROP_MULT : 1)) { found++; const _q = isSwarmZone(d) ? 1 : qualityMult(d); let _it = _q > 1 ? I.generate(d, rollRarityBoosted(d, _q)) : I.generate(d); if (isSwarmZone(d) && _it.rarity > 0) _it = I.generate(d, Math.max(0, _it.rarity - SWARM_RARITY_PENALTY)); if (newItems.length < 40) newItems.push(_it); }
     }
-    newItems.forEach((it) => { countRareFind(it); if (!state.equipped[it.slot]) state.equipped[it.slot] = it; else if (state.inventory.length < invCap()) state.inventory.push(it); else addSalvage(it); });
+    // AUTO-EQUIP ONLY INTO A SLOT THIS HULL ACTUALLY HAS. `state.equipped[slot]`
+    // was assigned blind, so an offline-found Fighter Bay landed in
+    // equipped.fighter on a hull with no bay at all — its stat lines then counted
+    // for free, bypassing canMountWeapon() entirely. Anything the hull cannot
+    // mount goes to the hold instead.
+    const _slots = C.shipSlots(state.ship);
+    newItems.forEach((it) => { countRareFind(it);
+      const _ok = _slots.indexOf(it.slot) >= 0 && canMountWeapon(it, state.ship);
+      if (_ok && !state.equipped[it.slot]) state.equipped[it.slot] = it;
+      else if (state.inventory.length < invCap()) state.inventory.push(it); else addSalvage(it); });
     state.itemsFound += found;
     // deaths: estimate from how dangerous the zone is
     const lethal = dmg / (rt.stats.maxHp || 1);
@@ -6554,7 +6778,10 @@
     // ---- COSMETICS + CREDITS (premium currency) ----
     if (!state.cosmetics) state.cosmetics = { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };
     if (!state.cosmetics.owned) state.cosmetics.owned = { stock: 1, none: 1 };
-    if (state.credits == null) state.credits = 500; // one-time founder bonus — try the system before payments go live
+    // One-time founder grant, halved with every other LootCoin payout in the Aug
+    // 2026 pass (build 614). Only ever applies to a save that has never had a
+    // credits field, so no existing account is touched.
+    if (state.credits == null) state.credits = 250;
     // ---- PILOT PROGRESSION + DREADNAUGHT HUNT ----
     if (state.dreadCores == null) state.dreadCores = 0;          // rare currency: only from Dreadnaughts
     if (!state.pilot) state.pilot = { nodes: { '0,0': 1 } };     // hex skill tree: { 'q,r': 1 } unlocked nodes
@@ -6709,6 +6936,32 @@
     // unkillable. Hull mods, skill/pilot trees and new drops are all rebalanced in
     // config; this scales the lifesteal ALREADY rolled onto live gear, so nobody
     // keeps a pre-nerf fitting wherever it happens to be stowed.
+    // A FIGHTER CARRIER MUST NEVER BE UNARMED — but NOT on the boot thread.
+    //
+    // This began as a one-time migration (603) latched behind `fbaySeed`, which was the
+    // wrong shape: a bay can empty long after that ran (a sale, an auto-sell pass, or a
+    // hull swap that stashes gear into `state.fittings` without restoring all of it), and
+    // a carrier with no bay has NO WEAPON AT ALL — no cannon hardpoint to fall back on and
+    // no craft to launch. So it has to run on every load.
+    //
+    // 643 ran it INLINE HERE, inside migrateSave() on the synchronous boot path, and
+    // wedged the page: item generation plus refreshStats() plus save(), for every owned
+    // carrier, in the same first-frame window the watchdog already reports boots dying in
+    // ("died during: first-frame"). Reloads stopped completing at all.
+    //
+    // Deferred behind the first frame instead. Nothing about topping up a bay needs to
+    // happen before the game is on screen, and seedFighterBays() only ever fills EMPTY
+    // bays — it is a no-op on a fully fitted carrier — so running it late cannot disturb a
+    // fitting that is already there.
+    setTimeout(() => {
+      try {
+        let seeded = 0;
+        Object.keys(state.ownedShips || {}).forEach((k) => {
+          if ((C.SHIP_BY_KEY[k] || {}).fighterCapacity) seeded += seedFighterBays(k);
+        });
+        if (seeded) { state.fbaySeed = 1; save(); }
+      } catch (e) {}
+    }, 3000);
     if (state.lsVer !== 1) {
       const cutLS = (i2) => { if (i2 && i2.stats && i2.stats.lifeSteal) i2.stats.lifeSteal = Math.round(i2.stats.lifeSteal * 0.2 * 10) / 10; };
       Object.keys(state.equipped || {}).forEach((k) => cutLS(state.equipped[k]));
@@ -7038,7 +7291,7 @@
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
-    buyShip, switchShip, grantShip, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
+    buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     lanceState,
     canFlyShip,
@@ -7049,7 +7302,16 @@
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
     isCitadelZone, citadelCooldownLeft, isSwarmZone, zoneReqLevel,
     getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,
-    shipDroneCount, getDrones: () => state.drones, getShipKills: (k) => (state.shipKills[k] || 0),
+    shipDroneCount, fighterHull, getDrones: () => state.drones,
+    // Live internals for fighters.js. Handing over resolveHit is the point: a
+    // fighter's hit then resolves through the SAME path as a bolt, so crits, life
+    // steal, boss/elite multipliers, cryo, the singularity, kills, XP and loot all
+    // need no duplicate. `nearby` is what lets Multi-Shot reach the wing.
+    //
+    // ONE OBJECT, REUSED. This is read twice a frame; returning a fresh literal
+    // was two allocations per frame forever, and per-frame garbage is the known
+    // shape of "giga laggy" in this engine (see the kill-path note above).
+    _fx: () => { _fxo.rt = rt; _fxo.state = state; return _fxo; }, getShipKills: (k) => (state.shipKills[k] || 0),
     skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills,
     getShop, shopTimeLeft, buyShopItem, getBossInfo, shopItemPrice, shopIsUpgrade,
     getLCMarket, buyLCMarket, lcCosmicTimeLeft, lcPrimTimeLeft, LC_PRICES,

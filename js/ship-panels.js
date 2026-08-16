@@ -34,11 +34,12 @@
     const s = (G() || {}).state || {};
     const out = [];
 
-    // XP — read straight from GAME.xpFleetInfo(): ONE base rate (100%, or 500%
-    // on Pro), every bonus a flat % of that base — summed, then multiplied in,
-    // and the TOTAL is capped at 1000%. When the stack exceeds the cap the pill
-    // says so and shows what the stack would have paid, because a player who has
-    // built past the ceiling deserves to know the next XP node buys nothing.
+    // XP — read straight from GAME.xpFleetInfo(): ONE SUM.
+    //   100 + 400 (Pro) + every other bonus added, bonuses capped at +500,
+    //   total capped at 1000. Nothing multiplies anything else.
+    // When either ceiling bites, the pill names WHICH one and shows what the stack
+    // would have paid — a player who has built past a ceiling deserves to know the
+    // next XP node buys nothing, rather than losing the overflow silently.
     // NOT safe(): its isNaN() guard coerces an OBJECT to NaN and throws the whole
     // result away — xpFleetInfo returns an object, so safe() returned null on
     // every account and the pill never rendered. Plain try/catch.
@@ -48,23 +49,31 @@
     if (xi) {
       const cap = xi.cap || 1000;
       const brk = (xi.sources || []).map((s) => s.n + ' +' + s.pct + '%').join(' · ');
-      const near = !xi.capped && xi.headroom != null && xi.headroom <= cap * 0.1;
+      const bcap = xi.bonusCap || 500;
+      const base = 'Base ' + xi.basePct + '%' + (xi.pro ? ' (100 + 400 from LootFleet Pro — the 5×)' : '');
+      // headroom is now measured against the BONUS ceiling, which is the one a
+      // pilot can actually walk into by buying perks.
+      const near = !xi.capped && !xi.bonusCapped && xi.headroom != null && xi.headroom <= bcap * 0.1;
       let tip;
-      if (xi.capped) {
+      if (xi.bonusCapped) {
+        tip = 'BONUS CEILING REACHED. Your bonuses add up to +' + xi.buffPct + '% (' + brk
+          + '), and only +' + bcap + '% counts. ' + base + ' + ' + bcap + '% = ' + xi.pct
+          + '% — that is what you are earning. Further XP bonuses add nothing until something drops off.';
+      } else if (xi.capped) {
         tip = 'CAPPED. Your stack pays ' + xi.rawPct + '%, but the XP rate is capped at '
-          + cap + '% — that is what you are earning. Base ' + xi.basePct + '%'
-          + (xi.pro ? ' (5× by LootFleet Pro)' : '') + ' + bonuses ' + xi.buffPct + '% of base ('
+          + cap + '% — that is what you are earning. ' + base + ' + bonuses +' + xi.buffPct + '% ('
           + brk + '). Further XP bonuses add nothing until something drops off.';
       } else {
-        tip = 'Base ' + xi.basePct + '%' + (xi.pro ? ' (5× by LootFleet Pro)' : '')
+        tip = 'One sum, nothing multiplies. ' + base
           + (xi.buffPct > 0
-            ? ' + bonuses ' + xi.buffPct + '% of base (' + brk + '). Bonuses add together, then multiply the base.'
-            : '. No bonuses active — VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of this base.')
-          + ' Hard cap ' + cap + '%' + (near ? ' — you are within ' + Math.round(xi.headroom) + '% of it.' : '.');
+            ? ' + bonuses +' + xi.buffPct + ' percentage points (' + brk + ').'
+            : '. No bonuses active — VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each ADD flat percentage points.')
+          + ' Bonuses count up to +' + bcap + '%, total capped at ' + cap + '%'
+          + (near ? ' — you are within ' + Math.round(xi.headroom) + ' points of the bonus ceiling.' : '.');
       }
       out.push({
         ic: '✦', n: 'XP Rate',
-        v: xi.pct + '%' + (xi.capped ? ' · MAX' : ''),
+        v: xi.pct + '%' + (xi.capped || xi.bonusCapped ? ' · MAX' : ''),
         c: xi.capped ? '#ffd24d' : xi.buffPct > 0 ? '#7ce0a0' : '#8fa3bd',
         tip,
       });

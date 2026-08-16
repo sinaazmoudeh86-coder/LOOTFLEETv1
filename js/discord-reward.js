@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  const REWARD = 1000;
+  const REWARD = 500;   // halved in the Aug 2026 LootCoin payout pass (build 614)
   const G = () => window.GAME;
   const claimed = () => { try { return !!(G().state && G().state.discordJoin); } catch (e) { return false; } };
 

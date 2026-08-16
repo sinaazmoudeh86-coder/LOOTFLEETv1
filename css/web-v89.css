@@ -994,6 +994,22 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 .ship-tile.st-sina::before{ z-index:4 !important; }
 .sts-art .sina-beam{ z-index:3; }
 
+/* ---- TITAN AQUILA — the Sina pill, sized for a PORTRAIT hull ---------------
+   The Sina rule sizes the art by WIDTH (92%, up to 300px) and hangar-ships.css
+   then clears max-height for full-row tiles. That is fine for the Sina and the
+   Titan plate, which are landscape — but the Aquila is 522x780, so 300px wide
+   renders 448px tall inside a panel that is ~170px with overflow hidden: the whole
+   middle of the hull was cropped out. Exactly what the Aeternum hit.
+   Size by HEIGHT with a width guard, so any source aspect fits whole. An explicit
+   height (not max-height) is deliberate — it cannot be undone by the
+   max-height:none rule, whichever file order wins. */
+.ship-tile.st-aql .sts-art{ min-height:210px; }
+.ship-tile.st-aql .sts-art img{ width:auto; height:94%; max-width:94%; max-height:94%;
+  left:50%; top:50%; transform:translate(-50%,-50%);
+  filter:drop-shadow(0 14px 26px rgba(0,0,0,.65)) drop-shadow(0 0 30px rgba(255,210,77,.5)) drop-shadow(0 0 62px rgba(120,190,255,.32));
+  animation:aqlFloat 5s ease-in-out infinite; }
+@keyframes aqlFloat{ 0%,100%{ transform:translate(-50%,-51%) rotate(-.7deg); } 50%{ transform:translate(-50%,-49%) rotate(.7deg); } }
+
 /* ===== THE AETERNUM — same pill, lance-green identity ===================== */
 .ship-tile.st-aet{ background:linear-gradient(180deg,#131f14,#080d09) !important; }
 .ship-tile.st-aet::before{ background:linear-gradient(120deg,#a6ff5b,#5fd47a,#e9ffd0,#3f8f3a,#a6ff5b); background-size:400% 400%; opacity:.95; }

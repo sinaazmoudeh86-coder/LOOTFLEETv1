@@ -89,6 +89,7 @@
   // Icons are inline SVG strings injected into the DOM.
   // ---------------------------------------------------------------------------
   const ICON = {
+    fighter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 6.6L20 12.4v1.8l-6-1.6V18l2.2 2.2h-8.4L10 18v-5.4l-6 1.6v-1.8l6.2-3.8z"/></svg>',
     weapon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h16l-1.5 4H13l-2 4H8v-4H3z"/><path d="M7 12v2"/><path d="M19 8V6"/></svg>',
     ammo:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="4" height="11" rx="1"/><path d="M8 3.5l2-1.5 2 1.5"/><path d="M8 14h4l-.6 6h-2.8z"/><rect x="14" y="6" width="4" height="9" rx="1"/></svg>',
     vest:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3l4 2.5L16 3v8a6 6 0 0 1-4 5.5A6 6 0 0 1 8 11z"/><path d="M12 6v9"/></svg>',
@@ -98,6 +99,12 @@
   };
   const SLOTS = {
     bow:    { key: 'bow',    name: 'Cannon',     primary: ['attackDamage', 'critDamage'],   icon: ICON.weapon },
+    // FIGHTER BAY — a first-class slot, not a cannon in disguise. Each bay holds
+    // ONE Heavy Fighter, so a hull with `fighterCapacity: 4` exposes four of
+    // them and flies four craft. Being in SLOTS is also what puts fighters on the
+    // NORMAL LOOT TABLE: generate() picks a slot at random from SLOT_KEYS, so
+    // bays drop, roll rarity and carry stat lines like any other fitting.
+    fighter:{ key: 'fighter',name: 'Fighter Bay',primary: ['attackDamage', 'critDamage'],   icon: ICON.fighter },
     arrows: { key: 'arrows', name: 'Munitions',  primary: ['attackSpeed', 'critChance'],    icon: ICON.ammo },
     armor:  { key: 'armor',  name: 'Hull',       primary: ['health', 'attackDamage'],       icon: ICON.vest },
     boots:  { key: 'boots',  name: 'Thrusters',  primary: ['moveSpeed', 'health'],          icon: ICON.boots },
@@ -518,6 +525,33 @@
     // the upgrade chain): its unique role is hosting Warden support arrays —
     // their fleet-wide heal/buff aura is DOUBLED while you fly an Aegis.
     { key:'aegis',       name:'Aegis',          cls:'Aegis',      price:350000000,   reqKills:26000, weapons:3, ammo:2, hull:3, drones:2, side:true, mods:{hpPct:55,dmgPct:8,critChance:4,rangePct:12}, tag:'FLEET SUPPORT', desc:'Guardian hull built around Warden support arrays — their fleet heal/buff aura is DOUBLED while you fly the Aegis.' },
+    // VANGUARD — the first FIGHTER CARRIER, and the entry point of a new hull
+    // family. A SIDE-BRANCH, like the Aegis: not a rung on the upgrade ladder but
+    // a different way to fight. One Fighter Bay, no cannon, no munitions and no
+    // utility slots — every point of damage it deals leaves the ship. It flies at
+    // a quarter of the reference hull's speed (`speedMult`), so the entire skill
+    // is parking it where the fight will be before the fight arrives.
+    // cls stays 'Carrier' — the hangar files by cls, and cls also drives escort
+    // weapon type and accent. What makes this a FIGHTER carrier is
+    // `fighterCapacity`, which is what every fighter rule actually tests. Same
+    // convention the Dread hulls use to stay in the Carrier bucket.
+    { key:'vanguard', name:'Vanguard', cls:'Carrier', price:0, reqKills:0,
+      weapons:0, ammo:0, hull:2, drones:0, side:true, noUtility:true,
+      fighterCapacity:4, speedMult:0.25,
+      mods:{ hpPct:130, dmgPct:35, critChance:8 },
+      tag:'FIGHTER CARRIER I',
+      desc:'The first Heavy Fighter Carrier. It mounts no cannon at all — instead it carries FOUR FIGHTER BAYS, each holding one autonomous Heavy Fighter that launches on its own, picks its own target and swarms it. Fit a better fighter in a bay and that craft hits harder. Barely a quarter the speed of a normal hull, and the wing reaches only a short way out: position the carrier, and let the fighters do the killing.',
+      // EARNED ON THE TOUR OF DUTY LADDER — Enlisted (free) track, level 40, which
+      // is about three weeks of daily play. The blueprint drop and build order were
+      // pulled in 607 and this replaced them in 619.
+      //
+      // `tour` REPLACES `unreleased` rather than joining it: `unreleased` means "no
+      // route exists" and drives copy that says so outright, which became a lie the
+      // moment the ladder started handing this hull out. It still needs the
+      // sale guard — a price:0 hull otherwise reads as unlocked and affordable and
+      // hands itself over free — so `tour` is in awardOnly() beside `missionShip`
+      // and `event`, which are award-only for the same reason.
+      tour:{ lv:40, track:'Enlisted' } },
     { key:'supercarrier',name:'Super Carrier',  cls:'Carrier',    price:900000000,   reqKills:39000, weapons:3, ammo:2, hull:3, drones:4, mods:{hpPct:40,dmgPct:24,critChance:8},            tag:'Drone Bay ×4',   desc:'3 weapons, heavy plating, 4 drone bays.' },
     { key:'titan',       name:'Titan Carrier',  cls:'Carrier',    price:4000000000,  reqKills:60000, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'FLAGSHIP',      desc:'The apex hull. 4 weapons, 3 ammo, and 8 drone bays.' },
     // MOTHERSHIP — the endgame faction Titan Carrier. Bought ONLY with Galaxy
@@ -616,33 +650,59 @@
       tag:'DREAD-CLASS · OMEGA', dreadAura:true, reqLevel:200,
       desc:'The apex Dreadnaught — the single most powerful vessel in the galaxy, forged from a fortune in every currency.',
       megaCost:{ gold:50e9, fuel:600e6, iron:400e6, plasma:250e6, prism:40000, credits:92000, dreadCores:60 } },
+    // ---- DREAD PRAETORIAN · DREAD-CLASS FIGHTER CARRIER ---------------------
+    // The highest-performing Dread hull in the game, and the only one that is BOTH
+    // a gunship and a carrier: FOUR cannon hardpoints AND SIX fighter bays, on top
+    // of full Dread-class munitions, hull and utility slots. 19 fitted slots is
+    // more than anything else flies.
+    //
+    // This is the hull the Fighter Bay system was built to make possible. The
+    // Vanguard trades every cannon away for four bays; the Praetorian gives up
+    // nothing — which is why it sits at the very top of the ladder rather than
+    // beside the Omega. Every line is 1.15× the Dread Omega.
+    //
+    // It keeps cls:'Carrier' (the hangar files by cls, and cls picks escort weapon
+    // type and accent) and reaches the Dread tab through `megaCost`— except it has
+    // none yet: NOT OBTAINABLE, by request. See `unreleased` on the Vanguard above.
+    { key:'praetorian', name:'Dread Praetorian', cls:'Carrier', price:0, reqKills:0,
+      weapons:4, ammo:3, hull:3, drones:96, fighterCapacity:6,
+      mods:{ hpPct:3040, dmgPct:1710, multiShot:456, critChance:90, critDamage:1330, moveSpeed:285, atkSpeedPct:570, rangePct:910, lifeSteal:16.8 },
+      // Earned on the TOUR OF DUTY ladder — Admiralty track, level 100. It is the
+      // entire stated reason to buy that track, so it must not read as unobtainable.
+      tag:'DREAD-CLASS · PRAETORIAN', dreadAura:true, reqLevel:200, tour:{ lv:100, track:'Admiralty' },
+      desc:'The apex Dreadnaught, and the only hull in the galaxy that is both gunship and carrier. FOUR cannon hardpoints fire while SIX FIGHTER BAYS launch six autonomous Heavy Fighters that pick their own targets and swarm them — on top of full Dread-class munitions, plating and utility fittings. Nineteen fitted slots. Every line on its sheet is above the Dread Omega.' },
     // ---- KAEVITH ALIEN TECHNOLOGY · THE INCURSION EVENT ---------------------
     // Five recovered hulls, never sold and never blueprinted: the ONLY way to
     // get one is to clear an invaded zone in My Galaxy and win the salvage roll
     // (1% on ring 1 → 10% at the rim; deeper rings favour the bigger hulls).
     // Their real value is the RESONANCE FIELD: any Kaevith hull in the fleet
     // (flagship or escort) raises EVERY kill's XP for the whole fleet — xpBonus
-    // is a percentage, and stacking them adds up to a +100% ceiling.
+    // is a percentage and they add together.
+    //
+    // PROGRESSION NOTE (Aug 2026) — cut from 10/25/45/70/100 (+250% for the full
+    // roster) to 8/16/28/44/64 (+160%). Part of the game-wide XP reduction; see the
+    // FLEET XP RATE block in game-v93.js. The full set is still the biggest single
+    // swing in the game and is still worth chasing every hull for.
     // Performance runs entry-level (Splinter) → Dreadnaught-class (Godshard).
     { key:'xen1', name:'Kaevith Splinter', cls:'Frigate', price:0, reqKills:0, weapons:1, ammo:1, hull:1, drones:0,
       mods:{ moveSpeed:30, dmgPct:10, critChance:5 },
-      tag:'KAEVITH I · SPLINTER', xen:1, xpBonus:10, alienTech:true,
+      tag:'KAEVITH I · SPLINTER', xen:1, xpBonus:8, alienTech:true,
       desc:'A single shard of Kaevith hullstone flying on a stolen drive — entry-level performance, but the resonance core alone lifts your whole fleet\u2019s XP by 10% per kill.' },
     { key:'xen2', name:'Kaevith Shard', cls:'Cruiser', price:0, reqKills:0, weapons:2, ammo:1, hull:1, drones:0,
       mods:{ dmgPct:20, hpPct:14, critChance:6 },
-      tag:'KAEVITH II · SHARD', xen:2, xpBonus:25, alienTech:true,
-      desc:'Cruiser-grade alien plate around a wider resonance lattice. +25% fleet XP per kill.' },
+      tag:'KAEVITH II · SHARD', xen:2, xpBonus:16, alienTech:true,
+      desc:'Cruiser-grade alien plate around a wider resonance lattice. +16% fleet XP per kill.' },
     { key:'xen3', name:'Kaevith Glaive', cls:'Battleship', price:0, reqKills:0, weapons:3, ammo:2, hull:2, drones:0,
       mods:{ dmgPct:40, hpPct:55, critChance:10, multiShot:8 },
-      tag:'KAEVITH III · GLAIVE', xen:3, xpBonus:45, alienTech:true,
-      desc:'A battleship-weight blade of crystal with three void hardpoints. +45% fleet XP per kill.' },
+      tag:'KAEVITH III · GLAIVE', xen:3, xpBonus:28, alienTech:true,
+      desc:'A battleship-weight blade of crystal with three void hardpoints. +28% fleet XP per kill.' },
     { key:'xen4', name:'Kaevith Sovereign', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8,
       mods:{ hpPct:120, dmgPct:75, multiShot:22, critChance:16, critDamage:60, atkSpeedPct:25, rangePct:30 },
-      tag:'KAEVITH IV · SOVEREIGN', xen:4, xpBonus:70, alienTech:true,
-      desc:'A carrier-class Kaevith command hull with eight drone spines. +70% fleet XP per kill.' },
+      tag:'KAEVITH IV · SOVEREIGN', xen:4, xpBonus:44, alienTech:true,
+      desc:'A carrier-class Kaevith command hull with eight drone spines. +44% fleet XP per kill.' },
     { key:'xen5', name:'Kaevith Godshard', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:30,
       mods:{ hpPct:700, dmgPct:400, multiShot:110, critChance:50, critDamage:320, moveSpeed:60, atkSpeedPct:135, rangePct:210, lifeSteal:3.8 },
-      tag:'KAEVITH V · GODSHARD', xen:5, xpBonus:100, alienTech:true,
+      tag:'KAEVITH V · GODSHARD', xen:5, xpBonus:64, alienTech:true,
       desc:'The Incursion\u2019s flagship — a Dreadnaught-class monolith of living crystal. Its resonance field alone doubles every kill\u2019s XP for the entire fleet.' },
     // ---- THE EMBER CHOIR · ZONE GRIND INCURSION ------------------------------
     // Sister event to the Kaevith Incursion, on the other axis. Kaevith pays XP;
@@ -700,6 +760,52 @@
       tag:'FINAL CLASS · TITAN SINA', sinaTracers:true,
       desc:'The final-class hero ship — twice the Dread Omega in every dimension. Its guns reach across the entire battle zone, spraying full-spectrum tracer fire. Sold outright for 1,000,000 LootCoins.',
       megaCost:{ credits:1000000 } },
+    // ---- TITAN AQUILA · TITAN-CLASS FIGHTER CARRIER -------------------------
+    // The apex of the fighter line and the second Titan-class hull. One more cannon
+    // and one more fighter bay than the Dread Praetorian: FIVE cannons, SEVEN bays.
+    //
+    // The ladder the Fighter Bay system now describes, in one place:
+    //   Vanguard      — Carrier-class  · 0 cannon · 4 bays · quarter speed
+    //   Dread Praetorian — Dread-class · 4 cannon · 6 bays
+    //   Titan Aquila  — Titan-class   · 5 cannon · 7 bays
+    // Each rung adds a bay AND a gun, so the wing grows with the hull rather than
+    // replacing it — and `fighterCapacity` is the only thing that had to change to
+    // fly seven craft, because bay count and slot count are the same number by
+    // construction (see BAY_SLOTS / shipSlots below).
+    //
+    // Twenty-one fitted slots, the most in the game. Every stat line is 1.2× the
+    // Titan Sina, which makes it the strongest hull in the galaxy on paper — and
+    // like both hulls below it, NOT OBTAINABLE yet (see `unreleased` on the
+    // Vanguard). It keeps cls:'Carrier' for the hangar and escort rules; the Titan
+    // tier is matched from the TITAN- tag.
+    { key:'titanaquila', name:'Titan Aquila', cls:'Carrier', price:0, reqKills:0,
+      weapons:5, ammo:3, hull:3, drones:128, fighterCapacity:7,
+      mods:{ hpPct:6336, dmgPct:3564, multiShot:950, critChance:96, critDamage:2772, moveSpeed:595, atkSpeedPct:1188, rangePct:4000, lifeSteal:35 },
+      tag:'TITAN CLASS · AQUILA', sinaTracers:true, dreadAura:true, reqLevel:200, unreleased:true,
+      desc:'Titan-class, and the apex of the carrier line. FIVE cannon hardpoints fire full-spectrum tracers while SEVEN FIGHTER BAYS put seven autonomous Heavy Fighters on the field — each picking its own target and swarming it — over full Dread-class munitions, plating and utility fittings and 128 drone bays. Twenty-one fitted slots: nothing else in the galaxy carries more.' },
+    // ---- CELESTIAL CORVUS · CELESTIAL-CLASS FIGHTER CARRIER -----------------
+    // The end of the fighter line: ELEVEN fighter bays and no more guns than the
+    // Aquila. Four extra bays and the same five cannons — the hull stops being a
+    // gunship that carries fighters and becomes a mobile airfield.
+    //
+    // AND IT IS SLOW. `speedMult: 0.45` — less than half the speed of a normal
+    // hull, the only line on its sheet that goes DOWN. It is the largest vessel in
+    // the game and moves like it. Note this is a MULTIPLIER on the hull's own
+    // movement, applied after the moveSpeed mod, so a movement build still helps;
+    // it just never makes the Corvus quick. Same mechanism as the Vanguard's 0.25.
+    //
+    // The full fighter ladder:
+    //   Vanguard          Carrier    ·  0 cannon ·  4 bays · ×0.25 speed
+    //   Dread Praetorian  Dread      ·  4 cannon ·  6 bays · full speed
+    //   Titan Aquila      Titan      ·  5 cannon ·  7 bays · full speed
+    //   Celestial Corvus  Celestial  ·  5 cannon · 11 bays · ×0.45 speed
+    // Twenty-five fitted slots. It required no engine work: `fighterCapacity` is a
+    // ship stat and bay count IS slot count (BAY_SLOTS, widened to 12 above).
+    { key:'corvus', name:'Celestial Corvus', cls:'Carrier', price:0, reqKills:0,
+      weapons:5, ammo:3, hull:3, drones:192, fighterCapacity:11, speedMult:0.45,
+      mods:{ hpPct:9500, dmgPct:5350, multiShot:1425, critChance:96, critDamage:4160, moveSpeed:300, atkSpeedPct:1780, rangePct:6000, lifeSteal:52 },
+      tag:'CELESTIAL CLASS · CORVUS', celestial:true, dreadAura:true, dpsAura:0.9, reqLevel:200, unreleased:true,
+      desc:'Celestial-class, and the last word in carrier design — a mobile airfield rather than a warship. ELEVEN FIGHTER BAYS put eleven autonomous Heavy Fighters in the air at once, each choosing its own target, over five cannon hardpoints, 192 drone bays and full Celestial plating. Twenty-five fitted slots. It is the largest vessel ever built and it moves at under half the speed of a normal hull: the wing is how it reaches anything.' },
     // ETERNUM — CELESTIAL CLASS. The hull that comes after Titan. Every line on
     // its sheet is 1.5× the Titan Sina, but the reason to fly it is the armament:
     //   • DEATH BEAMS — five continuous lances that lock the five nearest hostiles
@@ -762,6 +868,65 @@
   // Escorts fly in formation, fire real shots (escortDmgFrac of your damage)
   // and contribute statShare of their hull mods to your fleet score.
   // ---------------------------------------------------------------------------
+  // FIGHTER CLASS — the Vanguard's bay and every carrier bay after it. CAPACITY
+  // IS NOT HERE: it is a ship stat (`fighterCapacity`), so an 8- or 12-bay hull
+  // is a config line and no code. These are per-craft values; the equipped bay's
+  // rarity scales them through ITEMS.fighterSpec().
+  const FIGHTER = {
+    // ---- FIGHTER DPS IS ANCHORED TO CANNON DPS -----------------------------
+    // `dpsVsCannon` is the ONLY balance number here, and it is a ratio, not a share:
+    // a REFERENCE carrier's full wing does this much of what a cannon hull's base fire
+    // does. 1.10 = ten per cent more.
+    //
+    // WHY A RATIO. `dmgFrac` alone was 0.95, which sounds modest and was not: the wing's
+    // multiple of cannon DPS works out to
+    //
+    //     bays × dmgFrac × attackRate / PLAYER_BASE.attackSpeed
+    //     4    × 0.95    × 2.6         / 1.3                    = 7.6×
+    //
+    // Four craft each firing twice as often as the hull, at 95% of its damage, is eight
+    // times the hull's output before anything else is counted. Measured live on a real
+    // account: 302T/sec from cannons against 2,297T/sec from the wing.
+    //
+    // Note the ratio is ACCOUNT-INDEPENDENT: attack speed folds into fighter damage via
+    // `spdMul`, so `attacksPerSec` cancels out of the division entirely. One number
+    // balances the class at every level of progression.
+    //
+    // `dmgFrac` is DERIVED from the ratio in fighters.js rather than written here, so
+    // changing attackRate or the player's base fire rate cannot silently rebalance the
+    // whole class. Bigger carriers still hit harder — more bays is the progression — the
+    // ratio pins the ENTRY hull.
+    dpsVsCannon: 1.10, // the Vanguard's 4-bay wing = 110% of a cannon hull's base DPS
+    refBays: 4,        // the hull that ratio is measured against (the Vanguard)
+    attackRate: 2.6,   // attacks/sec, per craft — feel, not power; dmgFrac absorbs it
+    range: 620,         // OPERATIONAL ENVELOPE, measured from the carrier, not the craft
+    speed: 520,         // px/sec — against a Vanguard's 23, deliberately extreme
+    orbitRadius: 44,    // ring flown around a target while attacking
+    dockDist: 26,       // close enough to stow
+    launchTime: 0.22,   // clear of the hull before steering
+    launchStagger: 0.1, // the wing leaves in sequence, not as a block
+    // HOW MUCH HULL RANGE THE WING INHERITS — a damped share, hard-capped.
+    // Weapon Range has to mean something for the class (a range build reaching a
+    // cannon and nothing else was the gap the audit found), but it cannot be
+    // passed through raw: endgame fireRange runs 15,000+ against a 250 base, so
+    // a rangeMul of 61 turned a 620-unit envelope into 37,000 — twenty times the
+    // whole map. That deletes the pillar the class is balanced on (short reach,
+    // slow hull, position or contribute nothing), makes speedMult:0.25 free, and
+    // makes the Lance marque's entire identity meaningless because +55% of a
+    // map-covering number is still map-covering.
+    //
+    // At share 0.12 / cap 1.35 a maxed range build widens a plain bay from 620 to
+    // 837 — a real reward — while the deepest possible reach (Legendary Lance on
+    // a maxed range build) lands just under the map diagonal instead of dwarfing
+    // it. Positioning stays a decision at every point on the curve.
+    rangeShare: 0.12,   // fraction of the hull's range multiplier that carries over
+    rangeMulCap: 1.35,  // ceiling on that carry-over, whatever the build
+    trailEvery: 0.06,   // seconds of GAME time between trail motes, per craft —
+                        // a fixed cadence, because a per-frame random saturates
+                        // to one mote per craft per frame at 5–10× speed
+    drawSize: 52,       // sprite width in world units (2× the first cut)
+  };
+
   const FLEET = { slotLevels: [100, 200, 300, 400], maxShips: 5, escortDmgFrac: 0.25, escortFireRate: 1.1, statShare: 0.30 };
 
   // The ordered equipment slots a ship exposes. Extra weapon/ammo/hull slots
@@ -769,9 +934,20 @@
   const WEAP_SLOTS = ['bow','bow2','bow3','bow4','bow5','bow6','bow7'];
   const AMMO_SLOTS = ['arrows','arrows2','arrows3'];
   const HULL_SLOTS = ['armor','armor2','armor3'];
+  // One key per bay. A hull exposes `fighterCapacity` of them, so capacity and
+  // slot count are the same number by construction — an 8-bay carrier is a config
+  // line, exactly as intended.
+  const BAY_SLOTS = ['fighter','fighter2','fighter3','fighter4','fighter5','fighter6',
+    'fighter7','fighter8','fighter9','fighter10','fighter11','fighter12'];
   function shipSlots(shipKey) {
     const s = SHIP_BY_KEY[shipKey] || SHIPS[0];
-    return [].concat(WEAP_SLOTS.slice(0, s.weapons), AMMO_SLOTS.slice(0, s.ammo), HULL_SLOTS.slice(0, s.hull), ['boots','gloves','amulet']);
+    // `noUtility` hulls expose NO boots/gloves/shield-core slots. The Vanguard is
+    // the first: a Fighter Carrier is a launch platform rather than a fitted
+    // warship, and giving up the utility trio is most of what pays for a bay that
+    // hits like a full cannon battery.
+    const util = s.noUtility ? [] : ['boots','gloves','amulet'];
+    return [].concat(WEAP_SLOTS.slice(0, s.weapons), BAY_SLOTS.slice(0, s.fighterCapacity | 0),
+      AMMO_SLOTS.slice(0, s.ammo), HULL_SLOTS.slice(0, s.hull), util);
   }
   // base item type accepted by a slot key (strips trailing digit)
   function slotBase(slotKey) { return slotKey.replace(/\d+$/, ''); }
@@ -899,7 +1075,7 @@
     RARITY, RARITY_BY_KEY, STATS, STAT_KEYS, SLOTS, SLOT_KEYS, ENEMIES,
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
-    SHIPS, SHIP_BY_KEY, DRONE, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
+    SHIPS, SHIP_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
     levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,

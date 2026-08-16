@@ -4,8 +4,8 @@
    Buy a shipment, escort it across a hostile sector to the Citadel, and the
    manifest pays out against the odds you saw before you launched.
 
-   GATE: Pilot Ascension ★20 — an endgame event, priced for pilots who have
-   already prestiged.
+   GATE: Pilot Ascension ★3 — opens shortly after a pilot's first prestige
+   rather than deep into one.
 
    THE RUN IS THE REAL GAME. cargo-run.js deploys on the live battle engine in
    your own zone: your flagship, your gear, your escorts, your drones, the
@@ -23,7 +23,7 @@
   'use strict';
   const G = () => window.GAME, C = () => window.CONFIG, I = () => window.ITEMS;
   const $ = (id) => document.getElementById(id);
-  const UNLOCK_STARS = 20;
+  const UNLOCK_STARS = 3;
   const DAILY_RUNS = 2;
   const EXTRA_RUN_LC = 1000;
 
@@ -500,7 +500,9 @@
         out.res = { fuel: Math.round(base), iron: Math.round(base), plasma: Math.round(base * 0.7) };
       } else if (kind === 'item') {
         try { out.items.push(I().generate(hz(), Math.min(C().RARITY.length - 1, arg))); } catch (e) {}
-      } else if (kind === 'lc') out.lc += Math.round(arg * 0.1 * (0.8 + Math.random() * 0.5) * Math.min(4, L));
+      // 0.1 → 0.05: LootCoin manifest lines halved in the Aug 2026 payout pass
+      // (build 614). Gold, resources, items and Dread Cores are unchanged.
+      } else if (kind === 'lc') out.lc += Math.round(arg * 0.05 * (0.8 + Math.random() * 0.5) * Math.min(4, L));
       else if (kind === 'cores') out.cores += Math.max(1, Math.round(arg * 0.1 * (0.7 + Math.random() * 0.7) * Math.min(5, L)));
     });
     return out;

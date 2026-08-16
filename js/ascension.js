@@ -58,10 +58,10 @@
       next:  (st) => '+' + (st + 1) + '%',
       icon: '<circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="9" ry="3.8"/><ellipse cx="12" cy="12" rx="9" ry="3.8" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.8" transform="rotate(120 12 12)"/>' },
     { id: 'ho', name: 'Storm Conduit', res: 'iron', storm: true,
-      tip: 'Charges the hull with void lightning. Every SECOND in combat there\u2019s a chance (not per shot — per second) a massive bolt drops from the sky for several seconds\u2019 worth of your DPS, then CHAINS through nearly every ship on screen, losing 15% power per arc. A rolled strike is never wasted — if the map is empty it waits for the next ship. Minimum 1.5%/sec once charged.',
+      tip: 'Charges the hull with void lightning. Every SECOND in combat there\u2019s a chance (not per shot — per second) a massive bolt drops from the sky for several seconds\u2019 worth of your DPS, then CHAINS through nearly every ship on screen, losing 15% power per arc. A rolled strike is never wasted — if the map is empty it waits for the next ship. Minimum 0.75%/sec once charged.',
       bonus: (st) => st <= 0 ? 'dormant — no charge yet'
-        : '⚡ ' + Math.max(1.5, st * 0.08).toFixed(2) + '%/sec · ' + (3 + st * 0.06).toFixed(1) + '× DPS bolt · ' + (14 + Math.floor(st / 10)) + ' arcs',
-      next:  (st) => '⚡ ' + Math.max(1.5, (st + 1) * 0.08).toFixed(2) + '%/sec',
+        : '⚡ ' + Math.max(0.75, st * 0.04).toFixed(2) + '%/sec · ' + (3 + st * 0.06).toFixed(1) + '× DPS bolt · ' + (14 + Math.floor(st / 10)) + ' arcs',
+      next:  (st) => '⚡ ' + Math.max(0.75, (st + 1) * 0.04).toFixed(2) + '%/sec',
       icon: '<path d="M13 2L5 13h5l-1 9 8-11h-5z"/>' },
   ];
   const RES = {
@@ -95,16 +95,21 @@
     } catch (e) { return {}; }
   }
   // STORM CONDUIT numbers — chance is % PER SECOND of combat (not per attack).
-  // Floor of 0.3%/sec once charged so the show is actually witnessed early.
+  // PROC RATE HALVED (Aug 2026): 0.08 → 0.04 per step, floor 1.5 → 0.75%/sec. At
+  // endgame step counts the conduit was firing a 3×-DPS 14-arc strike often enough
+  // to be the primary damage source and drown the screen in bolts — the strike is
+  // meant to be an event, not the rotation. Damage and arc count are untouched.
   function storm(shipKey) {
     try {
       const st = steps(peek(shipKey, 'ho'));
       if (st <= 0) return null;
-      return { chance: Math.max(1.5, st * 0.08), mult: 3 + st * 0.06, chains: 14 + Math.floor(st / 10) };
+      return { chance: Math.max(0.75, st * 0.04), mult: 3 + st * 0.06, chains: 14 + Math.floor(st / 10) };
     } catch (e) { return null; }
   }
+  // PROGRESSION NOTE (Aug 2026) — 0.5% → 0.35% per step, part of the game-wide XP
+  // reduction (see the FLEET XP RATE block in game-v93.js).
   function xpMult() {
-    try { return 1 + steps(peek(G().state.ship, 'cc')) * 0.5 / 100; } catch (e) { return 1; }
+    try { return 1 + steps(peek(G().state.ship, 'cc')) * 0.35 / 100; } catch (e) { return 1; }
   }
 
   // ---- SUCCESS CHANCE (published) ---------------------------------------------

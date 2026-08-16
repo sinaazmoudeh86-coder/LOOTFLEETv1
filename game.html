@@ -64,11 +64,12 @@ window.__lfErr=[];
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style-v2.css?v=570">
 <link rel="stylesheet" href="css/theme.css?v=421">
-<link rel="stylesheet" href="css/web-v89.css?v=583">
+<link rel="stylesheet" href="css/web-v89.css?v=610">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=421">
 <link rel="stylesheet" href="css/fx-primordial.css?v=421">
 <link rel="stylesheet" href="css/moon-colony.css?v=421">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=505">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=611">
+<link rel="stylesheet" href="css/season-pass.css?v=638">
 <link rel="stylesheet" href="css/fx-aaa.css?v=421">
 <link rel="stylesheet" href="css/readability.css?v=583">
 <link rel="stylesheet" href="css/kaevith.css?v=440">
@@ -534,7 +535,7 @@ window.__lfErr=[];
           <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
           <div class="res-chip lc-chip pm-chip" id="prism-chip" style="--rc:#ff3a3a;display:none" title="Prism Ore"><span class="rg" style="color:#ff3a3a">◈</span><span id="hud-prism">0</span></div>
           <div class="res-chip lc-chip" id="hud-dread" style="--rc:#ff3a4a;display:none" title="Dread Cores"><span class="rg" style="color:#ff3a4a">◇</span><span id="hud-dread-v">0</span></div>
-          <div class="res-chip lc-chip chip-glow" id="hud-lc-chip" style="--rc:#f2a93c;cursor:pointer" title="LootCoins — tap to get more"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lcg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lcg2)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lcg2)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
+          <div class="res-chip lc-chip chip-glow" id="hud-lc-chip" style="--rc:#f2a93c;cursor:pointer" title="LootCoins — tap to get more"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lf-lcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lf-lcg)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lf-lcg)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
         </div>
       </div>
 
@@ -638,6 +639,11 @@ window.__lfErr=[];
         <div class="screen overlay" id="screen-voidzone">
           <div class="scr-head"><span class="scr-title">Void Zone</span><span class="scr-sub" id="voidzone-sub">7 apex tiles · turf war</span></div>
           <div class="scr-body" id="voidzone-body"></div>
+        </div>
+        <!-- TOUR OF DUTY · SEASON PASS -->
+        <div class="screen overlay" id="screen-tour">
+          <div class="scr-head"><span class="scr-title">Tour of Duty</span><span class="scr-sub" id="tour-sub">Season 1</span></div>
+          <div class="scr-body" id="tour-body"></div>
         </div>
         <!-- SPACE CARGO DEFENSE -->
         <div class="screen overlay" id="screen-cargo">
@@ -912,6 +918,11 @@ window.__lfErr=[];
           <div class="mega-grab"></div>
           <div class="mega-title">⬡ Command</div>
           <div class="mega-grid">
+            <div class="mega-card cmd-tour" data-go="tour">
+              <div class="mc-ic mc-tour"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.2 6.6.5-5 4.3 1.5 6.5L12 16.1l-5.5 3.4L8 13 3 8.7l6.6-.5z"/></svg></div>
+              <div><div class="mc-n">Tour of Duty <em class="sd-live-tag">SEASON 1</em></div><div class="mc-s">100 levels · 8 weeks · three tracks — the Long Watch</div></div>
+              <span class="mc-lock"></span><span class="badge" id="cmd-tour-badge" style="display:none">0</span>
+            </div>
             <div class="mega-card cmd-sdread" data-go="sdread">
               <div class="mc-ic mc-vm"><img src="ships/ship-voidmaw.png" alt="Voidmaw"></div>
               <div><div class="mc-n">Season 1: Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
@@ -919,7 +930,7 @@ window.__lfErr=[];
             </div>
             <div class="mega-card cmd-cargo" data-go="cargo">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 3.5v7L12 16 5 12.5v-7z"/><path d="M5 5.5l7 3.5 7-3.5M12 9v7"/><path d="M8 19h8M12 16v6"/></svg></div>
-              <div><div class="mc-n">Cargo Defense <em class="sd-live-tag">EVENT</em></div><div class="mc-s">Escort a shipment to the Citadel by hand · 3 runs/day · ★20+</div></div>
+              <div><div class="mc-n">Cargo Defense <em class="sd-live-tag">EVENT</em></div><div class="mc-s">Escort a shipment to the Citadel by hand · 3 runs/day · ★3+</div></div>
               <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-voidz" data-go="voidzone">
@@ -1080,23 +1091,24 @@ window.__lfErr=[];
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=574"></script>
-<script src="js/items.js?v=474"></script>
+<script src="js/config-v2.js?v=640"></script>
+<script src="js/items.js?v=642"></script>
 <script src="js/entities.js?v=583"></script>
-<script src="js/render.js?v=575"></script>
+<script src="js/render.js?v=649"></script>
 <script src="js/galaxy.js?v=503"></script>
-<script src="js/leaderboard.js?v=570"></script>
+<script src="js/leaderboard.js?v=605"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js?v=501"></script>
+<script src="js/servertime.js?v=613"></script>
 <script src="js/analytics.js?v=421"></script>
-<script src="js/cloud.js?v=591"></script>
-<script src="js/account.js?v=590"></script>
+<script src="js/cloud.js?v=594"></script>
+<script src="js/account.js?v=650"></script>
 <script src="js/session-lock.js?v=421"></script>
 <script src="js/vip.js?v=431"></script>
 <script src="js/territory.js?v=481"></script>
 <script src="js/payments-v91.js?v=492"></script>
-<script src="js/game-v93.js?v=587"></script>
-<script src="js/ui-v94.js?v=583"></script>
+<script src="js/game-v93.js?v=650"></script>
+<script src="js/ui-v94.js?v=650"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
 <script src="js/fx-aaa.js?v=421"></script>
@@ -1105,47 +1117,49 @@ window.__lfErr=[];
 <script src="js/moon-colony.js?v=431"></script>
 <script src="js/return-brief.js?v=421"></script>
 <script src="js/home-citadel.js?v=578"></script>
-<script src="js/missions.js?v=574"></script>
-<script src="js/achievements.js?v=574"></script>
+<script src="js/missions.js?v=646"></script>
+<script src="js/achievements.js?v=614"></script>
 <script src="js/coach-v89.js?v=569"></script>
 <script src="js/prism-v5.js?v=431"></script>
 <script src="js/prism-fleet.js?v=431"></script>
-<script src="js/dreadnaught.js?v=569"></script>
-<script src="js/server-dreadnaught.js?v=574"></script>
+<script src="js/dreadnaught.js?v=604"></script>
+<script src="js/server-dreadnaught.js?v=614"></script>
 <script src="js/galaxy-box.js?v=501"></script>
 <script src="js/shipworks.js?v=431"></script>
 <script src="js/starforge.js?v=421"></script>
-<script src="js/pilot-ascension.js?v=518"></script>
+<script src="js/pilot-ascension.js?v=646"></script>
+<script src="js/season-pass.js?v=650"></script>
 <script src="js/sim-pilots.js?v=421"></script>
-<script src="js/ranks-boards.js?v=587"></script>
+<script src="js/ranks-boards.js?v=597"></script>
 <script src="js/rank-rewards.js?v=421"></script>
-<script src="js/discord-reward.js?v=421"></script>
+<script src="js/discord-reward.js?v=614"></script>
 <script src="js/onboard.js?v=421"></script>
 <script src="js/pro-offer.js?v=496"></script>
-<script src="js/ship-panels.js?v=499"></script>
+<script src="js/ship-panels.js?v=606"></script>
 <script src="js/paragon-cannon.js?v=421"></script>
 <script src="js/social.js?v=431"></script>
-<script src="js/mail.js?v=483"></script>
-<script src="js/alliance.js?v=488"></script>
+<script src="js/mail.js?v=597"></script>
+<script src="js/alliance.js?v=614"></script>
 <script src="js/alliance-boss.js?v=558"></script>
 <script src="js/void-zone.js?v=506"></script>
 <script src="js/cargo-run.js?v=574"></script>
-<script src="js/cargo-defense.js?v=587"></script>
-<script src="js/nanocores.js?v=588"></script>
+<script src="js/cargo-defense.js?v=614"></script>
+<script src="js/nanocores.js?v=604"></script>
+<script src="js/fighters.js?v=648"></script>
 <script src="js/nanocores-ui.js?v=569"></script>
 <script src="js/crates-hub.js?v=569"></script>
-<script src="js/ascension.js?v=478"></script>
+<script src="js/ascension.js?v=646"></script>
 <script src="js/casino.js?v=449"></script>
 <script src="js/casino2.js?v=449"></script>
 <script src="js/casino-citadels.js?v=453"></script>
-<script src="js/redeem.js?v=520"></script>
+<script src="js/redeem.js?v=650"></script>
 <script src="js/auth.js?v=421"></script>
 <script src="js/update-gate.js?v=486"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 591;
+  window.LF_BUILD = 650;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1345,7 +1359,7 @@ window.__lfErr=[];
     // STAR-GATED CARDS. A few systems are gated by PILOT ASCENSION, not level —
     // they must never be measured against L or they read "unlocks at Level 20"
     // to a Level 400 pilot who has never ascended.
-    const STAR_LOCKS={ cargo:20 };
+    const STAR_LOCKS={ cargo:3 };
     function pStars(){ try{ if(window.PASCEND&&PASCEND.stars) return PASCEND.stars()|0; }catch(e){} return 0; }
     // Locked cards are DIMMED, NEVER HIDDEN. Seeing the whole map of the game
     // with a level on each lock reads as a promise and makes the game look deep;
@@ -1357,10 +1371,24 @@ window.__lfErr=[];
     // Pilot Ascension's gate is a flat Level 100 (the half-the-cap gate from 504 was
     // reverted in 505). Still read through PASCEND so the number lives in one place.
     function pascGate(){ try{ if(window.PASCEND&&PASCEND.gateLv) return PASCEND.gateLv()|0; }catch(e){} return LOCKS.pasc; }
+    // Features that are BUILT but not launched. Each returns true once the
+    // account is allowed to see it at all (see the beta codes in js/redeem.js).
+    const BETA={ tour:function(){ try{ return !!(window.GAME&&window.GAME.state&&window.GAME.state.tourBeta); }catch(e){ return false; } } };
     function sync(){ const L=lvl();
       let nextNeed=Infinity, lockedN=0;
+      // TOUR OF DUTY — unclaimed rewards on the card, so a finished level is never
+      // sitting there unnoticed behind a menu.
+      try{ const tb=document.getElementById('cmd-tour-badge');
+        if(tb&&window.TOUR){ const n=window.TOUR.pendingCount();
+          tb.textContent=n>99?'99+':n; tb.style.display=n?'':'none'; } }catch(e){}
       mega.querySelectorAll('[data-go]').forEach(c=>{
-        c.style.display='';                          // nothing is ever hidden
+        // BETA-GATED CARDS are HIDDEN, not locked. A locked card advertises the
+        // feature and tells you what it costs; a hidden one does not exist yet as
+        // far as the player is concerned. Tour of Duty ships in this build but
+        // stays dark until an admin redeems the beta code in ⚙ Settings, so it
+        // can be tested against real production saves before it goes public.
+        if(BETA[c.dataset.go]&&!BETA[c.dataset.go]()){ c.style.display='none'; return; }
+        c.style.display='';                          // nothing else is ever hidden
         const starNeed=STAR_LOCKS[c.dataset.go];
         if(starNeed){                                 // ascension-gated, not level-gated
           const s=pStars(), lockedS=s<starNeed;

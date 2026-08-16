@@ -237,19 +237,21 @@
   }
   function seasonRankFor(total) { if (!total) return null; let r = 1; seasonBots().forEach((b) => { if (b.dmg > total) r++; }); return r; }
   // DAILY leaderboard prizes — ✦ EVENT COINS + ◈ LootCoins (spend in the Event Store)
+  // LootCoin column halved in the Aug 2026 payout pass (build 614); Event Coins are
+  // event-store currency, not LootCoins, and were deliberately left alone.
   const LB_TIERS = [
-    { max: 1,   name: '#1',      coins: 2500, lc: 25 },
-    { max: 10,  name: 'Top 10',  coins: 1500, lc: 15 },
-    { max: 100, name: 'Top 100', coins: 1000, lc: 10 },
-    { max: 1e9, name: 'Ranked',  coins: 500,  lc: 5 },
+    { max: 1,   name: '#1',      coins: 2500, lc: 13 },
+    { max: 10,  name: 'Top 10',  coins: 1500, lc: 8 },
+    { max: 100, name: 'Top 100', coins: 1000, lc: 5 },
+    { max: 1e9, name: 'Ranked',  coins: 500,  lc: 3 },
   ];
   function tierFor(rank) { for (const t of LB_TIERS) if (rank <= t.max) return t; return LB_TIERS[3]; }
-  // SEASON final rewards — the big Event Coin payout
+  // SEASON final rewards — the big Event Coin payout (LootCoins halved, build 614)
   const SEASON_TIERS = [
-    { max: 1,   name: '#1',      coins: 25000, lc: 250 },
-    { max: 10,  name: 'Top 10',  coins: 10000, lc: 100 },
-    { max: 100, name: 'Top 100', coins: 5000,  lc: 50 },
-    { max: 1e9, name: 'Ranked',  coins: 2500,  lc: 25 },
+    { max: 1,   name: '#1',      coins: 25000, lc: 125 },
+    { max: 10,  name: 'Top 10',  coins: 10000, lc: 50 },
+    { max: 100, name: 'Top 100', coins: 5000,  lc: 25 },
+    { max: 1e9, name: 'Ranked',  coins: 2500,  lc: 13 },
   ];
   const tierTxt = (t) => '✦ ' + t.coins.toLocaleString() + ' Event Coins · ◈ ' + t.lc + ' LootCoins';
   // one-time end-of-season settlement — stages a CLAIM (collected by the player)
@@ -481,7 +483,7 @@
     run.pubT = (run.pubT || 0) + dt;
     if (run.pubT >= 15 && cloudOn()) {
       run.pubT = 0;
-      try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: Math.max(s.bestDay | 0, Math.floor(run.dealt)), total: Math.floor(s.total), stage: Math.max(s.bestStage | 0, stageInfo(run.dealt).stage) }); } catch (e) {}
+      try { window.CLOUD.sdUpsert({ name: myName(), season: SEASON.num, day: s.day, best: Math.max(+s.bestDay || 0, Math.floor(run.dealt)), total: Math.floor(s.total), stage: Math.max(s.bestStage | 0, stageInfo(run.dealt).stage) }); } catch (e) {}
     }
     // MANUAL FLIGHT ONLY — the event disables auto-pilot for its whole duration
     try { if (G().getAuto()) G().setAuto(false); } catch (e) {}
@@ -896,11 +898,53 @@
   // =========================================================================
   // LIVE CLOUD BOARDS — real cross-account standings via supabase (sdread_scores)
   // =========================================================================
-  let _cl = { t: 0, inflight: false, day: null, season: null };
+  let _cl = { t: 0, inflight: false, day: null, season: null, mine: null };
   function cloudOn() { return !!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.sdDaily); }
   function myUid() { try { return (window.AUTH && AUTH.session && AUTH.session()) ? AUTH.session().id : null; } catch (e) { return null; } }
   function myName() { try { const s = window.AUTH && AUTH.session && AUTH.session(); return (s && (s.name || s.email)) || 'Operator'; } catch (e) { return 'Operator'; } }
   function cloudOthers(rows) { const id = myUid(); return (rows || []).filter((r) => !id || r.user_id !== id); }
+  // MY OWN SERVER ROW IS A FLOOR FOR THE LOCAL RECORD (Aug 2026 — "I did my run,
+  // relogged, and my Voidmaw score went back to an older one").
+  //
+  // The YOU row on both boards is drawn from LOCAL state — meDay = s.bestDay,
+  // meSea = s.total — while every rival row comes from the server. So the instant
+  // a finished run fails to reach localStorage, the player's own figure rolls back
+  // to the last copy that did persist and every other row on the board stays
+  // exactly where it was. That asymmetry is the whole reported picture.
+  //
+  // A run can fail to persist for reasons the event never sees: push() returns
+  // before saveLocal() for a kicked tab or a tab that never claimed the session
+  // lock, saveLocal() swallows a quota failure, and the cloud flush is debounced
+  // 8 seconds — so a relog inside that window leaves neither copy holding the run.
+  //
+  // The server row is the better copy in every one of those cases and always was:
+  // sdread_upsert is ratcheted (greatest() inside a season and day) and a live run
+  // publishes every 15 seconds, so it holds figures this account really earned even
+  // when the save that produced them is gone. Adopt it.
+  //
+  // STRICTLY A FLOOR. It only ever raises, so a fresh local run that has not
+  // published yet is untouched, and the row can only ever contain values this same
+  // account sent under its own uid.
+  // ASKED FOR BY user_id, NOT SCANNED OUT OF THE BOARD. Both boards are
+  // limit(100) and the season board spans the whole season, so a mid-table pilot
+  // is simply not in _cl.season — and reading the floor out of that array would
+  // have made this whole repair inert for everyone outside the top 100, which is
+  // most of the players it exists for. _cl.mine is refreshed by ensureCloud().
+  function reconcileFromServer() {
+    if (!myUid()) return;
+    const s = sd(); if (!s) return;
+    const m = _cl.mine; if (!m) return;
+    let hit = 0;
+    // DAILY ONLY IF THE ROW'S OWN `day` IS TODAY. The row carries the day its
+    // best_day belongs to, so it answers this directly — and at the UTC rollover
+    // sd() has already zeroed bestDay, where adopting yesterday's figure would
+    // re-place the pilot on a board he has not fought on yet.
+    if ((m.day | 0) === (s.day | 0) && (+m.best_day || 0) > (+s.bestDay || 0)) { s.bestDay = +m.best_day; hit = 1; }
+    if ((+m.total || 0) > (+s.total || 0)) { s.total = +m.total; hit = 1; }
+    if ((m.stage | 0) > (s.bestStage | 0)) { s.bestStage = m.stage | 0; hit = 1; }
+    if ((+s.bestDay || 0) > (+s.bestEver || 0)) { s.bestEver = +s.bestDay; hit = 1; }
+    if (hit) { try { G().save(); } catch (e) {} }
+  }
   function ensureCloud(cb, force) {
     if (!cloudOn()) return;
     const s = sd(); if (!s) return;
@@ -909,10 +953,15 @@
     if (_cl.inflight && Date.now() - (_cl.inflightAt || 0) < 10000) return;
     if (!force && Date.now() - _cl.t < 8000) return;
     _cl.inflight = true; _cl.inflightAt = Date.now(); _cl.t = Date.now();
-    Promise.all([window.CLOUD.sdDaily(SEASON.num, s.day, 100), window.CLOUD.sdSeason(SEASON.num, 100)]).then(([d, se]) => {
+    Promise.all([window.CLOUD.sdDaily(SEASON.num, s.day, 100), window.CLOUD.sdSeason(SEASON.num, 100),
+      window.CLOUD.sdMine ? window.CLOUD.sdMine(SEASON.num) : Promise.resolve(null)]).then(([d, se, mine]) => {
       _cl.inflight = false; _cl.ok = !!(d || se);
-      if (d) _cl.day = d;
+      if (d) { _cl.day = d; _cl.dayIdx = s.day; }
       if (se) _cl.season = se;
+      if (mine) _cl.mine = mine;
+      // BEFORE syncRanks — the settlements read s.bestDay, so the record has to be
+      // whole before a rank is computed off it.
+      try { reconcileFromServer(); } catch (e) {}
       syncRanks();
       if (cb) cb();
     }).catch(() => { _cl.inflight = false; });
@@ -982,10 +1031,17 @@
     const s = sd(); if (!s) return;
     if (!cloudOn() || !myUid()) return;
     if (s.pubDirty) { publishScore(); return; }
-    if (!s.bestDay || !_cl.day) return;
+    if (!s.bestDay) return;
+    // PREFER THE ROW FETCHED BY ID. Scanning the top-100 daily slice cannot tell
+    // "no row of mine" from "my row is rank 101", so a mid-table pilot republished
+    // on every single event-screen open. Fall back to the slice only when the
+    // direct fetch has not landed yet.
+    const m = _cl.mine;
+    if (m) { if ((m.day | 0) !== (s.day | 0) || (+m.best_day || 0) < (+s.bestDay || 0)) publishScore(); return; }
+    if (!_cl.day) return;
     const id = myUid();
-    const mine = _cl.day.filter((r) => r.user_id === id)[0];
-    if (!mine || (mine.best_day || 0) < s.bestDay) publishScore();
+    const row = _cl.day.filter((r) => r.user_id === id)[0];
+    if (!row || (row.best_day || 0) < s.bestDay) publishScore();
   }
 
   // ---- leaderboards (daily · season, side by side) ----

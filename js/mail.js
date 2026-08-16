@@ -101,7 +101,7 @@
       ic: '⚔',
       title: (opts.offline ? 'While you were away — ' : '') + tileName + ' has fallen',
       body: who + ' captured your system <b>' + esc(tileName) + '</b>' +
-        (opts.razed ? ' and <b>razed your Citadel</b>' : '') +
+        (opts.razed ? ' and <b>took your Citadel with it</b> — intact, at its full rank' : '') +
         '. The tile is shielded — plan your counterattack from My Galaxy.',
       meta: { kind: 'loss', from: who, tile: tileName, tileId: opts.id || null, fleetScore: info.fleetScore || 0, fleet: info.defense || null },
     });
@@ -111,7 +111,7 @@
       ic: '✦',
       title: 'System captured — ' + tileName,
       body: (fromName ? 'You took <b>' + esc(tileName) + '</b> from ' + esc(fromName) : 'You captured <b>' + esc(tileName) + '</b>') +
-        (razed ? ' — their Citadel is rubble' : '') + '. It produces resources every hour you hold it.',
+        (razed ? ' — their Citadel stands, intact and at full rank, under your flag' : '') + '. It produces resources every hour you hold it.',
       meta: { kind: 'win', tile: tileName, tileId: tileId || null },
     });
   }

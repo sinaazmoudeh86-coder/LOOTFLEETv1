@@ -144,19 +144,18 @@
   //       `lf-backup::<uid>` before every merge. If it still holds intact building
   //       objects, that IS the player's colony — restore it slot for slot.
   //
-  //   2 · RECONSTRUCTION, when no snapshot survives. The signature is unambiguous:
-  //       a numeric entry in `b`, or a colony that has terraformed past sector 1
-  //       with nothing built (nobody spends millions terraforming and builds
-  //       nothing). Those colonies are refilled — every slot of every unlocked
-  //       sector, weighted to that moon's own deposits, plus a defense tower per
-  //       sector so the rebuild is not raided flat before they see it.
+  //   2 · REFUND, when no snapshot survives. The signature is unambiguous: a numeric
+  //       entry in `b`, or a colony that has terraformed past sector 1 with nothing
+  //       built (nobody spends millions terraforming and builds nothing).
   //
-  //       Level is derived from terraform depth, the one development signal that
-  //       survived the corruption intact: reaching sector 5 costs millions, so a
-  //       deep colony is restored deep. It is a floor, not an exact replay — a
-  //       maxed colony gets back less than it lost, and that is stated in the mail.
+  //       WE DO NOT INVENT A COLONY. An earlier pass filled the empty slots with
+  //       plausible mines, and it read exactly as what it was — random structures
+  //       the player never placed, at levels they never chose. Nobody wants a
+  //       stranger's colony handed back to them. Instead the slots are left EMPTY
+  //       and the resources are returned, sized to the colony's terraform depth,
+  //       so the pilot rebuilds the layout THEY had. Their choices, their money.
   //
-  // Runs at most once per moon (`_rst`), so it can never inflate a colony twice.
+  // Runs at most once per moon (`_rst`), so it can never pay out twice.
   function restoreWipedColonies(root) {
     let snap = null;
     try {
@@ -164,7 +163,8 @@
       if (uid) { const raw = localStorage.getItem('lf-backup::' + uid); if (raw) snap = JSON.parse(raw); }
     } catch (e) {}
     const snapMoons = (snap && snap.moon && Array.isArray(snap.moon.moons)) ? snap.moon.moons : null;
-    let fixed = 0, recovered = 0, rebuilt = 0;
+    let fixed = 0, recovered = 0, lost = 0;
+    const refund = { gold: 0, fuel: 0, iron: 0, plasma: 0 };
 
     root.moons.forEach((m, i) => {
       if (!m || typeof m !== 'object' || m._rst) return;
@@ -195,34 +195,36 @@
         if (!bd || typeof bd !== 'object' || !bd.kind || !B[bd.kind]) delete bmap[k];
       });
 
-      // 2 · reconstruction for anything the snapshot could not cover
+      // 2 · REFUND for every slot the snapshot could not cover. The slot stays empty
+      // — the pilot rebuilds it — and the resources a structure of that standing cost
+      // are returned so rebuilding is free to them.
       const secs = Math.max(1, Math.min(SECTORS.length, m.sectors | 0));
-      const lvl = Math.max(1, Math.min(20, 1 + (secs - 1) * 4));   // s1→1, s6→21 capped 20
-      const bias = (MOONCAT[i] || MOONCAT[0] || {}).bias || {};
-      // the moon's best deposit leads; a tower holds the sector. PRISM EXTRACTORS ARE
-      // EXCLUDED — at 800k gold apiece, handing them out at a reconstructed level
-      // would pay far more than the fault cost anyone.
-      const mines = Object.keys(B).filter((k) => B[k].cat === 'mine' && k !== 'prismex')
-        .sort((a, b) => ((bias[B[b].out] || 1) - (bias[B[a].out] || 1)));
-      const tower = Object.keys(B).filter((k) => B[k].cat === 'defense')[0];
+      const lvl = Math.max(1, Math.min(20, 1 + (secs - 1) * 4));   // s1→1 · s6→21, capped
+      // Priced off an Ore Mine — the baseline structure. Deliberately NOT the
+      // expensive ones: this compensates the fault, it does not pay out a jackpot.
+      const unit = investedCost(B.oremine, lvl);
       for (let sec = 0; sec < secs; sec++) {
         const sd = SECTORS[sec]; if (!sd) continue;
         for (let j = 0; j < sd.slots; j++) {
-          const key = sec + ':' + j;
-          if (bmap[key]) continue;                     // recovered or never lost
-          const wantTower = j === sd.slots - 1 && tower && (B[tower].minSector || 0) <= sec;
-          const pick = wantTower ? tower
-            : mines.filter((k) => (B[k].minSector || 0) <= sec)[j % Math.max(1, mines.filter((k) => (B[k].minSector || 0) <= sec).length)];
-          if (!pick) continue;
-          bmap[key] = { kind: pick, lv: lvl };
-          rebuilt++;
+          if (bmap[sec + ':' + j]) continue;         // recovered, or never lost
+          lost++;
+          Object.keys(refund).forEach((k) => { refund[k] += unit[k] || 0; });
         }
       }
       m._rst = 1; fixed++;
-      logAdd(m, '🛠 COLONY RESTORED — structures lost to a save-merge fault have been rebuilt.');
+      logAdd(m, '🛠 COLONY AUDIT — structures lost to a save-merge fault; build costs refunded.');
     });
 
     if (!fixed) return;
+    // pay the refund
+    if (lost) {
+      const st = G.state;
+      if (!st.resources) st.resources = { fuel: 0, iron: 0, plasma: 0 };
+      st.gold = (st.gold || 0) + refund.gold;
+      st.resources.fuel = (st.resources.fuel || 0) + refund.fuel;
+      st.resources.iron = (st.resources.iron || 0) + refund.iron;
+      st.resources.plasma = (st.resources.plasma || 0) + refund.plasma;
+    }
     try { G.save(); } catch (e) {}
     // Tell them, once, in plain terms — a colony that changes shape without
     // explanation is worse than one that is missing.
@@ -230,12 +232,17 @@
       if (window.MAIL && window.MAIL.push) {
         window.MAIL.push({
           from: 'Colonial Authority',
-          subj: '🛠 Your moon colony has been restored',
+          subj: '🛠 Moon colony — restored and refunded',
           body: '<p>A fault in how saves merged between devices corrupted moon colony ' +
-            'structures. It has been fixed, and your ' + (fixed === 1 ? 'colony' : fixed + ' colonies') + ' rebuilt.</p>' +
-            (recovered ? '<p><b>' + recovered + ' structure' + (recovered === 1 ? '' : 's') + '</b> were recovered from your last good backup at their real levels.</p>' : '') +
-            (rebuilt ? '<p><b>' + rebuilt + ' structure' + (rebuilt === 1 ? '' : 's') + '</b> could not be read back and were reconstructed, scaled to how far you had terraformed. ' +
-              'If your colony was further along than what you see, this is a floor rather than an exact restore — and we are sorry for the shortfall.</p>' : '') +
+            'structures. It is fixed, and your ' + (fixed === 1 ? 'colony has' : fixed + ' colonies have') + ' been put right.</p>' +
+            (recovered ? '<p><b>' + recovered + ' structure' + (recovered === 1 ? '' : 's') + '</b> were recovered from your last good backup, at their real levels — exactly as you built them.</p>' : '') +
+            (lost ? '<p><b>' + lost + ' slot' + (lost === 1 ? '' : 's') + '</b> could not be read back. Rather than guess at what you had and hand you ' +
+              'structures you never chose, we have refunded the build cost so you can rebuild your own layout:</p><ul>' +
+              (refund.gold ? '<li>$ ' + Math.round(refund.gold).toLocaleString() + ' gold</li>' : '') +
+              (refund.fuel ? '<li>⬢ ' + Math.round(refund.fuel).toLocaleString() + ' fuel</li>' : '') +
+              (refund.iron ? '<li>◆ ' + Math.round(refund.iron).toLocaleString() + ' iron</li>' : '') +
+              (refund.plasma ? '<li>✦ ' + Math.round(refund.plasma).toLocaleString() + ' plasma</li>' : '') +
+              '</ul><p>Your sectors and terraforming are untouched — only the structures need placing.</p>' : '') +
             '<p>Nothing you build from here is at risk from this fault again.</p>',
         });
       }

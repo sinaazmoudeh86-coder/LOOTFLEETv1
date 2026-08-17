@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 662 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v229 · build 663 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v662`.
-**Login screen reads `BUILD 662`.**
+Supersedes v228. Service worker cache is `lootfleet-v663`.
+**Login screen reads `BUILD 663`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -13,7 +13,7 @@ Supersedes v228. Service worker cache is `lootfleet-v662`.
 
 Everything else is client-side. No reset, no save migration.
 
-Carries builds 583–662.
+Carries builds 583–663.
 
 ### What changed in 662
 
@@ -30,13 +30,15 @@ Carries builds 583–662.
 - **Restitution, two tiers, at most once per colony.** `account.js` stashes the
   untouched cloud copy at `lf-backup::<uid>` before every merge, so where that
   snapshot survives the real colony is restored **slot for slot at its true
-  levels**. Where it does not, the colony is reconstructed: every slot of every
-  unlocked sector, weighted to that moon's own deposits, one defense tower per
-  sector so the rebuild is not immediately raided flat, at a level derived from
-  terraform depth (the one development signal the corruption left intact — sector 6
-  costs millions, so a deep colony is restored deep). Prism Extractors are excluded
-  at 800k gold apiece. It is an honest floor, not an exact replay, and the in-game
-  mail says so plainly rather than pretending nothing happened.
+  levels** — exactly as it was built. Where no snapshot survives, **we do not invent
+  a colony.** An earlier cut of this filled the empty slots with plausible mines and
+  it read as precisely what it was: random structures the player never placed, at
+  levels they never chose. The slots are now left EMPTY and the **build cost is
+  refunded** instead — priced off a baseline Ore Mine at a level derived from
+  terraform depth (the one development signal the corruption left intact) — so the
+  pilot rebuilds their own layout with their own choices, for free. Sectors and
+  terraforming were never affected. The in-game mail itemises the refund and says
+  plainly why it is a refund rather than a restore.
 
 ### What changed in 661
 
@@ -195,7 +197,7 @@ Carries builds 583–662.
 
 ## ⚠ TOUR OF DUTY IS DARK IN THIS RELEASE
 
-The season pass is LIVE for every player from Level 1 as of build 662 — no gate,
+The season pass is LIVE for every player from Level 1 as of build 663 — no gate,
 no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ---
@@ -204,10 +206,10 @@ no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 | Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `662` |
-| Update beacon | `version.json` → `build` | `662` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v662` |
-| Project root beacon | root `version.json` (source tree) | `662` |
+| Client constant | `game.html` → `window.LF_BUILD` | `663` |
+| Update beacon | `version.json` → `build` | `663` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v663` |
+| Project root beacon | root `version.json` (source tree) | `663` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1997,7 +1999,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 662**.
+1. Login screen reads **BUILD 663**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

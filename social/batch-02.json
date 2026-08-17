@@ -1,0 +1,46 @@
+{
+  "site": "lootfleet.com",
+  "png_base": "https://lootfleet.com/social/png/",
+  "cards": [
+    {"slug":"act-zone41","type":"action","art":"ship-titan.png","hue":"#f2a93c","lvl":"87","score":"18.3T","zone":"ZONE 41 · 8,402 KILLS","big":"THE ZONES<br>NEVER END.","tag":"Every zone deeper: denser swarms, bigger numbers, better loot.",
+      "caption":"Zone 41. 8,402 kills. The swarm keeps coming and the numbers keep growing — how deep can you push? Play free in your browser → lootfleet.com #spacegame #browsergame #indiegame #lootfleet"},
+    {"slug":"feat-progression","type":"feature","n":"Ø1","lab":"PROGRESSION","hue":"#c09aff","h1":"FROM SCRAPPY FRIGATE TO TITAN CARRIER","sub":"Beat zone bosses for blueprints, bank the shards, and watch one hull evolve through ten classes.","rows":[
+      {"n":"Ten hull classes","t":"A clean upgrade ladder from nimble Frigate to galaxy-dominating Titan Carrier."},
+      {"n":"Blueprint crafting","t":"Bosses drop the schematics — complete a set and the evolution fires instantly."},
+      {"n":"Every hull plays different","t":"More mounts, more drones, more raw power at every tier you reach."}],
+      "stats":[{"v":"10","k":"Hull classes"},{"v":"47","k":"Hulls"},{"v":"1","k":"Evolving fleet"}],"art":"ship-frigate.png",
+      "caption":"From scrappy Frigate to Titan Carrier — 10 hull classes, 47 hulls, one evolving fleet. Beat bosses, bank blueprints, evolve → lootfleet.com #lootfleet #spacegame #progression"},
+    {"slug":"feat-loot","type":"feature","n":"Ø2","lab":"ENDGAME CHASE","hue":"#f2a93c","h1":"LOOT THAT NEVER STOPS DROPPING","sub":"Every kill can cough up an upgrade. Gear rolls across twelve glowing rarities and six slots.","rows":[
+      {"n":"Twelve rarities","t":"Common climbs all the way to Primordial — each tier brighter, rarer, meaner."},
+      {"n":"Six gear slots","t":"Cannon, munitions, hull, thrusters, targeting, shield core — hot-swappable mid-run."},
+      {"n":"Auto-magnet pickup","t":"Drops arc out, then snap to your ship. Nothing on the field is left behind."}],
+      "stats":[{"v":"12","k":"Rarities"},{"v":"6","k":"Gear slots"},{"v":"∞","k":"Scaling"}],"art":"ship-cruiser.png",
+      "caption":"Every kill can drop an upgrade. 12 rarities, 6 slots, a loot magnet that vacuums the whole haul → lootfleet.com #lootfleet #spacegame #lootgame"},
+    {"slug":"act-boss","type":"action","art":"ship-dreadnought.png","hue":"#ff6b78","lvl":"63","score":"21.2B","zone":"BOSS IN 0:11","big":"EVERY ZONE<br>ENDS IN A BOSS.","tag":"Blueprints, crate keys and Kaevith tech — bosses carry the good stuff.",
+      "caption":"The meter hits zero and something BIG warps in. Every zone ends in a boss, every boss drops the good stuff → lootfleet.com #lootfleet #spacegame #bossfight"},
+    {"slug":"feat-fleet","type":"feature","n":"Ø3","lab":"FLEET BUILDING","hue":"#9ad4ff","h1":"ONE FLAGSHIP. FOUR ESCORTS. EVERYBODY FIGHTS.","sub":"Your bench is not decoration — every hull in the fleet feeds the fight.","rows":[
+      {"n":"30% fleet share","t":"Escort hull mods and stowed gear pay into your flagship's live stats."},
+      {"n":"Carrier wings fly","t":"Benched carriers launch their own fighters from their own decks."},
+      {"n":"The Aegis heals","t":"The support hull fires nothing — it pulses repairs across the fleet instead."}],
+      "stats":[{"v":"5","k":"Fleet slots"},{"v":"30%","k":"Escort share"},{"v":"⬡","k":"Live wings"}],"art":"ship-carrier.png",
+      "caption":"One flagship, four escorts, and every single one of them fights. Fleet share, live carrier wings, repair pulses → lootfleet.com #lootfleet #spacegame #fleetbuilding"},
+    {"slug":"act-cargo","type":"action","art":"ship-battleship.png","hue":"#5ad0ff","lvl":"★3","score":"OMEGA V","slab":"SHIPMENT TIER","zone":"CARGO DEFENSE · 10:00","big":"ONE FREIGHTER.<br>TEN MINUTES.<br>HOLD THE LANE.","tag":"Fly the escort by hand — collapse rings, void anomalies, a sector boss.",
+      "caption":"Ten minutes. One freighter. Everything in the sector wants it dead. Cargo Defense is hand-flown escort duty at its meanest → lootfleet.com #lootfleet #spacegame #towerdefense"},
+    {"slug":"feat-galaxy","type":"feature","n":"Ø4","lab":"TERRITORY WAR","hue":"#7ce0a0","h1":"CLAIM TILES. RAISE CITADELS. KEEP WHAT YOU WIN.","sub":"My Galaxy is a shared map of real players — every tile pays hourly income.","rows":[
+      {"n":"Siege real territory","t":"Every tile is held by a real pilot or their citadel. Break it, take it."},
+      {"n":"Citadels transfer intact","t":"Win a fortified tile and the fortress is YOURS — at the rank they built it."},
+      {"n":"24-hour shields","t":"Fresh captures are attack-shielded — build up before the counter-siege."}],
+      "stats":[{"v":"$/h","k":"Tile income"},{"v":"R5","k":"Citadel max"},{"v":"24h","k":"Capture shield"}],"art":"ship-monolith2.png",
+      "caption":"A shared galaxy of real players. Siege their tiles, seize their citadels INTACT, collect the income → lootfleet.com #lootfleet #spacegame #territorywar"},
+    {"slug":"act-kaevith","type":"action","art":"ship-xen3.png","hue":"#c09aff","lvl":"◈","score":"+160%","slab":"FLEET XP BONUS","zone":"THE KAEVITH INCURSION","big":"THEY CAME FOR<br>YOUR ZONES.<br>TAKE THEIR SHIPS.","tag":"Clear invaded zones → earn all five crystal hulls → +160% fleet XP, stacked.",
+      "caption":"The Kaevith invaded the wrong galaxy. Clear their zones, fly their crystal hulls, stack +160% fleet XP → lootfleet.com #lootfleet #spacegame #alieninvasion"},
+    {"slug":"feat-idle","type":"feature","n":"Ø5","lab":"IDLE ENGINE","hue":"#ffd24d","h1":"YOUR FLEET GRINDS WHILE YOU SLEEP","sub":"Close the tab. The war economy keeps running — a full report is waiting when you dock back in.","rows":[
+      {"n":"Offline battle sim","t":"Kills, loot, gold and XP accrue as if you'd kept flying — deaths included."},
+      {"n":"Moon mines never stop","t":"Colony production ticks around the clock. Just keep the pirates off it."},
+      {"n":"Territory pays hourly","t":"Every tile you hold deposits income whether you're online or not."}],
+      "stats":[{"v":"24/7","k":"Economy"},{"v":"0","k":"Downloads"},{"v":"FREE","k":"Forever"}],"art":"ship-mothership.png",
+      "caption":"Log off. Your fleet doesn't. Offline battle sim, moon mines, hourly territory income — the grind runs 24/7 → lootfleet.com #lootfleet #idlegame #spacegame"},
+    {"slug":"act-ascend","type":"action","art":"ship-oblivionfinal.png","hue":"#ffd24d","lvl":"★","score":"PRESTIGE","slab":"CAREER MODE","zone":"PILOT ASCENSION","big":"RESET AT THE TOP.<br>COME BACK<br>STRONGER.","tag":"Ascend for permanent stars — every run after flies higher than the last.",
+      "caption":"Hit the ceiling, burn it all down, keep the stars. Pilot Ascension turns every reset into permanent power → lootfleet.com #lootfleet #spacegame #prestige"}
+  ]
+}

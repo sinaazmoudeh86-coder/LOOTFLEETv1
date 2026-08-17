@@ -2,6 +2,9 @@
 
 Content flows: **batch JSON → rendered PNG cards (hosted on the game site) → `social_queue` table → cron Edge Function → Buffer → Instagram / TikTok / Facebook.**
 
+## Easiest path: the setup helper
+Open **social/admin.html** from the project preview (it is a LOCAL tool — never publish it; keep it out of the deploy folder). Enter your project ref + service_role key, press **LIST BUFFER CHANNELS**, copy the id string into the `BUFFER_CHANNEL_IDS` secret, then press **TEST RUN** — `{"due":0,"report":[]}` means healthy.
+
 ## One-time setup (~15 min)
 
 1. **Buffer side** — connect Instagram, TikTok and Facebook as channels in Buffer, then create an API key at `publish.buffer.com/settings/api` (API is on every plan, incl. Free).

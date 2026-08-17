@@ -35,6 +35,35 @@ h1{font:900 62px/1.04 'Orbitron';letter-spacing:.01em;margin:16px 0 8px}
 .fact{font:700 44px/1.3 'Rajdhani';color:#dfe8f6;max-width:860px;border-left:6px solid var(--ac,#f2a93c);padding-left:34px}
 .small{font:600 28px/1.4 'Rajdhani';color:#8fa3bd;max-width:820px;margin-top:34px}
 .glow{position:absolute;left:50%;top:46%;width:980px;height:980px;transform:translate(-50%,-50%);background:radial-gradient(circle,var(--ac,#f2a93c) 0%,transparent 62%);opacity:.09;pointer-events:none}
+/* ---- ACTION cards (battle-scene full bleed) ---- */
+.gem{position:absolute;display:block;transform:rotate(45deg);border-radius:4px;opacity:.85}
+.dmg{position:absolute;font:800 32px 'Orbitron';font-style:normal;color:#fff;text-shadow:0 0 18px rgba(255,255,255,.5);opacity:.9}
+.ring{position:absolute;width:170px;height:170px;border:2px solid var(--rc);border-radius:50%;opacity:.35}
+.card.act::after{content:'';position:absolute;left:0;right:0;bottom:0;height:62%;background:linear-gradient(180deg,transparent 0%,rgba(4,6,13,.6) 34%,rgba(4,6,13,.97) 64%);pointer-events:none}
+.act-wrap{justify-content:flex-end;z-index:2}
+.hud{position:absolute;top:78px;left:84px;right:84px;display:flex;align-items:center;gap:26px}
+.pill{border:2px solid;border-radius:14px;padding:12px 22px;font:900 30px 'Orbitron';background:rgba(5,8,16,.7)}
+.score{display:flex;flex-direction:column;gap:2px;border:1px solid #223052;border-radius:14px;padding:10px 24px;background:rgba(5,8,16,.75)}
+.score i{font:800 15px 'Orbitron';font-style:normal;letter-spacing:.22em;color:#f2a93c}
+.score b{font:900 40px 'Orbitron';color:#eaf0fa}
+.zn{margin-left:auto;font:700 24px 'Rajdhani';letter-spacing:.1em;color:#8fa3bd;border:1px solid #223052;border-radius:12px;padding:12px 20px;background:rgba(5,8,16,.75)}
+.act-ship{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);max-width:560px;max-height:430px;object-fit:contain;filter:drop-shadow(0 34px 70px rgba(90,160,255,.4))}
+.act-big{position:relative;font:900 88px/1.06 'Orbitron';margin:auto 0 26px}
+.act-wrap .foot{margin-top:36px}
+.act-tag{position:relative;display:flex;align-items:center;gap:18px;font:700 30px/1.25 'Rajdhani';color:#cdd9ec;margin-bottom:8px}
+.act-tag i{flex:none;width:14px;height:14px;transform:rotate(45deg);border-radius:3px}
+.card.act .foot{border-top-color:rgba(255,255,255,.14)}
+/* ---- FEATURE cards (homepage panel style) ---- */
+.feat-rows{display:flex;flex-direction:column;gap:22px;margin:10px 0 0}
+.frow{display:flex;gap:22px;align-items:flex-start}
+.fd{flex:none;width:56px;height:56px;border:1px solid;border-radius:13px;display:grid;place-items:center;font-size:24px;background:rgba(255,255,255,.03)}
+.frow b{display:block;font:800 30px 'Orbitron';letter-spacing:.02em;margin-bottom:5px}
+.frow p{font:600 26px/1.25 'Rajdhani';color:#a9b8d0;max-width:820px}
+.fstats{display:flex;gap:52px;margin:34px 0 26px}
+.fst b{display:block;font:900 54px 'Orbitron'}
+.fst span{font:700 20px 'Rajdhani';letter-spacing:.1em;color:#7f8fb0;text-transform:uppercase}
+.fscene{position:relative;flex:1;min-height:220px;border:1px solid #223052;border-radius:22px;overflow:hidden;background:radial-gradient(120% 140% at 50% 0%,#0d1730,#05080f 70%)}
+.fs-ship{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);max-height:170px;max-width:340px;object-fit:contain;filter:drop-shadow(0 16px 34px rgba(90,160,255,.45))}
 #idx{max-width:1140px;margin:30px auto;padding:0 20px;font:700 16px 'Rajdhani';color:#8fa3bd}
 </style></head>
 <body>
@@ -42,8 +71,36 @@ h1{font:900 62px/1.04 'Orbitron';letter-spacing:.01em;margin:16px 0 8px}
 <div id="stage"></div>
 <script>
 const esc = (s) => String(s);
+// deterministic per-slug PRNG so action scenes render identically every snapshot
+function rng(seed){ let h = 2166136261; for (const ch of seed) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return () => { h = Math.imul(h ^ (h >>> 15), 2246822519); h = Math.imul(h ^ (h >>> 13), 3266489917); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
+const GEMC = ['#5ad0ff','#c09aff','#ff9a5a','#5affd7','#ff6be0','#7ce0a0','#ffd24d','#ff6b78'];
+function scene(slug, hue, n, h){
+  const r = rng(slug); let out = '';
+  for (let i = 0; i < n; i++) {
+    const c = GEMC[(r() * GEMC.length) | 0], s = 14 + r() * 30;
+    out += '<i class="gem" style="left:' + (r() * 96 + 2) + '%;top:' + (r() * (h - 14) + 6) + '%;width:' + s + 'px;height:' + s + 'px;background:' + c + ';box-shadow:0 0 ' + (s * 1.4) + 'px ' + c + '"></i>';
+  }
+  for (let i = 0; i < Math.min(7, n / 6 | 0); i++) {
+    const v = ['4.6B','907M','21.2B','1.58T','CRIT! 5.6B','688M','12.4B'][i];
+    out += '<em class="dmg" style="left:' + (r() * 70 + 8) + '%;top:' + (r() * 34 + 5) + '%;font-size:' + (26 + r() * 26) + 'px">' + v + '</em>';
+  }
+  out += '<i class="ring" style="left:18%;top:' + (h * 0.55) + '%;--rc:' + hue + '"></i><i class="ring" style="left:64%;top:' + (h * 0.3) + '%;--rc:' + hue + '"></i>';
+  return out;
+}
+function hud(c){ return '<div class="hud"><span class="pill" style="border-color:' + c.hue + ';color:' + c.hue + '">LVL ' + c.lvl + '</span><span class="score"><i>⚡ ' + (c.slab || 'SHIP SCORE') + '</i><b>' + c.score + '</b></span><span class="zn">' + c.zone + '</span></div>'; }
 function foot(){ return '<div class="foot"><span class="l">▸ PLAY FREE · LOOTFLEET.COM</span><span class="r">browser · no download</span></div>'; }
 function render(c){
+  if (c.type === 'action') return '<div class="card act" id="c-' + c.slug + '">' + scene(c.slug, c.hue, 46, 72) +
+    '<img class="act-ship" src="../ships/' + c.art + '" alt="" onerror="this.style.visibility=\'hidden\'">' +
+    '<div class="wrap act-wrap">' + hud(c) +
+    '<div class="act-big" style="text-shadow:0 0 60px ' + c.hue + '66">' + c.big + '</div>' +
+    '<div class="act-tag"><i style="background:' + c.hue + '"></i>' + c.tag + '</div>' + foot() + '</div></div>';
+  if (c.type === 'feature') return '<div class="card" id="c-' + c.slug + '"><div class="glow" style="--ac:' + c.hue + '"></div><div class="wrap">' +
+    '<div class="kick" style="color:' + c.hue + '">' + c.n + ' — ' + c.lab + '</div><h1>' + c.h1 + '</h1><div class="sub">' + c.sub + '</div>' +
+    '<div class="feat-rows">' + c.rows.map((r) => '<div class="frow"><span class="fd" style="color:' + c.hue + ';border-color:' + c.hue + '44">◆</span><div><b>' + r.n + '</b><p>' + r.t + '</p></div></div>').join('') + '</div>' +
+    '<div class="fstats">' + c.stats.map((s) => '<div class="fst"><b style="color:' + c.hue + '">' + s.v + '</b><span>' + s.k + '</span></div>').join('') + '</div>' +
+    '<div class="fscene">' + scene(c.slug, c.hue, 22, 88) + '<img class="fs-ship" src="../ships/' + c.art + '" alt="" onerror="this.style.visibility=\'hidden\'"></div>' +
+    foot() + '</div></div>';
   if (c.type === 'list') return '<div class="card" id="c-' + c.slug + '"><div class="wrap">' +
     '<div class="kick">LOOT FLEET · ' + c.kick + '</div><h1>' + c.h1 + '</h1><div class="sub">' + c.sub + '</div>' +
     '<div class="rows">' + c.rows.map((r) => '<div class="row"><div class="chip" style="color:' + r.c + '">' + r.ic + '</div><b style="color:' + r.c + '">' + r.n + '</b><p>' + r.t + '</p></div>').join('') + '</div>' + foot() + '</div></div>';
@@ -57,10 +114,10 @@ function render(c){
     '<div class="kick">LOOT FLEET · ' + c.kick + '</div><div class="big">' + c.big + '</div>' +
     '<div class="fact">' + c.fact + '</div><div class="small">' + c.small + '</div>' + foot() + '</div></div>';
 }
-fetch('batch-01.json').then((r) => r.json()).then((b) => {
+fetch('batch-' + (new URLSearchParams(location.search).get('b') || '02') + '.json').then((r) => r.json()).then((b) => {
   const q = new URLSearchParams(location.search), one = q.get('slug');
   const cards = one ? b.cards.filter((c) => c.slug === one) : b.cards;
-  document.getElementById('idx').textContent = one ? '' : 'BATCH 01 · ' + b.cards.length + ' cards · each 1080×1350 · snapshot ids: ' + b.cards.map((c) => '#c-' + c.slug).join('  ');
+  document.getElementById('idx').textContent = one ? '' : (q.get('b') ? 'BATCH ' + q.get('b') : 'BATCH 01') + ' · ' + b.cards.length + ' cards · each 1080×1350 · snapshot ids: ' + b.cards.map((c) => '#c-' + c.slug).join('  ');
   document.getElementById('stage').innerHTML = cards.map(render).join('');
 });
 </script>

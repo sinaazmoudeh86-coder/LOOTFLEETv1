@@ -64,6 +64,28 @@ h1{font:900 62px/1.04 'Orbitron';letter-spacing:.01em;margin:16px 0 8px}
 .fst span{font:700 20px 'Rajdhani';letter-spacing:.1em;color:#7f8fb0;text-transform:uppercase}
 .fscene{position:relative;flex:1;min-height:220px;border:1px solid #223052;border-radius:22px;overflow:hidden;background:radial-gradient(120% 140% at 50% 0%,#0d1730,#05080f 70%)}
 .fs-ship{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);max-height:170px;max-width:340px;object-fit:contain;filter:drop-shadow(0 16px 34px rgba(90,160,255,.45))}
+/* ---- DOSSIER cards (one per hull) ---- */
+.dos-ship{top:36%;max-width:640px;max-height:520px}
+.dos-name{position:relative;font:900 84px/1.02 'Orbitron';margin-bottom:18px}
+.dos-envy{position:relative;font:800 40px/1.1 'Orbitron';letter-spacing:.02em;margin-bottom:30px}
+.dos-earn{position:relative;display:flex;flex-direction:column;gap:8px;border:1px solid #223052;border-left:4px solid #f2a93c;border-radius:14px;padding:20px 26px;background:rgba(5,8,16,.8);margin-bottom:6px}
+.dos-earn i{font:800 19px 'Orbitron';font-style:normal;letter-spacing:.2em;color:#f2a93c}
+.dos-earn b{font:700 30px/1.2 'Rajdhani';color:#dfe8f5}
+.dos-stamp{position:absolute;left:50%;top:37%;transform:translate(-50%,-50%) rotate(-14deg);font:900 92px 'Orbitron';letter-spacing:.14em;color:#ff6b78;border:6px solid #ff6b78;border-radius:18px;padding:10px 38px;opacity:.85;z-index:3;background:rgba(4,6,13,.35)}
+/* ---- HULL FILE cards (batch 03 — the full roster) ---- */
+.hf-top{display:flex;justify-content:space-between;align-items:center}
+.hf-fam{font:800 22px 'Orbitron';letter-spacing:.18em;padding:12px 24px;border:1px solid;border-radius:12px;background:rgba(5,8,16,.6)}
+.hf-name{font:900 74px/1.02 'Orbitron';margin:26px 0 10px;text-align:center}
+.hf-tag{font:800 27px 'Orbitron';letter-spacing:.24em;text-align:center}
+.hf-rar{display:flex;gap:9px;justify-content:center;align-items:center;margin:20px 0 0}
+.hf-rar i{width:20px;height:20px;transform:rotate(45deg);border-radius:3px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.05)}
+.hf-rar span{font:700 19px 'Rajdhani';letter-spacing:.14em;color:#7f8fb0;margin-right:10px}
+.hf-art{max-height:400px;max-width:760px;object-fit:contain;margin:26px auto 6px;display:block}
+.hf-pitch{font:700 29px/1.32 'Rajdhani';color:#c3d0e6;text-align:center;max-width:850px;margin:12px auto 0}
+.hf-earn{margin:30px 0 0;border:1px solid;border-radius:16px;padding:20px 30px;background:rgba(5,8,16,.55)}
+.hf-earn i{display:block;font:800 18px 'Orbitron';font-style:normal;letter-spacing:.26em;margin-bottom:8px}
+.hf-earn p{font:700 26px/1.25 'Rajdhani';color:#e6edf9}
+.hf-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:26px 0 30px}
 #idx{max-width:1140px;margin:30px auto;padding:0 20px;font:700 16px 'Rajdhani';color:#8fa3bd}
 </style></head>
 <body>
@@ -74,13 +96,13 @@ const esc = (s) => String(s);
 // deterministic per-slug PRNG so action scenes render identically every snapshot
 function rng(seed){ let h = 2166136261; for (const ch of seed) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return () => { h = Math.imul(h ^ (h >>> 15), 2246822519); h = Math.imul(h ^ (h >>> 13), 3266489917); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
 const GEMC = ['#5ad0ff','#c09aff','#ff9a5a','#5affd7','#ff6be0','#7ce0a0','#ffd24d','#ff6b78'];
-function scene(slug, hue, n, h){
+function scene(slug, hue, n, h, noDmg){
   const r = rng(slug); let out = '';
   for (let i = 0; i < n; i++) {
     const c = GEMC[(r() * GEMC.length) | 0], s = 14 + r() * 30;
     out += '<i class="gem" style="left:' + (r() * 96 + 2) + '%;top:' + (r() * (h - 14) + 6) + '%;width:' + s + 'px;height:' + s + 'px;background:' + c + ';box-shadow:0 0 ' + (s * 1.4) + 'px ' + c + '"></i>';
   }
-  for (let i = 0; i < Math.min(7, n / 6 | 0); i++) {
+  if (!noDmg) for (let i = 0; i < Math.min(7, n / 6 | 0); i++) {
     const v = ['4.6B','907M','21.2B','1.58T','CRIT! 5.6B','688M','12.4B'][i];
     out += '<em class="dmg" style="left:' + (r() * 70 + 8) + '%;top:' + (r() * 34 + 5) + '%;font-size:' + (26 + r() * 26) + 'px">' + v + '</em>';
   }
@@ -90,6 +112,24 @@ function scene(slug, hue, n, h){
 function hud(c){ return '<div class="hud"><span class="pill" style="border-color:' + c.hue + ';color:' + c.hue + '">LVL ' + c.lvl + '</span><span class="score"><i>⚡ ' + (c.slab || 'SHIP SCORE') + '</i><b>' + c.score + '</b></span><span class="zn">' + c.zone + '</span></div>'; }
 function foot(){ return '<div class="foot"><span class="l">▸ PLAY FREE · LOOTFLEET.COM</span><span class="r">browser · no download</span></div>'; }
 function render(c){
+  if (c.type === 'dossier') return '<div class="card act dos" id="c-' + c.slug + '">' + scene(c.slug, c.hue, 36, 66, true) +
+    '<img class="act-ship dos-ship" src="../ships/' + c.art + '" alt="" style="filter:drop-shadow(0 30px 90px ' + c.hue + '55) drop-shadow(0 0 34px ' + c.hue + '40)' + (c.classified ? ' brightness(.32) contrast(1.15)' : '') + '" onerror="this.style.visibility=\'hidden\'">' +
+    (c.classified ? '<div class="dos-stamp">CLASSIFIED</div>' : '') +
+    '<div class="wrap act-wrap">' +
+    '<div class="hud"><span class="pill" style="border-color:' + c.hue + ';color:' + c.hue + '">' + c.tag + '</span><span class="zn">HULL DOSSIER · ' + c.n + '</span></div>' +
+    '<div class="dos-name" style="text-shadow:0 0 60px ' + c.hue + '66">' + c.name + '</div>' +
+    '<div class="dos-envy" style="color:' + c.hue + '">' + c.envy + '</div>' +
+    '<div class="dos-earn"><i>⬢ HOW IT’S EARNED</i><b>' + c.earn + '</b></div>' + foot() + '</div></div>';
+  if (c.type === 'hull') { const pad = String(c.i).padStart(2, '0');
+    return '<div class="card" id="c-' + c.slug + '"><div class="glow" style="--ac:' + c.c + ';opacity:.13"></div><div class="wrap">' +
+    '<div class="hf-top"><span class="kick">HULL FILE ' + pad + ' / ' + c.of + '</span><span class="hf-fam" style="color:' + c.c + ';border-color:' + c.c + '55">' + c.tag + '</span></div>' +
+    '<div class="hf-name">' + c.name.toUpperCase() + '</div>' +
+    '<div class="hf-rar"><span>GALACTIC RARITY</span>' + Array.from({length:10},(x,j)=>'<i style="' + (j < c.rar ? 'background:' + c.c + ';border-color:' + c.c + ';box-shadow:0 0 12px ' + c.c : '') + '"></i>').join('') + '</div>' +
+    '<img class="hf-art" src="../ships/' + c.art + '" alt="" style="filter:drop-shadow(0 30px 64px ' + c.c + '59)" onerror="this.style.visibility=\'hidden\'">' +
+    '<div class="hf-pitch">' + c.pitch + '</div>' +
+    '<div class="hf-earn" style="border-color:' + c.c + '55"><i style="color:' + c.c + '">⛓ HOW IT’S EARNED</i><p>' + c.earn + '</p></div>' +
+    '<div class="stats hf-stats">' + c.stats.map((s) => '<div class="st"><b style="color:' + c.c + '">' + s.v + '</b><span>' + s.k + '</span></div>').join('') + '</div>' +
+    foot() + '</div></div>'; }
   if (c.type === 'action') return '<div class="card act" id="c-' + c.slug + '">' + scene(c.slug, c.hue, 46, 72) +
     '<img class="act-ship" src="../ships/' + c.art + '" alt="" onerror="this.style.visibility=\'hidden\'">' +
     '<div class="wrap act-wrap">' + hud(c) +
@@ -114,7 +154,7 @@ function render(c){
     '<div class="kick">LOOT FLEET · ' + c.kick + '</div><div class="big">' + c.big + '</div>' +
     '<div class="fact">' + c.fact + '</div><div class="small">' + c.small + '</div>' + foot() + '</div></div>';
 }
-fetch('batch-' + (new URLSearchParams(location.search).get('b') || '02') + '.json').then((r) => r.json()).then((b) => {
+fetch('batch-' + (new URLSearchParams(location.search).get('b') || '03') + '.json').then((r) => r.json()).then((b) => {
   const q = new URLSearchParams(location.search), one = q.get('slug');
   const cards = one ? b.cards.filter((c) => c.slug === one) : b.cards;
   document.getElementById('idx').textContent = one ? '' : (q.get('b') ? 'BATCH ' + q.get('b') : 'BATCH 01') + ' · ' + b.cards.length + ' cards · each 1080×1350 · snapshot ids: ' + b.cards.map((c) => '#c-' + c.slug).join('  ');

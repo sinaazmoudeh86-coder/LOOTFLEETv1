@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 660 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v229 · build 661 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v660`.
-**Login screen reads `BUILD 660`.**
+Supersedes v228. Service worker cache is `lootfleet-v661`.
+**Login screen reads `BUILD 661`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -13,7 +13,29 @@ Supersedes v228. Service worker cache is `lootfleet-v660`.
 
 Everything else is client-side. No reset, no save migration.
 
-Carries builds 583–660.
+Carries builds 583–661.
+
+### What changed in 661
+
+- **GAME SPEED IS HONEST AGAIN — the recurring "AI broke the speed" regression,
+  fixed at the root.** A 2m30s Voidmaw run was finishing in 1m18s at 5x. Two
+  separate places were throwing sim time away: `dt` was clamped to 50ms (so a
+  phone holding 12fps simulated 0.25s per 0.083s frame = 3x, not 5x), and the
+  sub-step CEILING (3 or 6) capped it a second time. The 651 "debt bank" did not
+  help — it only repaid on a frame FASTER than the cap, and under sustained load
+  there is no such frame, so the debt pinned at its ceiling and the overrun was
+  deleted regardless. There is no bookkeeping now: the frame's REAL elapsed time
+  is always simulated, sub-steps absorb it (ceiling 16, so long frames stay
+  granular), and the only bound is a genuine 0.25s stall boundary that
+  `computeOffline()` already owns. 5x now means 5x at any frame rate.
+- **Voidmaw black holes and their red telegraph are visible again.** The wells
+  painted BEFORE the flagship, so on a capital hull — the Voidmaw draws at 2.8x —
+  the ship's own aura covered them completely. Hazards now draw in a pass ABOVE
+  the whole fleet: anything you have to read and avoid is painted last.
+- **Capital-hull auras no longer glare over the arena.** Halo radius keyed off the
+  hull footprint (651) so big sprites keep their glow clear of the art, but it was
+  unbounded — at 2.8-5.2x it grew into screen-filling light. Bounded at 96px local
+  radius, with the prism halo's bloom scaled back to match.
 
 ### What changed in 660
 
@@ -150,7 +172,7 @@ Carries builds 583–660.
 
 ## ⚠ TOUR OF DUTY IS DARK IN THIS RELEASE
 
-The season pass is LIVE for every player from Level 1 as of build 660 — no gate,
+The season pass is LIVE for every player from Level 1 as of build 661 — no gate,
 no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ---
@@ -159,10 +181,10 @@ no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 | Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `660` |
-| Update beacon | `version.json` → `build` | `660` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v660` |
-| Project root beacon | root `version.json` (source tree) | `660` |
+| Client constant | `game.html` → `window.LF_BUILD` | `661` |
+| Update beacon | `version.json` → `build` | `661` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v661` |
+| Project root beacon | root `version.json` (source tree) | `661` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1952,7 +1974,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 660**.
+1. Login screen reads **BUILD 661**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

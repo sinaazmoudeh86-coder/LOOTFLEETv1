@@ -2277,14 +2277,19 @@
     // The overrun is now BANKED as debt and paid back over following frames, so
     // the simulation keeps real time. Bounded at 1.5s (a longer gap is a
     // background stall, and computeOffline() owns that time, not this loop).
-    const FRAME_CAP = 0.05;
-    if (dt > FRAME_CAP) {
-      if (!document.hidden && dt < 1) rt._lag = Math.min(1.5, (rt._lag || 0) + (dt - FRAME_CAP));
-      dt = FRAME_CAP;
-    } else if (rt._lag > 0) {
-      const pay = Math.min(rt._lag, FRAME_CAP - dt);
-      rt._lag -= pay; dt += pay;
-    }
+    // SIMULATE THE TIME THAT ACTUALLY PASSED. Every previous attempt at this
+    // clamped dt to 50ms, which silently DELETED the overrun: a 5x run on a phone
+    // holding 12fps got 0.05 x 5 = 0.25s of sim per 0.083s frame = 3x, not 5x, and
+    // a 2m30s Voidmaw run took 1m18s instead of 30s. The "debt bank" that replaced
+    // the clamp was no better — it only repaid on a frame FASTER than the cap, and
+    // under sustained load there is no such frame, so the debt pinned at its
+    // ceiling and the rest was lost anyway.
+    //
+    // There is no bookkeeping now. The frame's real elapsed time is simulated in
+    // full; sdt below absorbs it by taking more (or coarser) sub-steps. The only
+    // bound is a genuine STALL boundary: past 0.25s the gap is a backgrounded tab
+    // or a GC pause, and computeOffline() owns that time, not this loop.
+    if (dt > 0.25) dt = 0.25;
     // ADAPTIVE TIME-SCALE — simulate gameSpeed× time in as FEW sub-steps as
     // stability allows (each ≤ 50ms of sim time) instead of gameSpeed FULL
     // update passes per frame. 4×/5×/10× used to run 4/5/10 whole sim passes
@@ -2321,7 +2326,13 @@
     // whatever the frame time says. cargo-run.js governs the CONTENT of the run
     // from the same measurement (see GOV there); this governs the SIMULATION.
     const cg = !!(rt.cgrun && rt.cgrun.active);
-    const steps = Math.min((slow || cg) ? 3 : 6, Math.max(1, Math.ceil(total / ((slow || cg) ? 0.06 : 0.035))));
+    // STEP COUNT IS A SMOOTHNESS CHOICE, NEVER A TIME BUDGET. sdt = total/steps, so
+    // the full frame is always simulated whatever the ceiling is — a low ceiling
+    // just means coarser sub-steps, not a slower game. The ceiling rises to 16 so
+    // a genuinely long frame stays granular rather than resolving in one huge leap
+    // (which is what breaks homing and collision at 10x).
+    const budget = (slow || cg) ? 0.06 : 0.035;
+    const steps = Math.max(1, Math.min(16, Math.ceil(total / budget)));
     const sdt = total / steps;
     for (let i = 0; i < steps; i++) { rt.time += sdt; state.playTime += sdt; update(sdt); }
     // ...and the escort's own tick, once, with the whole frame's sim time.
@@ -2876,8 +2887,9 @@
     R.drawArena(ctx, rt.worldW, rt.worldH, rt.time, state.currentDungeon);
     // VOID ZONE — black-hole arena dressing under everything else
     if (state.currentSystem) { try { drawVoidArena(ctx); } catch (e) {} }
-    // VOIDMAW SINGULARITIES — collapsing wells beneath stunned targets
-    if (rt.holes && rt.holes.length) { try { drawSingularities(ctx); } catch (e) {} }
+    // (Voidmaw singularities are drawn LATER, above the player — see the hazard
+    // pass after drawArcher. A well hidden under the flagship's own aura is not a
+    // readable hazard.)
     // ✦ EVENT HORIZON LANCE — alignment line, the beam, and its fracture lanes
     try { drawLance(ctx); } catch (e) {}
     // ✦ ETERNUM DEATH BEAMS — continuous locks on the nearest hostiles
@@ -2925,6 +2937,12 @@
     R.drawArcher(ctx, rt.archer.x, rt.archer.y, 1.5, rt.archer, state.equipped, rt.time);
     for (const dr of rt.drones) R.drawDrone(ctx, dr.x, dr.y, rt.time, dr.face, dr.flash);
     try { if (window.FIGHTERS) window.FIGHTERS.draw(ctx); } catch (e) {}
+    // ---- HAZARD PASS — ALWAYS ABOVE THE FLEET --------------------------------
+    // Anything the player has to READ AND AVOID draws last. The Voidmaw's wells
+    // used to paint under the archer, and on a capital hull (Voidmaw is drawn at
+    // 2.8x) the ship's own aura covered them completely: the black holes and the
+    // red telegraph marking where they are about to collapse both disappeared.
+    if (rt.holes && rt.holes.length) { try { drawSingularities(ctx); } catch (e) {} }
     for (const p of rt.projectiles) R.drawArrow(ctx, p);
     for (const b of rt.ebolts) R.drawEnemyBolt(ctx, b);
     for (const f of rt.floats) R.drawFloat(ctx, f);

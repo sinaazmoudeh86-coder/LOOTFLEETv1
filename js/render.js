@@ -1350,7 +1350,10 @@
     // a Dreadnaught-class sprite — drawn 2-3x larger by shipScaleOf — the ring sat
     // INSIDE the artwork and the aura simply vanished. Radii now take the larger of
     // the tier figure and the hull's real footprint.
-    const _hullR = ((42 + tier * 3) * shipScaleOf(activeShipKey())) * 0.5;
+    // Bounded at 96px of local radius: past that the halo is no longer reading
+    // "this ship is buffed", it is hiding the arena. Capital hulls keep a halo
+    // clear of their art without glaring over the hazards around them.
+    const _hullR = Math.min(96, ((42 + tier * 3) * shipScaleOf(activeShipKey())) * 0.5);
     const facing = (archer.facing != null ? archer.facing : -Math.PI/2);
     const muzzle = archer.muzzle || 0, recoil = archer.recoil || 0;
     const bob = Math.sin((archer.bob || t*3)) * 1.0;
@@ -1370,8 +1373,8 @@
 
     // PRISM AURA — significant prismatic halo when this hull carries a Prism Core
     if (shipHasPrism(activeShipKey())) {
-      const pr = Math.max(30 + tier * 4, _hullR * 1.34);
-      drawPrismAura(ctx, t, pr, Math.min(2.2, Math.max(1, pr / 66)));
+      const pr = Math.max(30 + tier * 4, _hullR * 1.22);
+      drawPrismAura(ctx, t, pr, Math.min(1.6, Math.max(1, pr / 78)));
     }
     // VERIDIAN RESONANCE AURA — the damage field made visible: a breathing
     // verdant ring at the aura's true radius (world-space, so drawn unscaled

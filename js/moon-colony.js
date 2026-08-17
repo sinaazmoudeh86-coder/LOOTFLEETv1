@@ -106,6 +106,7 @@
     // Everything render() reads is normalised here, once, before it is read.
     const root = s.moon;
     if (!Array.isArray(root.moons) || !root.moons.length) root.moons = [newColony()];
+    restoreWipedColonies(root);
     const CURK = ['gold', 'fuel', 'iron', 'plasma', 'prism'];
     for (let i = 0; i < root.moons.length; i++) {
       let m = root.moons[i];
@@ -131,6 +132,116 @@
     if (!isFinite(root.perm)) root.perm = 0;
     return s.moon;
   }
+  // ---- COLONY RESTITUTION -----------------------------------------------------
+  // mergeSaves() folded building OBJECTS with `Math.max(x | 0, y | 0)`, and
+  // `{kind,lv} | 0` is 0 — so one conflicted login turned every structure in every
+  // colony into the number 0. The merge is fixed (account.js), but saves already
+  // written carry the damage, so it has to be undone here.
+  //
+  // TWO TIERS, best evidence first:
+  //
+  //   1 · REAL RECOVERY. account.js stashes the untouched cloud copy at
+  //       `lf-backup::<uid>` before every merge. If it still holds intact building
+  //       objects, that IS the player's colony — restore it slot for slot.
+  //
+  //   2 · RECONSTRUCTION, when no snapshot survives. The signature is unambiguous:
+  //       a numeric entry in `b`, or a colony that has terraformed past sector 1
+  //       with nothing built (nobody spends millions terraforming and builds
+  //       nothing). Those colonies are refilled — every slot of every unlocked
+  //       sector, weighted to that moon's own deposits, plus a defense tower per
+  //       sector so the rebuild is not raided flat before they see it.
+  //
+  //       Level is derived from terraform depth, the one development signal that
+  //       survived the corruption intact: reaching sector 5 costs millions, so a
+  //       deep colony is restored deep. It is a floor, not an exact replay — a
+  //       maxed colony gets back less than it lost, and that is stated in the mail.
+  //
+  // Runs at most once per moon (`_rst`), so it can never inflate a colony twice.
+  function restoreWipedColonies(root) {
+    let snap = null;
+    try {
+      const uid = window.ACCOUNT && window.ACCOUNT.uid && window.ACCOUNT.uid();
+      if (uid) { const raw = localStorage.getItem('lf-backup::' + uid); if (raw) snap = JSON.parse(raw); }
+    } catch (e) {}
+    const snapMoons = (snap && snap.moon && Array.isArray(snap.moon.moons)) ? snap.moon.moons : null;
+    let fixed = 0, recovered = 0, rebuilt = 0;
+
+    root.moons.forEach((m, i) => {
+      if (!m || typeof m !== 'object' || m._rst) return;
+      if (!Array.isArray(m.log)) m.log = [];        // logAdd runs below, before normalisation
+      const bmap = (m.b && typeof m.b === 'object') ? m.b : (m.b = {});
+      // corruption signature
+      let corrupt = 0, intact = 0;
+      Object.keys(bmap).forEach((k) => {
+        const bd = bmap[k];
+        if (!bd || typeof bd !== 'object' || !bd.kind || !B[bd.kind]) corrupt++; else intact++;
+      });
+      const orphanSectors = (m.sectors | 0) > 1 && intact === 0;
+      if (!corrupt && !orphanSectors) return;         // this colony is fine
+
+      // 1 · the pre-merge snapshot
+      const sm = snapMoons && snapMoons[i];
+      if (sm && sm.b && typeof sm.b === 'object') {
+        Object.keys(sm.b).forEach((k) => {
+          const o = sm.b[k];
+          if (!o || typeof o !== 'object' || !o.kind || !B[o.kind]) return;
+          const cur = bmap[k];
+          if (!cur || typeof cur !== 'object' || !cur.kind) { bmap[k] = { kind: o.kind, lv: Math.max(1, o.lv | 0) }; recovered++; }
+        });
+      }
+      // drop whatever is still junk — it has no `kind`, so there is nothing to save
+      Object.keys(bmap).forEach((k) => {
+        const bd = bmap[k];
+        if (!bd || typeof bd !== 'object' || !bd.kind || !B[bd.kind]) delete bmap[k];
+      });
+
+      // 2 · reconstruction for anything the snapshot could not cover
+      const secs = Math.max(1, Math.min(SECTORS.length, m.sectors | 0));
+      const lvl = Math.max(1, Math.min(20, 1 + (secs - 1) * 4));   // s1→1, s6→21 capped 20
+      const bias = (MOONCAT[i] || MOONCAT[0] || {}).bias || {};
+      // the moon's best deposit leads; a tower holds the sector. PRISM EXTRACTORS ARE
+      // EXCLUDED — at 800k gold apiece, handing them out at a reconstructed level
+      // would pay far more than the fault cost anyone.
+      const mines = Object.keys(B).filter((k) => B[k].cat === 'mine' && k !== 'prismex')
+        .sort((a, b) => ((bias[B[b].out] || 1) - (bias[B[a].out] || 1)));
+      const tower = Object.keys(B).filter((k) => B[k].cat === 'defense')[0];
+      for (let sec = 0; sec < secs; sec++) {
+        const sd = SECTORS[sec]; if (!sd) continue;
+        for (let j = 0; j < sd.slots; j++) {
+          const key = sec + ':' + j;
+          if (bmap[key]) continue;                     // recovered or never lost
+          const wantTower = j === sd.slots - 1 && tower && (B[tower].minSector || 0) <= sec;
+          const pick = wantTower ? tower
+            : mines.filter((k) => (B[k].minSector || 0) <= sec)[j % Math.max(1, mines.filter((k) => (B[k].minSector || 0) <= sec).length)];
+          if (!pick) continue;
+          bmap[key] = { kind: pick, lv: lvl };
+          rebuilt++;
+        }
+      }
+      m._rst = 1; fixed++;
+      logAdd(m, '🛠 COLONY RESTORED — structures lost to a save-merge fault have been rebuilt.');
+    });
+
+    if (!fixed) return;
+    try { G.save(); } catch (e) {}
+    // Tell them, once, in plain terms — a colony that changes shape without
+    // explanation is worse than one that is missing.
+    try {
+      if (window.MAIL && window.MAIL.push) {
+        window.MAIL.push({
+          from: 'Colonial Authority',
+          subj: '🛠 Your moon colony has been restored',
+          body: '<p>A fault in how saves merged between devices corrupted moon colony ' +
+            'structures. It has been fixed, and your ' + (fixed === 1 ? 'colony' : fixed + ' colonies') + ' rebuilt.</p>' +
+            (recovered ? '<p><b>' + recovered + ' structure' + (recovered === 1 ? '' : 's') + '</b> were recovered from your last good backup at their real levels.</p>' : '') +
+            (rebuilt ? '<p><b>' + rebuilt + ' structure' + (rebuilt === 1 ? '' : 's') + '</b> could not be read back and were reconstructed, scaled to how far you had terraformed. ' +
+              'If your colony was further along than what you see, this is a floor rather than an exact restore — and we are sorry for the shortfall.</p>' : '') +
+            '<p>Nothing you build from here is at risk from this fault again.</p>',
+        });
+      }
+    } catch (e) {}
+  }
+
   const cm = (root) => root.moons[root.cur];
   function logAdd(mm, txt) { mm.log.unshift({ t: Date.now(), txt }); if (mm.log.length > 12) mm.log.length = 12; }
 

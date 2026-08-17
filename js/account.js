@@ -667,8 +667,23 @@
         const bm = base.moon.moons[i];
         if (!bm) { base.moon.moons[i] = om; return; }
         bm.sectors = Math.max(bm.sectors | 0, om.sectors | 0);
+        // A BUILDING IS AN OBJECT — { kind, lv, dmg? } — NOT A LEVEL NUMBER.
+        // This line used to read `Math.max(bb[k] | 0, ob[k] | 0)`, and `{...} | 0`
+        // is 0, so EVERY building in EVERY colony became the number 0 on any
+        // conflicted login. That is both Moon Colony bug reports from one line:
+        // before build 653 a numeric entry threw inside render() (B[undefined].ic)
+        // and the screen went blank; after 653 the shape-repair pass correctly
+        // deleted the junk, which turned the blank screen into a wiped colony.
+        // Merge the OBJECTS: keep the higher level, never lose `kind`, and treat
+        // repaired-in-either-copy as repaired.
         const bb = bm.b = bm.b || {}, ob = om.b || {};
-        for (const k in ob) bb[k] = Math.max(bb[k] | 0, ob[k] | 0);
+        for (const k in ob) {
+          const o = ob[k]; if (!o || typeof o !== 'object' || !o.kind) continue;
+          const b = bb[k];
+          if (!b || typeof b !== 'object' || !b.kind) { bb[k] = o; continue; }
+          if ((o.lv | 0) > (b.lv | 0)) b.lv = o.lv | 0;
+          if (!o.dmg) delete b.dmg;                 // fixed on either device = fixed
+        }
       });
       if (other.moon.lifetime) {
         base.moon.lifetime = base.moon.lifetime || {};

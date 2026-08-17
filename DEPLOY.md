@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 661 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v229 · build 662 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v661`.
-**Login screen reads `BUILD 661`.**
+Supersedes v228. Service worker cache is `lootfleet-v662`.
+**Login screen reads `BUILD 662`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -13,7 +13,30 @@ Supersedes v228. Service worker cache is `lootfleet-v661`.
 
 Everything else is client-side. No reset, no save migration.
 
-Carries builds 583–661.
+Carries builds 583–662.
+
+### What changed in 662
+
+- **MOON COLONY WAS BEING WIPED BY ONE LINE IN THE SAVE MERGE, AND PLAYERS ARE
+  GETTING THEIR COLONIES BACK.** `mergeSaves()` folded each colony's building map
+  with `Math.max(bb[k] | 0, ob[k] | 0)` — but a building is an OBJECT,
+  `{ kind, lv }`, and `{...} | 0` is `0`. Every structure in every colony became
+  the number zero on any conflicted login. **This is both Moon Colony reports from
+  a single line:** before build 653 a numeric entry threw inside render()
+  (`B[undefined].ic`) and the screen went blank; 653's shape-repair pass then
+  correctly deleted the junk, which converted the blank screen into a wiped colony.
+  The merge now folds the objects — higher level wins, `kind` is never lost, and a
+  building repaired on either device counts as repaired.
+- **Restitution, two tiers, at most once per colony.** `account.js` stashes the
+  untouched cloud copy at `lf-backup::<uid>` before every merge, so where that
+  snapshot survives the real colony is restored **slot for slot at its true
+  levels**. Where it does not, the colony is reconstructed: every slot of every
+  unlocked sector, weighted to that moon's own deposits, one defense tower per
+  sector so the rebuild is not immediately raided flat, at a level derived from
+  terraform depth (the one development signal the corruption left intact — sector 6
+  costs millions, so a deep colony is restored deep). Prism Extractors are excluded
+  at 800k gold apiece. It is an honest floor, not an exact replay, and the in-game
+  mail says so plainly rather than pretending nothing happened.
 
 ### What changed in 661
 
@@ -172,7 +195,7 @@ Carries builds 583–661.
 
 ## ⚠ TOUR OF DUTY IS DARK IN THIS RELEASE
 
-The season pass is LIVE for every player from Level 1 as of build 661 — no gate,
+The season pass is LIVE for every player from Level 1 as of build 662 — no gate,
 no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ---
@@ -181,10 +204,10 @@ no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 | Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `661` |
-| Update beacon | `version.json` → `build` | `661` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v661` |
-| Project root beacon | root `version.json` (source tree) | `661` |
+| Client constant | `game.html` → `window.LF_BUILD` | `662` |
+| Update beacon | `version.json` → `build` | `662` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v662` |
+| Project root beacon | root `version.json` (source tree) | `662` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1974,7 +1997,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 661**.
+1. Login screen reads **BUILD 662**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

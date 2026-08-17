@@ -53,12 +53,37 @@
   // Re-resolved on a timer, not per frame: shipSlots() allocates and
   // weaponClassOf() hashes, and a fitting change 0.4s late is imperceptible.
   let _cacheT = 0, _shipKey = '', _cap = 0, _armed = 0, _range = 0;
-  const _rig = [];   // one entry per BAY: { item, sp } or null when the bay is empty
+  const _rig = [];   // one entry per BAY across every wing: { item, sp } or null when empty
+  // ---- ONE WING PER CARRIER IN THE FLEET -----------------------------------
+  // A wing used to belong to the flagship alone — capacity, bays and rig all read
+  // `state.ship` — so a Corvus sitting in the FLEET fed its stat lines into the
+  // hull total and then flew nothing. Eleven bays of visible hardware, no craft on
+  // screen. Every carrier in the fleet now launches, from its own hull position,
+  // out of its OWN stowed fittings.
+  //
+  // THEIR STRIKES ARE PAID AT THE FLEET SHARE. An escort's hull mods and stowed
+  // gear already reach `rt.stats` at `C.FLEET.statShare`, so a full-price escort
+  // wing would be the same hardware counted twice over. The share is what keeps an
+  // escort carrier worth fielding without letting a bench of them out-damage the
+  // hull actually being flown.
+  const _wings = [];   // { key, flag, share, cap, armed, range, at } — `at` = first bay index in _rig
+  let _sig = '';
   let _stamp = 0;
   const _targets = [];
   const _pk = { target: null, damage: 0, crit: false, x: 0, y: 0, angle: 0 };
 
-  function capacityOf(h) { const s = h.C.SHIP_BY_KEY[h.state.ship]; return (s && s.fighterCapacity) | 0; }
+  function capacityOf(h, key) { const s = h.C.SHIP_BY_KEY[key || h.state.ship]; return (s && s.fighterCapacity) | 0; }
+
+  // Where a wing launches from. The flagship is the archer; an escort is its own
+  // marker in `rt.escorts`, which updateEscorts() positions each frame. Falls back
+  // to the archer for the one frame before escorts are first placed.
+  function hostPos(h, w) {
+    const a = h.rt.archer;
+    if (w.flag) return a;
+    const es = h.rt.escorts;
+    if (es) for (let i = 0; i < es.length; i++) if (es[i].key === w.key) return es[i];
+    return a;
+  }
 
   // DERIVED, NOT CONFIGURED. `CONFIG.FIGHTER.dpsVsCannon` states the intent — a
   // reference wing does N× a cannon hull's base DPS — and the per-strike share falls out
@@ -95,24 +120,42 @@
   // concat, and a fitting change landing 0.4s late is imperceptible.
   function refresh(h, dt) {
     _cacheT -= dt;
-    if (_cacheT > 0 && h.state.ship === _shipKey) return;
-    _cacheT = 0.4; _shipKey = h.state.ship;
-    _cap = capacityOf(h);
-    _rig.length = _cap; _armed = 0; _range = 0;
-    if (!_cap) return;
-    const eq = h.state.equipped || {}, slots = h.C.shipSlots(h.state.ship);
-    let n = 0;
-    for (let i = 0; i < slots.length && n < _cap; i++) {
-      if (h.C.slotBase(slots[i]) !== 'fighter') continue;
-      const item = eq[slots[i]];
-      if (item) {
-        const sp = specOf(h, item);
-        _rig[n] = { item, sp }; _armed++;
-        if (sp.range > _range) _range = sp.range;   // the envelope is the carrier's, so the longest-reaching bay sets it
-      } else _rig[n] = null;
-      n++;
-    }
-    while (n < _cap) _rig[n++] = null;
+    const sig = h.state.ship + '|' + ((h.state.fleet || []).join(','));
+    if (_cacheT > 0 && sig === _shipKey) return;
+    _cacheT = 0.4; _shipKey = sig;
+    _wings.length = 0; _rig.length = 0; _armed = 0; _range = 0; _cap = 0;
+    const share = (h.C.FLEET && h.C.FLEET.statShare) || 0;
+    // the flagship first, then every escort hull that actually has bays
+    const hulls = [{ key: h.state.ship, flag: true, gear: h.state.equipped || {}, share: 1 }];
+    try {
+      if (h.fleetShips) h.fleetShips().forEach((f) => {
+        if (!capacityOf(h, f.key)) return;
+        hulls.push({ key: f.key, flag: false, share,
+                     gear: (h.state.fittings && h.state.fittings[f.key]) || {} });
+      });
+    } catch (e) {}
+    for (let hi = 0; hi < hulls.length; hi++) {
+      const hu = hulls[hi], cap = capacityOf(h, hu.key);
+      if (!cap) continue;
+      // INDEX INTO `_wings`, NOT INTO `hulls`. Any hull without bays is skipped, so
+      // the two lists diverge the moment a cannon flagship leads the fleet — and a
+      // craft carrying the hulls index then resolves to the WRONG wing: wrong
+      // launch point, wrong damage share.
+      const wi = _wings.length;
+      const w = { key: hu.key, flag: hu.flag, share: hu.share, cap, armed: 0, range: 0, at: _rig.length };
+      const slots = h.C.shipSlots(hu.key);
+      let n = 0;
+      for (let i = 0; i < slots.length && n < cap; i++) {
+        if (h.C.slotBase(slots[i]) !== 'fighter') continue;
+        const item = hu.gear[slots[i]];
+        if (item) {
+          const sp = specOf(h, item);
+          _rig[w.at + n] = { item, sp, wi }; w.armed++;
+          if (sp.range > w.range) w.range = sp.range;   // the envelope is that carrier's own
+        } else _rig[w.at + n] = { empty: 1, sp: null, wi };
+        n++;
+      }
+      while (n < cap) _rig[w.at + n++] = { empty: 1, sp: null, wi };
     // ---- NORMALISE THE WING TO THE ANCHOR, ON THE DPS PRODUCT ------------
     // A craft's contribution is dmg × rate, so the normalisation has to be done on the
     // PRODUCT. Scaling damage alone (642) divided each craft's dmgMul by the wing's mean
@@ -133,24 +176,32 @@
     // so Σ(dmg_i × rate_i) is exactly the anchor for ANY mix of marques and rarities,
     // while w_i still ranks the bays against each other. A marque is now genuinely a
     // shape — the Maul hits hard and slowly, the Swarm often and lightly, and both wings
-    // total the same.
+    // total the same. Done PER WING, so one carrier's loadout never rescales another's.
     {
       const F0 = h.C.FIGHTER, base = baseDmgFrac(F0), rate0 = F0.attackRate || 1;
       let sum = 0, cnt = 0;
-      for (let i = 0; i < _cap; i++) {
-        const e = _rig[i]; if (!e) continue;
+      for (let i = 0; i < cap; i++) {
+        const e = _rig[w.at + i]; if (!e || !e.sp) continue;
         // rate is already F.attackRate × rateMul, so this is the rate ratio
         sum += (e.sp.w || 1) * ((e.sp.rate || rate0) / rate0);
         cnt++;
       }
       const k = sum > 0 ? cnt / sum : 1;
-      for (let i = 0; i < _cap; i++) {
-        const e = _rig[i]; if (!e) continue;
+      for (let i = 0; i < cap; i++) {
+        const e = _rig[w.at + i]; if (!e || !e.sp) continue;
         e.sp.dmg = base * (e.sp.w || 1) * k;
       }
     }
+    _wings.push(w);
+    _armed += w.armed; _cap += cap;
+    if (w.range > _range) _range = w.range;
+    }
     const list = h.rt.fighters;
-    if (list) for (let i = 0; i < list.length; i++) list[i].sp = _rig[i] ? _rig[i].sp : null;
+    if (list) for (let i = 0; i < list.length; i++) {
+      const e = _rig[i];
+      list[i].sp = e ? e.sp : null;
+      if (e) list[i].wi = e.wi | 0;
+    }
   }
 
   // Weapon Range from skills, the pilot tree, hull mods, gear and the Warden aura
@@ -210,13 +261,28 @@
     refresh(h, dt);
     if (!_cap || !_armed) { if (rt.fighters && rt.fighters.length) rt.fighters.length = 0; return; }
 
-    if (!rt.fighters || rt.fighters.length !== _cap) {
+    if (!rt.fighters || rt.fighters.length !== _cap || _sig !== _shipKey) {
       const prev = rt.fighters || [];
+      _sig = _shipKey;
       rt.fighters = [];
       for (let i = 0; i < _cap; i++) rt.fighters.push(prev[i] || make(i, a.x, a.y));
-      for (let i = 0; i < _cap; i++) rt.fighters[i].sp = _rig[i] ? _rig[i].sp : null;
+      for (let i = 0; i < _cap; i++) {
+        const e = _rig[i];
+        rt.fighters[i].sp = e ? e.sp : null;
+        rt.fighters[i].wi = e ? e.wi : 0;
+      }
     }
     const list = rt.fighters, F = h.C.FIGHTER, st = rt.stats;
+    // Resolve each wing's launch point ONCE per tick rather than per craft, and
+    // remember how far the furthest carrier sits from the flagship so the target
+    // sweep below covers what an escort's own wing can legitimately reach.
+    let spread = 0;
+    for (let i = 0; i < _wings.length; i++) {
+      const w = _wings[i], p = hostPos(h, w);
+      w.hx = p.x; w.hy = p.y;
+      const d = Math.hypot(p.x - a.x, p.y - a.y);
+      if (d > spread) spread = d;
+    }
     const env = _range * envMul(F, st);
     const grounded = a.dead || rt.awaitingRespawn;
 
@@ -224,7 +290,11 @@
     _stamp++;
     _targets.length = 0;
     if (!grounded) {
-      const r2 = env * env, en = rt.enemies;
+      // Swept from the flagship with the fleet's own spread added on, so a craft
+      // launched off an escort out on the flank is not blind to what is in front
+      // of it. Every wing shares one pass; the per-craft reach test below is what
+      // actually governs engagement.
+      const r2 = (env + spread) * (env + spread), en = rt.enemies;
       for (let i = 0; i < en.length; i++) {
         const e = en[i];
         if (!e || e.dead || e.dying) continue;
@@ -266,20 +336,28 @@
 
     for (let i = 0; i < list.length; i++) {
       const f = list[i], sp = f.sp;
+      const w = _wings[f.wi | 0] || _wings[0];
+      // the craft's own carrier is where it sits, launches from, and returns to
+      const hx = w ? w.hx : a.x, hy = w ? w.hy : a.y;
+      const shr = w ? w.share : 1;
       // an empty bay flies nothing — it sits stowed and is never drawn
-      if (!sp) { f.st = DOCKED; f.tgt = null; f.x = a.x; f.y = a.y; continue; }
+      if (!sp) { f.st = DOCKED; f.tgt = null; f.x = hx; f.y = hy; continue; }
       if (f.tgt && f.tgt._fs !== _stamp) { f.tgt = null; if (f.st === ORBIT) f.st = INTERCEPT; }
       f.cd -= dt; f.wait -= dt; f.tr -= dt;
       if (f.flash > 0) f.flash -= dt * 7;
 
       if (f.st === DOCKED) {
-        f.x = a.x; f.y = a.y; f.vx = f.vy = 0;
+        f.x = hx; f.y = hy; f.vx = f.vy = 0;
+        // Bay index WITHIN this craft's own wing. `f.i` is a global index across
+        // every carrier, so using it raw would fan an escort's craft out at an
+        // angle derived from the flagship's bay count and stagger them by it too.
+        const bi = f.i - (w ? w.at : 0);
         if (any && f.wait <= 0) {
           f.st = LAUNCH; f.wait = F.launchTime;
-          const ang = -Math.PI / 2 + (f.i - (_cap - 1) / 2) * 0.5;
+          const ang = -Math.PI / 2 + (bi - (w ? w.cap - 1 : 0) / 2) * 0.5;
           f.vx = Math.cos(ang) * sp.speed * 0.8; f.vy = Math.sin(ang) * sp.speed * 0.8;
           f.face = ang;
-        } else if (!any) { f.wait = f.i * F.launchStagger; }
+        } else if (!any) { f.wait = bi * F.launchStagger; }
         continue;
       }
       if (f.st === LAUNCH) {
@@ -289,7 +367,7 @@
       }
       if (!any) f.st = RETURN;
       if (f.st === RETURN) {
-        const d = steer(f, a.x, a.y, sp.speed, dt, 6);
+        const d = steer(f, hx, hy, sp.speed, dt, 6);
         if (d < F.dockDist) { f.st = DOCKED; f.tgt = null; f.wait = 0; }
         else if (any) f.st = INTERCEPT;
         continue;
@@ -314,7 +392,9 @@
       if (!grounded && f.cd <= 0 && dist <= reach * 1.7) {
         f.cd = (crowd ? 2 : 1) / sp.rate;
         const crit = Math.random() * 100 < st.critChance;
-        let dmg = st.attackDamage * sp.dmg * spdMul * (0.9 + Math.random() * 0.2) * (crowd ? 2 : 1);
+        // × the wing's share: 1 for the hull being flown, C.FLEET.statShare for an
+        // escort carrier, whose gear is already priced into rt.stats at that rate.
+        let dmg = st.attackDamage * sp.dmg * spdMul * shr * (0.9 + Math.random() * 0.2) * (crowd ? 2 : 1);
         if (crit) dmg *= 1 + st.critDamage / 100;
         if (state.auto) dmg *= 0.8;
         dmg = dmg < 1 ? 1 : Math.round(dmg);
@@ -387,7 +467,14 @@
     let out = 0;
     const list = h.rt.fighters || [];
     for (let i = 0; i < list.length; i++) if (list[i].st !== DOCKED) out++;
-    return { cap: _cap, bays: _cap, armed: _armed, out, range: _range * envMul(h.C.FIGHTER, h.rt.stats) };
+    // `bays`/`armed` are the whole fleet's; `flagBays` is just the hull being flown,
+    // so a readout can say "4 of yours + 11 from the fleet" rather than one figure
+    // that looks wrong against the hangar card.
+    const w0 = _wings[0];
+    return { cap: _cap, bays: _cap, armed: _armed, out,
+             flagBays: w0 && w0.flag ? w0.cap : 0, flagArmed: w0 && w0.flag ? w0.armed : 0,
+             wings: _wings.length, escortWings: _wings.filter((w) => !w.flag).length,
+             range: _range * envMul(h.C.FIGHTER, h.rt.stats) };
   }
 
   // ---- THE WING'S SHARE OF SHIP SCORE ---------------------------------------
@@ -409,18 +496,28 @@
   //
   // `force` drops the 0.4s rig cache, because a bay swap must move the score on
   // the same frame the player makes it, not up to two fifths of a second later.
+  //
+  // EVERY WING COUNTS, EACH AT ITS OWN SHARE. An escort carrier's craft land real
+  // damage now, so leaving them out of the ratio would repeat the exact fault this
+  // function was written to fix — a hull scored as though its bays were empty —
+  // one level down in the fleet.
   function dpsRatio(force) {
     const h = host(); if (!h) return 0;
     if (force) _cacheT = 0;
     refresh(h, 0);
     if (!_cap || !_armed) return 0;
-    const F = h.C.FIGHTER;
     const bs = (h.C.PLAYER_BASE && h.C.PLAYER_BASE.attackSpeed) || 1;
     let sum = 0;
-    for (let i = 0; i < _cap; i++) { const e = _rig[i]; if (e) sum += e.sp.dmg * e.sp.rate; }
+    for (let wi = 0; wi < _wings.length; wi++) {
+      const w = _wings[wi];
+      let s = 0;
+      for (let i = 0; i < w.cap; i++) { const e = _rig[w.at + i]; if (e && e.sp) s += e.sp.dmg * e.sp.rate; }
+      sum += s * w.share;
+    }
     const r = sum / bs;
     return isFinite(r) && r > 0 ? r : 0;
   }
 
-  window.FIGHTERS = { update, draw, status, dpsRatio, capacity: () => _cap };
+  window.FIGHTERS = { update, draw, status, dpsRatio, capacity: () => _cap,
+                      wings: () => _wings.map((w) => ({ key: w.key, flag: w.flag, bays: w.cap, armed: w.armed, share: w.share })) };
 })();

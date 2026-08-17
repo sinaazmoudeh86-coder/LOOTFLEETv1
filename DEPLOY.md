@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 663 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v229 · build 666 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v663`.
-**Login screen reads `BUILD 663`.**
+Supersedes v228. Service worker cache is `lootfleet-v666`.
+**Login screen reads `BUILD 666`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -13,7 +13,55 @@ Supersedes v228. Service worker cache is `lootfleet-v663`.
 
 Everything else is client-side. No reset, no save migration.
 
-Carries builds 583–663.
+Carries builds 583–666.
+
+### What changed in 666
+
+- **EVERY CARRIER IN THE FLEET FLIES ITS WING NOW.** A wing belonged to the
+  flagship alone — capacity, bays and rig all read `state.ship` — so a Corvus
+  sitting in the fleet fed its stat lines into the hull total and then flew
+  nothing. Eleven bays of visible hardware, no craft on screen. Escort carriers
+  launch, orbit, target independently and return exactly as the flagship's do,
+  **from their own hull position**, out of their **own stowed fittings**
+  (`state.fittings[key]`) — so upgrading a benched carrier's bays upgrades that
+  carrier's craft.
+- **Escort strikes are paid at the fleet share (30%).** An escort's hull mods and
+  stowed gear already reach `rt.stats` at `C.FLEET.statShare`, so a full-price
+  escort wing would be the same hardware counted twice over. The share keeps a
+  benched carrier worth fielding without letting a bench of them out-damage the
+  hull actually being flown.
+- **Ship Score counts them, each at its share.** `dpsRatio()` sums every wing
+  rather than the flagship's — leaving escort wings out would have repeated, one
+  level down in the fleet, the exact fault that function exists to fix: a hull
+  scored as though its bays were empty. Verified: a cannon Dreadnought flying a
+  Vanguard + Corvus bench reports `wingRatio` **1.238**, which is
+  `((4/4 + 11/4) × 1.10) × 0.30` to the third decimal.
+- Per-wing normalisation, launch fan and stagger are all measured **within** the
+  craft's own wing, so one carrier's loadout never rescales another's and an
+  escort's craft do not fan out at an angle derived from the flagship's bay count.
+
+### What changed in 664
+
+- **GOOGLE SIGN-IN NO LONGER PUBLISHES YOUR REAL NAME.** `finalizeCloud()` resolved
+  the pilot name as `meta.name || meta.full_name || meta.user_name || <email local
+  part>` — the person's actual first and last name, or `firstname.lastname` from the
+  address. The pilot name is PUBLIC: leaderboards, territory claims, battle reports,
+  the Discord feed. Signing in with Google published your legal name to a game
+  channel. Provider fields and the email are now never read.
+- **New accounts get a generated callsign** — `Voidhawk-417`, `Emberfang-238` —
+  derived deterministically from the account id, so one account reads as the same
+  pilot on every device before it is renamed (a per-device random name would make
+  one player look like several mid-sync). The first-login gate then asks them to
+  choose their own, with the field starting EMPTY so it asks a real question rather
+  than inviting a blind Enter, and the copy states we never use a real name.
+- **Names already leaked are scrubbed.** Established accounts are carrying the
+  adopted Google name in the save and on the leaderboard. Where the stored name
+  matches what the provider calls that person AND they never chose it themselves
+  (no `lf_name`, the key `setName()` writes), it was adopted rather than picked: it
+  is replaced with a callsign, the leaderboard row is overwritten, and the naming
+  prompt is forced via a `csTemp` flag that overrides the veteran-save skip. A name
+  the player DID set is left untouched, even if it is their real one — that was
+  their decision to make.
 
 ### What changed in 662
 
@@ -197,7 +245,7 @@ Carries builds 583–663.
 
 ## ⚠ TOUR OF DUTY IS DARK IN THIS RELEASE
 
-The season pass is LIVE for every player from Level 1 as of build 663 — no gate,
+The season pass is LIVE for every player from Level 1 as of build 666 — no gate,
 no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ---
@@ -206,10 +254,10 @@ no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 | Stamp | File | Build 654 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `663` |
-| Update beacon | `version.json` → `build` | `663` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v663` |
-| Project root beacon | root `version.json` (source tree) | `663` |
+| Client constant | `game.html` → `window.LF_BUILD` | `666` |
+| Update beacon | `version.json` → `build` | `666` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v666` |
+| Project root beacon | root `version.json` (source tree) | `666` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -1999,7 +2047,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 663**.
+1. Login screen reads **BUILD 666**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

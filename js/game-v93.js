@@ -1251,7 +1251,9 @@
   // COMBAT
   // --------------------------------------------------------------------------
   // Reused bridge object for fighters.js — see _fx below.
-  const _fxo = { rt: null, state: null, C, E, hit: null, nearby: null };
+  // `fleetShips` is here because an escort carrier flies its own wing now
+  // (fighters.js buildWings): the module has to see the fleet, not just the hull.
+  const _fxo = { rt: null, state: null, C, E, hit: null, nearby: null, fleetShips: null };
   function nearestEnemy(maxDist) {
     let best = null, bd = (maxDist || Infinity) ** 2;
     for (const e of rt.enemies) {
@@ -1530,6 +1532,7 @@
   // hoisted function declarations, bound once
   _fxo.hit = function (p) { return resolveHit(p); };
   _fxo.nearby = function (n, primary) { return nearbyEnemies(n, primary); };
+  _fxo.fleetShips = function () { return fleetShips(); };
   function resolveHit(p) {
     const e = p.target;
     if (!e || e.dead) return;

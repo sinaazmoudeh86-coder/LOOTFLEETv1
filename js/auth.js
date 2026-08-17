@@ -55,10 +55,42 @@
     else go();
   }
 
+  // ---- CALLSIGNS — WE NEVER PUBLISH A REAL NAME ----------------------------
+  // A Google sign-in hands us `user_metadata.name` / `full_name`, which is the
+  // person's actual first and last name, and the email local part is usually
+  // `firstname.lastname` too. Every one of those used to become the pilot name —
+  // and the pilot name is PUBLIC: leaderboards, territory claims, battle reports,
+  // the Discord feed. Signing in with Google published your legal name to a game
+  // channel, which nobody asked for and nobody expects.
+  //
+  // New accounts now get a generated callsign instead, and are prompted to choose
+  // their own on the first screen. The provider's name is never read.
+  //
+  // DETERMINISTIC from the account id, so the same account gets the same callsign
+  // on every device before it is renamed — a random one per device would make the
+  // player look like several different pilots mid-sync.
+  const CS_A = ['Void', 'Ash', 'Null', 'Ember', 'Iron', 'Frost', 'Storm', 'Rift', 'Dusk', 'Nova',
+                'Grim', 'Pale', 'Vex', 'Onyx', 'Halo', 'Umbra', 'Quill', 'Cinder', 'Wraith', 'Zenith'];
+  const CS_B = ['hawk', 'drake', 'fang', 'spur', 'crow', 'lance', 'maul', 'reach', 'vane', 'shard',
+                'wolf', 'talon', 'rook', 'kite', 'span', 'thorn', 'coil', 'peak', 'gale', 'harrow'];
+  function callsign(seed) {
+    let h = 2166136261;
+    const s = String(seed || Math.random());
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    h = h >>> 0;
+    const a = CS_A[h % CS_A.length];
+    const b = CS_B[(h >>> 8) % CS_B.length];
+    const n = 100 + ((h >>> 16) % 900);            // keeps it unique enough to claim
+    return (a + b + '-' + n).slice(0, 16);         // e.g. Voidhawk-417
+  }
+
   // ---- CLOUD finalize (after a successful Supabase auth) --------------------
   async function finalizeCloud(user, fresh) {
     const meta = user.user_metadata || {};
-    const name = meta.lf_name || meta.name || meta.full_name || meta.user_name || (user.email ? user.email.split('@')[0] : 'Operator');
+    // ONLY `lf_name` — the name the PLAYER chose through setName(). Provider fields
+    // (name, full_name, user_name) and the email are deliberately not consulted:
+    // see the callsign note above. A pilot with no chosen name gets a callsign.
+    const name = meta.lf_name || callsign(user.id || user.email);
     setSession({ method: 'Supabase', name, id: user.id, email: user.email, at: Date.now() });
     // pin THIS tab to the account it just signed into (account.js), then claim
     // the slot — the newest login kicks any other tab/device on the SAME account
@@ -70,7 +102,30 @@
     // renamed commander to whatever Google calls them.
     try {
       const saved = window.GAME && window.GAME.state && window.GAME.state.pilotName;
-      if (saved && saved !== name) {
+      // SCRUB A LEAKED REAL NAME. Builds before this one adopted the Google profile
+      // name automatically, so established accounts are already carrying it in the
+      // save and on the public leaderboard. If the stored name MATCHES what the
+      // provider calls this person and they never chose it themselves (no `lf_name`
+      // — the key setName() writes), it was adopted, not picked: replace it with a
+      // callsign and ask them to choose. A name they DID set is left alone, even if
+      // it happens to be their real one — that was their decision to make.
+      const provider = [meta.name, meta.full_name, meta.user_name,
+                        (user.email || '').split('@')[0]].filter(Boolean).map((x) => String(x).toLowerCase());
+      const leaked = !meta.lf_name && saved && provider.indexOf(String(saved).toLowerCase()) >= 0;
+      if (leaked) {
+        const cs = callsign(user.id || user.email);
+        try {
+          window.GAME.state.pilotName = cs;
+          window.GAME.state.csTemp = 1;      // forces the naming prompt below
+          window.GAME.state.nameSet = false;
+          window.GAME.save();
+        } catch (e) {}
+        const s2 = window.ACCOUNT.session() || {};
+        s2.name = cs; setSession(s2);
+        try { window.ACCOUNT.refreshBar(); } catch (e) {}
+        try { if (window.CLOUD && window.CLOUD.client) window.CLOUD.client.auth.updateUser({ data: { lf_name: cs } }); } catch (e) {}
+        try { window.ACCOUNT.push(); } catch (e) {}   // overwrite the leaderboard row
+      } else if (saved && saved !== name) {
         const s = window.ACCOUNT.session() || {};
         s.name = saved;
         setSession(s);   // SESS ('io-auth') — writing 'lf_session' here wrote a key nothing reads
@@ -100,13 +155,20 @@
       const g = window.GAME;
       if (!g || !g.state) { if ((maybePromptName._n = (maybePromptName._n || 0) + 1) < 30) setTimeout(maybePromptName, 400); return; }
       const st = g.state;
-      if (st.nameSet) return;
-      if ((st.level || 1) > 1 || (st.playTime || 0) > 120) {   // veteran save — don't nag
+      // A GENERATED CALLSIGN IS NOT A CHOSEN NAME. `nameSet` is set silently for any
+      // save with real progress, so a veteran whose leaked name was just scrubbed
+      // would never be asked — `csTemp` overrides that and always prompts.
+      if (st.nameSet && !st.csTemp) return;
+      if (!st.csTemp && ((st.level || 1) > 1 || (st.playTime || 0) > 120)) {   // veteran save — don't nag
         st.nameSet = true; try { g.save(); } catch (e) {} return;
       }
       if ($('first-name-gate')) return;
       const s = getSession() || {};
-      const suggested = (s.name || '').replace(/[^\w .-]/g, '').slice(0, 16);
+      // The field starts EMPTY on purpose. Pre-filling it with the assigned callsign
+      // invites a blind Enter; showing the callsign as the temporary name beside an
+      // empty field asks the actual question.
+      const temp = (s.name || '').replace(/[^\w .-]/g, '').slice(0, 16);
+      const suggested = '';
       const wrap = document.createElement('div');
       wrap.id = 'first-name-gate';
       wrap.innerHTML =
@@ -118,13 +180,17 @@
         '#fng-in{width:100%;box-sizing:border-box;padding:13px;border-radius:11px;border:1px solid #33456b;background:#0a0f1b;color:#eaf0fa;font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;text-align:center;letter-spacing:.06em}' +
         '#fng-in:focus{outline:none;border-color:#5b9cff;box-shadow:0 0 0 3px rgba(91,156,255,.18)}' +
         '#fng-err{display:none;color:#ff8a96;font-size:11px;margin-top:7px}' +
+        '#fng-temp{font-size:11px;font-weight:700;color:#8fa3bd;margin:0 0 9px;letter-spacing:.02em}' +
+        '#fng-temp b{color:#9ad4ff;font-family:Orbitron,sans-serif;font-size:12px}' +
         '#fng-ok{width:100%;margin-top:13px;border:none;border-radius:11px;padding:13px;background:linear-gradient(180deg,#4d94ff,#1f61d8);color:#fff;font-family:Rajdhani,sans-serif;font-weight:800;font-size:15px;letter-spacing:.04em;cursor:pointer}' +
         '#fng-ok:active{transform:scale(.98)}' +
         '#fng-note{font-size:10.5px;color:#67758c;margin-top:10px}</style>' +
         '<div id="fng-card">' +
           '<div style="font-size:34px">☄</div>' +
           '<h2>NAME YOUR COMMANDER</h2>' +
-          '<p>This is how the galaxy sees you — leaderboards, territory claims and battle reports all carry it.</p>' +
+          '<p>This is how the galaxy sees you — leaderboards, territory claims and battle reports all carry it. ' +
+            'We never use your real name.</p>' +
+          (temp ? '<div id="fng-temp">For now you are <b>' + temp.replace(/</g, '&lt;') + '</b></div>' : '') +
           '<input id="fng-in" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Commander name" value="' + suggested.replace(/"/g, '&quot;') + '">' +
           '<div id="fng-err">2–16 characters — letters, numbers, spaces, . _ -</div>' +
           '<button id="fng-ok">⚔ Enter the galaxy</button>' +
@@ -137,7 +203,7 @@
         const v = (input.value || '').trim().replace(/[^\w .-]/g, '').slice(0, 16);
         if (v.length < 2) { fe.style.display = 'block'; input.value = v; try { input.focus(); } catch (e) {} return; }
         try { if (window.ACCOUNT && window.ACCOUNT.setName) window.ACCOUNT.setName(v); } catch (e) {}
-        st.nameSet = true; try { g.save(); } catch (e) {}
+        st.nameSet = true; delete st.csTemp; try { g.save(); } catch (e) {}
         try { if (window.ACCOUNT && window.ACCOUNT.push) window.ACCOUNT.push(); } catch (e) {}   // leaderboard row picks the name up
         wrap.remove();
         try { if (window.UI && window.UI.unlockToast) window.UI.unlockToast('☄ Welcome, Commander ' + v); } catch (e) {}

@@ -11,7 +11,11 @@ Supersedes v228. Service worker cache is `lootfleet-v666`.
 | `supabase/hull-announce.sql` | new `log_hull()` RPC — Discord ship art for EVERY hull, not just Kaevith |
 | redeploy the `discord-feed` Edge Function | it posts the new `hull_earned` card and reads `actor_id` |
 
+| `supabase/social-queue.sql` | auto social posting: the queue table + batch 01 (20 posts, 2/day) |
+| deploy the `social-post` Edge Function + cron | drains the queue into Buffer (setup: `social/SOCIAL-SETUP.md`) |
+
 Everything else is client-side. No reset, no save migration.
+**The `social/` folder must ship with the site** — Buffer fetches the post images from `lootfleet.com/social/png/…`.
 
 Carries builds 583–666.
 

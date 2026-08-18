@@ -596,6 +596,9 @@
   // is where the levels bite hardest.
   let _LOD = 0;
   function setLOD(v) { _LOD = v | 0; }
+  // Read side of the governor. Other in-world renderers (home-citadel's fort and
+  // city pass) have to shed on the same signal, and had no way to ask for it.
+  function getLOD() { return _LOD; }
   function drawArrow(ctx, p) {
     const wt = p.drone ? 'drone' : (WSTYLE[p.wtype] ? p.wtype : 'gatling');
     const st = WSTYLE[wt];
@@ -1786,7 +1789,7 @@
   }
 
   window.RENDER = {
-    setLOD,
+    setLOD, getLOD,
     drawArena, drawEnemy, drawArrow, drawEnemyBolt, drawParticle, drawParticleGlow, drawFloat, drawArcher, drawHangar, drawDrone, drawEscort, drawShipIcon, skinnedShip, drawCosmeticAura,
     gearColor, auraOf, mix, biomeOf, shipTier, hullTier, shipVisTier, drawHullPortrait, SHIP_NAMES, shipScaleOf,
   };

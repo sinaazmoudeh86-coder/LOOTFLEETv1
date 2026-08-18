@@ -4792,6 +4792,12 @@
   }
   function isEmberBossPending() {
     if (state.currentSystem) return false;                 // Zone Grind only
+    // PRISM MINING IS NOT THE CHOIR'S GROUND. A prism run borrows the Zone Grind
+    // arena and its enemy stream, so a Choir-claimed zone was reskinning the
+    // field boss mid-dig — the event firing inside a mode it was never meant to
+    // reach. The Choir belongs to zone grinding proper; while a prism run is
+    // live the zone fields its ordinary garrison.
+    try { if (state.prismRun && state.prismRun.active) return false; } catch (e) {}
     return isEmberZone(state.currentDungeon);
   }
   // Reskin + harden a boss into its Choir hull. Mirrors xenSkin's contract.
@@ -4845,10 +4851,10 @@
     const tier = emberTierFor(zone), key = EMB_KEYS[tier - 1];
     const chance = emberChance(zone);
     const pct = Math.max(0.1, +(chance * 100).toFixed(1));
-    const have = EMB_KEYS.filter((k) => state.ownedShips && state.ownedShips[k]).length;
-    if (state.ownedShips && state.ownedShips[key]) {
-      return { won: false, owned: true, pct, key, tier, complete: have >= EMB_KEYS.length };
-    }
+    // ALREADY YOURS — SAY NOTHING. This zone can only ever pay out one hull, and
+    // you have it. Reporting a roll you cannot win on every single boss kill is
+    // noise, so the result is null and no popup is built.
+    if (state.ownedShips && state.ownedShips[key]) return null;
     if (Math.random() >= chance) return { won: false, pct, key, tier };
     if (!grantShip(key)) return { won: false, pct, key, tier };
     state.embFound = (state.embFound || 0) + 1;
@@ -4900,8 +4906,11 @@
     // honest to 2dp — the old Math.max(1, round(pct)) floor reported "1%" on a tile
     // that actually pays 0.2%
     const pct = chance * 100 >= 1 ? Math.round(chance * 1000) / 10 : Math.round(chance * 10000) / 100;
+    // THE SET IS COMPLETE — SAY NOTHING. Same rule as the Choir: with every
+    // Kaevith hull in the hangar there is nothing left to roll for, so a clear
+    // no longer interrupts with a result card.
     const have = XEN_MOB_KEYS.filter((k) => state.ownedShips && state.ownedShips[k]).length;
-    if (have >= XEN_MOB_KEYS.length) return { won: false, complete: true, pct };
+    if (have >= XEN_MOB_KEYS.length) return null;
     const dry = state.xenDry || 0;
     if (Math.random() >= chance) {
       state.xenDry = dry + 1; save();

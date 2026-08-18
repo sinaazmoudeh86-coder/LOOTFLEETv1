@@ -247,8 +247,11 @@
       }
     }
     // LootCoins balance in the top bar
+    // FULL NUMBER, NOT AN ABBREVIATION. Every other chip is a bulk resource where
+    // "12.4M" is the readable form; LootCoins are spent in exact amounts against
+    // exact prices, so the balance is printed in full with thousands separators.
     if (el['hud-lc'] && G.getCredits) {
-      const v = (G.formatNumRaw || G.formatNum)(G.getCredits());
+      const v = Math.floor(G.getCredits() || 0).toLocaleString('en-US');
       if (el['hud-lc'].textContent !== v) el['hud-lc'].textContent = v;
     }
     // WALLET FIT GUARD — when balances grow long, drop the /h rates first, then
@@ -4102,10 +4105,8 @@
         <div class="xres-tag">NO ALIEN TECHNOLOGY THIS TIME</div>
         <div class="xres-g">◈</div>
         <div class="xres-t2">The Kaevith wreckage gave up nothing</div>
-        <div class="xres-c">${r.complete
-          ? 'You already hold all five Kaevith hulls — there is nothing left to earn.'
-          : 'This zone rolled a <b>' + r.pct + '%</b> chance to earn a hull. The zone is still yours, and the fight still paid gold, XP and loot.'}</div>
-        ${r.complete ? '' : `<div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim. The two entry chassis are the common drops; the <b>Glaive</b> is <b>5× rarer</b>, the <b>Godshard</b> <b>10× rarer</b>, and the <b>Sovereign</b> is the scarcest hull in the line at well under <b>1%</b> of a winning roll.</div>`}
+        <div class="xres-c">This zone rolled a <b>${r.pct}%</b> chance to earn a hull. The zone is still yours, and the fight still paid gold, XP and loot.</div>
+        <div class="xres-note">Deeper rings carry better odds — up to <b>10%</b> at the rim. The two entry chassis are the common drops; the <b>Glaive</b> is <b>5× rarer</b>, the <b>Godshard</b> <b>10× rarer</b>, and the <b>Sovereign</b> is the scarcest hull in the line at well under <b>1%</b> of a winning roll.</div>
       </div>`}
       <div class="sheet-actions"><button class="btn" data-x>Close</button>${r.won ? '<button class="btn gold" data-fleet>Open Hangar</button>' : '<button class="btn gold" data-galaxy>Find another void zone</button>'}</div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);

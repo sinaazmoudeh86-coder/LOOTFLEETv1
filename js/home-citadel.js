@@ -468,6 +468,8 @@
   // districts, citadel + structure art, labels, ghost pads) is baked into ONE
   // offscreen canvas, rebuilt only when buildings/art change; per-frame work is
   // a single blit + the live bits (shield, HP arc, beams, drones, patrol).
+  // 0 full · 1 trimmed · 2 survival — the same governor render.js runs on.
+  function lod() { try { return (window.RENDER && window.RENDER.getLOD) ? window.RENDER.getLOD() : 0; } catch (e) { return 0; } }
   function engineRender(ctx, t, rt) {
     if (!run) return;
     ctx.save();
@@ -479,10 +481,16 @@
     ensureCity(f, t);
     if (_city.cv) ctx.drawImage(_city.cv, f.x - CITY_W / 2, f.y - CITY_TOP);
     // dynamics over the baked city
-    drawCityDynamics(ctx, t, f, pulse, hurt);
+    // UNDER LOAD, THE YARD GOES QUIET BEFORE THE FIGHT DOES. Towers and the fx
+    // pass are the defense actually resolving and are never shed; the ambient
+    // set-dressing — patrol ring, cargo drones — is. A late wave puts 40 raiders,
+    // eight towers and their projectiles on screen at once, and it was the
+    // decoration that pushed the frame over.
+    const L = lod();
+    drawCityDynamics(ctx, t, f, pulse, hurt, L);
     drawTowers(ctx, t);
-    drawHomeDrones(ctx, t, f);
-    drawPatrolFleet(ctx, t, f);
+    if (L < 2) drawHomeDrones(ctx, t, f);
+    if (L < 1) drawPatrolFleet(ctx, t, f);
     drawFx(ctx);
     // DEFENSE GRID fire — targets cached in the tick
     const bt = run.beamTargets || [];
@@ -870,7 +878,7 @@
     _city.cv = cv;
   }
   // ---- per-frame dynamics (cheap strokes only) ------------------------------
-  function drawCityDynamics(ctx, t, f, pulse, hurt) {
+  function drawCityDynamics(ctx, t, f, pulse, hurt, L) {
     ctx.save(); ctx.translate(f.x, f.y);
     if (hurt) { ctx.globalAlpha = 0.20 + pulse * 0.08; ctx.fillStyle = '#ff4a4a'; ctx.beginPath(); ctx.arc(0, -30, f.size * 1.25, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
     // rotating shield wall
@@ -880,22 +888,27 @@
     const frac = Math.max(0, f.hp / f.max);
     ctx.beginPath(); ctx.arc(0, 0, f.size + 18, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
     ctx.strokeStyle = frac > 0.35 ? 'rgba(124,224,160,.9)' : 'rgba(255,90,104,.95)'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
-    ctx.font = '800 15px Rajdhani,sans-serif'; ctx.textAlign = 'center';
-    ctx.fillStyle = hurt ? '#ffb1b1' : '#c8ffb0';
-    ctx.fillText('HOME CITADEL', 0, -f.size - 34);
-    ctx.font = '700 13px Rajdhani,sans-serif';
-    ctx.fillText(Math.ceil(frac * 100) + '%', 0, -f.size - 18);
+    // Canvas text re-parses the font shorthand on every assignment and is the
+    // single most expensive call in this pass. The name is decoration — the HP
+    // arc above already carries the reading — so it goes first under load.
+    if (!L) {
+      ctx.font = '800 15px Rajdhani,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = hurt ? '#ffb1b1' : '#c8ffb0';
+      ctx.fillText('HOME CITADEL', 0, -f.size - 34);
+      ctx.font = '700 13px Rajdhani,sans-serif';
+      ctx.fillText(Math.ceil(frac * 100) + '%', 0, -f.size - 18);
+    }
     // live silo fill (frame is baked)
     const fillFrac = run.siloFrac || 0, fh = 38 * fillFrac;
     ctx.fillStyle = 'rgba(124,224,160,' + (0.55 + pulse * 0.25) + ')';
     ctx.fillRect(205 + 58 - 2.5, 50 - 20 + 19 - fh, 5, fh);
     // mine sparks
-    if (run.b.mine > 0 && Math.sin(t * 6.4) > 0.55) {
+    if (!L && run.b.mine > 0 && Math.sin(t * 6.4) > 0.55) {
       ctx.fillStyle = '#b8ffd0';
       for (let i = 0; i < 3; i++) ctx.fillRect(-205 - 26 + i * 20 + Math.sin(t * 9 + i) * 3, 55 - 34 + Math.cos(t * 7 + i) * 4, 2, 2);
     }
     // repair pulse ring
-    if (run.b.repair > 0) {
+    if (!L && run.b.repair > 0) {
       const rr2 = 12 + ((t * 14) % 18);
       ctx.strokeStyle = 'rgba(124,224,160,' + Math.max(0, 0.6 - rr2 / 32) + ')'; ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.arc(-130, 175 - 14, rr2, 0, 7); ctx.stroke();
@@ -1324,8 +1337,15 @@
     }
   }
 
+  // boot() is called on DOMContentLoaded AND again on a 1.2s safety timer (a
+  // late parse otherwise leaves the screen blank). injectCSS guards itself; the
+  // HUD tick did not, so every session was running TWO one-second intervals,
+  // each able to trigger a full re-render of the base view.
+  let _booted = false;
   function boot() {
     injectCSS();
+    if (_booted) return;
+    _booted = true;
     setInterval(() => { if (document.hidden) return; try { updateHud(); } catch (e) {} }, 1000);
   }
   window.HOMECIT = { render, updateHud, openHowTo, engineTick, engineRender, onDeath,

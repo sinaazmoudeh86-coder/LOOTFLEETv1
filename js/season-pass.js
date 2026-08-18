@@ -461,9 +461,24 @@
   // SHIP SHARD CRATE — one shard toward a random hull between Frigate and Titan
   // Sina. Shards ride `state.shipParts`, the same field the Season 1 event hull
   // uses, so 100 shards assembles a hull through machinery that already exists.
-  const SHARD_POOL = () => (C().SHIPS || []).filter((sh) =>
-    !sh.unreleased && !sh.celestial && !sh.alienTech && !sh.emberTech && !sh.event
-    && sh.key !== 'aeternum' && (sh.tier == null || sh.tier >= 0));
+  //
+  // THE POOL IS THE SHIPWORKS ROSTER, NOT A GUESS. This used to be a hand-kept
+  // exclusion list over every hull in the config, which let shards drop toward
+  // ships that have no part requirement — no Inventory row, no Exchange row, no
+  // ASSEMBLE. Those shards were unspendable. The pool is now exactly the set of
+  // hulls the Shipworks can build, so every shard the Tour pays is redeemable
+  // and can climb the Exchange. The old filter stays only as a fallback for the
+  // window where shipworks.js has not parsed yet.
+  const SHARD_POOL = () => {
+    const ships = C().SHIPS || [];
+    try {
+      const keys = window.SHIPWORKS && window.SHIPWORKS.buildableKeys && window.SHIPWORKS.buildableKeys();
+      if (keys && keys.length) { const set = {}; keys.forEach((k) => { set[k] = 1; }); return ships.filter((sh) => set[sh.key]); }
+    } catch (e) {}
+    return ships.filter((sh) =>
+      !sh.unreleased && !sh.celestial && !sh.alienTech && !sh.emberTech && !sh.event
+      && sh.key !== 'aeternum' && (sh.tier == null || sh.tier >= 0));
+  };
   // WEIGHTED BY LADDER POSITION — the pick used to be uniform, which made a
   // Titan Sina shard exactly as common as a Frigate shard (players were pulling
   // 3 Sina shards in ~15 crates). Weight now decays 18% per rung of the pool

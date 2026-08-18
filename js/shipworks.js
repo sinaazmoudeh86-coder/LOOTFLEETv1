@@ -512,8 +512,46 @@
   // ===========================================================================
   // BOOT + CSS
   // ===========================================================================
+  // ===========================================================================
+  // ORPHANED SHARD RECOVERY — one time, on the build that narrowed the pool
+  // ===========================================================================
+  // Between builds 660 and 666 the Tour of Duty paid shards from a pool that was
+  // wider than this roster, so players banked parts toward hulls that have no
+  // PARTS_NEED entry: no Inventory row, no Exchange row, no ASSEMBLE, no salvage.
+  // Narrowing the pool stopped new ones, but the balances already earned would
+  // have gone silently unreachable. Every orphan is bought back at the hull's own
+  // salvage rate — the same figure a spare part is worth anywhere else — and the
+  // key is cleared so the entry cannot rot in the save.
+  function recoverOrphanShards() {
+    const g = G(); if (!g || !g.state) return;
+    const st = g.state;
+    if (st.shardOrphanFix || !st.shipParts) return;
+    st.shardOrphanFix = 1;
+    const keep = {}; buildable().forEach((s) => { keep[s.key] = 1; });
+    let gold = 0, parts = 0, names = [];
+    for (const k in st.shipParts) {
+      const n = st.shipParts[k] | 0;
+      if (keep[k] || n <= 0) { if (!keep[k]) delete st.shipParts[k]; continue; }
+      gold += n * salvageValue(k);
+      parts += n;
+      const s = C().SHIP_BY_KEY[k];
+      names.push((s && s.name) || k);
+      delete st.shipParts[k];
+    }
+    if (parts > 0) {
+      st.gold = (st.gold || 0) + gold;
+      toast('\u25c8 ' + parts + ' unusable shard' + (parts === 1 ? '' : 's') + ' bought back \u2014 ' +
+        names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') +
+        ' \u00b7 \u25cf ' + fmt(gold) + ' gold');
+    }
+    try { g.save(); } catch (e) {}
+    try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
+  }
+
   function boot() {
     injectCSS();
+    // deferred: CONFIG and the save both have to be up before the sweep can run
+    setTimeout(() => { try { recoverOrphanShards(); } catch (e) {} }, 2500);
     setInterval(() => { if (document.hidden) return; try { if (window.GAME && GAME.state) updateBadge(); } catch (e) {} }, 2500);
   }
   function injectCSS() {
@@ -521,7 +559,12 @@
     const s = document.createElement('style'); s.id = 'sw-css'; s.textContent = CSS; document.head.appendChild(s);
   }
 
-  window.SHIPWORKS = { render };
+  // THE CANONICAL BUILDABLE ROSTER, in chain order. Any hull NOT on this list has
+  // no part requirement, no Exchange row and no way to be assembled — so nothing
+  // may hand out shards toward it. season-pass.js reads this to build its crate
+  // pool; the two lists drifting is what let the Tour pay shards for hulls the
+  // Shipworks could not redeem.
+  window.SHIPWORKS = { render, buildableKeys: () => buildable().map((s) => s.key) };
 
   const CSS = `
   /* Command card */

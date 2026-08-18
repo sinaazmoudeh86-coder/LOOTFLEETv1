@@ -35,6 +35,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const BUFFER_URL = "https://api.buffer.com";
+// CORS — lets the local admin helper (social/admin.html) call this from a browser.
+// Auth is still required on every call; this only permits the browser to ASK.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...CORS } });
 
 async function buffer(key: string, query: string): Promise<any> {
   const res = await fetch(BUFFER_URL, {
@@ -51,28 +60,67 @@ async function buffer(key: string, query: string): Promise<any> {
 const gq = (s: string) => JSON.stringify(String(s ?? "")); // safe GraphQL string literal
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  try {
   const key = Deno.env.get("BUFFER_API_KEY") || "";
-  const db = createClient(
-    Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL") || "",
-    Deno.env.get("SB_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-  );
 
   // ---- discovery mode: list channels so BUFFER_CHANNEL_IDS can be filled ----
+  // (needs only the Buffer key — runs even if the DB env is missing/mistyped)
+  // Buffer's schema scopes channels to an organization, so: orgs first, then
+  // channels per org (shapes from developers.buffer.com examples).
   if (new URL(req.url).searchParams.get("channels")) {
-    const data = await buffer(key, `query { channels { id service name displayName } }`)
-      .catch((e) => ({ error: String(e) }));
-    return Response.json(data);
+    try {
+      const acc = await buffer(key, `query { account { organizations { id name } } }`);
+      const orgs = acc?.account?.organizations ?? [];
+      const channels: any[] = [];
+      for (const o of orgs) {
+        const d = await buffer(key, `query { channels(input: { organizationId: ${gq(o.id)} }) { id service name displayName isQueuePaused } }`);
+        for (const c of d?.channels ?? []) channels.push({ ...c, organization: o.name });
+      }
+      return json({ channels });
+    } catch (e) { return json({ error: String(e).slice(0, 400) }, 500); }
   }
 
+  // Supabase injects SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY into every Edge
+  // Function automatically — validated here so a typo'd name yields a readable
+  // error instead of an opaque crash.
+  const sbUrl = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL") || "";
+  const sbKey = Deno.env.get("SB_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!sbUrl || !sbKey) return json({ error: "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not available to this function" }, 500);
+  const db = createClient(sbUrl, sbKey);
+
   const channels = (Deno.env.get("BUFFER_CHANNEL_IDS") || "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (!key || !channels.length) return Response.json({ error: "BUFFER_API_KEY / BUFFER_CHANNEL_IDS not configured" }, { status: 500 });
+  if (!key || !channels.length) return json({ error: "BUFFER_API_KEY / BUFFER_CHANNEL_IDS not configured" }, 500);
+
+  // ---- channel id → service map ---------------------------------------------
+  // Facebook REQUIRES a post type in per-network metadata (FacebookPostMetadataInput.type
+  // is non-null — the "Facebook posts require a type" error), and Instagram accepts
+  // one. The right metadata depends on which network a channel id belongs to, so
+  // resolve services fresh each run — no extra secret, and reconnecting a channel
+  // in Buffer can never leave a stale mapping.
+  const svc: Record<string, string> = {};
+  try {
+    const acc = await buffer(key, `query { account { organizations { id } } }`);
+    for (const o of acc?.account?.organizations ?? []) {
+      const d = await buffer(key, `query { channels(input: { organizationId: ${gq(o.id)} }) { id service } }`);
+      for (const c of d?.channels ?? []) svc[String(c.id)] = String(c.service || "").toLowerCase();
+    }
+  } catch (e) { /* metadata falls back to none; Buffer's error will say so */ }
+  // enum literals (unquoted). Only networks that need/accept a type are named;
+  // everything else posts with no metadata block, exactly as before.
+  const metaFor = (ch: string) => {
+    const s = svc[ch] || "";
+    if (s.startsWith("facebook")) return `metadata: { facebook: { type: post } }`;
+    if (s.startsWith("instagram")) return `metadata: { instagram: { type: post } }`;
+    return "";
+  };
 
   // ---- due rows, oldest first, small batch ----------------------------------
   const { data: rows, error } = await db.from("social_queue")
     .select("id,slug,caption,image_url,buffer_ids")
     .eq("status", "queued").lte("due_at", new Date().toISOString())
     .order("due_at", { ascending: true }).limit(4);
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return json({ error: error.message }, 500);
 
   const report: any[] = [];
   for (const row of rows ?? []) {
@@ -99,6 +147,7 @@ Deno.serve(async (req) => {
             mode: customScheduled
             dueAt: ${gq(dueAt)}
             assets: [{ image: { url: ${gq(row.image_url)} } }]
+            ${metaFor(ch)}
           }) {
             ... on PostActionSuccess { post { id } }
             ... on MutationError { message }
@@ -120,5 +169,10 @@ Deno.serve(async (req) => {
     report.push({ slug: row.slug, ok, channels: Object.keys(done).length, errs });
   }
 
-  return Response.json({ due: rows?.length ?? 0, report });
+  return json({ due: rows?.length ?? 0, report });
+  } catch (e) {
+    // NEVER an opaque crash: every failure comes back as JSON with CORS intact,
+    // so the setup helper can display it instead of "Failed to fetch".
+    return json({ error: String(e).slice(0, 400) }, 500);
+  }
 });

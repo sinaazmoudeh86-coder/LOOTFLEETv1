@@ -468,6 +468,12 @@
     if (res.hullLost && res.hullLost.levels) c.hulls = (c.hulls | 0) + res.hullLost.levels;
     if (res.win) {
       c.wins = (c.wins | 0) + 1;
+      // LIFETIME MANIFEST COUNTER. The Tour of Duty weekly "Logistics Run" reads
+      // state.lifeStats.cargo, which nothing had ever incremented — the mission
+      // could never move off 0/3. Every other Tour metric rides a counter that
+      // already existed; this one needed writing here, at the only place a
+      // manifest is actually delivered.
+      try { const L = (g.state.lifeStats = g.state.lifeStats || {}); L.cargo = (L.cargo | 0) + 1; } catch (e) {}
       c.best = Math.max(c.best | 0, res.integrity);
       // WHICH SHIPMENT WAS DELIVERED. `best` is an integrity percentage, not a
       // tier, so nothing published the class of freighter that made it home —
@@ -616,7 +622,26 @@
   // ===========================================================================
   // BOOT + CSS
   // ===========================================================================
-  function boot() { injectCSS(); }
+  // ONE-TIME BACKFILL. c.wins has been counting deliveries since the mode
+  // shipped; lifeStats.cargo starts at 0. Seed it from the career record so a
+  // veteran's counter is honest — and raise the Tour's live weekly baseline by
+  // the same amount, or the seed would instantly hand out a mission the player
+  // did not complete this week.
+  function seedCargoLife() {
+    const g = G(); if (!g || !g.state) return;
+    const s = g.state, c = s.cargo; if (!c || s.cargoLifeSeed) return;
+    const n = c.wins | 0;
+    s.cargoLifeSeed = 1;
+    if (n > 0) {
+      const L = (s.lifeStats = s.lifeStats || {});
+      L.cargo = Math.max(L.cargo | 0, n);
+      const t = s.tour;
+      if (t && t.bw) t.bw.cargo = Math.max(t.bw.cargo | 0, n);
+      if (t && t.bd) t.bd.cargo = Math.max(t.bd.cargo | 0, n);
+    }
+    try { g.save(); } catch (e) {}
+  }
+  function boot() { injectCSS(); try { seedCargoLife(); } catch (e) {} }
   function injectCSS() {
     if ($('cd-css')) return;
     const s = document.createElement('style'); s.id = 'cd-css'; s.textContent = CSS; document.head.appendChild(s);

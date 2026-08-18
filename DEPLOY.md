@@ -1,8 +1,8 @@
-# Loot Fleet — deploy v229 · build 666 · ONE MAP EVERYWHERE · CITADELS WON WHOLE · MOON COLONY UNBREAKABLE · TOUR: BUY A LEVEL · 100+ CRATES · CARGO FRAME GOVERNOR
+# Loot Fleet — deploy v230 · build 669 · LOGISTICS RUN FIXED · CHOIR OUT OF PRISM FIELDS · LOOTCOINS IN FULL · NO DEAD-END POPUPS · HOME CITADEL FRAME SHED · SHARDS MATCH THE EXCHANGE
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v228. Service worker cache is `lootfleet-v666`.
-**Login screen reads `BUILD 666`.**
+Supersedes v229. Service worker cache is `lootfleet-v669`.
+**Login screen reads `BUILD 669`.**
 
 ### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
 
@@ -17,7 +17,50 @@ Supersedes v228. Service worker cache is `lootfleet-v666`.
 Everything else is client-side. No reset, no save migration.
 **The `social/` folder must ship with the site** — Buffer fetches the post images from `lootfleet.com/social/png/…`.
 
-Carries builds 583–666.
+Carries builds 583–669.
+
+### What changed in 669 — player bug reports
+
+Six reports from the Discord, all fixed. No balance changes, no new content.
+
+- **Weekly mission "Logistics Run" could never progress.** It counts delivered
+  manifests off `state.lifeStats.cargo` — a counter nothing in the game had ever
+  written, so the mission sat at 0/3 forever while the player kept delivering.
+  Cargo Defense now increments it on every successful run. Existing players get a
+  one-time backfill from their career win count, and the Tour's live weekly
+  baseline is raised by the same amount so the seed cannot hand out a completion
+  nobody earned.
+
+- **The Ember Choir was appearing in Prism Mining fields.** A prism run borrows
+  the Zone Grind arena and its enemy stream, and `isEmberBossPending()` only
+  asked "Zone Grind, no system" — so a Choir-claimed zone reskinned the field boss
+  in the middle of a dig. The Choir belongs to zone grinding proper; while a prism
+  run is live the zone now fields its ordinary garrison.
+
+- **LootCoins read as an abbreviation.** The HUD chip ran the balance through the
+  K/M/B ladder that bulk resources use. LootCoins are spent in exact amounts
+  against exact prices, so the balance now prints in full with separators.
+
+- **Kaevith and Choir popups fired with nothing to win.** Killing a Choir hull you
+  already own, or clearing an alien zone with all five Kaevith hulls in the
+  hangar, still opened a result card to report a roll that could not pay out. Both
+  rolls now return nothing and no card is built.
+
+- **Home Citadel frame rate.** `boot()` runs on DOMContentLoaded and again on a
+  1.2s safety timer; the HUD tick had no guard, so every session carried two
+  one-second intervals. Guarded. The fort's render pass also ignored the LOD
+  governor that the rest of the game sheds on — `RENDER.getLOD()` is now exposed
+  and the citadel consults it, dropping canvas text, the patrol ring, cargo drones
+  and ambient sparks under load. Towers and the fx pass never shed: the defense
+  itself always resolves at full fidelity.
+
+- **Tour shards for hulls the Exchange cannot redeem.** The shard pool was a
+  hand-kept exclusion list that had drifted from the Shipworks roster, so shards
+  dropped toward ten hulls with no part requirement — no Inventory row, no
+  Exchange row, no ASSEMBLE. The pool now reads `SHIPWORKS.buildableKeys()`
+  directly, so the two lists cannot disagree. Shards already banked against those
+  hulls are bought back once at the hull's own salvage rate, with a toast naming
+  what was converted; the orphaned keys are cleared from the save.
 
 ### What changed in 666
 
@@ -256,12 +299,12 @@ no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 654 |
+| Stamp | File | Build 669 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `666` |
-| Update beacon | `version.json` → `build` | `666` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v666` |
-| Project root beacon | root `version.json` (source tree) | `666` |
+| Client constant | `game.html` → `window.LF_BUILD` | `669` |
+| Update beacon | `version.json` → `build` | `669` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v669` |
+| Project root beacon | root `version.json` (source tree) | `669` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -2051,7 +2094,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 666**.
+1. Login screen reads **BUILD 669**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

@@ -97,7 +97,18 @@
     if (!b) {
       b = document.createElement('span');
       b.id = 'vip-badge';
-      b.addEventListener('click', (e) => { e.stopPropagation(); openSheet(); });
+      // THE PRO CHIP IS ITS OWN BUTTON. It rides inside the VIP badge but it is a
+      // different product, and tapping it opened the VIP ladder — so there was no
+      // route in the game to what Pro actually includes. VIP pill → VIP sheet,
+      // PRO chip → the Pro sheet (perks, price, renewal date).
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const t = e.target;
+        if (t && t.closest && t.closest('em')) {
+          try { if (window.UI && window.UI.openProSheet) { window.UI.openProSheet(); return; } } catch (x) {}
+        }
+        openSheet();
+      });
       pbl.parentElement.insertBefore(b, pbl.nextSibling);
     }
     const lv = level();

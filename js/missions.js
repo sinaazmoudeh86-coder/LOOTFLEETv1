@@ -360,6 +360,26 @@
     };
     return '<div class="msn-tabs">' + t('d', 'DAILY') + t('w', 'WEEKLY') + t('m', 'MONTHLY') + t('life', '⬡ BADGES') + '</div>';
   }
+  // ---------------------------------------------------------------------------
+  // TAB DOTS ARE PATCHED, NOT REBUILT. The red count on DAILY / WEEKLY / MONTHLY /
+  // BADGES was written only by tabsHtml(), i.e. only when the VISIBLE board's own
+  // structure changed — so a weekly order completing while you stood on the daily
+  // board, or a new badge rank landing, left that tab's dot missing until you
+  // tapped it (tapping forces a rebuild). Every tick writes all four in place now.
+  // ---------------------------------------------------------------------------
+  function patchTabs(body) {
+    const btns = body.querySelectorAll('[data-tab]');
+    if (!btns.length) return;
+    btns.forEach((btn) => {
+      const id = btn.dataset.tab;
+      const n = id === 'life' ? (window.ACHIEVE ? window.ACHIEVE.claimable() : 0) : boardClaimable(boardCfg(id));
+      let dot = btn.querySelector('.msn-td');
+      if (!n) { if (dot) dot.remove(); return; }
+      if (!dot) { dot = document.createElement('i'); dot.className = 'msn-td'; btn.appendChild(dot); }
+      const t = String(n);
+      if (dot.textContent !== t) dot.textContent = t;
+    });
+  }
   function boardHtml(cfg, b) {
     const lvl = G.state.level || 1, z = Math.max(1, G.state.highestUnlocked || 1);
     const tier = b.tier || 1, rm = rwMult(tier) * cfg.rm;
@@ -455,10 +475,19 @@
     if (cfg && b) {
       const sig = structSig(cfg, b);
       if (body._msnSig === sig && body._msnHtml && patchBoard(body, cfg, b)) {
+        patchTabs(body);
         if (sub) sub.textContent = cfg.label.charAt(0) + cfg.label.slice(1).toLowerCase() + ' · Tier ' + (b.tier || 1) + ' · ' + b.list.filter((m) => m.done >= m.n).length + '/10 · resets ' + fmtLeft(cfg.left());
         return;
       }
       body._msnSig = sig;
+    } else if (TAB === 'life' && window.ACHIEVE && window.ACHIEVE.sig) {
+      // THE BADGES TAB GETS THE SAME CONTRACT as a board: patch the live numbers,
+      // rebuild only when the ladder's structure moves. Re-innerHTML'ing 1,110
+      // badge cards plus the Titan Sina hero image every second is what made this
+      // tab flicker. See ACHIEVE.sig()/patch().
+      const asig = 'life|' + window.ACHIEVE.sig();
+      if (body._msnSig === asig && body._msnHtml && window.ACHIEVE.patch(body)) { patchTabs(body); return; }
+      body._msnSig = asig;
     } else body._msnSig = null;
     // preserve scroll through re-renders
     let _sc = body; while (_sc && _sc !== document.documentElement && _sc.scrollHeight <= _sc.clientHeight + 4) _sc = _sc.parentElement;
@@ -582,6 +611,10 @@
     if (window.ACHIEVE) claimable += window.ACHIEVE.claimable();
     const b = $('cmd-msn-badge');
     if (b) { b.style.display = claimable ? '' : 'none'; b.textContent = claimable; }
+    // the per-tab dots ride the same beat, so a badge rank landing while you are
+    // looking at a mission board lights the BADGES tab immediately
+    const body = $('missions-body');
+    if (body && document.querySelector('#screen-missions.active')) patchTabs(body);
   }
 
   // ---------------------------------------------------------------------------

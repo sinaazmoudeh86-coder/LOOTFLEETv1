@@ -289,17 +289,31 @@
   // Resolve an item's weapon class. New drops carry `wclass`; legacy weapons
   // (incl. old firearm-named saves) map deterministically from their id so the
   // same item always shows — and fires — the same class.
+  // THE CANNON HASH NAMES A GUN — nothing else. Registering `fighter` in
+  // WEAPON_CLASSES put it in the hash's modulus, so 1 legacy cannon in 7 resolved
+  // to a launch rack: "most of my ships now have fighter bays in cannon slots".
+  // Which slot an item is IN decides what it is; the hash only picks a gun class.
+  // `support` is out for the same reason from the other direction: a Warden Array
+  // mounts ONLY on an Aegis (canMountWeapon refuses it anywhere else), so hashing
+  // a legacy cannon onto it would make gear the player is already flying
+  // unmountable and project a fleet aura nobody rolled. New drops still roll it
+  // — they carry an explicit `wclass`, which is read above.
+  const HASH_CLASSES = WEAPON_CLASSES.filter((w) => w.key !== 'fighter' && w.key !== 'support');
   function weaponClassOf(item) {
-    if (item && item.wclass && FCLASS_BY_KEY[item.wclass]) return FCLASS_BY_KEY[item.wclass];
-    if (item && item.wclass && WCLASS_BY_KEY[item.wclass]) return WCLASS_BY_KEY[item.wclass];
-    // a bay from before the marques resolves to the generic entry rather than
-    // falling through to the cannon hash below
-    if (item && item.slot === 'fighter') return FCLASS_BY_KEY.fighter;
+    const wc = item && item.wclass;
+    const bay = !!(item && item.slot === 'fighter');
+    if (bay) {
+      // a bay from before the marques resolves to the generic entry
+      return (wc && FCLASS_BY_KEY[wc]) || FCLASS_BY_KEY.fighter;
+    }
+    // A cannon saved with a fighter class (bays were briefly cannon-slot items)
+    // falls through to the hash rather than reading as a launch rack.
+    if (wc && wc !== 'fighter' && WCLASS_BY_KEY[wc]) return WCLASS_BY_KEY[wc];
     const h = item ? ((item.id || 0) * 7 + (item.name ? item.name.length : 0)) : 0;
     // floor + abs the hash so a non-integer/negative id can never index out of the
     // array (which would yield undefined and crash any tooltip reading wc.color).
-    const idx = Math.abs(Math.floor(h)) % WEAPON_CLASSES.length;
-    return WEAPON_CLASSES[idx] || WEAPON_CLASSES[0];
+    const idx = Math.abs(Math.floor(h)) % HASH_CLASSES.length;
+    return HASH_CLASSES[idx] || HASH_CLASSES[0];
   }
 
   // Fleet-support aura projected by an equipped Warden Array, scaled by rarity.

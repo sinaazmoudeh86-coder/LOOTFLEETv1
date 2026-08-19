@@ -1,23 +1,111 @@
-# Loot Fleet — deploy v230 · build 669 · LOGISTICS RUN FIXED · CHOIR OUT OF PRISM FIELDS · LOOTCOINS IN FULL · NO DEAD-END POPUPS · HOME CITADEL FRAME SHED · SHARDS MATCH THE EXCHANGE
+# Loot Fleet — deploy v231 · build 670 · COLONY PAYS WHAT IT SHOWS · NO PHANTOM FIGHTER BAYS · ONE BADGE NUMBER · TABS COUNT IMMEDIATELY · AUTOPILOT NEVER PARKS · ABANDONED TILES STAY NEUTRAL · KAEVITH FINDABLE AGAIN
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v229. Service worker cache is `lootfleet-v669`.
-**Login screen reads `BUILD 669`.**
+Supersedes v230. Service worker cache is `lootfleet-v670`.
+**Login screen reads `BUILD 670`.**
 
-### RUN TWO THINGS ON THE SERVER FOR THIS RELEASE
+### NOTHING TO RUN ON THE SERVER FOR THIS RELEASE
 
-| what | why |
+**No SQL, no Edge Function redeploy, no cron change.** 670 is entirely client-side
+— push the folder and you are done.
+
+One save migration runs itself in the client, guarded by its own flag so it fires
+once per account and never again:
+
+| flag | what it does |
 |---|---|
-| `supabase/hull-announce.sql` | new `log_hull()` RPC — Discord ship art for EVERY hull, not just Kaevith |
-| redeploy the `discord-feed` Edge Function | it posts the new `hull_earned` card and reads `actor_id` |
+| `n.drFix` | rescales live nanocore Damage Reduction rolls by /10, to match the buff's new 0.1–0.5% range |
 
-| `supabase/social-queue.sql` | auto social posting: the queue table + batch 01 (20 posts, 2/day) |
-| deploy the `social-post` Edge Function + cron | drains the queue into Buffer (setup: `social/SOCIAL-SETUP.md`) |
+Two new pieces of state need no migration: `mm.radj` (the moon colony's banked raid
+adjustment, defaults to 1) and `state.tileFree` (the 24h neutral grace on a tile you
+abandon, self-pruning).
 
-Everything else is client-side. No reset, no save migration.
+If you are standing up a NEW environment rather than updating the live one, the
+server work from build 666 still applies and is listed under "What changed in 666".
 **The `social/` folder must ship with the site** — Buffer fetches the post images from `lootfleet.com/social/png/…`.
 
-Carries builds 583–669.
+Carries builds 583–670.
+
+### What changed in 670 — player bug reports
+
+Ten reports, plus a Kaevith rarity review. All client-side.
+
+- **The moon colony paid less than the collect card promised.** `accrueMoon()`
+  recomputes `stored` from scratch on every accrual — and the screen's own
+  `pending()` accrues on every render — so a raid outcome written INTO `stored`
+  survived exactly one tick. A repelled raid showed its +15% in the card and then
+  paid the base amount: **389k shown, 338k banked (389 / 1.15), on top of the 7.8k
+  already held — the reported 347k almost exactly.** Raid outcomes are now banked in
+  `mm.radj` and applied at accrual time, cleared when you collect, so what the card
+  shows is what the shipment pays. A breach skim is equally permanent now (it used to
+  be refunded by the next tick). Prism can also no longer be dropped on the floor:
+  the ingot bag is created on demand instead of being skipped when absent.
+- **Fighter bays appeared in cannon slots on most hulls.** Registering `fighter` in
+  `WEAPON_CLASSES` put it in the modulus of the legacy-cannon hash, so **1 in 7 old
+  cannons resolved to "Fighter Bay"** — name, glyph, colour and projectile. The hash
+  now runs over cannon classes only, and a cannon saved with a fighter `wclass` (bays
+  were briefly cannon-slot items) falls through to it rather than reading as a launch
+  rack. Which slot an item sits in decides what it is.
+- **The Starforge offered a Fighter Bay hardpoint on a Dreadnought.** `slotKeys()`
+  listed every key present in `state.equipped`, and that map keeps keys from hulls you
+  flew before. It reads `CONFIG.shipSlots()` now — the same layout the Hero screen and
+  `computeStats` use — so the forge cannot show a hardpoint the hull does not have.
+- **Both badge counts were wrong, and they disagreed with each other.** The header
+  printed `totalClaimed()` (all 1,110 rendered badges) over a hardcoded 1,000, while
+  the Titan Sina card printed the original-ladder count over the 1,110 total: 826/1000
+  beside 803/1110, neither being the number of badges held. **By request the capstone
+  now counts every rendered badge — claim all 1,110 and the ship is granted** — and one
+  count, one whole, is printed everywhere.
+- **A completed mission or badge did not light its tab.** The red dot was written only
+  by `tabsHtml()`, i.e. only when the VISIBLE board's structure changed, so a weekly
+  order completing while you stood on the daily board left that tab bare until you
+  tapped it. `patchTabs()` now writes all four dots in place on every tick and on
+  every badge sync.
+- **The Badges tab flickered.** `ACHIEVE.html()` is 1,110 badge cards plus the Titan
+  Sina hero image, and the 1s tick re-`innerHTML`'d all of it. It now has the same
+  contract the mission boards have had: `sig()` rebuilds only when the ladder's
+  structure moves, `patch()` writes the moving numbers into the live nodes.
+- **Autopilot sometimes would not fly.** With an unreachable hostile (outside the world
+  box) as the nearest enemy, the operator steered to a **dead stop and returned, every
+  tick**, for as long as it stayed nearest — which is why flying manually and re-arming
+  cleared it. It now takes the nearest REACHABLE hostile, and with none falls through to
+  the spawn-node drift instead of parking.
+- **Bots claimed tiles the moment you abandoned them.** The rival sim treats a shielded
+  tile as off the board, but abandoning CLEARED the shield — so a bot could take the
+  tile on the next 6-minute galaxy tick, or on the next load through `seedRivals()`.
+  A released tile now carries 24h of neutral grace that blocks the **sim only**: you and
+  real players can retake it immediately.
+- **Nanocore buffs retuned.** Damage Reduction 1–5% → **0.1–0.5%** (it is a divisor on
+  every hit taken and stacks with the Pilot Tree's Armor, which pays 0.5% a node, so a
+  five-slot Legendary was handing out up to 25% flat mitigation). XP Gain floor 2% → 1%,
+  so the range has room for a genuinely bad roll. Live DR rolls are rescaled /10 by
+  `n.drFix` and keep their relative quality — a god 5% roll is still a god 0.5% roll.
+- **The PRO chip opens Pro.** It sits inside the VIP badge but it is a different
+  product, and tapping it opened the VIP ladder — there was no route in the game to what
+  Pro actually includes. VIP pill → VIP sheet, PRO chip → the Pro sheet.
+- **The Pilot Tree was drowning in crit chance.** `critChance` was one of eight
+  equally-likely offense rolls paying 1.5–3% a node, while a whole Primordial fitting's
+  crit line is ~0.1%. Three in four crit rolls now become another offense stat; ring 1 is
+  exempt because those six nodes are the curated opening. Magnitudes are untouched, so no
+  node you already own loses value.
+
+### Kaevith Incursion — rarity reviewed (670)
+
+**A winning roll threw.** `xenTechRoll()` returned `pity: pity` with `pity` never
+declared — a `ReferenceError` on the one path that matters. The hull was granted and
+saved a line earlier, so the ship arrived silently while the caller's claim handling
+died with the throw: **winning the event looked like nothing happening.**
+
+**And the odds were too thin to reach.** The Aug 2026 pass cut them 5× (1%/10% →
+0.2%/2%) and removed the pity floor at the same time. At 0.2% a pilot working the inner
+rings could clear invaded zone after invaded zone for weeks and see nothing.
+
+Rather than lifting the base rate back to where hulls stopped reading as prizes, **the
+drought now pays**: base odds go to 0.8% (ring 1) → 5% (rim), and every invaded clear
+that misses raises the next roll by 40% of base, capped at 12× (and 75% absolute). A win
+resets it. Ring 1 tops out near 9.6%, the rim near 60%. `state.xenDry` already existed
+as a debug counter and is the escalator's memory. The tile sheet reads the effective
+number through `GAME.xenChanceNow()`, so the odds shown are the odds rolled.
 
 ### What changed in 669 — player bug reports
 
@@ -299,12 +387,12 @@ no code. `LF-TOUR-BETA-ACCESS` remains redeemable as a no-op.
 
 ## ⚠ FOUR STAMPS MUST AGREE — verified for this folder.
 
-| Stamp | File | Build 669 |
+| Stamp | File | Build 670 |
 |---|---|---|
-| Client constant | `game.html` → `window.LF_BUILD` | `669` |
-| Update beacon | `version.json` → `build` | `669` |
-| SW cache name | `sw.js` → `CACHE` | `lootfleet-v669` |
-| Project root beacon | root `version.json` (source tree) | `669` |
+| Client constant | `game.html` → `window.LF_BUILD` | `670` |
+| Update beacon | `version.json` → `build` | `670` |
+| SW cache name | `sw.js` → `CACHE` | `lootfleet-v670` |
+| Project root beacon | root `version.json` (source tree) | `670` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and stays un-versioned. Verified un-versioned at cut time.
@@ -2094,7 +2182,7 @@ stage can start a second row. One row at every viewport width.
 
 ## Smoke-test after the push
 
-1. Login screen reads **BUILD 669**.
+1. Login screen reads **BUILD 670**.
 2. **Map parity** — open the game on a phone and on a desktop window side by side.
    The zone banner, spawn spacing and the distance you must fly to reach loot must
    read the same; loot must NOT arrive at a standing ship on either.

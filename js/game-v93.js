@@ -2170,6 +2170,18 @@
   // that is 300 hypots and six throwaway arrays a frame, all to answer "which
   // drops are outside magnet range". Same answer, zero garbage.
   const _lootBuf = [];
+  // A target outside the world box can never be reached: the archer is clamped to
+  // it every frame. Both autopilot target paths test this — see the stall note.
+  function inArena(e) { return !!e && e.x >= 0 && e.y >= 0 && e.x <= rt.worldW && e.y <= rt.worldH; }
+  function nearestInArena() {
+    const a = rt.archer; let best = null, bd = Infinity;
+    for (const e of rt.enemies) {
+      if (!e || e.dead || e.dying || e.hp <= 0 || !inArena(e)) continue;
+      const d2 = (e.x - a.x) ** 2 + (e.y - a.y) ** 2;
+      if (d2 < bd) { bd = d2; best = e; }
+    }
+    return best;
+  }
   function autopilot(dt) {
     const a = rt.archer, s = rt.stats, sp = s.moveSpeedPx;
     // 1) collect any ground loot first (the "pick everything up" promise)
@@ -2239,16 +2251,26 @@
       // the ship flew into the wall and held there at full throttle — dead still
       // on screen, in autopilot, apparently frozen. Enemies are clamped now too
       // (entities.js), and this is the belt to that braces.
-      if (t2 && (t2.x < 0 || t2.y < 0 || t2.x > rt.worldW || t2.y > rt.worldH)) t2 = null;
-      if (!t2) { rt.aiTgt = null; steerArcher(0, 0, dt); return; }
-      else if (t2 !== threat) {
-        const cd = (t2.x - a.x) ** 2 + (t2.y - a.y) ** 2;
-        const nd = (threat.x - a.x) ** 2 + (threat.y - a.y) ** 2;
-        if (nd < cd * 0.56) t2 = threat;      // 0.56 ≈ 25% nearer in real distance
+      if (t2 && !inArena(t2)) t2 = null;
+      // AND IT NEVER PARKS. The fallback used to be a dead stop and a return, so
+      // for as long as an unreachable hostile stayed the nearest one, autopilot
+      // held the ship perfectly still every tick — "auto won't fly until I move it
+      // by hand and switch auto back on" (moving by hand changes which enemy is
+      // nearest, which is why that cleared it). Take the nearest REACHABLE hostile
+      // instead; with none, fall through to the spawn-node drift below so the
+      // operator keeps flying and re-acquires the moment something spawns.
+      if (!t2) t2 = nearestInArena();
+      if (t2) {
+        if (t2 !== threat && inArena(threat)) {
+          const cd = (t2.x - a.x) ** 2 + (t2.y - a.y) ** 2;
+          const nd = (threat.x - a.x) ** 2 + (threat.y - a.y) ** 2;
+          if (nd < cd * 0.56) t2 = threat;      // 0.56 ≈ 25% nearer in real distance
+        }
+        rt.aiTgt = t2;
+        moveToward(t2.x, t2.y, dt, sp, FIRE_RANGE * 0.62);
+        return;
       }
-      rt.aiTgt = t2;
-      moveToward(t2.x, t2.y, dt, sp, FIRE_RANGE * 0.62);
-      return;
+      rt.aiTgt = null;                          // nothing reachable — drift, don't park
     }
     // 4) nothing around → drift toward the nearest pending spawn node
     let node = null, bd = Infinity;
@@ -4709,9 +4731,10 @@
   // end-of-battle popup can tell the player either way. ("Salvage" is already
   // this game's word for scrapping items into resources — kept distinct.)
   //
-  // NO PITY FLOOR (Aug 2026). Every invaded clear that misses still banks a dry
-  // counter for debugging, but nothing forces a win any more: alongside the 5× rate
-  // cut in galaxy.js, the guarantee was the main reason Kaevith hulls felt common.
+  // NO PITY FLOOR, BUT NO DEAD DROUGHT EITHER. Nothing forces a win; instead every
+  // invaded clear that misses lifts the next roll's odds (see xenChanceNow), so
+  // the guarantee that once made Kaevith hulls feel common is gone while a long
+  // dry run still converges on a hull.
   // A pilot clearing invaded tiles at the rim was capped at 25 misses, so the true
   // rate was never the advertised one — it was one hull every 25 clears, floor and
   // ceiling both. The roll is now exactly what the tooltip says it is.
@@ -4883,6 +4906,22 @@
   // The OVERALL chance of any hull dropping is untouched — this only changes
   // WHICH hull you get. xenSplit() feeds the same numbers to the event tooltips
   // so the briefing can never drift from the table.
+  // ---- DRY-STREAK ESCALATOR -------------------------------------------------
+  // A flat 0.2%-per-clear roll (the Aug 2026 rarity pass) meant a pilot working
+  // the inner rings could clear invaded zone after invaded zone for weeks and see
+  // nothing — "the Kaevith ship chance has become way too rare". Rather than
+  // lifting the base rate back to where hulls stopped reading as prizes, the
+  // DROUGHT pays: every invaded clear that misses makes the next one better by
+  // +40% of the base rate, capped at 12× (and 75% absolute). A win resets it.
+  // ring 1: 0.8% → up to 9.6% · rim: 5% → up to 60%. state.xenDry already existed
+  // as a debug counter; it is the escalator's memory now, and it survives saves.
+  // xenChanceNow() is what the tile sheet prints, so the number shown is the
+  // number rolled — the UI reads it through GAME, never GX.alienChance directly.
+  const XEN_DRY_STEP = 0.4, XEN_DRY_CAP = 12;
+  function xenChanceNow(ring) {
+    const mult = Math.min(XEN_DRY_CAP, 1 + (state.xenDry || 0) * XEN_DRY_STEP);
+    return Math.min(0.75, GX.alienChance(ring) * mult);
+  }
   const XEN_BASE_W = [50, 25, 1.576, 0.17509, 0.169];
   // Per-hull share of a winning roll at a given ring, for the event tooltips.
   // Mirrors the pool build in xenTechRoll exactly — including which hulls are
@@ -4902,7 +4941,7 @@
   }
   function xenTechRoll(tile) {
     if (!tile || !tile.alien || tile.void || tile.home) return null;
-    const chance = GX.alienChance(tile.ring);
+    const chance = xenChanceNow(tile.ring);
     // honest to 2dp — the old Math.max(1, round(pct)) floor reported "1%" on a tile
     // that actually pays 0.2%
     const pct = chance * 100 >= 1 ? Math.round(chance * 1000) / 10 : Math.round(chance * 10000) / 100;
@@ -4932,7 +4971,12 @@
     // idempotent per (pilot, hull), so it can't be replayed into spam.
     try { if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.logXenHull(hit.k, tile.id, tile.ring, false); } catch (e) {}
     save();
-    return { won: true, key: hit.k, ship: sh, pct, pity: pity };
+    // `pity` was read here and never declared — a ReferenceError on the ONE path
+    // that matters. The hull was granted and saved a line earlier, so the ship
+    // arrived silently while the caller's claim handling died with the throw:
+    // winning the event looked like nothing happening. There is no pity FLOOR
+    // (the escalator replaces it), so the flag is simply false.
+    return { won: true, key: hit.k, ship: sh, pct, dry: 0, pity: false };
   }
 
   let _vzArenaImg = null;
@@ -5059,7 +5103,7 @@
       const p = ringXenP(ring) * scale;
       GX.ringCoords(ring).forEach((c) => {
         const id = GX.tileId(c.q, c.r);
-        if (state.ownedSystems[id] || state.rivalTiles[id]) return;
+        if (state.ownedSystems[id] || state.rivalTiles[id] || simBlocked(id)) return;
         if (rnd() >= p) return;
         const name = freeRivalName(counts, null, rnd);
         if (!name) return;
@@ -5106,7 +5150,7 @@
     // that takes YOUR tiles honoured it — but the expand and war branches did not,
     // so the sim happily claimed shielded neutral ground the player had just
     // fought over and was waiting out the clock to take.
-    const shielded = (id) => tileCooldownLeft(id) > 0;
+    const shielded = (id) => tileCooldownLeft(id) > 0 || simBlocked(id);
     const neutral = ids.filter((id) => !state.ownedSystems[id] && !state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
     const rivalHeld = ids.filter((id) => state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
     const mine = ids.filter((id) => state.ownedSystems[id] && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
@@ -5845,6 +5889,19 @@
     return out;
   }
 
+  // NEUTRAL GRACE — a tile YOU released is off the board for the rival sim. The
+  // sim already treats a shielded tile as untouchable, but abandoning clears the
+  // shield, so a bot could take a tile you had just given up on the next 6-minute
+  // galaxy tick, or on the next load through seedRivals(). This blocks the SIM
+  // only: you (and real players) can claim the tile back immediately.
+  // Self-pruning — an expired entry is dropped the first time it is read.
+  const FREE_GRACE_MS = 24 * 3600 * 1000;
+  function simBlocked(id) {
+    const m = state.tileFree; if (!m) return false;
+    const t = m[id]; if (!t) return false;
+    if (t <= Date.now()) { delete m[id]; return false; }
+    return true;
+  }
   // ABANDON — walk away from a tile you own: ownership, its citadel and its
   // production all release; the tile goes neutral (server claim released too).
   function abandonTile(id) {
@@ -5854,6 +5911,8 @@
     delete state.ownedSystems[id];
     if (state.citadels) delete state.citadels[id];
     if (state.tileCd) delete state.tileCd[id];
+    if (!state.tileFree) state.tileFree = {};
+    state.tileFree[id] = Date.now() + FREE_GRACE_MS;
     if (state.currentSystem === id) state.currentSystem = null;
     try { if (window.TERRITORY && window.TERRITORY.enabled() && window.TERRITORY.release) window.TERRITORY.release(id); } catch (e) {}
     if (rt.realTiles && rt.realTiles[id]) delete rt.realTiles[id];
@@ -7525,7 +7584,7 @@
     // galaxy map
     warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
     // Kaevith Incursion
-    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => 0, xenSplit,
+    inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => 0, xenSplit, xenChanceNow,
     // House Citadels (casino holds — real tiles, sieged like Void spires)
     casinoHolds, casinoIds: () => CASINO_IDS.slice(), casinoShareOf,
     casinoTotalShare: () => CASINO_IDS.reduce((a, k) => a + casinoShareOf(k), 0),

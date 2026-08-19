@@ -2035,9 +2035,12 @@
     }
     const typeName = t.citadel ? '⛴ CITADEL SIEGE ZONE' : t.boss ? '☠ Boss Tile' : t.resource ? (GM.RES[t.resource].glyph + ' Resource Field') : 'Combat Sector';
     // KAEVITH INCURSION — an invaded zone fights differently. Ownership does not change.
-    // Rendered to 2dp, not rounded to whole percent: the rate runs 0.2% → 2% after the
-    // Aug 2026 rarity pass, and Math.round() turned every inner-ring tile into "0%".
-    const xenPct = (t.alien && !t.void && GM.alienChance) ? GM.alienChance(t.ring) * 100 : 0;
+    // Rendered to 2dp, not rounded to whole percent: the rate starts at 0.8% on
+    // ring 1, and Math.round() turned every inner-ring tile into "0%". Read through
+    // GAME.xenChanceNow so the tile sheet shows the odds the roll will actually
+    // use, dry-streak escalator included (see xenChanceNow in game-v93).
+    const xenBase = (t.alien && !t.void) ? (G.xenChanceNow ? G.xenChanceNow(t.ring) : (GM.alienChance ? GM.alienChance(t.ring) : 0)) : 0;
+    const xenPct = xenBase * 100;
     const xenChance = xenPct ? (xenPct >= 1 ? (Math.round(xenPct * 10) / 10) : (Math.round(xenPct * 100) / 100)) : 0;
     // EMPIRE AT CAPACITY — explain the block BEFORE the pilot taps a dead button.
     // Only relevant on a tile you don't already hold; redeploying to your own is

@@ -7,7 +7,8 @@
    Titan — each grade = 10% of the chain's ranks. Early ranks are quick wins;
    the ladder tops out at multi-year scale. Claiming pays LootCoins per grade
    and CLAIM sweeps every earned rank in one tap.
-   THE PRIZE: claim ALL 1,000 badges → the TITAN SINA is granted on the spot.
+   THE PRIZE: claim EVERY badge on the board → the TITAN SINA is granted on the
+   spot.
    Renders inside the Missions screen via window.ACHIEVE.html()/bind().
 ============================================================================= */
 (function () {
@@ -111,12 +112,15 @@
   // the rendered ladder — folding it in changed the look of the Badges tab, and
   // the original card design read better. Re-enable by pushing ENDGAME into
   // CHAINS here if it ever gets its own screen.
-  // THE CAPSTONE COUNTS THE ORIGINAL LADDER ONLY. Nanocore chains render beside
-  // the rest but carry `extra`, so adding them could never move a 1,000-badge
-  // prize to 1,110 — the gate, its copy and its progress bar are untouched.
-  const SINA_CHAINS = CHAINS.filter((c) => !c.extra);
-  const SINA_AT = SINA_CHAINS.reduce((a, c) => a + c.n, 0);   // = 1000 — the gate
+  // THE CAPSTONE COUNTS EVERY RENDERED BADGE (Aug 2026, by request). It used to
+  // count the original 1,000-badge ladder while printing the 1,110 RENDERED total
+  // in its own progress bar, so the Badges tab showed two fractions of two
+  // different wholes — 826/1000 in the header beside 803/1110 on the prize card,
+  // neither of which was the number of badges the player had. One whole now:
+  // every badge on screen counts, toward one gate, printed one way everywhere.
   const TOTAL = CHAINS.reduce((a, c) => a + c.n, 0);          // every rendered badge
+  const SINA_AT = TOTAL;                                      // …and the gate
+  const BY_ID = {}; CHAINS.forEach((c) => { BY_ID[c.id] = c; });
   const gradeIdx = (ch, rank) => Math.min(9, Math.floor((rank - 1) / (ch.n / 10))); // rank is 1-based
   const gradeOf = (ch, rank) => GRADES[gradeIdx(ch, rank)];
 
@@ -135,8 +139,8 @@
     return n;
   }
   const totalClaimed = () => { const a = ensure(); let n = 0; CHAINS.forEach((ch) => { n += Math.min(ch.n, a.claimed[ch.id] || 0); }); return n; };
-  // What the Titan Sina gate reads — original ladder only (see SINA_CHAINS).
-  const sinaClaimed = () => { const a = ensure(); let n = 0; SINA_CHAINS.forEach((ch) => { n += Math.min(ch.n, a.claimed[ch.id] || 0); }); return n; };
+  // What the Titan Sina gate reads — the same count as the header (see TOTAL).
+  const sinaClaimed = () => totalClaimed();
   // 1s poll (driven by missions.js tick) — one toast per chain when new ranks land
   function tick() {
     const a = ensure(); let hit = false;
@@ -164,7 +168,7 @@
       '<div class="ach-hex"><i>' + ch.ic + '</i><em>' + rank + '</em></div></div>';
   };
 
-  // ---- ★ TITAN SINA — the 1,000-badge capstone ------------------------------
+  // ---- ★ TITAN SINA — the every-badge capstone ------------------------------
   function sinaBanner() {
     const a0 = ensure();
     const owned = !!(S().ownedShips && S().ownedShips.titansina) || !!a0.sinaGranted;
@@ -178,8 +182,8 @@
     return '<div class="ach-sina' + (ready ? ' ready' : '') + (owned ? ' owned' : '') + '">' +
       '<div class="vrd-art"><img src="ships/ship-titansina.png" alt="Titan Sina" decoding="async"></div>' +
       '<div class="vrd-mid">' +
-        '<div class="vrd-t" style="color:#ffdfe2">THE TITAN SINA <em style="background:linear-gradient(90deg,#ff8a96,#ff5a68);color:#2a060a">1,000-BADGE PRIZE</em></div>' +
-        '<div class="vrd-s" style="color:#c4a6ab">Claim <b style="color:#ffdfe2">all 1,000 lifetime badges</b> to be granted the FINAL-CLASS hull — full-spectrum gatling tracers, 128 drones, range across the entire zone.</div>' +
+        '<div class="vrd-t" style="color:#ffdfe2">THE TITAN SINA <em style="background:linear-gradient(90deg,#ff8a96,#ff5a68);color:#2a060a">' + SINA_AT.toLocaleString() + '-BADGE PRIZE</em></div>' +
+        '<div class="vrd-s" style="color:#c4a6ab">Claim <b style="color:#ffdfe2">all ' + SINA_AT.toLocaleString() + ' lifetime badges</b> to be granted the FINAL-CLASS hull — full-spectrum gatling tracers, 128 drones, range across the entire zone.</div>' +
         '<div class="vrd-bar" style="border-color:rgba(255,90,104,.35);background:#1a0d10"><i style="width:' + Math.min(100, have / SINA_AT * 100) + '%;background:linear-gradient(90deg,#8a2f3a,#ff5a68);box-shadow:0 0 10px rgba(255,90,104,.6)"></i><span>★ ' + have.toLocaleString() + ' / ' + TOTAL.toLocaleString() + ' badges claimed</span></div>' +
       '</div>' + right + '</div>';
   }
@@ -187,7 +191,7 @@
     // PERMANENT GRANT GUARD — gated on the badge record (which survives every
     // ascension), NOT on hangar ownership. Ascension keeps every hull now, but the
     // record is still the right gate: it can't be lost, sold or reset, so a
-    // 1,000-badge pilot can never re-claim the FINAL-CLASS hull a second time.
+    // full-board pilot can never re-claim the FINAL-CLASS hull a second time.
     const a = ensure();
     if (a.sinaGranted) return;
     if (S().ownedShips && S().ownedShips.titansina) { a.sinaGranted = true; Gm().save(); return; }
@@ -198,7 +202,7 @@
     const tl = document.getElementById('toast-layer');
     if (tl) {
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#ff8a96'; t.style.fontSize = '24px';
-      t.innerHTML = '★ TITAN SINA GRANTED<br><span style="font-size:12px;color:#ffd9dd">1,000 badges — the final-class hull is yours. Equip it in the Hangar.</span>';
+      t.innerHTML = '★ TITAN SINA GRANTED<br><span style="font-size:12px;color:#ffd9dd">' + SINA_AT.toLocaleString() + ' badges — the final-class hull is yours. Equip it in the Hangar.</span>';
       tl.appendChild(t); setTimeout(() => t.remove(), 4600);
     }
     if (window.UI) window.UI.refreshAll();
@@ -208,11 +212,11 @@
   function html() {
     const a = ensure();
     const claimedN = totalClaimed();
-    let out = '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">LIFETIME COMMENDATIONS <span class="mh-tier">' + claimedN.toLocaleString() + ' / 1,000</span></div>' +
-      '<div class="mh-s"><b>1,000 badges</b> across 15 career chains · 10 grades: <b>Bronze → Titan</b></div>' +
+    let out = '<div class="msn-head-card"><div class="mh-l"><div class="mh-t">LIFETIME COMMENDATIONS <span class="mh-tier">' + claimedN.toLocaleString() + ' / ' + TOTAL.toLocaleString() + '</span></div>' +
+      '<div class="mh-s"><b>' + TOTAL.toLocaleString() + ' badges</b> across ' + CHAINS.length + ' career chains · 10 grades: <b>Bronze → Titan</b></div>' +
       '<div class="mh-s">The full ladder is a multi-year voyage — the Titan Sina waits at the end.</div>' +
-      '</div><div class="mh-ring" style="--p:' + (claimedN / TOTAL * 360) + 'deg"><span>' + claimedN + '<i>/1000</i></span></div></div>';
-    // COLLECT ALL — one tap claims every earned badge across all 15 chains.
+      '</div><div class="mh-ring" style="--p:' + (claimedN / TOTAL * 360) + 'deg"><span>' + claimedN + '<i>/' + TOTAL + '</i></span></div></div>';
+    // COLLECT ALL — one tap claims every earned badge across every chain.
     {
       let allReady = 0, allLc = 0;
       CHAINS.forEach((ch) => {
@@ -238,16 +242,52 @@
       const per = ch.n / 10;
       const pips = GRADES.map((gr, i) => '<i class="ach-pip' + (c >= (i + 1) * per ? ' on' : '') + '" style="--c:' + gr.col + '"></i>').join('');
       let lcSum = 0; for (let r = c + 1; r <= e; r++) lcSum += GRADES[gradeIdx(ch, r)].lc;
-      out += '<div class="msn-card ach-card' + (readyN ? ' ready' : '') + (mastered ? ' mastered' : '') + '">' +
+      out += '<div class="msn-card ach-card' + (readyN ? ' ready' : '') + (mastered ? ' mastered' : '') + '" data-ach-row="' + ch.id + '">' +
         badge(ch, show, readyN > 0 || mastered) +
         '<div class="msn-mid"><div class="msn-n">' + ch.name + ' <span class="ach-rk" style="--c:' + g.col + '">' + g.name + ' · ' + Math.min(show, ch.n) + '/' + ch.n + '</span></div>' +
-        '<div class="msn-b">' + (mastered ? '<b style="color:#ff5a68">CHAIN MASTERED</b> — all ' + ch.n + ' badges claimed' : fmt(Math.min(v, tgt)) + ' / ' + fmt(tgt) + ' ' + ch.unit) + '</div>' +
-        '<div class="msn-bar"><i style="width:' + pct + '%;background:linear-gradient(90deg,#3f8cff,' + g.col + ')"></i></div>' +
+        '<div class="msn-b" data-ach-prog>' + (mastered ? '<b style="color:#ff5a68">CHAIN MASTERED</b> — all ' + ch.n + ' badges claimed' : fmt(Math.min(v, tgt)) + ' / ' + fmt(tgt) + ' ' + ch.unit) + '</div>' +
+        '<div class="msn-bar"><i data-ach-fill style="width:' + pct + '%;background:linear-gradient(90deg,#3f8cff,' + g.col + ')"></i></div>' +
         '<div class="ach-pips">' + pips + '</div></div>' +
         (readyN ? '<button class="msn-claim" data-ach="' + ch.id + '">CLAIM ×' + readyN + '<br>+' + fmt(lcSum) + ' ◉</button>' : mastered ? '<div class="msn-done" style="color:#ff5a68;border-color:#ff5a6888">★</div>' : '') +
         '</div>';
     });
     return out;
+  }
+  // ---------------------------------------------------------------------------
+  // FLICKER CONTRACT — the same one the mission boards use (see patchBoard in
+  // missions.js). html() is 1,110 badges of markup plus the Titan Sina hero art,
+  // and the 1s tick was re-innerHTML'ing all of it while the player flew: the
+  // image re-decoded and the whole tab strobed. sig() moves ONLY when the
+  // ladder's structure does (a rank earned, a badge claimed, the ship granted);
+  // everything else is a moving number, and patch() writes those in place.
+  // ---------------------------------------------------------------------------
+  function sig() {
+    const a = ensure();
+    return CHAINS.map((ch) => (a.claimed[ch.id] | 0) + ':' + rankEarned(ch)).join(',') +
+      '|' + (a.sinaGranted ? 1 : 0) + '|' + ((S().ownedShips && S().ownedShips.titansina) ? 1 : 0);
+  }
+  function patch(body) {
+    const rows = body.querySelectorAll('[data-ach-row]');
+    if (!rows.length) return false;
+    const a = ensure();
+    rows.forEach((row) => {
+      const ch = BY_ID[row.getAttribute('data-ach-row')]; if (!ch) return;
+      const c = Math.min(ch.n, a.claimed[ch.id] || 0);
+      if (c >= ch.n) return;                  // a mastered card holds no live numbers
+      const v = ch.v(), show = Math.min(ch.n, c + 1);
+      const prev = show > 1 ? ch.t[show - 2] : 0, tgt = ch.t[show - 1];
+      const fill = row.querySelector('[data-ach-fill]');
+      if (fill) {
+        const w = Math.min(100, Math.max(0, (v - prev) / Math.max(1, tgt - prev) * 100)).toFixed(2) + '%';
+        if (fill.style.width !== w) fill.style.width = w;
+      }
+      const prog = row.querySelector('[data-ach-prog]');
+      if (prog) {
+        const txt = fmt(Math.min(v, tgt)) + ' / ' + fmt(tgt) + ' ' + ch.unit;
+        if (prog.textContent !== txt) prog.textContent = txt;
+      }
+    });
+    return true;
   }
   function bind(body) {
     const claimAll = body.querySelector('[data-ach-all]');
@@ -294,7 +334,7 @@
     const sb = body.querySelector('[data-sina-accept]');
     if (sb) sb.addEventListener('click', acceptSina);
   }
-  window.ACHIEVE = { tick, html, bind, claimable, totalClaimed };
+  window.ACHIEVE = { tick, html, bind, patch, sig, claimable, totalClaimed };
 
   const CSS = `
   .ach-shelf{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; background:linear-gradient(180deg,#10182a,#0b1120);

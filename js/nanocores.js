@@ -54,10 +54,15 @@
       { k: 'cchn',  name: 'Crit Chance',      min: 1,   max: 5,   mod: 'critChance' },
       { k: 'rate',  name: 'Fire Rate',        min: 1,   max: 5,   mod: 'atkSpeedPct' },
       { k: 'multi', name: 'Multi Shot',       min: 1,   max: 5,   mod: 'multiShot' },
-      { k: 'dr',    name: 'Damage Reduction', min: 1,   max: 5,   mod: 'dmgReduce' },
+      // BALANCE (Aug 2026) — 1–5% → 0.1–0.5%. Damage reduction is the strongest
+      // line in the pool (it is a divisor on every hit taken, and it stacks with
+      // Armor from the Pilot Tree, which itself pays 0.5% a node), so a five-slot
+      // Legendary core was handing out up to 25% flat mitigation.
+      { k: 'dr',    name: 'Damage Reduction', min: 0.1, max: 0.5, mod: 'dmgReduce' },
       // PROGRESSION NOTE (Aug 2026) — 3–10 → 2–6, part of the game-wide XP
-      // reduction (see the FLEET XP RATE block in game-v93.js).
-      { k: 'xp',    name: 'XP Gain',          min: 2,   max: 6,   mod: 'xp' },
+      // reduction (see the FLEET XP RATE block in game-v93.js); floor then
+      // lowered 2 → 1 so the range has room for a genuinely bad roll.
+      { k: 'xp',    name: 'XP Gain',          min: 1,   max: 6,   mod: 'xp' },
     ],
     // Values step in 0.1 and are WEIGHTED toward the floor: v = min + range·rᵏ.
     // k = 2.6 puts ~70% of rolls in the bottom third of the range and makes the
@@ -99,6 +104,19 @@
     if (!n.equip || typeof n.equip !== 'object') n.equip = {};
     RKEYS.forEach((k) => { if (!(n.dupes[k] >= 0)) n.dupes[k] = 0; });
     if (!(n.opened >= 0)) n.opened = 0;
+    // ---- ONE-TIME: DAMAGE REDUCTION RESCALE --------------------------------
+    // dr rolled 1–5% and now rolls 0.1–0.5%. Live rolls are divided by the same
+    // 10 so a core keeps its RELATIVE quality (a god 5% roll is still a god 0.5%
+    // roll) instead of sitting ten times above anything obtainable — and so the
+    // roll-position/grade readouts, which scale to min..max, stay truthful.
+    if (!n.drFix) {
+      const dmax = (BY_B.dr && BY_B.dr.max) || 0.5;
+      Object.keys(n.cores).forEach((id) => {
+        const c = n.cores[id]; if (!c || !Array.isArray(c.buffs)) return;
+        c.buffs.forEach((b) => { if (b && b.k === 'dr' && b.v > dmax) b.v = Math.max(0.1, Math.round(b.v) / 10); });
+      });
+      n.drFix = 1;
+    }
     return n;
   }
   const idOf = (ship, r) => ship + '|' + r;

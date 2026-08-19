@@ -107,22 +107,25 @@
     name: 'The Kaevith', event: 'THE KAEVITH INCURSION', seed: 0x4b41ff,
     share: 0.20, color: '#c26bff', deepColor: '#7a2ac4',
     hpMod: 1.35, dmgMod: 1.22,          // slightly above the zone's normal garrison
-    // PER-CLEAR ODDS OF RECOVERING A HULL, ring 1 → rim. Cut 5× in Aug 2026 (1%/10%
-    // → 0.2%/2%): with 20% of the galaxy invaded and a pity floor on top, Kaevith
-    // hulls were landing often enough to stop reading as event prizes at all. The
-    // pity guarantee is gone with it — the roll is now pure chance.
-    minChance: 0.002, maxChance: 0.02,
+    // PER-CLEAR ODDS OF RECOVERING A HULL, ring 1 → rim. History: 1%/10% at launch,
+    // cut 5× to 0.2%/2% in Aug 2026 because hulls stopped reading as event prizes.
+    // That overshot — at 0.2% a realistic pilot fighting the inner rings could
+    // clear invaded zones for weeks and see nothing. Now 0.8%/5%, and the drought
+    // itself does the work: game-v93's dry-streak escalator raises the effective
+    // rate on every clear that misses (see xenChanceNow), so a first clear is
+    // still a long shot while a long drought cannot stay unrewarded.
+    minChance: 0.008, maxChance: 0.05,
   };
   function isInvaded(q, r) {
     const ring = ringOf(q, r);
     if (ring <= 0 || ring > RINGS) return false;
     return rngFor(((q * 0x27d4eb2d) ^ (r * 0x165667b1) ^ XEN.seed) >>> 0)() < XEN.share;
   }
-  // Recovery odds for clearing an invaded tile: 0.2% on ring 1 → 2% at the rim.
-  // The curve is sqrt-shaped, not linear: over RINGS rings a linear ramp left
-  // almost every real player parked near the 1% floor (ring 5 paid 2.5%), which
-  // read as broken. Square-rooting climbs fast out of the low rings and still
-  // lands exactly on the 1% / 10% endpoints.
+  // Recovery odds for clearing an invaded tile: 0.8% on ring 1 → 5% at the rim,
+  // before the dry-streak escalator. The curve is sqrt-shaped, not linear: over
+  // RINGS rings a linear ramp left almost every real player parked near the floor,
+  // which read as broken. Square-rooting climbs fast out of the low rings and
+  // still lands exactly on the two endpoints.
   function alienChance(ring) {
     const f = RINGS > 1 ? Math.min(1, Math.max(0, (ring - 1) / (RINGS - 1))) : 1;
     return XEN.minChance + (XEN.maxChance - XEN.minChance) * Math.sqrt(f);

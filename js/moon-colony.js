@@ -79,8 +79,10 @@
   // STATE — s.moon = { cur, perm, lifetime, moons:[colony…] }
   // ---------------------------------------------------------------------------
   const raidGap = () => (4 + Math.random() * 4) * 3600e3;
+  // radj — the RAID ADJUSTMENT banked for the current collect window (see accrueMoon).
+  const clampAdj = (v) => Math.max(0.05, Math.min(4, +v || 1));
   const newColony = () => ({ sectors: 1, b: {}, lastCollect: Date.now(),
-    stored: { gold: 0, fuel: 0, iron: 0, plasma: 0, prism: 0 }, nextRaid: Date.now() + raidGap(), log: [], buff: null });
+    stored: { gold: 0, fuel: 0, iron: 0, plasma: 0, prism: 0 }, radj: 1, nextRaid: Date.now() + raidGap(), log: [], buff: null });
   function ensure() {
     const s = G.state;
     if (!s.moon) {
@@ -123,6 +125,9 @@
       CURK.forEach((k) => { if (!isFinite(m.stored[k])) m.stored[k] = 0; });
       if (!Array.isArray(m.log)) m.log = [];
       if (!isFinite(m.lastCollect)) m.lastCollect = Date.now();
+      // the banked raid adjustment is a MULTIPLIER on this window's output: a junk
+      // or zero value would silently zero the colony until the next collect
+      if (!isFinite(m.radj) || m.radj <= 0) m.radj = 1;
       if (!isFinite(m.nextRaid)) m.nextRaid = Date.now() + raidGap();
       if (m.buff && !isFinite(m.buff.until)) m.buff = null;
     }
@@ -286,7 +291,15 @@
     const capH = storageHours(mm);
     const r = ratesPerHour(root, mi);
     const effH = Math.min(dtH, capH);
-    Object.keys(mm.stored).forEach((k) => { mm.stored[k] = (r[k] || 0) * effH; });
+    // A RAID OUTCOME IS BANKED IN `radj`, NEVER WRITTEN INTO `stored`. stored is
+    // recomputed from scratch on every accrual — and pending() accrues on every
+    // render of the screen — so a raid that multiplied stored in place survived
+    // exactly one tick. A repelled raid therefore showed its +15% in the collect
+    // card and then paid the base amount: "389k to collect, 347k collected"
+    // (389 / 1.15 = 338, plus the 7.8k already held). The multiplier now lives on
+    // the colony until collect clears it, so what the card shows is what is paid.
+    const radj = mm.radj = clampAdj(mm.radj);
+    Object.keys(mm.stored).forEach((k) => { mm.stored[k] = (r[k] || 0) * effH * radj; });
     mm._idle = dtH >= capH;
     if (now > mm.nextRaid && buildings(mm).length) {
       const rating = defenseRating(mm);
@@ -295,11 +308,13 @@
       const ratio = Math.min(1, rating / power);
       const mname = (MOONCAT[mi] || {}).name || 'your moon';
       if (ratio >= 1) {
+        mm.radj = clampAdj(radj * 1.15);
         Object.keys(mm.stored).forEach((k) => mm.stored[k] *= 1.15);
         logAdd(mm, '🛡 Raid on ' + mname + ' repelled (' + Math.round(rating) + ' vs ' + Math.round(power) + '). +15% stored output salvaged.');
       } else {
         // PUNISHMENT — the raid breaks through: skim loot AND knock systems offline
         const loss = (1 - ratio) * 0.3;
+        mm.radj = clampAdj(radj * (1 - loss));
         Object.keys(mm.stored).forEach((k) => mm.stored[k] *= 1 - loss);
         const targets = buildings(mm).filter((x) => !x.dmg && x.def.cat !== 'defense');
         const nHit = Math.min(targets.length, 1 + Math.floor((1 - ratio) * 3));
@@ -339,6 +354,13 @@
   // opens with `G.state` — so this threw, the catch upstream swallowed it, and
   // the colony section vanished exactly as it did before the fix. Bind on
   // demand; init() adds only a render interval on top of this.
+  // The ◈ ingot bag, created on demand in the shape prism-v5.js expects.
+  function pbag() {
+    try { if (window.NANOCORES && window.NANOCORES.bag) return window.NANOCORES.bag(); } catch (e) {}
+    const s = G && G.state; if (!s) return null;
+    if (!s.prism) s.prism = { ingots: 0, best: 0, core: 0, refinery: 0, _frac: 0, miners: [], entered: false };
+    return s.prism;
+  }
   function bindG() {
     if (G) return true;
     if (!(window.GAME && window.GAME.state)) return false;
@@ -373,10 +395,13 @@
     root.moons.forEach((mm) => {
       Object.keys(got).forEach((k) => got[k] += Math.floor(mm.stored[k] || 0));
       mm.lastCollect = Date.now();
+      mm.radj = 1;                    // the raid window closes with the shipment
       Object.keys(mm.stored).forEach((k) => mm.stored[k] = 0);
     });
     s.gold += got.gold; s.resources.fuel += got.fuel; s.resources.iron += got.iron; s.resources.plasma += got.plasma;
-    if (got.prism > 0 && s.prism) s.prism.ingots = (s.prism.ingots || 0) + got.prism;
+    // The ingot bag belongs to Prism Mining, and a player who never opened that
+    // screen has none — this used to silently drop every prism the colony mined.
+    if (got.prism > 0) { const p = pbag(); if (p) p.ingots = (p.ingots || 0) + got.prism; }
     Object.keys(got).forEach((k) => root.lifetime[k] += got[k]);
     // event roll — on the CURRENT moon
     let evHtml = '';
@@ -386,7 +411,7 @@
       for (const e of EVENTS) { roll -= e.w; if (roll <= 0) { ev = e; break; } }
       if (ev.mult) mm.buff = { mult: ev.mult, until: Date.now() + ev.hrs * 3600e3, name: ev.name, ic: ev.ic };
       else if (ev.instant) { const zs = zScale(); s.resources.iron += Math.round(30 * zs); s.resources.plasma += Math.round(16 * zs); }
-      else if (ev.instantPrism && s.prism) s.prism.ingots = (s.prism.ingots || 0) + 1;
+      else if (ev.instantPrism) { const p = pbag(); if (p) p.ingots = (p.ingots || 0) + 1; }
       else if (ev.perm && root.perm < 20) root.perm += 2;
       logAdd(mm, ev.ic + ' ' + ev.name + ' — ' + ev.txt);
       evHtml = ev.ic + ' ' + ev.name;

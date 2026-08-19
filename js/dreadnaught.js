@@ -129,6 +129,15 @@
       const pool = cat === 'offense' ? OFFENSE : cat === 'defense' ? DEFENSE : UTILITY;
       pick = pool[(rnd() * pool.length) | 0];
     }
+    // CRIT CHANCE THROTTLE. critChance was one of eight equally-likely offense
+    // rolls paying 1.5–3% a node, while a whole Primordial fitting's crit line is
+    // ~0.1% — so the tree was where crit came from, and it read as nothing but
+    // crit tiles. Three in four crit rolls now become another offense stat
+    // instead. Ring 1 is exempt: those six nodes are the curated opening.
+    if (ring > 1 && pick.key === 'critChance' && rnd() >= 0.25) {
+      const alt = OFFENSE.filter((o) => o.key !== 'critChance');
+      pick = alt[(rnd() * alt.length) | 0];
+    }
     util = !!pick.util;
     // magnitude: rolled in range, gently scaled by ring depth (deeper = stronger)
     const depth = 1 + Math.min(0.8, (ring - 1) * 0.06);

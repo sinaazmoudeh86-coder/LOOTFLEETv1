@@ -55,11 +55,22 @@
     if (!f[slot]) f[slot] = { lv: 0, heat: 0, pur: 100, rr: 0 };
     return f[slot];
   }
+  // THE HULL DECIDES WHICH HARDPOINTS EXIST — not state.equipped. This listed
+  // every key present in the equipped map, and that map keeps keys from hulls you
+  // flew before, so a Dreadnought (no fighterCapacity, therefore no bays) grew a
+  // Fighter Bay hardpoint to temper. CONFIG.shipSlots() is the same layout the
+  // Hero screen and computeStats read, so the forge can no longer disagree with
+  // them; a temper already paid for on a hidden slot waits there for the hull
+  // that has it (state.forge is keyed by slot and is never pruned).
   function slotKeys() {
-    const eq = G().state.equipped || {};
-    const out = SLOT_ORDER.filter((k) => k in eq);
-    Object.keys(eq).forEach((k) => { if (out.indexOf(k) === -1) out.push(k); });
-    return out;
+    const st = G().state, eq = st.equipped || {};
+    let live = [];
+    try { live = C().shipSlots(st.ship) || []; } catch (e) { live = []; }
+    if (!live.length) {
+      live = SLOT_ORDER.filter((k) => k in eq);
+      Object.keys(eq).forEach((k) => { if (live.indexOf(k) === -1) live.push(k); });
+    }
+    return live.slice();
   }
   function mult(e) { return 1 + (PCT_PER_LV / 100) * e.lv * (e.pur / 100); }
   // PUBLIC — computeStats multiplies the docked fitting's boostable lines by this

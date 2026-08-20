@@ -626,6 +626,24 @@
       base.shipKills = base.shipKills || {};
       for (const k in other.shipKills) base.shipKills[k] = Math.max(base.shipKills[k] | 0, other.shipKills[k] | 0);
     }
+    // ---- SHIP SHARDS (`shipParts`). Earned from Shipworks crates, Tour of Duty,
+    // Home Citadel part crates and the Server Dreadnaught event \u2014 six weeks of
+    // daily play for one Voidmaw \u2014 and named here because a system absent from this
+    // union is decided wholesale by the base pick. Kept through ascension by
+    // ASC_KEEP, so unioning it cannot undo a reset.
+    //
+    // ONLY FOR HULLS NOT OWNED. Assembling a hull SPENDS its shards, so maxing an
+    // owned hull's balance against a copy that had not assembled yet hands back the
+    // whole price of a ship that is already in the hangar \u2014 the same duplication
+    // trap the `pasc.pts` wallet block above exists to avoid.
+    if (other.shipParts) {
+      base.shipParts = base.shipParts || {};
+      const own = base.ownedShips || {};
+      for (const k in other.shipParts) {
+        if (own[k]) continue;
+        base.shipParts[k] = Math.max(base.shipParts[k] | 0, other.shipParts[k] | 0);
+      }
+    }
     // ---- STARFORGE tempers: `lv` per slot is the paid, permanent part. `heat`,
     // `pur` and `rr` are live forge state for the CURRENT attempt and belong to one
     // timeline — unioning those would invent a forge session that never happened.
@@ -782,6 +800,19 @@
           if (!o) continue;
           if (!b || (o.lv | 0) > (b.lv | 0)) base.citadels[id] = o;
         }
+      }
+      // ---- PER-HULL DRONE BAYS. Named here for the reason stated above: a system
+      // absent from this union is decided wholesale by the base pick, and bays are
+      // now stored per hull rather than as one global counter, so a stale copy
+      // could empty every carrier the pilot is not currently flying. Higher count
+      // per hull wins; the live `drones` view is re-derived from the active hull's
+      // record on the next spawnDrones().
+      //
+      // INSIDE the epoch guard: both ascension resets clear droneBays, so
+      // unioning across epochs would hand back a wing the reset disbanded.
+      if (other.droneBays) {
+        base.droneBays = base.droneBays || {};
+        for (const k in other.droneBays) base.droneBays[k] = Math.max(base.droneBays[k] | 0, other.droneBays[k] | 0);
       }
     }
     // =========================================================================

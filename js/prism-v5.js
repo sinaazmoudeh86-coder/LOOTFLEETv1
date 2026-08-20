@@ -43,7 +43,7 @@
   const MAX_MINERS = 10;       // hard cap on how many of EACH miner type you can own
   const REFINERY = { base: 1500, grow: 1.6, max: 25, k: 0.12 };   // +12% prism/sec per lvl (Gold)
   const CORE_BASE = 2500, CORE_GROW = 10, CORE_BONUS = 0.08;      // +8% prism/sec per lvl (Ingots) — 10x base, 10x exponential
-  const RAID_FRAC = 0.5;     // share of raiders that dive for your miners
+  const RAID_FRAC = 1;       // share of raiders that dive for your miners (ALL of them — see the raidTarget block in tick())
   const MINE_SPEED = 0.15;   // global dig-speed (Jul 2026: 0.02→0.15 — the old crush made a 37/s fleet mine ~1/s; T5 runs were 30+ min)
   const RAID_DPS = 0.55;     // multiplier on enemy damage vs miners
   const RAID_HP_CAP = 0.045; // one raider removes at most this frac of a rig's max HP per second (no one-shots)
@@ -130,7 +130,10 @@
     // rigs are industrial — hull scales with your level so they survive the deep
     // zones a high-tier field deploys into (but can still be lost if swarmed).
     const maxhp = Math.round(def.hp * (1 + lvl() * 0.07));
-    const m = { type, orbR, orbA, orbSpd: (ring ? -1 : 1) * (0.22 + Math.random() * 0.06), x: RUN.cx + Math.cos(orbA) * orbR, y: RUN.cy + Math.sin(orbA) * orbR, ang: 0, hp: maxhp, maxhp: maxhp, hitFlash: 0, regenT: 0, warpT: flyIn ? 0.5 : 0, spr: spr(def.sprite), dead: false };
+    // `size` is the ENGINE's hit/standoff radius: a miner is handed to Enemy.update()
+    // as a raidTarget, and the AI computes `reach` from target.size (see the tick()
+    // raid block). Matches the drawn rig — drawMiner uses 26/30/34 across the tiers.
+    const m = { type, size: def.hp > 600 ? 17 : def.hp > 200 ? 15 : 13, orbR, orbA, orbSpd: (ring ? -1 : 1) * (0.22 + Math.random() * 0.06), x: RUN.cx + Math.cos(orbA) * orbR, y: RUN.cy + Math.sin(orbA) * orbR, ang: 0, hp: maxhp, maxhp: maxhp, hitFlash: 0, regenT: 0, warpT: flyIn ? 0.5 : 0, spr: spr(def.sprite), dead: false };
     RUN.miners.push(m); return m;
   }
   function aliveMiners() { return RUN.miners.filter((m) => !m.dead); }
@@ -146,8 +149,16 @@
   }
 
   // ---- SIM (called by engine each frame during a run) -----------------------
+  // Hand the zone's hostiles back to the pilot. `raidTarget` points at a miner
+  // object owned by RUN, so it MUST be dropped when the run ends — otherwise the
+  // survivors of a finished field keep besieging a rig that is no longer drawn,
+  // orbiting an invisible point instead of attacking the player.
+  function releaseRaiders(rt) {
+    if (!rt || !rt.enemies) return;
+    for (const e of rt.enemies) { if (e._praid === undefined) continue; e.raidTarget = null; e.isRaider = false; e._praid = undefined; }
+  }
   function tick(dt, rt) {
-    const g = G(); if (!g) return; const run = g.state.prismRun; if (!run || !run.active) { RUN.active = false; return; }
+    const g = G(); if (!g) return; const run = g.state.prismRun; if (!run || !run.active) { if (RUN.active) releaseRaiders(rt); RUN.active = false; return; }
     // ORPHAN GUARD — if the zone changed under the run through any path that
     // skipped resetZone (death respawn race, event deploy, galaxy warp), the
     // run is dead: end it cleanly instead of mining an invisible field in the
@@ -155,6 +166,7 @@
     if (g.state.currentDungeon !== run.d) {
       g.state.prismRun = null;
       RUN.active = false;
+      releaseRaiders(rt);
       try { g.save(); } catch (e) {}
       updateHud(); syncChrome();
       return;
@@ -183,20 +195,40 @@
       const pp = P(); ensureDaily(pp); pp.daily.used[RUN.tier] = (pp.daily.used[RUN.tier] || 0) + prod;
       RUN.floatAcc += prod; RUN.floatT -= dt;
       if (RUN.floatT <= 0 && RUN.floatAcc >= 1) { rt.floats.push(new (EN().FloatText)(RUN.cx, RUN.cy - fR - 8, '◈ +' + fmt(RUN.floatAcc), { color: ORE, size: 14, vy: -40, life: 0.9 })); RUN.floatAcc = 0; RUN.floatT = 0.7; }
-      if (RUN.ore <= 0 || pp.daily.used[RUN.tier] >= dailyCap(RUN.tier)) { fieldDone(RUN.tier); return; }
+      if (RUN.ore <= 0 || pp.daily.used[RUN.tier] >= dailyCap(RUN.tier)) { releaseRaiders(rt); fieldDone(RUN.tier); return; }
     }
 
-    // raiders peel off to wreck the dig
+    // ---- RAIDERS BESIEGE THE DIG, NOT THE PILOT ----------------------------
+    // Every non-boss hostile in a Prism Field is bound to a miner through the
+    // engine's own `raidTarget` hook — the same one Home Citadel and the cargo
+    // escort use — so seek, hold-at-range, contact and fire gating all run
+    // against the rig. Two things this fixes over the old hand-rolled version:
+    //
+    //   • It was only HALF of them (RAID_FRAC 0.5); the rest hunted the pilot,
+    //     so the screen read as an ordinary zone with some rigs in it.
+    //   • The ones that did raid were moved by THIS module writing x/y directly
+    //     while Enemy.update() was steering the same ship toward the pilot in the
+    //     same frame. Two systems, one position: raiders crabbed sideways and
+    //     stalled between the two targets instead of committing to the dig.
+    //
+    // `isRaider` also suppresses their standoff volleys at the pilot (see
+    // enemyFire in game-v93.js) — a rig-besieging wave stops sniping you.
+    // Damage to the rig stays HERE: the engine has no notion of miner HP, and
+    // RAID_DPS / RAID_HP_CAP are what keep a deep-zone hostile from one-shotting
+    // a rig. Bosses are deliberately exempt and still come for you.
+    //
+    // Re-bound every frame: killMiner() flags `dead`, and a dead raidTarget makes
+    // the engine fall straight back to chasing the pilot — which is also exactly
+    // what should happen once the last rig is gone.
     for (const e of rt.enemies) {
       if (e.dead || e.dying || e.isBoss) continue;
       if (e._praid === undefined) e._praid = Math.random() < RAID_FRAC;
       if (!e._praid) continue;
       const m = nearestAliveMiner(e.x, e.y);
-      const tx = m ? m.x : RUN.cx, ty = m ? m.y : RUN.cy;
-      const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy) || 1;
-      const reach = (m ? 16 : fR) + (e.size || 10) + 4;
-      if (d > reach) { const sp = (e.speed || 40); e.x += dx / d * sp * dt; e.y += dy / d * sp * dt; }
-      else if (m) {
+      if (!m) { if (e.raidTarget) { e.raidTarget = null; e.isRaider = false; } continue; }
+      e.raidTarget = m; e.isRaider = true;
+      const d = Math.hypot(m.x - e.x, m.y - e.y) || 1;
+      if (d <= m.size + (e.size || 10) + 6) {
         const dps = Math.min((e.damage || 6) * RAID_DPS, m.maxhp * RAID_HP_CAP); m.hp -= dps * dt; m.hitFlash = 1; m.regenT = 3;
         if (Math.random() < dt * 4) { const a = Math.random() * TAU; rt.particles.push(new (EN().Particle)(m.x, m.y, { vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, life: 0.3, size: 1.6 + Math.random() * 2, color: e.tint || '#ff6a78', glow: true, drag: 0.9 })); }
         if (m.hp <= 0) killMiner(m, rt);

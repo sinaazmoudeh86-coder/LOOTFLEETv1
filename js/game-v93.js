@@ -123,6 +123,7 @@
     shipKills: { frigate: 0 }, // kills scored while piloting each hull (unlock gate)
     blueprints: {},         // hull blueprints recovered from zone bosses: { shipKey: true }
     drones: 0,              // drones currently loaded into the active carrier's bays
+    droneBays: {},          // PER-HULL bay contents: { shipKey: droneCount } — see clampDrones()
     fittings: {},           // per-ship saved gear: { shipKey: { slotKey: item } }
     equipped: { bow: null, arrows: null, armor: null, boots: null, gloves: null, amulet: null, bow2: null, arrows2: null },
     inventory: [],
@@ -378,7 +379,7 @@
     state.ship = legacy.key;
     state.shipLevels = keepLevels;         // hull upgrades KEPT — every level you bought stands
     state.fittings = {};                   // no saved loadouts (there is no gear to load)
-    state.fleet = null; state.drones = 0;   // wing disbanded — re-form it as slots unlock
+    state.fleet = null; state.drones = 0; state.droneBays = {};   // wing disbanded — re-form it as slots unlock
     state.ascension = keepAsc;             // SHIP ASCENSION KEPT — module tiers & stars ride across
     state.forge = {};                      // Starforge hardpoint tempers reset
     // PILOT TREE KEPT — `pilot` and `dreadCores` ride across in ASC_KEEP. Seed
@@ -440,7 +441,7 @@
     rt.siege = null; rt.waves = null; rt.sdrun = null; rt.hcrun = null; rt.cgrun = null;
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; state.prismRun = null;
-    state.fleet = null; state.drones = 0;   // no wing, no drones — re-form as slots unlock
+    state.fleet = null; state.drones = 0; state.droneBays = {};   // no wing, no drones — re-form as slots unlock
     // Territory is NOT cleared — it rides across in ASC_KEEP. rt.realTiles is the
     // live server mirror and stays as-is so the galaxy map doesn't blank out; the
     // next republish rewrites every held tile with the new (much lower) fleet
@@ -3721,6 +3722,7 @@
     if (state.fleet) state.fleet = state.fleet.map((k) => (k === key ? null : k));
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
     if (state.autoEquipAlways) autoEquip(true);
+    loadDroneBay(key);   // the hull's own bay, stashed by clampDrones() when it was last flown
     refreshStats(); spawnDrones();
     if (window.UI) window.UI.refreshAll(); save();
     return true;
@@ -3737,12 +3739,33 @@
   function fighterHull() { const s = C.SHIP_BY_KEY[state.ship]; return !!(s && s.fighterCapacity && !(s.weapons | 0)); }
 
   // ---- DRONES (carrier bays) -----------------------------------------------
-  // Clamp the loaded-drone count to the active hull's bay capacity, then
-  // (re)build the orbiting drone objects, preserving existing orbit phases.
+  // EVERY HULL KEEPS ITS OWN BAY, exactly like `fittings` keeps its own gear.
+  //
+  // `state.drones` was a single account-wide counter clamped to the ACTIVE hull's
+  // capacity, so flying a full 8-bay Titan and switching to anything smaller threw
+  // the surplus away permanently — switch back and the bays were empty and had to
+  // be re-earned at 16% a kill. `state.droneBays[shipKey]` is now the stored
+  // truth; `state.drones` is the live view of the hull being flown, so every
+  // existing reader (damage, power, HUD, the death penalty) is unchanged.
+  //
+  // clampDrones() WRITES THROUGH: it is called from spawnDrones(), which already
+  // runs after every mutation (drone captured, drone lost on death, hull switch,
+  // load), so the stored bay tracks the live count without a second call site.
   function clampDrones() {
     const cap = shipDroneCount();
     if (state.drones == null) state.drones = 0;
+    if (!state.droneBays) state.droneBays = {};
     state.drones = Math.max(0, Math.min(cap, state.drones | 0));
+    state.droneBays[state.ship] = state.drones;
+  }
+  // Load the target hull's own bay before a switch. A hull with NO record yet
+  // (every account, the first time it switches after this build) inherits the old
+  // global count and lets clampDrones() trim it to capacity — the pre-fix
+  // behaviour — so nobody loses drones to the migration itself.
+  function loadDroneBay(key) {
+    if (!state.droneBays) state.droneBays = {};
+    const rec = state.droneBays[key];
+    if (rec != null) state.drones = Math.max(0, rec | 0);
   }
   const DRONE_MAX_VIS = 16;      // ceiling on visible craft, whatever the bay holds
   function spawnDrones() {
@@ -6924,6 +6947,7 @@
     if (state.shipKills[state.ship] == null) state.shipKills[state.ship] = 0;
     if (!state.blueprints) state.blueprints = {};
     if (state.drones == null) state.drones = 0;
+    if (!state.droneBays) state.droneBays = {};
     // SEED THE CAREER LOOT COUNTER, ONCE. lifetimeLooted rode through ascension
     // in ASC_KEEP but was never actually incremented, so every account read 0 and
     // both readers fell back to the hold's length. Seeding it with exactly what

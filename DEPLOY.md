@@ -1,30 +1,105 @@
-# Loot Fleet — deploy v231 · build 670 · COLONY PAYS WHAT IT SHOWS · NO PHANTOM FIGHTER BAYS · ONE BADGE NUMBER · TABS COUNT IMMEDIATELY · AUTOPILOT NEVER PARKS · ABANDONED TILES STAY NEUTRAL · KAEVITH FINDABLE AGAIN
+# Loot Fleet — deploy v232 · build 673 · VOIDMAW SHARDS RESTORED · DRONE BAYS STAY FULL · PRISM RAIDERS HUNT THE RIGS
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v230. Service worker cache is `lootfleet-v670`.
-**Login screen reads `BUILD 670`.**
+Supersedes v231. Service worker cache is `lootfleet-v673`.
+**Login screen reads `BUILD 673`.**
 
 ### NOTHING TO RUN ON THE SERVER FOR THIS RELEASE
 
-**No SQL, no Edge Function redeploy, no cron change.** 670 is entirely client-side
+**No SQL, no Edge Function redeploy, no cron change.** 673 is entirely client-side
 — push the folder and you are done.
 
-One save migration runs itself in the client, guarded by its own flag so it fires
-once per account and never again:
+### Build stamps — all four agree
+
+| stamp | value |
+|---|---|
+| root `game.html` `window.LF_BUILD` | 673 |
+| root `version.json` | 673 |
+| `deploy-v232/version.json` | 673 |
+| `deploy-v232/sw.js` `CACHE` | `lootfleet-v673` |
+
+Audited before hand-off: all 78 `js/`+`css/` files `game.html` references are byte-identical
+to the project root, none missing, every one cache-busted.
+
+### Save migrations — self-running, once per account
 
 | flag | what it does |
 |---|---|
-| `n.drFix` | rescales live nanocore Damage Reduction rolls by /10, to match the buff's new 0.1–0.5% range |
+| `state.vmShardRestore` | returns ship shards the build-666 orphan sweep deleted, read from this device's pre-sweep save snapshots |
+| `state.shardOrphanFix = 2` | re-runs the orphan sweep under the corrected rule (only keys naming no hull in the game) |
+| `state.droneBays` | seeds per-hull drone bays; a hull with no record inherits the old global count on its first switch |
 
-Two new pieces of state need no migration: `mm.radj` (the moon colony's banked raid
-adjustment, defaults to 1) and `state.tileFree` (the 24h neutral grace on a tile you
-abandon, self-pruning).
+**Push the site FIRST, then the beacon.** `js/update-gate.js` polls `version.json` every
+90s and force-reloads any client on a lower build within ~90s — bumping the beacon ahead
+of the files evicts players onto code that is not live yet.
 
-If you are standing up a NEW environment rather than updating the live one, the
-server work from build 666 still applies and is listed under "What changed in 666".
-**The `social/` folder must ship with the site** — Buffer fetches the post images from `lootfleet.com/social/png/…`.
+### What changed in 673 — player bug reports
 
-Carries builds 583–670.
+**❖ Voidmaw shards were wiped by a cleanup migration.** `shipworks.js`
+`recoverOrphanShards()` shipped in the 660–666 window to buy back shards banked
+against hulls the Shipworks cannot build. It defined "cannot build" as **absent from
+`PARTS_NEED`** — but Voidmaw Parts are redeemed by `server-dreadnaught.js` at 150,
+not by the Shipworks, and `voidmaw` has no `PARTS_NEED` entry. On the first load
+after that patch the sweep **deleted the entire Voidmaw grind and paid salvage gold
+for it**, with a toast calling six weeks of daily play "unusable shards". It was live
+in 670, which is why the reports land now. Two halves:
+
+- **The rule is now the honest one.** A shard is an orphan only if its key names **no
+  hull in the game**. A real hull's shards are never swept — the Shipworks is not the
+  only thing in the galaxy that redeems them, and a balance sitting in a save costs
+  nothing while a deleted one cannot be recovered. Anything the sweep does buy back is
+  written to `shardSweepLog` first, so a future repair has a receipt instead of guesswork.
+- **Restitution, from the player's own pre-sweep data.** `account.js` keeps three
+  whole-save snapshots on the device — the untouched cloud copy stashed before every
+  merge (`lf-backup`), the losing side of a save conflict (`lf-conflict`) and the
+  heaviest save this account has ever had here (`lf-best`). Where one predates the
+  sweep it still holds the true count, so the repair takes the **per-key max** across
+  all three and returns the difference, with a mail explaining what happened.
+  Deliberately narrow: only keys the old sweep could touch (no `PARTS_NEED` entry),
+  only hulls **not owned** (assembling spends shards, so a low balance on an owned hull
+  is correct rather than damage), and **the salvage gold is not clawed back** — it was
+  paid weeks ago and has been spent.
+
+**This was never Voidmaw-only.** The old rule would sweep shards for any real hull
+without a Shipworks entry — Chroma Fang, Veridian, the Kaevith hulls, the Praetorian
+line. The restore covers all of them.
+
+**Where no snapshot survives, no number is invented.** The sweep banked gold without
+itemising it, so a player whose snapshots have already rolled over has no surviving
+record of their count. Those accounts are flagged `vmShardRestore.n === 0` and can be
+targeted by a flat goodwill grant if one is decided; the same two-tier rule the
+build-670 moon-colony repair used.
+
+**`shipParts` now unions on save merge.** A system absent from `mergeSaves()`'s union
+list is decided wholesale by the base pick, so a stale cloud copy could re-zero shards
+the repair had just restored. Max per hull, **skipping owned hulls** so a copy that had
+not assembled yet cannot refund the price of a ship already in the hangar.
+
+**Drone bays emptied when you switched hulls and came back.** `state.drones` was one
+account-wide counter clamped to the ACTIVE hull's capacity, so leaving a full 8-bay
+Titan for anything smaller **destroyed the surplus permanently** — switch back and the
+bays were empty and had to be re-earned at 16% a kill. Bays are now stored per hull in
+`state.droneBays`, exactly as `fittings` stores gear; `state.drones` remains the live
+view of the hull being flown, so every reader (damage, power, HUD, the death penalty)
+is unchanged. `clampDrones()` writes through, and it already runs after every mutation.
+A hull with no record inherits the old global count on its first switch, so nobody
+loses drones to the migration itself. Unioned in `mergeSaves()` inside the epoch guard —
+both ascension resets disband the wing, and unioning across epochs would hand it back.
+
+**Prism Field raiders ignored the rigs and chased the pilot.** Only half of them ever
+dove for the dig (`RAID_FRAC` 0.5), and the ones that did were being moved by
+`prism-v5.js` writing `x/y` directly **while `Enemy.update()` steered the same ship
+toward the pilot in the same frame** — two systems, one position, so raiders crabbed
+sideways and stalled between the two targets. Every non-boss hostile is now bound to a
+miner through the engine's own `raidTarget` hook, the same one Home Citadel and the
+cargo escort use, so seek, hold-at-range, contact and fire gating all run against the
+rig; `isRaider` also stops their standoff volleys at the pilot. Damage to a rig stays
+in `prism-v5.js` (the engine has no notion of miner HP, and `RAID_DPS`/`RAID_HP_CAP`
+are what stop a deep-zone hostile one-shotting one). Targets are re-bound each frame
+and released when the run ends, so a finished field hands its survivors back to the
+pilot. **Bosses still come for you.**
+
+Carries builds 583–673.
 
 ### What changed in 670 — player bug reports
 

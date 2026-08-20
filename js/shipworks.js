@@ -522,27 +522,117 @@
   // have gone silently unreachable. Every orphan is bought back at the hull's own
   // salvage rate — the same figure a spare part is worth anywhere else — and the
   // key is cleared so the entry cannot rot in the save.
+  //
+  // ---------------------------------------------------------------------------
+  // WHAT "UNREACHABLE" ACTUALLY MEANS (Aug 2026 — the Voidmaw shard wipe)
+  // ---------------------------------------------------------------------------
+  // The sweep defined it as "not in PARTS_NEED", i.e. not buildable HERE. That is
+  // not the same thing, and the difference cost every event player their season:
+  // ❖ VOIDMAW PARTS are redeemed by server-dreadnaught.js at 150, not by the
+  // Shipworks, and `voidmaw` has no PARTS_NEED entry — so on the first load after
+  // the patch the sweep deleted the entire Voidmaw grind and paid out salvage gold
+  // for it. Six weeks of daily first-fight bonuses, daily rank claims and 1,500-✦
+  // store buys, gone, with a toast calling them "unusable shards".
+  //
+  // The rule is now the honest one: a shard is only an orphan if its key names NO
+  // HULL IN THE GAME. A real hull's shards are never touched here — the Shipworks
+  // is not the only thing in the galaxy that redeems them, and a balance sitting
+  // in the save costs nothing while a deleted one cannot be recovered.
+  //
+  // Anything the sweep does buy back is now written to `shardSweepLog` first, so a
+  // future repair has a receipt to work from rather than guesswork.
+  function knownHullKeys() {
+    const k = {};
+    try { C().SHIPS.forEach((s) => { k[s.key] = 1; }); } catch (e) {}
+    return k;
+  }
   function recoverOrphanShards() {
     const g = G(); if (!g || !g.state) return;
     const st = g.state;
-    if (st.shardOrphanFix || !st.shipParts) return;
-    st.shardOrphanFix = 1;
-    const keep = {}; buildable().forEach((s) => { keep[s.key] = 1; });
-    let gold = 0, parts = 0, names = [];
+    if (st.shardOrphanFix === 2 || !st.shipParts) return;
+    st.shardOrphanFix = 2;   // 2 = swept under the key-names-a-real-hull rule
+    const known = knownHullKeys();
+    if (!Object.keys(known).length) { st.shardOrphanFix = 1; return; }   // CONFIG not up — try again next boot
+    let gold = 0, parts = 0;
+    const log = [];
     for (const k in st.shipParts) {
       const n = st.shipParts[k] | 0;
-      if (keep[k] || n <= 0) { if (!keep[k]) delete st.shipParts[k]; continue; }
+      if (n <= 0) { if (!known[k]) delete st.shipParts[k]; continue; }
+      if (known[k]) continue;                       // a real hull — never swept
       gold += n * salvageValue(k);
       parts += n;
-      const s = C().SHIP_BY_KEY[k];
-      names.push((s && s.name) || k);
+      log.push({ k, n, at: Date.now() });
       delete st.shipParts[k];
     }
     if (parts > 0) {
+      st.shardSweepLog = (st.shardSweepLog || []).concat(log).slice(-50);
       st.gold = (st.gold || 0) + gold;
-      toast('\u25c8 ' + parts + ' unusable shard' + (parts === 1 ? '' : 's') + ' bought back \u2014 ' +
-        names.slice(0, 3).join(', ') + (names.length > 3 ? ' +' + (names.length - 3) + ' more' : '') +
-        ' \u00b7 \u25cf ' + fmt(gold) + ' gold');
+      toast('\u25c8 ' + parts + ' shard' + (parts === 1 ? '' : 's') + ' for retired hulls bought back \u00b7 \u25cf ' + fmt(gold) + ' gold');
+    }
+    try { g.save(); } catch (e) {}
+    try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
+  }
+
+  // ===========================================================================
+  // ❖ VOIDMAW SHARD RESTITUTION — undo what the old sweep took
+  // ===========================================================================
+  // Same two-tier rule the moon-colony repair uses, and for the same reason:
+  // where the player's own pre-sweep data survives we restore the REAL number,
+  // and where it does not we do not invent one.
+  //
+  // account.js keeps three snapshots of a whole save on the device — the untouched
+  // cloud copy stashed before every merge (`lf-backup`), the losing side of a save
+  // conflict (`lf-conflict`) and the heaviest save this account has ever had here
+  // (`lf-best`). Any of them predating the sweep still holds the true shard count.
+  // Per-key MAX across all three, then max against what is in the save now.
+  //
+  // Deliberately narrow, because a snapshot is old data and old data is dangerous:
+  //   • only keys with NO PARTS_NEED entry — exactly the set the old sweep could
+  //     delete. Buildable hulls are untouched, so their balances are current and
+  //     restoring an old max would refund parts already spent on an assembly.
+  //   • only hulls NOT owned. Assembling a Voidmaw spends its 150 parts; if the
+  //     hull is in the hangar the low balance is correct, not damage.
+  //   • the salvage gold is NOT clawed back. It was paid weeks ago and has been
+  //     spent; taking it back now would be a second silent loss.
+  // Runs once per account, and only where the old sweep actually ran.
+  function restoreSweptShards() {
+    const g = G(); if (!g || !g.state) return;
+    const st = g.state;
+    if (st.vmShardRestore || !st.shardOrphanFix) return;
+    let uid = null;
+    try { uid = window.ACCOUNT && window.ACCOUNT.uid && window.ACCOUNT.uid(); } catch (e) {}
+    if (!uid) return;   // signed out: wait for a session rather than banking "nothing survived"
+    const best = {};
+    ['lf-backup::', 'lf-conflict::', 'lf-best::'].forEach((p) => {
+      let snap = null;
+      try { const raw = localStorage.getItem(p + uid); if (raw) snap = JSON.parse(raw); } catch (e) {}
+      const sp = snap && snap.shipParts;
+      if (!sp) return;
+      for (const k in sp) { const n = sp[k] | 0; if (n > (best[k] | 0)) best[k] = n; }
+    });
+    const restored = [];
+    for (const k in best) {
+      if (PARTS_NEED[k] != null) continue;          // never swept — balance is current
+      if (owned(k)) continue;                      // already assembled: spending it was legitimate
+      const have = partsOf(k), want = best[k] | 0;
+      if (want <= have) continue;
+      addParts(k, want - have);
+      restored.push({ k, n: want - have });
+    }
+    st.vmShardRestore = { at: Date.now(), n: restored.reduce((a, r) => a + r.n, 0), keys: restored.map((r) => r.k) };
+    if (restored.length) {
+      const total = st.vmShardRestore.n;
+      const nm = (k) => { try { return (C().SHIP_BY_KEY[k] || {}).name || k; } catch (e) { return k; } };
+      const list = restored.map((r) => r.n + '\u00d7 ' + nm(r.k)).join(', ');
+      try {
+        if (window.MAIL) window.MAIL.push({
+          ic: '\u2756', title: 'Your shards are back',
+          body: '<b>' + total + ' ship shard' + (total === 1 ? '' : 's') + '</b> have been returned to your parts inventory: ' + list + '.' +
+            '<div style="margin-top:8px;opacity:.8">A cleanup patch treated them as shards for hulls that cannot be built. \u2756 Voidmaw Parts are assembled at the Server Dreadnaught event, not the Shipworks, so they should never have been swept. ' +
+            'The salvage gold you were paid is yours to keep.</div>',
+        });
+      } catch (e) {}
+      toast('\u2756 ' + total + ' shard' + (total === 1 ? '' : 's') + ' restored \u2014 see your mail');
     }
     try { g.save(); } catch (e) {}
     try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
@@ -550,8 +640,10 @@
 
   function boot() {
     injectCSS();
-    // deferred: CONFIG and the save both have to be up before the sweep can run
-    setTimeout(() => { try { recoverOrphanShards(); } catch (e) {} }, 2500);
+    // deferred: CONFIG and the save both have to be up before the sweep can run.
+    // Restitution goes FIRST — it reads the pre-sweep snapshots, and the sweep
+    // under the new rule must not see a half-restored inventory.
+    setTimeout(() => { try { restoreSweptShards(); } catch (e) {} try { recoverOrphanShards(); } catch (e) {} }, 2500);
     setInterval(() => { if (document.hidden) return; try { if (window.GAME && GAME.state) updateBadge(); } catch (e) {} }, 2500);
   }
   function injectCSS() {

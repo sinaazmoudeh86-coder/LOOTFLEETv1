@@ -52,11 +52,11 @@
     if (up) {
       const r = RARITY(a.item.rarity | 0);
       altarCard = '<div class="tem-altar live">'
-        + '<div class="tem-a-k">\u2726 ON THE ALTAR NOW</div>'
+        + '<div class="tem-a-k">\u2726 ON THE DISK NOW</div>'
         + '<div class="tem-a-item" style="color:' + (r ? r.color : '#ffd24d') + ';text-shadow:0 0 18px ' + (r ? r.glow : 'rgba(255,210,77,.8)') + '">'
         + (r ? r.name.toUpperCase() : 'RELIC') + '</div>'
         + '<div class="tem-a-lvl">ITEM LEVEL ' + (a.item.ilvl | 0) + '</div>'
-        + '<div class="tem-a-note">It is lying on the floor at the centre. Fly to it and it is yours \u2014 if you live.</div></div>';
+        + '<div class="tem-a-note">It is sitting on the disk. Fly onto it and the item is yours \u2014 first to touch it, no timer, no share.</div></div>';
     } else {
       // NO COUNTDOWN. The spawn is a random 1-3 hours and nobody is told when —
       // that is the mechanic, not a missing feature. A timer here would empty the
@@ -69,11 +69,10 @@
       const at = new Date(Date.now() + ms);
       const soon = ms > 0 && ms < 10 * 60000;
       altarCard = '<div class="tem-altar' + (soon ? ' soon' : '') + '">'
-        + '<div class="tem-a-k">' + (soon ? '\u26a0 THE ALTAR IS WAKING' : 'NEXT SPAWN') + '</div>'
+        + '<div class="tem-a-k">' + (soon ? '\u26a0 THE ALTAR IS WAKING' : 'THE ALTAR WAKES IN') + '</div>'
         + '<div class="tem-a-clock">' + (ms > 0 ? hms(ms) : 'ANY MOMENT') + '</div>'
         + '<div class="tem-a-at">' + at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' your time</div>'
-        + '<div class="tem-a-note">One item between <b>Relic</b> and <b>Paragon</b>, item level 300\u2013500. '
-        + 'Each wait is a random <b>1\u20133 hours</b>, so the one after this is anyone\u2019s guess. '
+        + '<div class="tem-a-note">One item lands on the disk \u2014 <b>Relic</b> to <b>Paragon</b>, item level 300\u2013500. '
         + (a && a.taken_name ? 'Last taken by <b>' + esc(a.taken_name) + '</b>.' : 'Nobody has taken one yet.') + '</div></div>';
     }
 
@@ -81,7 +80,7 @@
       '<div class="tem-hero">'
         + '<div class="tem-tag">TRUE PVP \u00b7 NO PROTECTIONS</div>'
         + '<div class="tem-title">THE TEMPLE</div>'
-        + '<div class="tem-sub">One arena. Every pilot in it can kill you.</div>'
+        + '<div class="tem-sub">One arena, one disk, one item. Every pilot in here can kill you.</div>'
       + '</div>'
       + altarCard
       + '<div class="tem-warn">'
@@ -93,10 +92,10 @@
       + '</div>'
       + '<div class="tem-rules">'
         + '<div><i>\u26a1</i><span><b>Speed is locked to 1\u00d7</b> and autopilot is off. Both are restored when you leave.</span></div>'
-        + '<div><i>\u25ce</i><span><b>No hostiles, no spawns.</b> Nothing in the Temple pays XP, gold or loot except the altar.</span></div>'
-        + '<div><i>\u23f1</i><span><b>The spawn time is unknown.</b> Somewhere between one and three hours \u2014 there is no countdown, for anyone.</span></div>'
-        + '<div><i>\u25ce</i><span><b>Hold the altar and it spawns better.</b> Every second you are ALONE inside the ring banks vigil, and vigil bends the roll toward the top tiers. Two pilots in the ring bank nothing \u2014 one of you has to leave.</span></div>'
-        + '<div><i>\u2694</i><span><b>Kills are reported by the attacker</b> and checked by the server for range and presence.</span></div>'
+        + '<div><i>\u25ce</i><span><b>No hostiles, no spawns.</b> Nothing in the Temple pays XP, gold or loot \u2014 only the disk does.</span></div>'
+        + '<div><i>\u23f1</i><span><b>Everyone sees the same clock.</b> The wait is a random one to three hours, rolled fresh each time \u2014 so the countdown above is exact, and the one after it is anyone\u2019s guess.</span></div>'
+        + '<div><i>\u25ce</i><span><b>Hold the disk and the altar yields better.</b> Every second you stand on it <b>alone</b> banks vigil, and vigil pushes the roll toward the top tiers. Two pilots on the disk bank nothing \u2014 one of you has to go.</span></div>'
+        + '<div><i>\u2694</i><span><b>A kill on the disk banks two minutes of vigil</b> and wipes theirs. Out at the rim it banks nothing \u2014 that is a chase, not a claim.</span></div>'
       + '</div>'
       + '<div class="tem-live"><span class="tem-dot' + (n ? ' on' : '') + '"></span>'
         + (n ? '<b>' + n + '</b> pilot' + (n === 1 ? '' : 's') + ' in the Temple right now' : 'The Temple is empty') + '</div>'
@@ -156,7 +155,7 @@
     p.className = up ? 'live' : (left > 0 && left < 600000) ? 'soon' : hold ? 'hold' : '';
     p.innerHTML = '<span class="tp-c">\u26e9</span>'
       + '<span class="tp-n">' + T().count() + '</span>'
-      + '<span class="tp-a">' + (up ? '\u2726 ALTAR UP' : hms(T().altarMs())) + '</span>'
+      + '<span class="tp-a">' + (up ? '\u2726 ON THE DISK' : hms(T().altarMs())) + '</span>'
       + (hold || v > 0 ? '<span class="tp-v">\u25ce ' + Math.floor(v / 60) + 'm</span>' : '')
       + '<span class="tp-x">LEAVE</span>';
   }

@@ -1,50 +1,56 @@
-# Loot Fleet — deploy v240 · build 706 · KOTH BOARD-RESET FIX · TEMPLE BETA CARD FIX
+# Loot Fleet — deploy v241 · build 707 · TEMPLE SQL FIXES · KOTH COUNTER FIX · COPY PASS
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v239 (build 704). Service worker cache is `lootfleet-v706`.
-**Login screen reads `BUILD 706`.**
+Supersedes v240 (build 706). Service worker cache is `lootfleet-v707`.
+**Login screen reads `BUILD 707`.**
 
 ---
 
-## ⚠ THE ORDER IS THE OPPOSITE OF THE USUAL ONE
+## THIS RELEASE FORCES EVERY PLAYER TO REFRESH
 
-**Deploy the site FIRST. Run the King of the Hill reset SECOND.**
+Three mechanisms, all already stamped in this folder — you do not have to do
+anything extra:
 
-Pre-705 clients ratchet their local kill total upward only — they never accept a
-lower figure from the server. Resetting the board while they are live means the
-next flush hands the stale count straight back, which is exactly what happened on
-the last attempt: the board was wiped and came back at 458 kills, tier 1168,
-within seconds. Build 706 is the one that makes a wipe stick.
+| mechanism | how it forces the reload |
+|---|---|
+| `version.json` = **707** vs clients running `LF_BUILD` 706 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
+| `sw.js` `CACHE` = **lootfleet-v707** | the service worker cache name changed, so the old bundle is evicted rather than served from disk |
+| every `js/`+`css/` ref carries `?v=707` | no browser can serve a stale copy of a changed file |
+
+**Push the site FIRST, then `version.json` last** if your host publishes
+incrementally — bumping the beacon ahead of the files evicts players onto code
+that is not live yet. A single upload of the whole folder is fine.
+
+---
+
+## ⚠ RE-RUN ONE SQL FILE
+
+`supabase/temple.sql` — **required.** Two live Postgres errors were traced to it,
+and the first one means the Temple altar can never spawn. It is
+`create or replace` throughout and safe to re-run on a live database.
+
+Then: `notify pgrst, 'reload schema';`
+
+Nothing else server-side changed. No Edge Function redeploy needed
+(`FEED_VER` is stamped 707 for the cron log, but the function code is unchanged
+since v239).
 
 ---
 
 ## STEP BY STEP
 
-1. **Push the site.** Upload the contents of this folder to the repo root.
-2. **Wait ~90 seconds.** `update-gate.js` polls `version.json` and force-reloads
-   every live client onto 706.
-3. **Run the SQL**, Supabase → SQL Editor:
-
-| # | file | why | skip if |
-|---|---|---|---|
-| 1 | `supabase/temple.sql` | the whole Temple server layer | already run |
-| 2 | `supabase/koth-reset-day.sql` | wipes TODAY's KOTH board — **run after step 2, not before** | never (the board is still inflated) |
-
-   Then `notify pgrst, 'reload schema';`
-
-4. **Edge Function** (only if not already on 704+):
-   `supabase functions deploy discord-feed` — all four files. Verify
-   `select content from net._http_response order by created desc limit 3;` → `"ver":706`.
-
-5. **Smoke test:**
-   - Login screen reads `BUILD 706`.
-   - **Ranks ▸ KING OF THE HILL** is empty after the reset and stays empty until
-     someone actually enters the arena. Your own count snaps to the server figure
-     within a few seconds of loading, with a "BOARD RESET" banner.
-   - Rank and kill count on the overlay agree — no "#2 with more kills than #1".
-   - **Redeem a Temple beta code** (⚙ Settings ▸ Coupon code): the violet TEMPLE
-     card appears on the Command menu immediately, no reload. Non-beta accounts
-     see no card, no Ranks tab, and `TEMPLE.enter()` refuses from the console.
+1. Supabase → SQL Editor → run `supabase/temple.sql`, then
+   `notify pgrst, 'reload schema';`
+2. Push the contents of this folder to the repo root.
+3. Watch: within ~90 seconds every live client blocks and reloads onto 707.
+4. Confirm the login screen reads `BUILD 707`.
+5. Smoke test:
+   - **KOTH** — enter the arena, get a kill. The pill count moves **immediately**,
+     not on the next board poll. Leave the tab backgrounded: it reads PAUSED.
+   - **KOTH** — rank and kill count on the overlay agree; no "#2 above a bigger #1".
+   - **Temple** (beta accounts) — Supabase logs show **no** `21000` or `42883`
+     errors, and the altar countdown actually reaches zero and drops an item.
+   - **Ranks** — thirteen boards, each with its own empty-state copy.
 
 ---
 
@@ -52,14 +58,87 @@ within seconds. Build 706 is the one that makes a wipe stick.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 706 |
-| root `version.json` | 706 |
-| `deploy-v240/version.json` | 706 |
-| `deploy-v240/sw.js` `CACHE` | `lootfleet-v706` |
-| `discord-feed` `FEED_VER` | 706 |
+| root `game.html` `window.LF_BUILD` | 707 |
+| root `version.json` | 707 |
+| `deploy-v241/version.json` | 707 |
+| `deploy-v241/sw.js` `CACHE` | `lootfleet-v707` |
+| `discord-feed` `FEED_VER` | 707 |
 
 Audited: all **87** referenced files (69 js, 18 css) byte-identical to the project
-root, zero stale, zero missing. `CODES.md` is not in this folder.
+root, zero stale, zero missing, every one cache-busted. 90 js files parse clean,
+19 stylesheets balanced, no duplicate DOM ids, all 22 Command targets resolve,
+zero `| 0` coercions remain on any currency or resource.
+`CODES.md` is not in this folder and must never be added.
+
+---
+
+## What changed in 707
+
+### 🗄 Two live Postgres errors, both in `temple.sql`
+
+**`UPDATE requires a WHERE clause` (21000) — the altar could never spawn.**
+`temple_tick()` ended its spawn branch with `update temple_presence set
+vigil_s = 0;`, unqualified. Supabase runs with the safe-update guard on, so that
+raises — and the raise **aborts the whole function**: `next_at` is never
+advanced, `item` is never written, and the next poll four seconds later hits the
+identical branch and fails identically. Every client in the zone generated an
+error every four seconds, indefinitely, and no altar could ever fire. Now scoped
+`where vigil_s > 0`.
+
+**`operator does not exist: record ->> unknown` (42883).** `temple_claim()` used
+a single `UPDATE … FROM temple_altar old` self-join with `RETURNING old.item` to
+capture the item before nulling it. RETURNING across a self-join does not hand
+back a typed jsonb column, so `select … into v_item` bound a bare record and the
+next `v_item->>'rarity'` raised. Replaced with lock-read-clear
+(`SELECT … FOR UPDATE`, then the update) — the lock was always what resolved the
+race, so the one-winner guarantee is unchanged; it is three readable statements
+instead of one clever one.
+
+Every SQL file in the project was then swept for the same WHERE-less pattern:
+clean.
+
+### 👑 The KOTH counter froze between board polls
+
+Build 705 made `myKills()` return the pilot's row from the server board so the
+rank and the count could not disagree. That fixed the disagreement and broke
+something worse: the board is refetched on a slow interval, so between polls the
+number was a frozen snapshot and the pending queue — every kill since the last
+flush — was invisible. The pill, the hero card and the overlay all read it, so
+the whole feature looked dead.
+
+The board row is the right **floor** (another device may have banked more than
+this save knows about) and completely the wrong **ceiling** (pend is real local
+work, seconds old). `reconcile()` already keeps `ack` honest against the server,
+which is what the disagreement actually needed.
+
+**And a merge could silently disarm scoring.** The no-entry-no-flush guard keys on
+`k.entered`, which `enter()` sets — but 702 deliberately stopped OR-ing that flag
+across save merges (OR-ing it re-armed the zombie queue that bug was about). A
+merge landing mid-session with the cloud copy as base therefore cleared the flag
+on a pilot who *was* in the arena, and every later flush binned their kills.
+`onKill()` only fires when the run is live, so a kill is itself proof of presence
+— better proof than a flag a merge can drop. Setting it there makes the guard
+self-healing without weakening it: a device that never enters still never flushes.
+
+### 📝 Copy and terminology
+
+The Temple rules card still read *"The spawn time is unknown — there is no
+countdown, for anyone"*, directly beneath an exact countdown. Left over from
+before 699, and flatly contradicting the screen it sits on.
+
+Vocabulary is now settled to three words for three things — the **disk** is the
+platform you stand on, the **altar** is the event that wakes, **vigil** is time
+held alone on the disk. The screen had been calling the platform "altar", "ring"
+and "centre" interchangeably, which makes one unusual mechanic read as three.
+
+Power and Haulage had no empty-state copy and fell through to a generic
+"Nothing on this board yet." A board that cannot explain its own emptiness reads
+as broken rather than new.
+
+
+---
+
+# Previous release — v240 · build 706
 
 ---
 

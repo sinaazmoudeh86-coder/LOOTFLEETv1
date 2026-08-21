@@ -233,8 +233,11 @@ begin
       taken_by = null, taken_name = null, taken_at = null,
       seq = a.seq + 1
     where id = 1 returning * into a;
-    -- the vigil is spent: the next altar is a fresh contest
-    update public.temple_presence set vigil_s = 0;
+    -- The vigil is spent: the next altar is a fresh contest. The WHERE is not
+    -- decoration — Supabase's safe-update guard rejects an unqualified UPDATE,
+    -- and this statement sits inside the spawn branch, so the rejection aborted
+    -- the spawn itself and the altar could never fire.
+    update public.temple_presence set vigil_s = 0 where vigil_s > 0;
   end if;
 
   -- THE COUNTDOWN IS PUBLIC. The INTERVAL is still rolled at random between one
@@ -282,25 +285,27 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'dead');
   end if;
 
-  -- THE ITEM IS CAPTURED BEFORE IT IS CLEARED. `returning` hands back the row as
-  -- it is AFTER the update, by which point item is already null — so the item has
-  -- to come out of the OLD tuple. One statement, one row lock: two pilots touching
-  -- the altar in the same frame produce exactly one winner, decided by the lock
-  -- rather than by whose packet arrived first.
-  with taken as (
-    update public.temple_altar t set
-      item = null,
-      taken_by = v_uid,
-      taken_name = coalesce(p_name, 'Operator'),
-      taken_at = now(),
-      next_at = now() + make_interval(secs => public.temple_spawn_secs())
-    from public.temple_altar old
-    where t.id = 1 and old.id = 1 and t.item is not null
-    returning old.item as got, t.seq as seq, t.next_at as next_at
-  )
-  select got, seq, next_at into v_item, v_seq, v_next from taken;
-
+  -- LOCK, READ, CLEAR. The FOR UPDATE lock is the race resolution: the second
+  -- pilot to arrive blocks here, and by the time it proceeds the item is null and
+  -- it is told 'gone'. Exactly one winner, decided by the lock rather than by
+  -- whose packet landed first.
+  --
+  -- This replaces a single UPDATE ... FROM self-join with RETURNING old.item,
+  -- which was too clever by half: RETURNING across a self-join does not hand back
+  -- a typed jsonb column, so `select ... into v_item` bound a bare record and the
+  -- next `v_item->>'rarity'` raised 42883 (operator does not exist: record ->>).
+  -- Three plain statements in one transaction are just as atomic and can be read.
+  select item, seq into v_item, v_seq from public.temple_altar where id = 1 for update;
   if v_item is null then return jsonb_build_object('ok', false, 'reason', 'gone'); end if;
+
+  update public.temple_altar set
+    item = null,
+    taken_by = v_uid,
+    taken_name = coalesce(p_name, 'Operator'),
+    taken_at = now(),
+    next_at = now() + make_interval(secs => public.temple_spawn_secs())
+  where id = 1
+  returning next_at into v_next;
 
   insert into public.temple_claims (user_id, name, rarity, ilvl, item)
   values (v_uid, coalesce(p_name, 'Operator'),

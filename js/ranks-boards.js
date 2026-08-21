@@ -61,6 +61,7 @@
       metric: (p) => p.power || 0,
       fmt: (v) => fmtRaw(v),
       meta: (p) => 'Zone ' + (p.zone | 0) + ' · Lv ' + (p.level | 0) + ' · ' + fmt(p.kills || 0) + ' kills',
+      empty: 'No operators have published a fleet yet.',
     },
     {
       // Needs no migration: asc_stars has always been on the leaderboard row and
@@ -122,6 +123,7 @@
       id: 'cargo', ic: '\u26df', col: '#ffb84d', label: 'HAULAGE', sub: 'Cargo Delivered',
       sql: 'cargo-ladder.sql',
       info: 'Space Cargo Defense — lifetime shipments escorted to the Citadel. Ties break on best delivered condition.',
+      empty: 'No shipments have been escorted yet. Run one Cargo Defense contract and you take this board.',
       unit: 'HAULS',
       metric: (p) => (p.cargo || 0) * 1e3 + Math.min(999, (p.cargo_best | 0) * 9),
       fmt: (v, p) => fmt(p.cargo | 0),

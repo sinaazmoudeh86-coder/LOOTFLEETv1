@@ -222,12 +222,17 @@
   // before the first poll lands and for an unranked pilot who has not published.
   function myKills() {
     const k = ks(); if (!k) return 0;
+    let base = k.ack | 0;
     const r = (k.rank | 0);
     if (r > 0 && Array.isArray(_board)) {
       const mine = _board.find((x) => (x.rank | 0) === r);
-      if (mine) return Math.max(mine.kills | 0, 0);
+      // FLOOR ONLY, NEVER A CEILING. If the board says more than this save has
+      // acknowledged, another device banked it and we adopt the higher figure.
+      // If it says less, it is simply a stale snapshot and ack is fresher.
+      if (mine) base = Math.max(base, mine.kills | 0);
     }
-    return (k.ack | 0) + (k.pend | 0);
+    // pend is always added: those kills happened, on this device, seconds ago.
+    return base + (k.pend | 0);
   }
   const kills = () => { const k = ks(); return k ? (k.ack | 0) + (k.pend | 0) : 0; };
   const rank = () => { const k = ks(); return k ? (k.rank | 0) : 0; };
@@ -505,6 +510,7 @@
       try { banner('▶ SCORING RESUMED', 'Back in the fight — kills are counting again.'); } catch (e) {}
     }
     k.pend = (k.pend | 0) + 1;
+    if (!k.entered) k.entered = 1;
     try { window.KOTHUI && window.KOTHUI.syncPill(); } catch (e) {}
   }
   // Is this session actually being scored? A pilot who is not signed in can play

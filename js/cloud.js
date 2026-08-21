@@ -190,6 +190,15 @@
   let _lbNoNano = false, _lbNanoRetryAt = 0;
   let _lbNoArt = false, _lbArtRetryAt = 0, _lbArtWarned = false;
   let _lbNoNew = false, _lbNewRetryAt = 0, _lbNewWarned = false;
+  // WHICH COLUMN SET THE LAST SUCCESSFUL BOARD READ ACTUALLY RETURNED.
+  // The ladders need to know whether a migration has run, and inspecting the
+  // returned ROWS cannot tell them: the caller merges the player's own live save
+  // over their row, so the new fields are always present on that one, and every
+  // other row is skipped precisely because it might be simulated. On a board with
+  // few published humans there is no row left to probe and the ladder stays
+  // 'waiting on a migration' forever, even after the SQL has run. The SELECT that
+  // succeeded is the authoritative answer, so record it here.
+  let _lbShape = '';
   function lbFail(where, err) {
     _lbFails++;
     // A row that never publishes makes the player INVISIBLE on Ranks while they
@@ -374,39 +383,46 @@
       // READ BACK here, so the Haulage ladder ranked every human at zero and a
       // Nanocore ladder was impossible to build. Each migration gets its own
       // rung on the ladder below, so a server missing one still serves the rest.
+      let shape = 'new';
       let { data, error } = await client.from('leaderboard')
         .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best')
         .order('power', { ascending: false }).limit(n || 100);
       if (error) {   // new-ladders.sql not run yet
+        shape = 'nano';
         const rW = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god')
           .order('power', { ascending: false }).limit(n || 100);
         data = rW.data; error = rW.error;
       }
       if (error) {   // nanocore-ladder.sql not run yet
+        shape = 'cargo';
         const rN = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best')
           .order('power', { ascending: false }).limit(n || 100);
         data = rN.data; error = rN.error;
       }
       if (error) {   // cargo-ladder.sql not run yet
+        shape = 'ladder';
         const rC = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges')
           .order('power', { ascending: false }).limit(n || 100);
         data = rC.data; error = rC.error;
       }
       if (error) {   // ranks-ladders.sql not run yet
+        shape = 'base';
         const r0 = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet,asc_stars')
           .order('power', { ascending: false }).limit(n || 100);
         data = r0.data; error = r0.error;
       }
       if (error) {   // column not migrated yet — fall back to the legacy shape
+        shape = 'legacy';
         const r = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet')
           .order('power', { ascending: false }).limit(n || 100);
         data = r.data; error = r.error;
       }
+      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }
@@ -443,6 +459,7 @@
       const { data, error } = await client.from('sdread_scores')
         .select('user_id,name,season,day,best_day,total,stage')
         .eq('user_id', id).eq('season', season || 1).maybeSingle();
+      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }
@@ -453,6 +470,7 @@
         .select('user_id,name,best_day,total,stage')
         .eq('season', season || 1).eq('day', day || 0).gt('best_day', 0)
         .order('best_day', { ascending: false }).limit(n || 100);
+      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }
@@ -463,6 +481,7 @@
         .select('user_id,name,best_day,total,stage')
         .eq('season', season || 1).gt('total', 0)
         .order('total', { ascending: false }).limit(n || 100);
+      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }
@@ -470,6 +489,10 @@
   window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, providers, deleteAccountData, getUser, pull, pullMeta, push,
     pullSave, pushSave, saveConflict, claimSession, touchSession, onSessionRow,
     lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason, sdMine,
+    // Which column set the last successful board read returned — 'new' means
+    // new-ladders.sql has run. This is how the ladders decide whether a
+    // migration is live; see the note on _lbShape.
+    lbShape: () => _lbShape,
     // Which rungs of the publish ladder are currently degraded, and when each
     // re-arms. One line in the console instead of reading source to find out why
     // a column is not moving.

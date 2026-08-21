@@ -1,91 +1,88 @@
-# Loot Fleet — deploy v235 · build 690 · DISCORD FEED REBUILD · INTEGER-OVERFLOW FIXES
+# Loot Fleet — deploy v236 · build 691 · LADDER MIGRATION PROBE FIX
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v234 (build 688). If v233/v234 were never pushed, this folder replaces both.
-Service worker cache is `lootfleet-v690`.
-**Login screen reads `BUILD 690`.**
+Supersedes v235 (build 690). Service worker cache is `lootfleet-v691`.
+**Login screen reads `BUILD 691`.**
 
 ---
 
-## ⚠ THREE THINGS TO RUN, IN THIS ORDER
+## IF YOU ALREADY DEPLOYED v235, THIS IS A ONE-STEP RELEASE
 
-### 1 · SQL — Supabase → SQL Editor
+**Just push the site.** No SQL to run, no Edge Function to redeploy — nothing
+server-side changed. Two client files moved: `js/cloud.js` and `js/ranks-boards.js`.
 
-All idempotent and safe to re-run.
-
-| # | file | why | skip if |
-|---|---|---|---|
-| 1 | `supabase/koth.sql` | King of the Hill tables, RPCs, cron | already run |
-| 2 | `supabase/koth-ratefix.sql` | `koth_bump` with `p_seq` + retuned rate cap | already run |
-| 3 | `supabase/new-ladders.sql` | `hcwave`/`expo` columns, rebuilt `lb_upsert`, `koth_hall_top()` | already run |
-
-Then, in the same editor:
-
-```sql
-notify pgrst, 'reload schema';
-```
-
-### 2 · EDGE FUNCTION — the Discord feed was restructured
-
-```bash
-supabase functions deploy discord-feed
-```
-
-**This is required this release.** The function is no longer one file — it now
-imports `catalog.ts`, `render.ts` and `voice-688.ts` from the same folder. A
-partial upload that misses one of them will fail to boot.
-
-Verify it landed:
-
-```sql
-select content from net._http_response order by created desc limit 3;
-```
-
-must show `{"ok":true,"ver":690,...}`. A lower `ver` means the old build is
-still running.
-
-### 3 · SITE, THEN BEACON
-
-Upload the contents of this folder to the repo root Vercel serves. `version.json`
-is inside it — one upload is fine, because the files land together. Only split if
-your host publishes incrementally, in which case `version.json` goes last:
-`update-gate.js` polls it every 90s and force-reloads anyone on a lower build.
+If you have NOT deployed v235 yet, do its three steps first (SQL → Edge Function →
+site); they are reproduced under "Previous release" below and everything in this
+folder is current.
 
 ---
 
 ## STEP BY STEP
 
-1. Run the three SQL files in order, then `notify pgrst, 'reload schema';`
-2. `supabase functions deploy discord-feed`
-3. Check `net._http_response` shows `"ver":690`
-4. Push the folder contents to the repo root
-5. Hard-reload the live site once — login screen must read `BUILD 690`
-6. Smoke test:
-   - **Fleet Exploration → open any contract.** FUEL COST shows your real fuel, not a negative number, and the launch button is enabled. *(This is the fix you reported.)*
-   - Ranks shows **twelve** tabs; King of the Hill has the TODAY / CROWNS pair
-   - Log one arena kill → the counter moves (proves `p_seq` landed)
-   - Abandon a spare system → 24h warning on the sheet, warp back refused with a countdown
-   - Console: `CLOUD.lbState()` → every rung `off: false`
-   - Discord: within ~2 minutes the channel should show tiered output (headlines separate, small news digested)
+1. Upload the contents of this folder to the repo root Vercel serves.
+2. Hard-reload the live site once — login screen must read `BUILD 691`.
+3. Open **Ranks ▸ HOME DEFENSE**. It should show the board, not
+   "waiting on a database migration".
+   - Still waiting? Then `new-ladders.sql` genuinely has not run. Run it in the
+     Supabase SQL Editor, then `notify pgrst, 'reload schema';` — the message is
+     now telling the truth.
+4. Same check on **EXPLORATION**.
 
 ---
 
-## Build stamps — all four agree
+## Build stamps — all agree
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 690 |
-| root `version.json` | 690 |
-| `deploy-v235/version.json` | 690 |
-| `deploy-v235/sw.js` `CACHE` | `lootfleet-v690` |
-
-`discord-feed` `FEED_VER` is also 690, matching the client build that ships it.
+| root `game.html` `window.LF_BUILD` | 691 |
+| root `version.json` | 691 |
+| `deploy-v236/version.json` | 691 |
+| `deploy-v236/sw.js` `CACHE` | `lootfleet-v691` |
+| `discord-feed` `FEED_VER` | 691 |
 
 Audited before hand-off: all **84** `js/`+`css/` files `game.html` references
 (67 js, 17 css) are byte-identical to the project root, none missing, every one
-cache-busted.
+cache-busted. `CODES.md` is **not** in this folder and must never be added.
 
-`CODES.md` is **not** in this folder and must never be added.
+---
+
+## What changed in 691
+
+**Home Defense and Exploration reported "waiting on a database migration" with the
+migration already run.**
+
+The check inspected the returned leaderboard rows for the new `hcwave`/`expo`
+columns. It deliberately skips two kinds of row, and both skips are correct on
+their own terms:
+
+- **the player's own row** — the game merges the live save over it, so those fields
+  are always present whether or not the column exists;
+- **every simulated pilot** — `derive()` fills the same fields client-side.
+
+On a board where few humans have published, that leaves **nothing to inspect**, so
+the check returned "not migrated" permanently. The failing state was
+indistinguishable from the real one, which is the worst property a diagnostic can
+have — it sent the operator to re-run SQL that had already run.
+
+The probe was inherited from Haulage and Nanocore, which only pass because enough
+humans have published to them. It was never correct; those two boards were
+concealing it.
+
+**The fix: ask the server, not the rows.** `cloud.js` now records which `SELECT`
+shape actually succeeded (`CLOUD.lbShape()`). If the query requesting
+`hcwave,expo,expo_best` came back clean, the columns exist. That is a direct
+statement about the schema and cannot be faked by a locally merged row.
+
+**And a third state, because there really are three.** Before the first board read
+lands — offline, signed out, first paint — the answer is genuinely unknown, and
+both wrong guesses are bad: accuse a healthy database, or rank a board of
+simulated pilots as though they were records. The probe now returns `unknown`,
+the board renders as loading, and it re-renders when the read arrives.
+
+
+---
+
+# Previous release — v235 · build 690
 
 ---
 

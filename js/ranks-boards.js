@@ -369,6 +369,31 @@
     expo: ['expo', 'expo_best'],
   };
   function migrated(rows, id) {
+    // THE NEW LADDERS ASK THE SERVER, NOT THE ROWS.
+    //
+    // The row probe below cannot answer for hcwave/expo. It deliberately skips
+    // the player's own row (mineInto writes those fields from the live save, so
+    // they are always present whether or not the column exists) and every
+    // simulated row (derive() fills them too). On a board where few humans have
+    // published, nothing is left to inspect — and the ladder reported "waiting on
+    // a database migration" permanently, even with the SQL run and the columns
+    // there. The failing state looked identical to the real one, which is the
+    // worst property a diagnostic can have.
+    //
+    // CLOUD.lbShape() reports which SELECT actually succeeded, which is a direct
+    // statement about the schema and cannot be faked by a merged local row.
+    if (id === 'hcwave' || id === 'expo') {
+      try {
+        const s = window.CLOUD && window.CLOUD.lbShape && window.CLOUD.lbShape();
+        if (s) return s === 'new';
+      } catch (e) {}
+      // No board read has landed yet (offline, signed out, first paint). We do
+      // not know, and the two wrong answers are both bad: claim the migration is
+      // missing and we accuse a healthy database, or claim it is present and we
+      // rank a board of simulated pilots. Say so instead — board() turns this
+      // into a loading state.
+      return 'unknown';
+    }
     const keys = SQL_PROBE[id] || ['missions', 'tile_rev'];
     for (const p of rows) {
       if (p.isMe || p._sim || p.is_simulated || p._filler) continue;
@@ -406,8 +431,15 @@
 
     // LEADERBOARD LADDERS — the same pool the power board uses, re-sorted
     const data = LB.allTimeBoard(g);
-    if (NEEDS_SQL[id] && !migrated(data.board, id)) {
-      return { rows: [], real: 0, tab, pending: false, needsSql: true };
+    if (NEEDS_SQL[id]) {
+      const m = migrated(data.board, id);
+      // 'unknown' means no server read has landed yet — render as loading, not as
+      // a missing migration, and re-render when the answer arrives.
+      if (m === 'unknown') {
+        try { if (window.CLOUD && window.CLOUD.lbTop) Promise.resolve(window.CLOUD.lbTop(100)).catch(() => {}).then(() => { if (onReady) onReady(); }); } catch (e) {}
+        return { rows: [], real: 0, tab, pending: true };
+      }
+      if (!m) return { rows: [], real: 0, tab, pending: false, needsSql: true };
     }
     const rows = data.board.map((p) => {
       const q = Object.assign({}, p);

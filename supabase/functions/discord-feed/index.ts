@@ -45,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 694;
+const FEED_VER = 704;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1778,6 +1778,47 @@ Deno.serve(async (req) => {
     }
 
     snap.push({ kind: '_meta', ref: 'koth', data: next, updated_at: now });
+
+  // ---- ⚔ THE TEMPLE (700) ----------------------------------------------------
+  // Claims only. temple_claims is written by ONE security-definer RPC after an
+  // atomic row-lock race, so every row is a real item leaving a real altar —
+  // nothing here can be client-forged. Cursor in feed_seen, same as war_events.
+  {
+    const tMeta = (seen.get('_meta:temple') || { id: 0 });
+    const tq = await db.from('temple_claims')
+      .select('id,at,name,rarity,ilvl')
+      .gt('id', Number(tMeta.id) || 0)
+      .order('id', { ascending: true }).limit(20);
+    const rows = (tq.error ? [] : (tq.data || [])) as any[];
+    const R_NAME: Record<number, string> = { 11: 'RELIC', 12: 'ARTIFACT', 13: 'MYTHIC', 14: 'ASCENDANT', 15: 'CELESTIAL', 16: 'PARAGON' };
+    let maxId = Number(tMeta.id) || 0;
+    for (const c of rows) {
+      maxId = Math.max(maxId, Number(c.id) || 0);
+      if (bootstrap) continue;
+      const rn = R_NAME[Number(c.rarity) || 0] || 'RELIC';
+      const top = Number(c.rarity) >= 15;
+      const seed = 'temple:' + c.id;
+      events.push({
+        kind: top ? 'templeClaimTop' : 'templeClaim',
+        actor: c.name,
+        line: `**${c.name}** lifted a ${rn} off the Temple altar`,
+        embed: {
+          color: CATALOG[top ? 'templeClaimTop' : 'templeClaim'].color,
+          author: { name: '⚔  THE TEMPLE' },
+          title: `${up(c.name)}  ⚔  ${rn} · ITEM LEVEL ${Number(c.ilvl) || 0}`,
+          description:
+            (top
+              ? `One item spawns every one to three hours, in the only zone where the hostiles are people. **${c.name}** walked out with a **${rn}**.`
+              : `**${c.name}** held the disk when it mattered and took the **${rn}** — item level ${Number(c.ilvl) || 0}.`) +
+            `\n-# The Temple · true PvP · dying there costs what dying always costs.`,
+          ...(top && gifFor('maxed', seed) ? { image: { url: gifFor('maxed', seed)! } } : {}),
+        },
+      });
+    }
+    if (maxId !== (Number(tMeta.id) || 0) || bootstrap) {
+      snap.push({ kind: '_meta', ref: 'temple', data: { id: maxId }, updated_at: now });
+    }
+  }
   }
 
   // ---- SITUATION REPORT ------------------------------------------------------

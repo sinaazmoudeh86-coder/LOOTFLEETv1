@@ -198,6 +198,7 @@
     else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
     else if (name === 'expo') { if (window.EXPOUI) window.EXPOUI.render(); }
     else if (name === 'koth') { if (window.KOTHUI) window.KOTHUI.render(); }
+    else if (name === 'temple') { if (window.TEMPLEUI) window.TEMPLEUI.render(); }
     if (name === 'battle') {
       try {
         const rt = G.rt || {};
@@ -420,6 +421,7 @@
     b.title = pro ? 'LootFleet Pro — active · manage' : 'LootFleet Pro — ' + pk.speed + '× speed · ' + pk.xpMult + '× XP · ' + pk.gold + '× gold · +' + Math.round((pk.loot - 1) * 100) + '% loot';
   }
   function refreshAll() {
+    try { templeLock(); syncJoystickVisible(); } catch (e) {}
     if (!_inited) return;
     syncProCta();
     if (screen === 'hero') renderHero();
@@ -464,6 +466,7 @@
     syncSpeed();
   }
   function syncSpeed() {
+    if (templeLock()) return;   // the row is hidden; nothing else here matters
     const pills = el['speed-row'].querySelectorAll('.spd');
     visibleSpeedTiers().forEach((tier, i) => {
       if (!pills[i]) return;
@@ -738,11 +741,33 @@
     if (b.title !== tip) b.title = tip;
   }
 
+  // THE TEMPLE HIDES BOTH CONTROLS OUTRIGHT.
+  //
+  // game-v93 already refuses to change speed or arm autopilot while temrun is
+  // live, so the buttons were dead — but a dead control is worse than an absent
+  // one: it reads as a broken game, and it invites people to keep pressing it
+  // looking for the advantage they know exists elsewhere. In a PvP zone the
+  // absence is also the message.
+  function templeLock() {
+    let on = false;
+    try { on = !!(G.inTemple && G.inTemple()); } catch (e) {}
+    const sr = el['speed-row'];   if (sr) sr.style.display = on ? 'none' : '';
+    const ab = el['auto-btn'];    if (ab) ab.style.display = on ? 'none' : '';
+    const aw = $('auto-warn');    if (aw && on) aw.classList.remove('show');
+    return on;
+  }
   function syncAuto() {
+    // THE TEMPLE HIDES THE AUTO BUTTON, NOT THE REST OF THIS FUNCTION.
+    // Bailing out early here also skipped syncJoystickVisible(), which is the one
+    // thing that puts the stick on screen — so a manual-only zone shipped with no
+    // way to move. The lock belongs on the two controls it is about.
+    const lock = templeLock();
     const on = G.getAuto();
-    el['auto-btn'].classList.toggle('on', on);
-    el['auto-lbl'].textContent = on ? 'Auto' : 'Manual';
-    const w = $('auto-warn'); if (w) w.classList.toggle('show', on);
+    if (!lock) {
+      el['auto-btn'].classList.toggle('on', on);
+      el['auto-lbl'].textContent = on ? 'Auto' : 'Manual';
+      const w = $('auto-warn'); if (w) w.classList.toggle('show', on);
+    }
     syncJoystickVisible();
   }
   function syncJoystickVisible() {
@@ -3517,7 +3542,11 @@
     const tab = data.tab;
     el['board-sub'].textContent = tab.sub;
 
-    html += '<div class="lbx-tabs">' + RB.TABS.map((t) =>
+    // TEMPLE is in closed beta: its board exists but the tab only shows for
+    // accounts holding the beta latch, so the zone does not leak via Ranks.
+    const _tabs = RB.TABS.filter((t) => t.id !== 'temple' || (window.TEMPLE && TEMPLE.betaOn && TEMPLE.betaOn()));
+    if (_lbTab === 'temple' && !_tabs.some((t) => t.id === 'temple')) _lbTab = 'power';
+    html += '<div class="lbx-tabs">' + _tabs.map((t) =>
       `<button class="lbx-tab${t.id === _lbTab ? ' on' : ''}" data-lbtab="${t.id}" style="--c:${t.col || '#5fd1ff'}"><i class="lbx-ic">${t.ic || ''}</i>${t.label}</button>`).join('') + '</div>';
     // SUB-VIEWS — only King of the Hill has them. Two boards answering the same
     // question on different clocks belong under one tab, not as two more entries
@@ -4573,5 +4602,5 @@
     return v + s;
   }
 
-  window.UI = { focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
+  window.UI = { syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
 })();

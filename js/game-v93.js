@@ -1194,7 +1194,7 @@
       e.tithe = tithe;
       e.rush = 1;                          // charge the pilot instead of holding station
       e.spawnFx = 0.5;
-      rt.enemies.push(e);
+      if (!pushEnemy(e)) break;            // Temple: nothing to summon
     }
     rt.shake = Math.min(5, (rt.shake || 0) + 3);
     burst(a.x, a.y, '#ff8a3d', 70, { speed: 420, life: 1.1, glow: true });
@@ -1223,7 +1223,7 @@
             Math.max(24, Math.min(rt.worldH - 24, a2.y + Math.sin(ang) * rad)));
           e2.beacon = true; e2.rush = 1; e2.spawnFx = 0.5;
           e2.tithe = tithe;
-          rt.enemies.push(e2);
+          pushEnemy(e2);
         }
       }
       if (rt.beaconSwarm <= 0) {
@@ -1247,9 +1247,24 @@
     const y = Math.max(20, Math.min(rt.worldH - 20, node.y + Math.sin(a) * r));
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     voidSkin(e);
+    if (rt.temrun && rt.temrun.active) return;   // Temple: no node hostiles
     e.node = node; node.enemy = e;
     kothScale(e);
-    rt.enemies.push(e);
+    pushEnemy(e);
+  }
+  // THE TEMPLE ADMITS NO HOSTILES, EVER.
+  //
+  // Setting tileDensity to 0 stops the node layer, but at least six other paths
+  // push straight into rt.enemies — beacon swarms, the siege wave engine, boss
+  // spawns, other modules' spawners. Guarding them one at a time would leave the
+  // next one to be found by a player standing in a PvP zone shooting a raider.
+  // This is the single choke point every hostile has to pass through, so the rule
+  // is stated once and cannot be routed around.
+  function pushEnemy(e) {
+    if (!e) return e;
+    if (rt.temrun && rt.temrun.active) return null;
+    rt.enemies[rt.enemies.length] = e;
+    return e;
   }
   function updateNodes(dt) {
     for (const node of rt.nodes) {
@@ -1886,7 +1901,7 @@
     b.damage = (b.damage || 10) * (1 + stage * 0.3);
     b.speed *= 0.5; b.size = 96; b.ranged = true; b.range = 470; b.fireCd = 2.0; b.fireT = 1.0;
     b.tint = '#c9a0ff'; b.name = 'Prism Fleet · Stage ' + stage;
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = false;
+    if (pushEnemy(b)) { rt.boss = b; rt.bossAlive = true; rt.superBossAlive = false; }
     burst(cx, cy, '#c9a0ff', 70, { speed: 320, life: 1.1, glow: true });
     return b;
   }
@@ -1924,7 +1939,7 @@
       b.name = nm.toUpperCase();
       b.isSuper = isSuper;
     }
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = isSuper;
+    if (pushEnemy(b)) { rt.boss = b; rt.bossAlive = true; rt.superBossAlive = isSuper; }
     burst(x, y, isSuper ? '#ff2a4a' : '#e23b4e', isSuper ? 90 : 50, { speed: isSuper ? 360 : 280, life: 1.1, glow: true });
     if (window.UI) window.UI.bossEvent(isSuper ? 'super' : 'spawn');
     return b;
@@ -1954,7 +1969,7 @@
     b.tint = '#ff2a3a';
     b.spriteImg = dreadImg(tier);
     b.name = 'DREADNAUGHT · Lv ' + dreadLevelFor(tier);
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    if (pushEnemy(b)) { rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true; }
     burst(cx, cy, '#ff2a3a', 110, { speed: 380, life: 1.3, glow: true });
     if (window.UI) window.UI.bossEvent('super');
     return b;
@@ -2655,6 +2670,8 @@
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineTick) { try { window.SDREAD.engineTick(dt, rt); } catch (e) {} }
     // KING OF THE HILL — the 24h kill race: tier scaling and field top-up.
     if (rt.kothrun && rt.kothrun.active && window.KOTH && window.KOTH.engineTick) { try { window.KOTH.engineTick(dt, rt); } catch (e) {} }
+    // THE TEMPLE — remote pilot sync, altar pickup, presence heartbeat.
+    if (rt.temrun && rt.temrun.active && window.TEMPLE && window.TEMPLE.engineTick) { try { window.TEMPLE.engineTick(dt, rt); } catch (e) {} }
     // HOLLOW ARMADA — alliance live raid on the real engine (timer, zones, transmit).
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineTick) { try { window.ALBOSS.engineTick(dt, rt); } catch (e) {} }
     // HOME CITADEL — wave defense on the real engine (fort objective, raider waves).
@@ -2738,6 +2755,28 @@
 
     // projectiles
     for (const p of rt.projectiles) { p.update(dt); if (p.hit) resolveHit(p); }
+    // THE TEMPLE — PvP HIT ATTRIBUTION.
+    //
+    // Remote pilots are nameplates driven by a broadcast, not engine entities, so
+    // they are invisible to targeting and to resolveHit(). Rather than fake them
+    // as enemies — which would put them in every nearbyEnemies() sweep, every
+    // drone target list and every loot roll — the collision is resolved here, on
+    // the projectiles the player actually fired.
+    //
+    // A hit does NOT decide anything. It reports a claim; temple.sql decides
+    // whether it counts, and refuses it unless both pilots are present, adjacent
+    // and off cooldown. The client is asserting "I shot at them", not "they died".
+    if (rt.temrun && rt.temrun.active && window.TEMPLE) {
+      for (const p of rt.projectiles) {
+        if (p.dead || p.enemy || p._temHit) continue;
+        // the swept segment: where it was last frame to where it is now
+        const uid = window.TEMPLE.pilotNear(p.x, p.y, 30, p._tpx, p._tpy);
+        p._tpx = p.x; p._tpy = p.y;
+        if (!uid) continue;
+        p._temHit = 1; p.dead = true;
+        try { window.TEMPLE.onHit(uid, p.damage || 0); } catch (e) {}
+      }
+    }
     sweepDead(rt.projectiles);
 
     // ground loot pickups + LOOT MAGNET: drops within range fly toward the
@@ -3088,6 +3127,8 @@
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineRender) { try { window.SDREAD.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // KING OF THE HILL — crown-gold arena vignette.
     if (rt.kothrun && rt.kothrun.active && window.KOTH && window.KOTH.engineRender) { try { window.KOTH.engineRender(ctx, rt.time, rt); } catch (e) {} }
+    // THE TEMPLE — the altar and every other pilot in the zone.
+    if (rt.temrun && rt.temrun.active && window.TEMPLE && window.TEMPLE.engineRender) { try { window.TEMPLE.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOLLOW ARMADA — collapse zones + siege aura over the arena.
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineRender) { try { window.ALBOSS.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOME CITADEL — the fort, its shield and turret fire, drawn in-world.
@@ -4234,6 +4275,8 @@
   // Armed on ENTRY only (not from resetZone, which also fires mid-zone), so
   // turning it off to dodge something by hand stays off for that whole visit.
   function armAuto() {
+    // never re-arm inside the Temple — see setAuto()
+    try { if (rt.temrun && rt.temrun.active) return; } catch (e) {}
     if (state.auto) return;
     state.auto = true;
     rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
@@ -4333,7 +4376,7 @@
     b.tint = '#b04dff';
     b.spriteImg = voidmawImg();
     b.name = 'VOIDMAW';
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    if (pushEnemy(b)) { rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true; }
     burst(cx, cy, '#b04dff', 110, { speed: 380, life: 1.3, glow: true });
     if (window.UI) window.UI.bossEvent('super');
     return b;
@@ -4368,6 +4411,77 @@
     if (window.UI) window.UI.refreshAll(); save();
     return true;
   }
+  // ===========================================================================
+  // THE TEMPLE — true PvP arena
+  // ===========================================================================
+  // A very large empty world with an altar at the centre and NO hostiles: every
+  // threat here is another pilot. Deliberately different from every other arena
+  // in three ways.
+  //
+  //   NO SPAWNS. tileDensity 0 and the boss clock pushed out of reach. A hostile
+  //   wandering in would be free XP in a zone that is supposed to pay nothing but
+  //   the altar, and it would give a camper something to farm while they wait.
+  //
+  //   1x SPEED, HANDS ON. Game speed is forced to 1 and autopilot is disarmed —
+  //   see setGameSpeed()/setAuto(), which refuse to change either while temrun is
+  //   live. Speed is bought with money and auto is the idle half of the game;
+  //   neither belongs in a fight against a person.
+  //
+  //   FOUR TIMES THE WORLD. Finding someone should take a moment, and holding the
+  //   centre should mean something. A normal arena would put every pilot on top
+  //   of the altar from the first second.
+  function startTemple() {
+    state.currentDungeon = 200;
+    state.currentSystem = null;
+    state.dreadRun = null; rt.siege = null; rt.waves = null;
+    rt.tileDensity = 0; rt.tileLoot = 0; rt.tileRespawnMult = 0; rt.deepDeath = false;
+    resetZone();
+    rt.siege = null; rt.waves = null;
+    rt.enemies.length = 0; rt.ground.length = 0;
+    rt.bossInit = rt.bossTimer = 1e9;
+    rt.alrun = null; rt.hcrun = null; rt.cgrun = null; rt.sdrun = null; rt.kothrun = null;
+    rt.worldW = Math.round(rt.worldW * 2); rt.worldH = Math.round(rt.worldH * 2);
+    rt.temrun = { active: true, started: Date.now(), prevSpeed: state.gameSpeed || 1, prevAuto: !!state.auto };
+    // forced before the first frame, not on the next tick
+    state.gameSpeed = 1; state.auto = false;
+    rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
+    // SPAWN AT THE RIM, ON A RANDOM BEARING.
+    //
+    // The first cut dropped every pilot within 700 units of the centre in a world
+    // four times normal size — so two entrants started almost stacked, and both
+    // started standing on the altar. Neither "a very large area where you look
+    // for other pilots" nor "hold the centre" survives that: the search is over
+    // before it starts and the centre is where you happen to appear.
+    //
+    // Entering now costs a real flight in, on a bearing nobody can predict, which
+    // is also what stops a killed pilot re-entering directly on top of the pilot
+    // who just killed them.
+    {
+      const cx = rt.worldW / 2, cy = rt.worldH / 2;
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.min(cx, cy) * (0.72 + Math.random() * 0.22);
+      rt.archer.x = Math.max(80, Math.min(rt.worldW - 80, cx + Math.cos(ang) * rad));
+      rt.archer.y = Math.max(80, Math.min(rt.worldH - 80, cy + Math.sin(ang) * rad));
+    }
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 0;
+    try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
+    try { if (window.UI && window.UI.syncJoystick) window.UI.syncJoystick(); } catch (e) {}
+    if (window.UI) window.UI.refreshAll(); save();
+    return true;
+  }
+  // Restore what the Temple took. Called from goSafeHangar/deploy teardown so a
+  // pilot who dies, warps out or closes the zone gets their speed tier and their
+  // autopilot back — losing a paid 5x permanently because you visited a PvP zone
+  // would be a far worse bug than anything the zone itself can do.
+  function endTemple() {
+    if (!rt.temrun) return;
+    const t = rt.temrun; rt.temrun = null;
+    try { state.gameSpeed = t.prevSpeed || 1; state.auto = !!t.prevAuto; } catch (e) {}
+    try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
+    try { if (window.TEMPLE) window.TEMPLE.leave(); } catch (e) {}
+    save();
+  }
   // Field top-up, called by the module when the arena thins out. Spawns OUTSIDE
   // weapon range so hostiles have to be flown at rather than appearing on top of
   // the pilot, and never attaches to a node — these are extras above the zone's
@@ -4392,7 +4506,7 @@
     const y = Math.max(24, Math.min(rt.worldH - 24, a.y + Math.sin(ang) * rad));
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     kothScale(e);
-    rt.enemies.push(e);
+    pushEnemy(e);
     return e;
   }
   // SAFE HANGAR — tow the pilot somewhere nothing can shoot them: clear every
@@ -4447,7 +4561,7 @@
     b.tint = '#2ee6c9';
     b.spriteImg = armadaImg();
     b.name = 'HOLLOW ARMADA · Mk-' + Math.max(1, markN | 0);
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    if (pushEnemy(b)) { rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true; }
     burst(cx, cy, '#2ee6c9', 110, { speed: 380, life: 1.3, glow: true });
     if (window.UI) window.UI.bossEvent('super');
     rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
@@ -4488,7 +4602,7 @@
     const type = pool[(Math.random() * Math.max(1, pool.length - 1)) | 0];
     const e = new E.Enemy(type, state.currentDungeon, x, y);
     e.isBoss = false; e.isCitadel = false;
-    rt.enemies.push(e);
+    pushEnemy(e);
     return e;
   }
   function endHomeDefense() {
@@ -4550,7 +4664,7 @@
     if (o.hpMult) { e.maxHp = e.hp = Math.max(1, e.maxHp * o.hpMult); }
     if (o.raidTarget) { e.raidTarget = o.raidTarget; e.isRaider = true; }
     e.cgRole = o.role || 'fighter';
-    rt.enemies.push(e);
+    pushEnemy(e);
     return e;
   }
   function endCargoRun() {
@@ -4598,6 +4712,9 @@
     // the one thing all of them go through, including goSafeHangar(). startKoth
     // arms rt.kothrun AFTER calling this, so it is unaffected.
     rt.kothrun = null;
+    // THE TEMPLE ends through endTemple(), not by nulling the flag: speed and
+    // autopilot have to be handed back or a pilot loses a paid 5x tier by dying.
+    if (rt.temrun) { try { endTemple(); } catch (e) {} }
     state.prismRun = null;   // any (re)deploy ends a Prism Field run
     state.prismFleetRun = null;   // ...and a Prism Fleet gauntlet run
     sweepLoot();
@@ -5599,7 +5716,7 @@
       e.damage *= 0.32; e.speed *= 0.72; e.size *= 1.25;
     }
     kothScale(e);
-    rt.enemies.push(e);
+    pushEnemy(e);
   }
   function spawnWave(n, densityMul) {
     densityMul = densityMul || 1;
@@ -5645,7 +5762,7 @@
       setCloneRegen(c, mu.ratio);
       c.tint = '#ff6a5e';
     }
-    rt.enemies.push(c);
+    pushEnemy(c);
     burst(c.x, c.y, '#ff9a50', 50, { speed: 300, life: 1.0, glow: true });
     return c;
   }
@@ -6278,7 +6395,7 @@
     }
     b.tint = '#ffce8a';
     b.name = ((def && def.name) ? def.name.toUpperCase() + "'S FLEET" : 'ENEMY CLONE FLEET') + ' · ⚡' + formatNum(cloneScore || 0);
-    rt.enemies.push(b); rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true;
+    if (pushEnemy(b)) { rt.boss = b; rt.bossAlive = true; rt.superBossAlive = true; }
     // ESCORT REPLICAS — their real fleet hulls, flanking the flagship
     escKeys.forEach((key, i) => {
       const ex = cx + (i % 2 === 0 ? -1 : 1) * (150 + Math.floor(i / 2) * 90);
@@ -6293,7 +6410,7 @@
       e2.spriteImg = im2;
       e2.tint = '#ffce8a';
       e2.name = ((C.SHIP_BY_KEY[key] || {}).name || key) + ' ESCORT';
-      rt.enemies.push(e2);
+      pushEnemy(e2);
     });
     burst(cx, cy, '#ffce8a', 90, { speed: 360, life: 1.2, glow: true });
     if (window.UI) window.UI.bossEvent('super');
@@ -6432,11 +6549,23 @@
   // moment anything else happened to call syncAuto(). That is the intermittent
   // "locks in on the 3rd or 4th boss jump" freeze.
   function setAuto(v) {
+    // NO AUTOPILOT IN THE TEMPLE. Hands-off flying is the whole idle half of this
+    // game and it has no place in a zone where the opponent is a person: it would
+    // be bots duelling bots for a Paragon, and the 20% auto damage penalty is not
+    // a substitute for actually being there.
+    try { if (rt.temrun && rt.temrun.active && v) { state.auto = false; return; } } catch (e) {}
     state.auto = !!v; rt.joy.x = rt.joy.y = 0; rt.joy.active = false; save();
     try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
   }
   function setJoystick(x, y, active) { rt.joy.x = x; rt.joy.y = y; rt.joy.active = active; }
   function setGameSpeed(mult) {
+    // THE TEMPLE IS ALWAYS 1×. Speed multiplies movement, fire rate and everything
+    // else the fight is made of, so a pilot at 10× does not beat a pilot at 1× —
+    // they are playing a different game at ten times the clock. There is no
+    // version of that which is PvP, and it is a purchasable advantage besides.
+    // The lock lives HERE rather than in the UI because the speed row is not the
+    // only caller and a hidden button is not a rule.
+    try { if (rt.temrun && rt.temrun.active) { state.gameSpeed = 1; return false; } } catch (e) {}
     // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it
     if (mult === 10) { if (!state.secretSpeed) return false; state.gameSpeed = 10; save(); return true; }
     // 4× is the PREMIUM tier — ONLY a 500-LootCoin unlock opens it
@@ -7717,6 +7846,7 @@
     init, state, rt, save, computeStats, refreshStats,
     shipLevel, shipUpInfo, upgradeShip, spawnFleetBoss,
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
+    startTemple, endTemple, inTemple: () => !!(rt.temrun && rt.temrun.active),
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
     buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,

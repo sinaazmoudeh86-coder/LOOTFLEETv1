@@ -127,6 +127,15 @@ export const CATALOG: Record<string, EventDef> = {
   hcwave:   { feature: 'hcwave',   tier: 'notable',  color: COLOR.hcwave,   icon: '⛨', label: 'HOME DEFENSE' },
   hcEra:    { feature: 'hcwave',   tier: 'headline', color: COLOR.hcwave,   icon: '⛨', label: 'A CITADEL HAS ENTERED A NEW ERA', gif: 'victory' },
 
+  // THE TEMPLE. A claim is the rarest loud moment in the game — one item every
+  // one to three hours, taken under fire in the only zone where other pilots are
+  // the threat. Tier follows the prize: a Celestial or Paragon off the disk is a
+  // galaxy headline; anything below rides as a notable card. Kills are NOT
+  // announced individually — ten a night would mute the channel — the claim card
+  // carries the fight's outcome instead.
+  templeClaim:    { feature: 'temple', tier: 'notable',  color: 0xc98bff, icon: '⚔', label: 'TEMPLE CLAIM', gif: 'victory' },
+  templeClaimTop: { feature: 'temple', tier: 'headline', color: 0xc98bff, icon: '⚔', label: 'THE TEMPLE HAS YIELDED A TREASURE', gif: 'maxed' },
+
   // KING OF THE HILL. The race has a hard 24-hour deadline, which makes its
   // announcements time-critical in a way nothing else here is: a crown posted
   // late is worthless, and an opening posted late costs entrants.
@@ -144,9 +153,9 @@ export const DEF = (kind: string): EventDef =>
 // Within a tier, this is the order things are shown. Kinds absent from the list
 // sort last, which is the right default for anything newly added.
 export const PRIORITY = [
-  'kothCrown', 'kothDyn', 'throne', 'void', 'armada', 'nanomax', 'expoElite', 'hcEra',
+  'kothCrown', 'kothDyn', 'templeClaimTop', 'throne', 'void', 'armada', 'nanomax', 'expoElite', 'hcEra',
   'ascend', 'dread', 'repel', 'steal', 'citadel', 'nano', 'hull', 'cargo',
-  'kothLead', 'kothWarn', 'kothOpen', 'expo', 'hcwave', 'bigbet',
+  'kothLead', 'kothWarn', 'kothOpen', 'templeClaim', 'expo', 'hcwave', 'bigbet',
   'top10', 'zone', 'claim', 'alliance', 'level', 'lost', 'pilot',
 ];
 

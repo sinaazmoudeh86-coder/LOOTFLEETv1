@@ -210,6 +210,13 @@
     if (!force && !(k.pend > 0)) return;
     const send = Math.min(600, k.pend | 0);
     if (send <= 0 && !force) return;
+    // NO ENTRY, NO FLUSH. pend can only honestly come from this device's own
+    // arena session today — onKill() is gated on rt.kothrun. A pending balance
+    // on a device that never entered today is a zombie: a merged-in copy of
+    // kills another device already flushed, or a restored snapshot. Submitting
+    // it double-counts; there is nothing legitimate it could be. Drop it and
+    // say nothing — the server total (ack) is untouched and correct.
+    if (!k.entered && (k.pend | 0) > 0) { k.pend = 0; save(); return; }
     _flushing = true;
     // REPLAY GUARD. koth_bump is at-least-once: if the transaction commits but
     // the response is lost, the client still holds the delta and retries it, and

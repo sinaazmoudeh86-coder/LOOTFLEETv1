@@ -111,7 +111,29 @@
       // it happens to be their real one — that was their decision to make.
       const provider = [meta.name, meta.full_name, meta.user_name,
                         (user.email || '').split('@')[0]].filter(Boolean).map((x) => String(x).toLowerCase());
-      const leaked = !meta.lf_name && saved && provider.indexOf(String(saved).toLowerCase()) >= 0;
+      // THE SAVE'S OWN nameSet FLAG IS PROOF OF CHOICE, AND IT MUST BE HONOURED.
+      //
+      // The scrub used to trust ONE signal — meta.lf_name — written by a
+      // fire-and-forget updateUser() inside setName(). If that single network
+      // call ever failed (offline rename, expired token), the player's save
+      // still carried their chosen name and nameSet:true, but the metadata
+      // proof was gone. On the next sign-in, anyone whose CHOSEN name matched
+      // a provider field — picking your own Google display name, or your email's
+      // local part, is common — was misread as a leak and force-renamed to a
+      // callsign ("why is my name grimthorn?", verbatim, ticket of Aug 2026).
+      //
+      // nameSet lives in the save, survives merges (one-way latch union, 684)
+      // and does not depend on any single request landing. A name the player
+      // set is left alone even when it equals the provider's — that was their
+      // decision to make, and the scrub exists for names they never chose.
+      const chosen = !!(window.GAME && window.GAME.state && window.GAME.state.nameSet);
+      const leaked = !meta.lf_name && !chosen && saved && provider.indexOf(String(saved).toLowerCase()) >= 0;
+      // SELF-HEAL THE MISSING PROOF: a chosen name with no lf_name is exactly
+      // the failed-write case — re-stamp the metadata so the next sign-in does
+      // not depend on the save being consulted first.
+      if (chosen && !meta.lf_name && saved) {
+        try { if (window.CLOUD && window.CLOUD.client) window.CLOUD.client.auth.updateUser({ data: { lf_name: saved } }); } catch (e) {}
+      }
       if (leaked) {
         const cs = callsign(user.id || user.email);
         try {

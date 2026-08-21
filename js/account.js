@@ -846,9 +846,26 @@
     if (other.koth && base.koth && (other.koth.day | 0) === (base.koth.day | 0)) {
       const bk = base.koth, ok = other.koth;
       bk.ack = Math.max(bk.ack | 0, ok.ack | 0);
-      bk.pend = Math.max(bk.pend | 0, ok.pend | 0);
+      // PEND IS NEVER UNIONED UPWARD — THIS WAS THE PHANTOM-KILLS BUG.
+      //
+      // pend is this DEVICE's unflushed kill queue. The moment a flush lands,
+      // the kills live in the server total (and in ack); the delta itself is
+      // spent. A second device's copy still carries the pre-flush pend, so
+      // max-wins RESURRECTED already-counted kills on every same-day login —
+      // flush() runs everywhere on a 30s tick, gave the zombie delta a fresh
+      // seq, and the server added it again. Score climbed while the player sat
+      // in the hangar: "earning kills without being in the event", exactly.
+      //
+      // min() instead: the actively-playing copy flushes every 5s so its pend
+      // is near zero, and the stale copy's balloon is discarded with it. The
+      // only loss case is kills genuinely unflushed on BOTH copies at once,
+      // which a 5-second flush cadence makes a few kills at worst — a ladder
+      // can absorb that; it cannot absorb duplication.
+      bk.pend = Math.min(bk.pend | 0, ok.pend | 0);
       bk.best = Math.max(bk.best | 0, ok.best | 0);
-      bk.entered = bk.entered || ok.entered;
+      // entered stays THIS device's own fact — it gates whether pend may flush
+      // at all (see koth.js), so OR-ing it across devices would re-arm exactly
+      // the zombie queue the min() above just disarmed.
       // an alert that already fired on one device must not fire again on the other
       ['wasKing', 'top5', 'h1', 'm10'].forEach((f) => { bk[f] = bk[f] || ok[f]; });
       // THE REPLAY COUNTER MUST NEVER GO BACKWARDS ACROSS A MERGE.
@@ -861,7 +878,14 @@
       bk.inflight = 0;
     } else if (other.koth && !base.koth) {
       base.koth = other.koth;
-      if (base.koth) base.koth.inflight = 0;
+      if (base.koth) {
+        base.koth.inflight = 0;
+        // an adopted copy's pend is another device's queue — those kills are
+        // either already in the server total or lost to a dropped flush; a
+        // fresh device must not replay them (see the pend note above)
+        base.koth.pend = 0;
+        base.koth.entered = 0;
+      }
     }
     // =========================================================================
     // ADDITIVE ENTITLEMENTS — things that can only ever be ACQUIRED
@@ -903,7 +927,7 @@
     // ONE-WAY LATCHES. Every one of these is "this account has been granted X"
     // and nothing in the game turns them back off, so OR-ing them can only
     // preserve an entitlement the player already holds.
-    ['flightWaiver', 'unlimited', 'discordJoin', 'nameSet', 'dreadFirstKill', 'embFound',
+    ['flightWaiver', 'unlimited', 'discordJoin', 'nameSet', 'templeBeta', 'dreadFirstKill', 'embFound',
      'tourBeta', 'lv100Warned', 'deathExplained', 'capNotified'].forEach((f) => {
       if (other[f] && !base[f]) base[f] = other[f];
     });

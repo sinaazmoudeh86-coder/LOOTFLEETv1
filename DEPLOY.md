@@ -1,21 +1,66 @@
-# Loot Fleet — deploy v238 · build 694 · KING OF THE HILL DIFFICULTY REBUILT
+# Loot Fleet — deploy v239 · build 704 · THE TEMPLE (CLOSED BETA, CODE-GATED) · KOTH PHANTOM-KILL FIX · NAME-SCRUB FIX
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v237 (build 693). Service worker cache is `lootfleet-v694`.
-**Login screen reads `BUILD 694`.**
+Supersedes v238 (build 694 — live). Service worker cache is `lootfleet-v704`.
+**Login screen reads `BUILD 704`.**
 
 ---
 
-## ONE STEP: PUSH THE SITE
+## ⚠ THREE THINGS TO RUN, IN THIS ORDER
 
-No SQL. No Edge Function. Three client files changed: `js/koth.js`,
-`js/koth-ui.js`, `css/koth.css`.
+### 1 · SQL — Supabase SQL Editor
 
-1. Upload the contents of this folder to the repo root Vercel serves.
-2. Hard-reload once — login screen must read `BUILD 694`.
-3. Enter **King of the Hill** and check the ☠ DIFFICULTY card: the bands should
-   read ×1 → ×21.78 across the first 1,200 kills, and the footer should say HP
-   grows with kills², not "HP triples / 100".
+| # | file | why | skip if |
+|---|---|---|---|
+| 1 | `supabase/temple.sql` | **NEW** — the whole Temple server layer: presence, kills, altar, vigil, ladder | never |
+| 2 | `supabase/koth-reset-day.sql` | zeroes TODAY's King of the Hill board (the pend-replay inflation) | you want inflated scores to stand until 00:05 UTC |
+| 3 | `supabase/koth-reset-pilot.sql` | optional — wipes `realsina1` alone | already run, or the day reset makes it moot |
+
+Then: `notify pgrst, 'reload schema';`
+
+### 2 · EDGE FUNCTION — required (Temple claims announce on Discord)
+
+```bash
+supabase functions deploy discord-feed
+```
+
+Four files (`index.ts`, `catalog.ts`, `render.ts`, `voice-688.ts`) — deploy the whole
+folder; a partial upload does not boot. Verify:
+`select content from net._http_response order by created desc limit 3;` → `"ver":703`.
+
+### 3 · SITE, THEN BEACON
+
+Upload the folder contents. `version.json` is inside — one upload is fine; only
+split if your host publishes incrementally (beacon last).
+
+---
+
+## ⛩ THE TEMPLE SHIPS DARK — CLOSED BETA (704)
+
+The zone is fully deployed but INVISIBLE and REFUSED for everyone until their
+account redeems a beta code (⚙ Settings ▸ Coupon code). The gate is a one-way
+save flag (`templeBeta`), enforced in four places: the Command card (CSS-dark,
+revealed per-account), the screen (beta wall), `TEMPLE.enter()` (refused — a
+console call gets the same answer), and the Ranks tab (filtered out). The flag
+survives save merges. Codes live in the project root `CODES.md` — six of them,
+one per account, NOT in this folder.
+
+To open it to everyone later: ship a build that sets `state.templeBeta = 1` in a
+migration, or replace `betaOn()` with `true` — one line in `js/temple.js`.
+
+## SMOKE TEST
+
+1. Login screen reads `BUILD 703`.
+2. **Command** does NOT show a Temple card. Redeem a beta code (⚙ Settings ▸ Coupon code) — the card appears without a reload.
+3. Enter the Temple (Lv 60+, signed in): rim spawn, disk platform at centre with
+   the countdown ON the disk, joystick present, speed row and auto button GONE.
+4. Pill top-left: countdown · LEAVE arms to "SURE?" on first tap.
+5. Two accounts: shoot each other — hits land, death tows the loser home with the
+   normal penalty, kill appears in the Temple screen feed and `temple_kills`.
+6. **Ranks**: TEMPLE tab visible ONLY on beta accounts; everyone else sees the usual strip.
+7. KOTH: sit in the hangar on a second device after playing — score must NOT rise
+   (the pend-replay fix).
+8. Discord: a Temple claim posts within ~2 min of someone lifting an item.
 
 ---
 
@@ -23,15 +68,68 @@ No SQL. No Edge Function. Three client files changed: `js/koth.js`,
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 694 |
-| root `version.json` | 694 |
-| `deploy-v238/version.json` | 694 |
-| `deploy-v238/sw.js` `CACHE` | `lootfleet-v694` |
-| `discord-feed` `FEED_VER` | 694 |
+| root `game.html` `window.LF_BUILD` | 704 |
+| root `version.json` | 704 |
+| `deploy-v239/version.json` | 704 |
+| `deploy-v239/sw.js` `CACHE` | `lootfleet-v704` |
+| `discord-feed` `FEED_VER` | 704 |
 
-Audited before hand-off: all **84** `js/`+`css/` files `game.html` references
-(67 js, 17 css) are byte-identical to the project root, none missing, every one
-cache-busted. `CODES.md` is **not** in this folder and must never be added.
+Audited: all **87** referenced files (69 js, 18 css) byte-identical to the project
+root, zero stale, zero missing. `CODES.md` is not in this folder.
+
+---
+
+## What changed — 695 through 703
+
+### ⛩ THE TEMPLE (695–701) — true PvP zone, Command ▸ Lv 60+
+
+- One shared arena, 4× world, **no hostiles ever** (single `pushEnemy()` choke
+  point), no XP/gold/loot except the altar.
+- **The disk**: solid platform at centre; the item spawns ON it; the countdown is
+  rendered on the deck itself. Spawn interval is random **1–3h**; the deadline is
+  public and server-clock-anchored once rolled.
+- **The vigil**: seconds ALONE in the ring bend the rarity roll upward (30 min ≈
+  3× the top-tier odds). Contested ring banks nothing. A kill inside the ring
+  banks 2 minutes and zeroes the victim's vigil.
+- **Roll weights**: Relic 46% → Paragon 0.5% (~monthly). Item level 300–500.
+  Claim races resolve by row lock — one winner, ever.
+- **Kills**: killer-reported (as specified), server-checked — both present,
+  adjacent (≤900u), victim alive, 1.5s attacker cooldown, every claim logged
+  accepted or refused. Victim announces its own death pre-teardown so the report
+  fires; damage applies through the victim's own engine (normal death penalty,
+  byte-identical).
+- **1× speed forced, autopilot disarmed, both UI controls hidden**, restored on
+  exit. Joystick stays (fixed after a regression).
+- **Ladder**: Ranks ▸ TEMPLE — altars first, kills second, deaths shown never
+  ranked. Server-written tables only; nothing self-reported.
+- **Discord**: claims announce; Celestial/Paragon get the full headline banner.
+- Honest limit, on the record: a modified client can refuse incoming damage and
+  be unkillable. The server bounds forged KILLS; it cannot make a client feel
+  hits. Watch `temple_kills` for pilots with absurd K/D and zero deaths.
+
+### 👑 KING OF THE HILL — phantom kills (702)
+
+`pend` (the unflushed kill queue) merged **max-wins** across devices, so every
+same-day second-device login resurrected already-flushed kills, and the 30s
+background flush resubmitted them under a fresh seq. Score climbed with nobody in
+the arena. Now: pend merges **min-wins**, an adopted save's queue is zeroed, and a
+device that never entered today cannot flush at all. `koth-reset-day.sql` clears
+the inflated board.
+
+### 🪪 FORCED-RENAME BUG (703)
+
+The sign-in privacy scrub (real-name leak protection) trusted only `lf_name`
+metadata — written by one fire-and-forget request in `setName()`. If that write
+ever failed, a later sign-in misread the player's CHOSEN name as a Google leak and
+force-renamed them to a callsign ("why is my name grimthorn?"). The scrub now
+honours the save's own `nameSet` latch as proof of choice and re-stamps missing
+metadata on sign-in. Affected players keep whatever they pick at the naming
+prompt; the original name is not recoverable from code.
+
+
+---
+
+# Previous release — v238 · build 694
 
 ---
 

@@ -79,6 +79,7 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/fit-guard.css?v=478">
 <link rel="stylesheet" href="css/expedition.css?v=675">
 <link rel="stylesheet" href="css/koth.css?v=694">
+<link rel="stylesheet" href="css/temple.css?v=704">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; align-items:flex-start; }
@@ -424,6 +425,11 @@ window.__lfErr=[];
 .mega-grid .mega-card.cmd-koth .mc-n{ color:#ffe9a8; }
 .mega-grid .mega-card.cmd-koth::before{ background:linear-gradient(130deg,#ffd24d,#fff0b8,#c58f14,#ffd24d); background-size:250% 250%; }
 
+.mega-grid .mega-card.cmd-temple{ background:linear-gradient(180deg,#1e0b2e,#100816); }
+.mega-grid .mega-card.cmd-temple .mc-ic{ color:#c98bff; border-color:rgba(201,139,255,.55); background:radial-gradient(120% 120% at 50% 0%,#2c1042,#100816); box-shadow:0 0 14px -3px rgba(201,139,255,.85); }
+.mega-grid .mega-card.cmd-temple .mc-n{ color:#ecd9ff; }
+.mega-grid .mega-card.cmd-temple::before{ background:linear-gradient(130deg,#c98bff,#ff5a68,#7f3ccc,#c98bff); background-size:250% 250%; }
+
 .mega-grid .mega-card.cmd-expo{ background:linear-gradient(180deg,#08202a,#081419); }
 .mega-grid .mega-card.cmd-expo .mc-ic{ color:#7fe0ff; border-color:rgba(127,224,255,.5); background:radial-gradient(120% 120% at 50% 0%,#0d3040,#081419); box-shadow:0 0 14px -3px rgba(127,224,255,.7); }
 .mega-grid .mega-card.cmd-expo .mc-n{ color:#c8f2ff; }
@@ -646,6 +652,12 @@ window.__lfErr=[];
             <div class="equip-grid" id="equip-grid"></div>
             <div class="stat-list" id="stat-list"></div>
           </div>
+        </div>
+
+        <!-- THE TEMPLE -->
+        <div class="screen overlay" id="screen-temple">
+          <div class="scr-head"><span class="scr-title">The Temple</span><span class="scr-sub" id="temple-sub">true PvP · altar every 3h</span></div>
+          <div class="scr-body" id="temple-body"></div>
         </div>
 
         <!-- VOID ZONE -->
@@ -958,6 +970,11 @@ window.__lfErr=[];
               <div><div class="mc-n">Cargo Defense <em class="sd-live-tag">EVENT</em></div><div class="mc-s">Escort a shipment to the Citadel by hand · 3 runs/day · ★3+</div></div>
               <span class="mc-lock"></span>
             </div>
+            <div class="mega-card cmd-temple" data-go="temple">
+              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M4.5 9.5h15"/><path d="M6.5 6v13"/><path d="M17.5 6v13"/><path d="M6.5 13h11"/></svg></div>
+              <div><div class="mc-n">The Temple </div><div class="mc-s">Pilot vs pilot · hold the altar · Relic–Paragon spawns · Lv 60+</div></div>
+              <span class="mc-lock"></span>
+            </div>
             <div class="mega-card cmd-voidz" data-go="voidzone">
               <div class="mc-ic mc-vz"><img src="ships/void-cit-4.png" alt="Void Zone"></div>
               <div><div class="mc-n">Void Zone <em class="sd-live-tag">TURF WAR</em></div><div class="mc-s">7 apex tiles · 100× yield · citadel included · Lv 25+</div></div>
@@ -1137,13 +1154,13 @@ window.__lfErr=[];
 <script src="js/servertime.js?v=613"></script>
 <script src="js/analytics.js?v=421"></script>
 <script src="js/cloud.js?v=691"></script>
-<script src="js/account.js?v=688"></script>
+<script src="js/account.js?v=704"></script>
 <script src="js/session-lock.js?v=421"></script>
 <script src="js/vip.js?v=670"></script>
 <script src="js/territory.js?v=652"></script>
 <script src="js/payments-v91.js?v=492"></script>
-<script src="js/game-v93.js?v=693"></script>
-<script src="js/ui-v94.js?v=693"></script>
+<script src="js/game-v93.js?v=698"></script>
+<script src="js/ui-v94.js?v=704"></script>
 <script src="js/fx-cinematic.js?v=421"></script>
 <script src="js/fx-primordial.js?v=431"></script>
 <script src="js/fx-aaa.js?v=421"></script>
@@ -1152,8 +1169,10 @@ window.__lfErr=[];
 <script src="js/moon-colony.js?v=670"></script>
 <script src="js/expedition.js?v=690"></script>
 <script src="js/expedition-ui.js?v=690"></script>
-<script src="js/koth.js?v=694"></script>
+<script src="js/koth.js?v=702"></script>
 <script src="js/koth-ui.js?v=694"></script>
+<script src="js/temple.js?v=704"></script>
+<script src="js/temple-ui.js?v=704"></script>
 <script src="js/return-brief.js?v=421"></script>
 <script src="js/home-citadel.js?v=667"></script>
 <script src="js/missions.js?v=670"></script>
@@ -1169,8 +1188,8 @@ window.__lfErr=[];
 <script src="js/pilot-ascension.js?v=646"></script>
 <script src="js/season-pass.js?v=667"></script>
 <script src="js/sim-pilots.js?v=421"></script>
-<script src="js/ranks-boards.js?v=691"></script>
-<script src="js/rank-rewards.js?v=681"></script>
+<script src="js/ranks-boards.js?v=701"></script>
+<script src="js/rank-rewards.js?v=701"></script>
 <script src="js/discord-reward.js?v=614"></script>
 <script src="js/onboard.js?v=421"></script>
 <script src="js/pro-offer.js?v=496"></script>
@@ -1191,14 +1210,14 @@ window.__lfErr=[];
 <script src="js/casino.js?v=449"></script>
 <script src="js/casino2.js?v=449"></script>
 <script src="js/casino-citadels.js?v=453"></script>
-<script src="js/redeem.js?v=683"></script>
-<script src="js/auth.js?v=664"></script>
+<script src="js/redeem.js?v=704"></script>
+<script src="js/auth.js?v=703"></script>
 <script src="js/update-gate.js?v=486"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 694;
+  window.LF_BUILD = 704;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1388,6 +1407,7 @@ window.__lfErr=[];
       missions:1,                                  // the card that says what to do next
       skills:8, casino:15, shipworks:20, expo:20,  // Fleet Exploration sits with Shipworks
       koth:80,                                     // King of the Hill — the arena is Level 200 hostiles
+      temple:60,                                   // The Temple — PvP, and it can take your gear
       galaxy:25, voidzone:25,                      // voidzone now matches its own copy
       dread:30, pilot:30, moon:30, boxes:30,
       prism:40, sdread:50, prismfleet:50,
@@ -1546,7 +1566,7 @@ window.__lfErr=[];
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-crates.active,#screen-nano.active,#screen-ascend.active,#screen-casino.active,#screen-cargo.active,#screen-expo.active,#screen-koth.active');
+      const on=document.querySelector('#screen-temple.active,#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-crates.active,#screen-nano.active,#screen-ascend.active,#screen-casino.active,#screen-cargo.active,#screen-expo.active,#screen-koth.active');
       cmd.classList.toggle('active', !!on);
       syncDock();
     },500);

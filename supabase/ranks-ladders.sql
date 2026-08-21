@@ -1,4 +1,15 @@
 -- =============================================================================
+--  ⛔ SUPERSEDED — DO NOT RUN THIS FILE. `new-ladders.sql` is the canonical
+--  `lb_upsert`. Two reasons this one is now a trap:
+--    1. It re-declares an OLDER overload of lb_upsert (fewer params), and
+--       `create or replace` cannot replace an overload whose argument list
+--       differs — it silently ADDS a second copy. Two live copies mean PostgREST
+--       picks the wrong candidate or refuses to pick at all.
+--    2. Its insert clamps `p_badges` at 1,000 (see the `least(1000, …)` below).
+--       The ladder is 1,110 badges as of build 670, so that clamp truncates a
+--       real count AND disagrees with every screen that prints it.
+--  Kept only as the historical record of when these columns were added.
+-- =============================================================================
 --  ranks-ladders.sql — five new columns + the patrons ladder
 --  ---------------------------------------------------------------------------
 --  The Ranks screen grows from one board (fleet power) to six. Four of the new

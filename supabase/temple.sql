@@ -578,3 +578,86 @@ returns jsonb language sql stable security definer set search_path = public as $
   )
 $$;
 grant execute on function public.temple_status() to authenticated, anon;
+
+
+-- ---------------------------------------------------------------------------
+-- 7 · DAMAGE THROUGH THE DATABASE (build 709)
+-- ---------------------------------------------------------------------------
+--  WHY THIS EXISTS. Damage was exchanged over a Realtime broadcast and nothing
+--  else. That is the correct FAST path — 130ms, smooth — but it is a single
+--  point of failure for the one thing the zone is about: if the socket does not
+--  join, two pilots see each other, shoot, and nothing happens, with no error on
+--  either screen. "Real PvP" cannot depend on a channel nobody has verified.
+--
+--  So damage gets a second, independent path with no socket involved. The
+--  attacker accumulates hits locally and posts a total a few times a second;
+--  temple_hit adds it to the victim's row; the victim's own heartbeat returns and
+--  CLEARS that total, and their client applies it to their own ship through the
+--  ordinary damage path. Worst-case latency is one heartbeat (~1.2s), which is
+--  slower than the socket but decides a kill perfectly well.
+--
+--  The victim still applies their own damage, for the same unavoidable reason as
+--  before: their HP lives in their save and nothing else can write it.
+alter table public.temple_presence add column if not exists dmg_in numeric not null default 0;
+alter table public.temple_presence add column if not exists dmg_by text;
+
+create or replace function public.temple_hit(p_victim uuid, p_dmg numeric)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  k public.temple_presence%rowtype;
+  v public.temple_presence%rowtype;
+  v_dist numeric;
+begin
+  if v_uid is null or p_victim is null or p_victim = v_uid then
+    return jsonb_build_object('ok', false, 'reason', 'auth');
+  end if;
+  if coalesce(p_dmg, 0) <= 0 then return jsonb_build_object('ok', false, 'reason', 'zero'); end if;
+
+  select * into k from public.temple_presence where user_id = v_uid;
+  select * into v from public.temple_presence where user_id = p_victim;
+
+  -- SAME PLAUSIBILITY TESTS AS A KILL CLAIM. Both present, both live, and close
+  -- enough that the shot could have connected. A client can still lie about the
+  -- NUMBER; it cannot lie about being somewhere else entirely.
+  if k.user_id is null or k.seen < now() - make_interval(secs => public.temple_presence_ttl())
+     or v.user_id is null or v.seen < now() - make_interval(secs => public.temple_presence_ttl()) then
+    return jsonb_build_object('ok', false, 'reason', 'absent');
+  end if;
+  if v.dead_until is not null and v.dead_until > now() then
+    return jsonb_build_object('ok', false, 'reason', 'dead');
+  end if;
+  v_dist := sqrt(power(k.x - v.x, 2) + power(k.y - v.y, 2));
+  if v_dist > public.temple_kill_range() then
+    return jsonb_build_object('ok', false, 'reason', 'out-of-range', 'dist', v_dist);
+  end if;
+
+  update public.temple_presence
+     set dmg_in = dmg_in + greatest(0, p_dmg),
+         dmg_by = coalesce(k.name, 'a pilot')
+   where user_id = p_victim;
+
+  return jsonb_build_object('ok', true, 'dist', v_dist);
+end $$;
+grant execute on function public.temple_hit(uuid, numeric) to authenticated;
+
+-- The heartbeat hands back and CLEARS whatever has been dealt to this pilot since
+-- the last beat. Read-and-clear in one statement so a hit can never be applied
+-- twice, and can never be lost between two beats.
+create or replace function public.temple_take() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_d numeric; v_by text;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false); end if;
+  -- LOCK, READ, CLEAR. RETURNING on an UPDATE reports the NEW row, so reading
+  -- dmg_in from it would always hand back 0 — the amount has to be read before
+  -- the write. Two statements under one row lock in one transaction: a hit can
+  -- never be applied twice and can never be lost between two beats.
+  select dmg_in, dmg_by into v_d, v_by
+    from public.temple_presence where user_id = v_uid for update;
+  if coalesce(v_d, 0) > 0 then
+    update public.temple_presence set dmg_in = 0, dmg_by = null where user_id = v_uid;
+  end if;
+  return jsonb_build_object('ok', true, 'dmg', coalesce(v_d, 0), 'by', v_by);
+end $$;
+grant execute on function public.temple_take() to authenticated;

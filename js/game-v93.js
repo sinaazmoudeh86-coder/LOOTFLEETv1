@@ -907,9 +907,20 @@
     const bonusPct = Math.min(XP_BONUS_CAP, buffPct);
     const rawPct = Math.round((basePct + buffPct) * 10) / 10;
     const pct = Math.min(XP_RATE_CAP, Math.round((basePct + bonusPct) * 10) / 10);
+    // THE CEILING THAT APPLIES TO **THIS** PILOT, not the global constant.
+    // XP_RATE_CAP is 1000, but only a Pro account can reach it: the total is
+    // base + bonuses, and without Pro the base is 100, so the real ceiling is
+    // 100 + 500 = 600. Reporting a flat "cap 1000%" to a free pilot promised 400
+    // points of headroom that cannot exist, and then showed CAPPED at 600 — which
+    // reads as a bug rather than a rule. Every caller should quote myCap.
+    const myCap = Math.min(XP_RATE_CAP, basePct + XP_BONUS_CAP);
     return { sources: src, pro, basePct, buffPct, bonusPct, rawPct, pct,
              capped: rawPct > pct, bonusCapped: buffPct > XP_BONUS_CAP,
-             cap: XP_RATE_CAP, bonusCap: XP_BONUS_CAP,
+             cap: XP_RATE_CAP, bonusCap: XP_BONUS_CAP, myCap,
+             // How much of the bonus stack is being thrown away right now. Zero
+             // for almost everyone; the whole point of the question is that when
+             // it is not zero, it is doing NOTHING and the pilot must be told.
+             wastedPct: Math.max(0, Math.round((rawPct - pct) * 10) / 10),
              headroom: Math.max(0, XP_BONUS_CAP - buffPct), mult: pct / 100 };
   }
   // XP MULTIPLIER, CACHED — gainXp() runs on EVERY KILL.

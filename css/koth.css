@@ -126,6 +126,10 @@
 .kov-full{width:100%;min-height:44px;margin-top:4px;border-radius:10px;cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.09em;
   background:rgba(255,210,77,.12);border:1px solid #6a5216;color:#ffd24d}
 .kov-full:active{transform:translateY(1px)}
+/* PAUSED — the pill goes grey and loses its glow, so "not counting" is visible
+   at a glance rather than something you infer from a number that stopped. */
+#koth-pill.paused{border-color:rgba(147,162,186,.5);background:rgba(30,38,52,.92);box-shadow:none}
+#koth-pill.paused .kp-c,#koth-pill.paused .kp-t,#koth-pill.paused .kp-k{color:#93a2ba}
 .kov-warn{margin-top:6px;padding:8px 10px;border-radius:9px;border:1px solid rgba(255,107,122,.45);background:rgba(255,107,122,.1);color:#ff8a96;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;line-height:1.45;letter-spacing:.03em;text-align:center;text-wrap:pretty}
 
 /* ---- big banner ---------------------------------------------------------- */

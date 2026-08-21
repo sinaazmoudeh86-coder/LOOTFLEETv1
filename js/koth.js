@@ -366,6 +366,45 @@
     flush(true);
   }
 
+  // ---- PRESENCE GATE --------------------------------------------------------
+  // THE ARENA CANNOT BE FARMED BY AN OPEN TAB.
+  //
+  // Build 681 made hostiles deal zero damage — the "punching bag" change — which
+  // was right for the mode and wrong for its economy. With no damage and no
+  // death, a pilot who simply leaves the game open in the arena keeps auto-firing
+  // and keeps scoring, all night, against a field that respawns forever. The
+  // 24-hour race stops measuring how hard someone played and starts measuring who
+  // left a tab open, which is the one outcome a leaderboard must never reward.
+  //
+  // So kills only count while the pilot is ACTUALLY THERE. Two independent tests,
+  // because they catch different absences:
+  //   · THE TAB IS HIDDEN — backgrounded, another app, screen locked. Immediate.
+  //   · NO INPUT FOR IDLE_MS — the tab is visible but nobody has touched it. This
+  //     is the overnight case, and the one the zero-damage change opened up.
+  //
+  // The run itself is NOT ended — that would be a nasty surprise on a phone that
+  // dimmed for a moment. Kills simply stop counting, the pill says so, and the
+  // moment the pilot touches the screen they resume with everything they had.
+  const IDLE_MS = 4 * 60 * 1000;
+  let _lastInput = Date.now();
+  let _wasAway = false;
+  function noteInput() { _lastInput = Date.now(); }
+  try {
+    ['pointerdown', 'keydown', 'touchstart', 'wheel', 'mousemove'].forEach((ev) => {
+      document.addEventListener(ev, noteInput, { passive: true, capture: true });
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) noteInput();
+    });
+  } catch (e) {}
+  // Why a kill is or is not being counted right now. The UI shows this verbatim,
+  // because "my kills stopped" with no explanation is worse than the exploit.
+  function presence() {
+    try { if (document.hidden) return { on: false, why: 'tab in the background' }; } catch (e) {}
+    if (Date.now() - _lastInput > IDLE_MS) return { on: false, why: 'no input for ' + Math.round(IDLE_MS / 60000) + ' minutes' };
+    return { on: true, why: '' };
+  }
+
   // Called by game-v93 onKill() for every hostile that dies inside the instance.
   // THE COUNTER IS NEVER CAPPED. An earlier build bounded the unflushed queue to
   // stop an unscored session dragging the difficulty tier into nonsense; that cut
@@ -375,6 +414,21 @@
   // stays finite (HP_CAP) and the screen says plainly when a run is not scored.
   function onKill() {
     const k = ks(); if (!k) return;
+    const p = presence();
+    if (!p.on) {
+      // Announce the transition once, not every frame. The kill still happens in
+      // the world — loot, fx, everything — it just does not reach the ladder.
+      if (!_wasAway) {
+        _wasAway = true;
+        try { banner('⏸ SCORING PAUSED', 'Kills stop counting while you are away (' + p.why + '). Touch the screen to resume.'); } catch (e) {}
+        try { window.KOTHUI && window.KOTHUI.syncPill(); } catch (e) {}
+      }
+      return;
+    }
+    if (_wasAway) {
+      _wasAway = false;
+      try { banner('▶ SCORING RESUMED', 'Back in the fight — kills are counting again.'); } catch (e) {}
+    }
     k.pend = (k.pend | 0) + 1;
     try { window.KOTHUI && window.KOTHUI.syncPill(); } catch (e) {}
   }
@@ -532,7 +586,7 @@
   window.KOTH = {
     GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP,
     tierFor, dmgMultFor, dayIdx, dayEnds, msLeft, scaleEnemy,
-    ks, kills, rank, unlocked, lvl, fmt, active, signedIn, scoring, HP_CAP,
+    ks, kills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, HP_CAP, IDLE_MS,
     enter, leave, onKill, engineTick, engineRender,
     flush, pollBoard, pollHall, setOpen, claimPrize, banner,
     board: () => _board, boardAt: () => _boardAt, entrants: () => _entrants,

@@ -208,8 +208,15 @@
   function syncPill() {
     const p = $('koth-pill'); if (!p || !K()) return;
     const r = K().rank(), k = K().kills();
-    p.className = r === 1 ? 'king' : '';
-    p.innerHTML = '<span class="kp-c">👑</span><span class="kp-t">KOTH</span>'
+    // PAUSED IS A STATE THE PILL HAS TO SHOW. Kills silently not counting is
+    // indistinguishable from a broken feature, so it says PAUSED outright rather
+    // than just freezing the number and letting the player guess.
+    let away = null;
+    try { const pr = K().presence && K().presence(); if (pr && !pr.on) away = pr; } catch (e) {}
+    p.className = away ? 'paused' : (r === 1 ? 'king' : '');
+    if (away) p.title = 'Scoring paused — ' + away.why + '. Touch the screen to resume.';
+    else p.removeAttribute('title');
+    p.innerHTML = '<span class="kp-c">' + (away ? '⏸' : '👑') + '</span><span class="kp-t">' + (away ? 'PAUSED' : 'KOTH') + '</span>'
       + '<span class="kp-r">' + (r ? '#' + r : '—') + '</span>'
       + '<span class="kp-k">' + num(k) + '</span>'
       + '<span class="kp-x">' + hms(K().msLeft()) + '</span>';

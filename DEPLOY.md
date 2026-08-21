@@ -1,32 +1,36 @@
-# Loot Fleet — deploy v236 · build 691 · LADDER MIGRATION PROBE FIX
+# Loot Fleet — deploy v237 · build 693 · KOTH AFK FARM CLOSED · XP CAP MADE HONEST
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v235 (build 690). Service worker cache is `lootfleet-v691`.
-**Login screen reads `BUILD 691`.**
+Supersedes v236 (build 691). Service worker cache is `lootfleet-v693`.
+**Login screen reads `BUILD 693`.**
 
 ---
 
-## IF YOU ALREADY DEPLOYED v235, THIS IS A ONE-STEP RELEASE
+## WHAT YOU HAVE TO RUN
 
-**Just push the site.** No SQL to run, no Edge Function to redeploy — nothing
-server-side changed. Two client files moved: `js/cloud.js` and `js/ranks-boards.js`.
-
-If you have NOT deployed v235 yet, do its three steps first (SQL → Edge Function →
-site); they are reproduced under "Previous release" below and everything in this
-folder is current.
+| | needed? | why |
+|---|---|---|
+| **Site push** | **YES** | all of 692 + 693 is client-side |
+| **SQL — `koth-reset-pilot.sql`** | only if you want the `realsina1` reset | wipes one operator from the daily race |
+| **SQL — everything else** | no | unchanged since v234 |
+| **Edge Function** | no | `FEED_VER` bumped to 693 for the cron log, but no code changed since v235 |
 
 ---
 
 ## STEP BY STEP
 
-1. Upload the contents of this folder to the repo root Vercel serves.
-2. Hard-reload the live site once — login screen must read `BUILD 691`.
-3. Open **Ranks ▸ HOME DEFENSE**. It should show the board, not
-   "waiting on a database migration".
-   - Still waiting? Then `new-ladders.sql` genuinely has not run. Run it in the
-     Supabase SQL Editor, then `notify pgrst, 'reload schema';` — the message is
-     now telling the truth.
-4. Same check on **EXPLORATION**.
+1. **Push the site.** Upload the contents of this folder to the repo root Vercel
+   serves. `version.json` is inside it — one upload is fine.
+2. **Hard-reload once.** Login screen must read `BUILD 693`.
+3. **Optional — reset `realsina1`.** Supabase → SQL Editor → paste
+   `supabase/koth-reset-pilot.sql` → Run. It prints every matching operator
+   *before* touching anything, so a typo resets nobody.
+4. **Smoke test:**
+   - **King of the Hill** — enter the arena, then leave the tab in the background
+     for a moment. The pill turns grey and reads **PAUSED**; kills stop counting.
+     Touch the screen and it resumes with everything intact.
+   - **My Fleet** — hover the `✦ XP` chip. A free pilot must see a **600%**
+     ceiling, not 1000%.
 
 ---
 
@@ -34,15 +38,99 @@ folder is current.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 691 |
-| root `version.json` | 691 |
-| `deploy-v236/version.json` | 691 |
-| `deploy-v236/sw.js` `CACHE` | `lootfleet-v691` |
-| `discord-feed` `FEED_VER` | 691 |
+| root `game.html` `window.LF_BUILD` | 693 |
+| root `version.json` | 693 |
+| `deploy-v237/version.json` | 693 |
+| `deploy-v237/sw.js` `CACHE` | `lootfleet-v693` |
+| `discord-feed` `FEED_VER` | 693 |
 
 Audited before hand-off: all **84** `js/`+`css/` files `game.html` references
 (67 js, 17 css) are byte-identical to the project root, none missing, every one
 cache-busted. `CODES.md` is **not** in this folder and must never be added.
+
+---
+
+## What changed in 693 — THE XP CAP
+
+**Asked: is 1000% real, or are players over it getting a hidden benefit?**
+
+**It is real.** `state.xp` is incremented from exactly one place — `gainXp()` —
+and it multiplies by `xpFleetInfo().mult`, which is
+`min(1000, base + min(500, bonuses)) / 100`. No module writes XP directly and no
+module applies a second multiplier outside the capped stack. All seven sources
+(VIP, Pilot Tree, Neural Uplink, Nanocore, Combat Computer, Kaevith Resonance,
+Tour of Duty) funnel into that one sum.
+
+| stacked bonuses | FREE paid / raw / wasted | PRO paid / raw / wasted |
+|---|---|---|
+| 500% | 600% / 600% / 0% | 1000% / 1000% / 0% |
+| 900% | 600% / 1000% / 400% | 1000% / 1400% / 400% |
+| 5000% | 600% / 5100% / 4500% | 1000% / 5500% / 4500% |
+
+At 5000% of stacked bonuses the multiplier is still exactly 10× for Pro and 6× for
+free. The overflow is dead weight.
+
+**But the chip was lying, in the opposite direction.** The cap is only 1000% *for
+Pro*. The total is base + bonuses; Pro's base is 500, a free pilot's is 100 — so a
+free pilot's real ceiling is **600%** and they can never reach 1000 however much
+they stack. The chip quoted the flat 1000% to everyone, promising 400 points of
+headroom that cannot exist, then displayed **CAPPED** at 600 — which reads as a
+broken number rather than a rule.
+
+It now quotes the pilot's own ceiling (`myCap`), and when the stack overflows it
+names the waste outright: *"CAPPED AT 600% — your bonuses add up to 1000%, so 400%
+is being discarded and pays you nothing."* A bonus that pays nothing must never
+look like a bonus that pays.
+
+---
+
+## What changed in 692 — THE ARENA COULD BE FARMED BY AN OPEN TAB
+
+Reported as "my account keeps gaining kills in King of the Hill". The kills were
+real, and they were caused by build 681.
+
+681 made arena hostiles deal **zero** damage — the punching-bag change. Right for
+the mode, wrong for its economy: with no damage and no death, a pilot who simply
+leaves the game open in the arena keeps auto-firing against a field that respawns
+forever. The 24-hour race stopped measuring how hard someone played and started
+measuring who left a tab open, which is the one outcome a leaderboard must never
+reward.
+
+**Kills now only count while the pilot is present.** Two independent tests,
+because they catch different absences:
+
+- **the tab is hidden** — backgrounded, another app, screen locked. Immediate.
+- **no input for 4 minutes** — visible but untouched. The overnight case, and the
+  one the zero-damage change opened up.
+
+The run is **not** ended — that would be a nasty surprise on a phone that dimmed
+for a second. Kills stop counting, the pill turns grey and reads **PAUSED** with
+the reason, a banner announces both the pause and the resume, and the moment the
+pilot touches the screen they carry on with everything they had. Kills silently
+not counting is indistinguishable from a broken feature, so the UI says so
+outright rather than freezing a number.
+
+### `koth-reset-pilot.sql` — wiping one operator
+
+Resets `realsina1` on the daily board. Prints every match before acting, so a
+typo removes nothing.
+
+It zeroes the row **in place** rather than deleting it. The row carries
+`last_seq`, and `koth_bump` refuses any sequence at or below the last it
+accepted — delete the row and the counter restarts at 0 while the client is still
+climbing, so every submission afterwards returns as a replay and that player
+silently stops scoring for the rest of the day. It also advances the sequence by
+1000 to clear anything in flight.
+
+Crown removal from `koth_hall` is included but **commented out**: it rewrites
+history and changes the CROWNS ladder for everyone. Undelivered prizes are
+removed; already-delivered ones are not, because a prize the player has received
+as mail and spent cannot be clawed back by deleting a ledger row.
+
+
+---
+
+# Previous release — v236 · build 691
 
 ---
 

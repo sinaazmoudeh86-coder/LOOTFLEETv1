@@ -1044,13 +1044,22 @@
     // the bonus ceiling is told, rather than silently losing the overflow.
     {
       const xi = (() => { try { return G.xpFleetInfo ? G.xpFleetInfo() : null; } catch (e) { return null; } })();
+      // THE CAP IS STATED PLAINLY, AND IT IS THE PILOT'S OWN CAP.
+      // This used to quote the global 1000% to everyone. Only a Pro account can
+      // reach that (base 500 + 500 bonus); a free pilot tops out at 600, so the
+      // old text promised 400 points of headroom that do not exist and then said
+      // CAPPED at 600 — which reads as a broken number rather than a rule.
+      // When the stack overflows, the wasted amount is named outright: a bonus
+      // that pays nothing must never look like a bonus that pays.
       const xpChip = xi
         ? ' <span class="hero-xp-chip' + (xi.capped ? ' capped' : xi.buffPct > 0 ? '' : ' zero') + '" title="' + (xi.capped
-            ? 'CAPPED — your stack pays ' + xi.rawPct + '%, and the XP rate is capped at ' + xi.cap + '%. More XP bonuses add nothing until something drops off.'
+            ? 'CAPPED AT ' + xi.myCap + '% — your bonuses add up to ' + xi.rawPct + '%, so ' + xi.wastedPct + '% is being discarded and pays you nothing. '
+              + (xi.pro ? 'This is the hard ceiling.' : 'Without Pro the ceiling is ' + xi.myCap + '% (base ' + xi.basePct + '% + ' + xi.bonusCap + '% bonuses); Pro raises the base to 500% for a ' + xi.cap + '% ceiling.')
+              + ' More XP bonuses add nothing until something drops off.'
             : xi.buffPct > 0
-            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (5× by Pro)' : '') + ' + ' + xi.buffPct + '% of base in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. Hard cap ' + xi.cap + '%.'
-            : 'Base XP rate \u2014 no bonuses active. VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of base, up to a ' + xi.cap + '% cap.')
-          + '">\u2726 XP ' + xi.pct + '%' + (xi.capped ? ' · MAX' : '') + '</span>'
+            ? 'Your XP rate: base ' + xi.basePct + '%' + (xi.pro ? ' (5× by Pro)' : '') + ' + ' + xi.buffPct + '% in bonuses \u2014 VIP, Pilot Tree, ascension perks and Kaevith hulls. Bonuses add together, then multiply the base. Your ceiling is ' + xi.myCap + '% (' + xi.headroom + '% of bonus headroom left).'
+            : 'Base XP rate \u2014 no bonuses active. VIP, Pilot Tree XP nodes, Neural Uplink, Combat Computer and Kaevith hulls each add a flat % of base, up to a ' + xi.myCap + '% ceiling.')
+          + '">\u2726 XP ' + xi.pct + '%' + (xi.capped ? ' · MAX ' + xi.myCap + '%' : '') + '</span>'
         : '';
       el['char-power'].innerHTML = 'Power <b>' + (G.formatNumRaw || G.formatNum)(G.score ? G.score() : Math.floor(st.theoryDps + st.maxHp * 0.5)) + '</b>' + xpChip;
     }

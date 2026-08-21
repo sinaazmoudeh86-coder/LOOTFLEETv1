@@ -151,14 +151,14 @@
     },
     {
       id: 'badges', ic: '\u2b21', col: '#b57bff', label: 'BADGES', sub: 'Ranks Claimed',
-      info: 'Lifetime commendations claimed, out of 1,000. Claim them all and the Titan Sina is granted.',
-      unit: '/1000',
+      get info() { return 'Lifetime commendations claimed, out of ' + badgeTotal().toLocaleString() + '. Claim them all and the Titan Sina is granted.'; },
+      get unit() { return '/' + badgeTotal(); },
       metric: (p) => p.badges || 0,
       fmt: (v) => String(v | 0),
       meta: (p) => {
-        const n = p.badges | 0;
-        return n >= 1000 ? 'Lv ' + (p.level | 0) + ' · ★ Titan Sina granted'
-                         : 'Lv ' + (p.level | 0) + ' · ' + fmt(1000 - n) + ' badges to the Titan Sina';
+        const n = p.badges | 0, T = badgeTotal();
+        return n >= T ? 'Lv ' + (p.level | 0) + ' · ★ Titan Sina granted'
+                      : 'Lv ' + (p.level | 0) + ' · ' + fmt(T - n) + ' badges to the Titan Sina';
       },
       empty: 'No badges claimed yet.',
     },
@@ -234,7 +234,7 @@
       fmt: (v, p) => (p.view === 'hall' ? String(p.wins | 0) : fmt(Number(p.kills) || 0)),
       meta: (p) => (p.view === 'hall'
         ? fmt(Number(p.kills) || 0) + ' kills across ' + (p.wins | 0) + ' winning day' + ((p.wins | 0) === 1 ? '' : 's')
-        : 'Tier ' + Math.max(1, p.tier | 0) + (p.ship ? ' · ' + String(p.ship) : '')),
+        : 'Tier ' + Math.max(1, p.tier | 0) + (p.ship ? ' · ' + hullName(p.ship) : '')),
       empty: 'The race has not started. Enter from Command ▸ King of the Hill.',
       emptyHall: 'No crowns awarded yet. The first event closes at 00:05 UTC.',
       async: true,
@@ -245,6 +245,23 @@
 
   function fmt(n) { try { return G().formatNum(n); } catch (e) { return String(Math.floor(n || 0)); } }
   function fmtRaw(n) { try { return (G().formatNumRaw || G().formatNum)(n); } catch (e) { return String(Math.floor(n || 0)); } }
+
+  // A HULL KEY IS NOT A HULL NAME. The KOTH rows carry the raw save key, so the
+  // board printed lowercase internals — 'dread6' for the Dread Omega, 'titansina'
+  // for the Titan Sina. Resolve through CONFIG; if a key ever outlives its ship
+  // entry, title-case it rather than leaking the identifier.
+  function hullName(k) {
+    const key = String(k || '');
+    try { const s = (window.CONFIG && window.CONFIG.SHIP_BY_KEY) ? window.CONFIG.SHIP_BY_KEY[key] : null; if (s && s.name) return s.name; } catch (e) {}
+    return key ? key.charAt(0).toUpperCase() + key.slice(1) : '';
+  }
+  // The badge ladder's size is ACHIEVE's to state, not this board's to remember:
+  // the total moved from 1,000 to 1,110 when the nanocore chains joined the count
+  // and every readout that hardcoded it drifted. Read it live, every render.
+  function badgeTotal() {
+    try { if (window.ACHIEVE && ACHIEVE.TOTAL) return ACHIEVE.TOTAL | 0; } catch (e) {}
+    return 1110;
+  }
 
   // ---- deterministic sim figures --------------------------------------------
   // How many hulls a simulated pilot can plausibly own. Derived from the live
@@ -296,8 +313,8 @@
     // MISSIONS — a board a day, give or take, across the whole career
     const missions = Math.floor(career * (0.55 + r() * 0.75));
 
-    // BADGES — the 1,000-rank ladder is a multi-year climb; even veterans are low
-    const badges = Math.min(1000, Math.floor(Math.pow(career, 0.92) * (0.22 + r() * 0.4)));
+    // BADGES — the full ladder is a multi-year climb; even veterans are low
+    const badges = Math.min(badgeTotal(), Math.floor(Math.pow(career, 0.92) * (0.22 + r() * 0.4)));
 
     // NANOCORES — gated at Lv 50 and paid for in Prism Ingots, so a sim's
     // Legendary count tracks career rather than luck, and stays low enough that
@@ -520,7 +537,7 @@
       // published 0 on this board. ACHIEVE.totalClaimed() is the same figure the
       // Missions screen shows; the inline sum is the no-module fallback.
       try { if (window.ACHIEVE && ACHIEVE.totalClaimed) return ACHIEVE.totalClaimed() | 0; } catch (e) {}
-      try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(1000, n); } catch (e) { return 0; }
+      try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(badgeTotal(), n); } catch (e) { return 0; }
     })();
     return q;
   }
@@ -580,7 +597,7 @@
       // published 0 on this board. ACHIEVE.totalClaimed() is the same figure the
       // Missions screen shows; the inline sum is the no-module fallback.
       try { if (window.ACHIEVE && ACHIEVE.totalClaimed) return ACHIEVE.totalClaimed() | 0; } catch (e) {}
-      try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(1000, n); } catch (e) { return 0; }
+      try { const c = (s.achieve && s.achieve.claimed) || {}; let n = 0; for (const k in c) n += c[k] | 0; return Math.min(badgeTotal(), n); } catch (e) { return 0; }
     })(),
       };
       // NANOCORES — legendary-only figures (Legendary cores recovered, deepest

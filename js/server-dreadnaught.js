@@ -51,9 +51,11 @@
     return m + 'm ' + (s % 60) + 's';
   }
   function shipName(k) { try { return window.CONFIG.SHIP_BY_KEY[k].name; } catch (e) { return k; } }
-  function mulberry(seed) { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
   // ---- persistent state -------------------------------------------------
+  // Event Coins are a BALANCE, so they are read through Math.floor, never `| 0`
+  // (bitwise OR wraps negative past 2,147,483,647 — see the currency rule).
+  const coinsOf = (s) => Math.floor(Number(s && s.coins) || 0);
   function sd() {
     const g = G(); if (!g || !g.state) return null;
     const st = g.state;
@@ -209,33 +211,19 @@
   }
 
   // ---- DAILY LEADERBOARD (best single run) --------------------------------
-  const BOTS = ['NovaReign', 'IronVanta', 'K0RSAIR', 'HollowStar', 'Vexline', 'DriftKing77', 'AsherOne', 'PulseWidow', 'GrimHalcyon', 'Zerofall', 'CmdrTycho', 'RelicHunter', 'StaticVoid', 'Emberlight', 'Quasar_Q', 'DeepRunner', 'HexNaught', 'Solvane', 'MorrowJack', 'Nyxen', 'Farslip', 'CoreBreak', 'OrbitalDecay', 'Whisper9', 'TalonRed', 'BasiliskV', 'Skyforged', 'NullTrace', 'Vantablade', 'EchoPrime', 'Lastlight', 'CinderFleet', 'RogueSina', 'Palewake', 'ThornZero', 'Umbra_Wolf', 'HaloBurn', 'Kessler', 'Voidmarch', 'StrayComet'];
-  function botsFor(day) {
-    const rnd = mulberry(day * 2654435761 >>> 0);
-    const list = [];
-    for (let i = 0; i < 99; i++) {
-      const name = BOTS[(rnd() * BOTS.length) | 0] + (rnd() < 0.35 ? '' : '·' + (1 + ((rnd() * 98) | 0)));
-      list.push({ name, dmg: Math.floor(8e6 * Math.pow(10, rnd() * 4.2)) });   // ~8M … ~130B
-    }
-    list.sort((a, b) => b.dmg - a.dmg);
-    return list;
-  }
-  function rankFor(day, best) { if (!best) return null; let r = 1; botsFor(day).forEach((b) => { if (b.dmg > best) r++; }); return r; }
-  // SEASON board — one fixed bot field for the whole season, ranked by TOTAL
-  // cumulative damage. Bots sit ~50M … ~15T so grinders climb it for weeks.
-  let _seasonBots = null;
-  function seasonBots() {
-    if (_seasonBots) return _seasonBots;
-    const rnd = mulberry((SEASON.num * 77003 + 4242) >>> 0);
-    const list = [];
-    for (let i = 0; i < 99; i++) {
-      const name = BOTS[(rnd() * BOTS.length) | 0] + (rnd() < 0.35 ? '' : '·' + (1 + ((rnd() * 98) | 0)));
-      list.push({ name, dmg: Math.floor(50e6 * Math.pow(10, rnd() * 5.5)) });
-    }
-    list.sort((a, b) => b.dmg - a.dmg);
-    _seasonBots = list; return list;
-  }
-  function seasonRankFor(total) { if (!total) return null; let r = 1; seasonBots().forEach((b) => { if (b.dmg > total) r++; }); return r; }
+  // NO BOT FIELD (build 710, by request). Both boards used to be padded with 99
+  // generated names apiece — a deterministic fake field that ALSO decided the
+  // pilot's rank whenever the live board was unavailable. It is gone: every row on
+  // both boards is a real published operator, and a rank is only ever the one the
+  // SERVER reports (liveDailyRank / liveSeasonRank, remembered in s.lbRank /
+  // s.lbSeasonRank). When nothing has landed, the honest answer is "not placed" —
+  // never an invented placing.
+  //
+  // Rewards no longer read a fabricated number either: with no known rank a
+  // settlement pays the participation tier (the last LB_TIERS/SEASON_TIERS row)
+  // and says so, rather than crediting a #1 nobody earned.
+  function knownDailyRank(s) { return (s && s.lbRank && s.lbRank.day === s.day) ? (s.lbRank.rank | 0) : (liveDailyRank() || null); }
+  function knownSeasonRank(s) { return (s && s.lbSeasonRank) ? (s.lbSeasonRank | 0) : (liveSeasonRank() || null); }
   // DAILY leaderboard prizes — ✦ EVENT COINS + ◈ LootCoins (spend in the Event Store)
   // LootCoin column halved in the Aug 2026 payout pass (build 614); Event Coins are
   // event-store currency, not LootCoins, and were deliberately left alone.
@@ -258,15 +246,19 @@
   function settleSeason(s) {
     if (!ended() || s.seasonDone || !s.total) return;
     s.seasonDone = 1;
-    const rank = s.lbSeasonRank || seasonRankFor(s.total);
-    const idx = SEASON_TIERS.findIndex((x) => rank <= x.max);
+    const rank = knownSeasonRank(s);
+    const idx = rank ? SEASON_TIERS.findIndex((x) => rank <= x.max) : SEASON_TIERS.length - 1;
     if (!s.claims) s.claims = [];
-    s.claims.push({ t: 's', rank, idx: idx < 0 ? 3 : idx, made: Date.now() });
-    s.pendingToast = '🏆 Season ' + SEASON.num + ' final standings — you placed #' + rank + '. Collect your rewards in the event.';
+    s.claims.push({ t: 's', rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
+    s.pendingToast = rank
+      ? '🏆 Season ' + SEASON.num + ' final standings — you placed #' + rank + '. Collect your rewards in the event.'
+      : '🏆 Season ' + SEASON.num + ' is over — your season prize is waiting in the event.';
     try {
       const st2 = SEASON_TIERS[idx < 0 ? 3 : idx];
-      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: 'Season ' + SEASON.num + ' final standings — #' + rank,
-        body: 'The <b>' + SEASON.label + '</b> season has ended. Your total damage placed you <b>#' + rank + '</b> (' + st2.name + ') — your prize is waiting: <b>' + tierTxt(st2) + '</b>.',
+      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: rank ? 'Season ' + SEASON.num + ' final standings — #' + rank : 'Season ' + SEASON.num + ' final standings',
+        body: 'The <b>' + SEASON.label + '</b> season has ended. '
+          + (rank ? 'Your total damage placed you <b>#' + rank + '</b> (' + st2.name + ')' : 'Your final placing never reached this device, so you are paid as <b>' + st2.name + '</b>')
+          + ' — your prize is waiting: <b>' + tierTxt(st2) + '</b>.',
         meta: { kind: 'prize', cta: { label: '🏆 Collect season prize', screen: 'sdread' } } });
     } catch (e) {}
     try { G().save(); } catch (e) {}
@@ -275,21 +267,25 @@
   function settleLeaderboard(s) {
     if (!s.bestDay || s.day >= dayIdx()) { return; }
     if (Date.UTC(1970, 0, 1) + s.day * 864e5 >= SEASON.end) return;          // season was over
-    const rank = (s.lbRank && s.lbRank.day === s.day) ? s.lbRank.rank : rankFor(s.day, s.bestDay), t = tierFor(rank);
+    const rank = knownDailyRank(s), t = rank ? tierFor(rank) : LB_TIERS[LB_TIERS.length - 1];
     // WINNINGS GO TO MAIL (Jul 2026): the settlement letter carries the prize —
     // you claim it right in the inbox. Falls back to the in-event claim stage
     // only if the mail system is unavailable.
     let mailed = false;
     try {
       if (window.MAIL) {
-        window.MAIL.push({ ic: '🏆', title: 'Daily event results — you ranked #' + rank,
-          body: 'Yesterday\u2019s <b>' + SEASON.label + '</b> daily board is settled: your best run ranked <b>#' + rank + '</b> (' + t.name + ').<br>Your winnings — claim them right here: <b>' + tierTxt(t) + '</b>',
-          meta: { kind: 'prize', prize: { t: 'd', rank, coins: t.coins, lc: t.lc } } });
+        window.MAIL.push({ ic: '🏆', title: rank ? 'Daily event results — you ranked #' + rank : 'Daily event results — ' + t.name,
+          body: 'Yesterday\u2019s <b>' + SEASON.label + '</b> daily board is settled: '
+            + (rank ? 'your best run ranked <b>#' + rank + '</b> (' + t.name + ').' : 'your placing never reached this device, so you are paid as <b>' + t.name + '</b>.')
+            + '<br>Your winnings — claim them right here: <b>' + tierTxt(t) + '</b>',
+          meta: { kind: 'prize', prize: { t: 'd', rank: rank || 0, coins: t.coins, lc: t.lc } } });
         mailed = true;
       }
     } catch (e) {}
-    if (!mailed) { if (!s.claims) s.claims = []; s.claims.push({ t: 'd', rank, name: t.name, coins: t.coins, lc: t.lc, made: Date.now() }); }
-    s.pendingToast = '🏆 Server Dreadnaught — yesterday you placed #' + rank + '. Your winnings are waiting in your MAIL.';
+    if (!mailed) { if (!s.claims) s.claims = []; s.claims.push({ t: 'd', rank: rank || 0, name: t.name, coins: t.coins, lc: t.lc, made: Date.now() }); }
+    s.pendingToast = rank
+      ? '🏆 Server Dreadnaught — yesterday you placed #' + rank + '. Your winnings are waiting in your MAIL.'
+      : '🏆 Server Dreadnaught — yesterday\u2019s board is settled. Your winnings are waiting in your MAIL.';
   }
   // collect EVERYTHING staged — the one button that pays out daily + season prizes
   function claimAll() {
@@ -298,9 +294,9 @@
     s.claims.forEach((c) => {
       let txt;
       if (c.t === 'd' && c.coins != null) {
-        s.coins = (s.coins | 0) + c.coins;
+        s.coins = coinsOf(s) + c.coins;
         g.state.credits = (g.state.credits || 0) + (c.lc || 0);
-        txt = '🏆 Daily rank #' + c.rank + ' (' + c.name + ') — ✦ ' + c.coins.toLocaleString() + ' Event Coins · ◈ ' + (c.lc || 0) + ' LootCoins';
+        txt = '🏆 Daily ' + (c.rank ? 'rank #' + c.rank + ' (' + c.name + ')' : c.name) + ' — ✦ ' + c.coins.toLocaleString() + ' Event Coins · ◈ ' + (c.lc || 0) + ' LootCoins';
       } else if (c.t === 'd') {
         // legacy claim shape (pre–Event Coin): gold / cores / parts
         g.state.gold = (g.state.gold || 0) + (c.gold || 0);
@@ -308,15 +304,15 @@
         let ptxt = '';
         if (c.parts && !vmOwned()) { addPart(VM_KEY, c.parts); ptxt = '❖ ' + c.parts + ' Voidmaw Parts · '; }
         const vpd = c.rank === 1 ? 100 : c.rank === 2 ? 50 : c.rank === 3 ? 25 : 10;
-        try { if (window.VIP) window.VIP.grant(vpd, 'Daily rank #' + c.rank); } catch (e) {}
-        txt = '🏆 Daily rank #' + c.rank + ' (' + c.name + ') — ⚜' + vpd + ' · ' + ptxt + '$' + fmt(c.gold || 0) + (c.cores ? ' · ◇' + c.cores : '');
+        try { if (window.VIP) window.VIP.grant(vpd, c.rank ? 'Daily rank #' + c.rank : 'Daily placement'); } catch (e) {}
+        txt = '🏆 Daily ' + (c.rank ? 'rank #' + c.rank : 'placement') + ' (' + c.name + ') — ⚜' + vpd + ' · ' + ptxt + '$' + fmt(c.gold || 0) + (c.cores ? ' · ◇' + c.cores : '');
       } else {
         const t = SEASON_TIERS[c.idx] || SEASON_TIERS[3];
-        s.coins = (s.coins | 0) + t.coins;
+        s.coins = coinsOf(s) + t.coins;
         g.state.credits = (g.state.credits || 0) + t.lc;
         const vps = c.rank === 1 ? 500 : c.rank === 2 ? 250 : c.rank === 3 ? 125 : 50;
-        try { if (window.VIP) window.VIP.grant(vps, 'Season rank #' + c.rank); } catch (e) {}
-        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — rank #' + c.rank + ' (' + t.name + '): ⚜' + vps + ' · ' + tierTxt(t);
+        try { if (window.VIP) window.VIP.grant(vps, c.rank ? 'Season rank #' + c.rank : 'Season placement'); } catch (e) {}
+        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — ' + (c.rank ? 'rank #' + c.rank + ' (' + t.name + ')' : t.name) + ': ⚜' + vps + ' · ' + tierTxt(t);
       }
       s.hist.unshift({ d: Date.now(), s: 0, txt }); lines.push(txt);
     });
@@ -354,8 +350,8 @@
   function buyStoreItem(id) {
     const s = sd(); if (!s) return;
     const it = storeItems().find((x) => x.id === id); if (!it) return;
-    if ((s.coins | 0) < it.cost) { toast('Need ' + COIN + ' ' + (it.cost - (s.coins | 0)).toLocaleString() + ' more Event Coins'); return; }
-    s.coins = (s.coins | 0) - it.cost;
+    if (coinsOf(s) < it.cost) { toast('Need ' + COIN + ' ' + (it.cost - coinsOf(s)).toLocaleString() + ' more Event Coins'); return; }
+    s.coins = coinsOf(s) - it.cost;
     let got;
     if (it.vip) {
       try { if (window.VIP) window.VIP.grant(it.vip, 'Event Store exchange'); } catch (e) {}
@@ -378,13 +374,13 @@
     sheet(
       '<div class="sdm-kicker">SEASON ' + SEASON.num + ' · EVENT STORE</div>' +
       '<div class="sdm-title small">' + COIN + ' EVENT STORE</div>' +
-      '<div class="sdm-cd">Balance <b>' + COIN + ' ' + (s.coins | 0).toLocaleString() + '</b> Event Coins · earned from daily + season ranks</div>' +
+      '<div class="sdm-cd">Balance <b>' + COIN + ' ' + coinsOf(s).toLocaleString() + '</b> Event Coins · earned from daily + season ranks</div>' +
       '<div class="sds-list">' + items.map((it) =>
-        '<div class="sds-row' + ((s.coins | 0) >= it.cost ? '' : ' cant') + '"><span class="sds-ic">' + it.ic + '</span>' +
+        '<div class="sds-row' + (coinsOf(s) >= it.cost ? '' : ' cant') + '"><span class="sds-ic">' + it.ic + '</span>' +
         '<div class="sds-t"><b>' + it.name + '</b><span>' + it.sub + '</span></div>' +
-        '<button class="sds-buy" data-buy="' + it.id + '"' + ((s.coins | 0) >= it.cost ? '' : ' disabled') + '>' + COIN + ' ' + it.cost.toLocaleString() + '</button></div>').join('') +
+        '<button class="sds-buy" data-buy="' + it.id + '"' + (coinsOf(s) >= it.cost ? '' : ' disabled') + '>' + COIN + ' ' + it.cost.toLocaleString() + '</button></div>').join('') +
       '</div>' +
-      '<div class="sdm-locknote soft">Shards land in your <b>ship parts</b> inventory — the same parts Shipworks assembles hulls from. Rank daily to bankroll the grind: even "Ranked" pays ' + COIN + ' 500 + ◈ 5 every day.</div>' +
+      '<div class="sdm-locknote soft">Shards land in your <b>ship parts</b> inventory — what Shipworks assembles hulls from.</div>' +
       '<button class="sdm-ok" id="sdm-ok">Close</button>'
     );
     _modal.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => buyStoreItem(b.dataset.buy)));
@@ -771,7 +767,7 @@
       vmStrip() +
       '<div class="sd-btnrow">' +
         '<button class="sd-btn" id="sd-lb">🏆 Leaderboards</button>' +
-        '<button class="sd-btn" id="sd-store">✦ Event Store <b>' + (s.coins | 0).toLocaleString() + '</b></button>' +
+        '<button class="sd-btn" id="sd-store">✦ Event Store <b>' + coinsOf(s).toLocaleString() + '</b></button>' +
         '<button class="sd-btn" id="sd-hist">📜 History</button>' +
         '<button class="sd-btn ghost" id="sd-how">❔ How it works</button>' +
       '</div>' +
@@ -862,12 +858,12 @@
       '<div class="sdm-art small"><img src="' + bossSprite(1) + '" alt=""></div>' +
       '<div class="sdm-intro">One server-wide boss with unlimited HP. Everyone falls eventually — better fleets fall later.</div>' +
       '<div class="sdm-rules">' +
-        rule('❖', 'Grand prize: the VOIDMAW', 'Collect <b>' + VM_NEED + ' parts</b> to assemble the boss itself. Stage drops, your first fight each day and the ✦ Event Store pay parts — <b>≈ a month of daily play</b>.') +
-        rule('⚔', String(BASE_ATTEMPTS) + ' attempts a day', '2:30 auto-combat runs (+1 for Pro, more with ◈). Damage is <b>cumulative all season</b> — every stage crossed drops loot instantly.') +
-        rule('🔴', 'Dodge the red zones', 'They blink faster and faster, then collapse into a <b>black hole</b> for 5 seconds — <b>75% of your hull per second</b> inside. Auto-pilot is disabled: you fly out with the joystick.') +
-        rule('🏆', 'Two boards, one store', 'Daily = best single run · Season = total damage. Both pay <b>✦ Event Coins + ◈ LootCoins</b> — spend coins in the Event Store on Titan Sina shards and other high-end ship parts.') +
+        rule('❖', 'Grand prize: the VOIDMAW', 'Collect <b>' + VM_NEED + ' parts</b> to assemble the boss itself — about a month of daily play.') +
+        rule('⚔', String(BASE_ATTEMPTS) + ' attempts a day', '2:30 auto-combat runs. Damage is <b>cumulative all season</b>, and every stage crossed drops loot.') +
+        rule('🔴', 'Dodge the red zones', 'They collapse into a <b>black hole</b> for 5 seconds — <b>75% of your hull per second</b> inside. Fly out with the joystick.') +
+        rule('🏆', 'Two boards, one store', 'Daily = best single run · Season = total damage. Both pay <b>✦ Event Coins</b> to spend in the store.') +
       '</div>' +
-      (locked ? '<div class="sdm-locknote">🔒 Minimum level to join: <b>' + UNLOCK + '</b> — you are Level ' + lvl() + '. The event runs until ' + SEASON.endsTxt + ', so there is time.</div>' : '') +
+      (locked ? '<div class="sdm-locknote">🔒 Opens at <b>Level ' + UNLOCK + '</b> — you are Level ' + lvl() + '.</div>' : '') +
       '<button class="sdm-ok" id="sdm-ok">' + (locked ? 'Got it' : first ? '⚔ Enter the fight' : 'Close') + '</button>'
     );
     m.querySelector('#sdm-ok').addEventListener('click', closeModal);
@@ -877,8 +873,8 @@
   // ---- run summary ----
   function openSummary(sum) {
     const s = sd();
-    const rank = liveDailyRank() || rankFor(s.day, s.bestDay);
-    const seaRank = liveSeasonRank() || seasonRankFor(Math.floor(s.total));
+    const rank = knownDailyRank(s);
+    const seaRank = knownSeasonRank(s);
     const m = sheet(
       '<div class="sdm-kicker">' + (sum.reason === 'destroyed' ? 'FLEET DESTROYED' : sum.reason === 'abandoned' ? 'RUN ABANDONED' : 'TIME EXPIRED') + '</div>' +
       '<div class="sdm-title">' + fmt(sum.dealt) + ' DMG</div>' +
@@ -1014,7 +1010,7 @@
       // five refusals is a real problem, not a blip: say so rather than leaving the
       // player to discover the gap on the board themselves
       try { G().save(); } catch (e) {}
-      toast('⚠ Score not published yet — will retry when you reopen the event');
+      toast('⚠ Score not on the board yet — it will publish itself later');
     }).catch(() => {
       if (n < 5) setTimeout(() => publishScore(n + 1), Math.min(30000, 2000 * Math.pow(2, n - 1)));
     });
@@ -1067,33 +1063,34 @@
     const live = cloudOn();
     const signedIn = live && !!myUid();
     const meDay = s.bestDay || 0, meSea = Math.floor(s.total) || 0;
-    const myDayRank = meDay ? ((live && liveDailyRank()) || rankFor(s.day, meDay)) : null;
-    const mySeaRank = meSea ? ((live && liveSeasonRank()) || seasonRankFor(meSea)) : null;
-    // live rows when we HAVE them; simulated rivals as the visible fallback
-    // while the first fetch is still in flight or failing (never an empty board)
-    const dayList = (live && _cl.day) ? cloudOthers(_cl.day).map((r) => ({ name: r.name || 'Operator', dmg: r.best_day || 0 })) : botsFor(s.day);
-    const seaList = (live && _cl.season) ? cloudOthers(_cl.season).map((r) => ({ name: r.name || 'Operator', dmg: r.total || 0 })) : seasonBots();
+    const myDayRank = meDay ? knownDailyRank(s) : null;
+    const mySeaRank = meSea ? knownSeasonRank(s) : null;
+    // REAL ROWS ONLY. No bot field stands in while a fetch is in flight — an
+    // empty board says it is empty (see the NO BOT FIELD note above).
+    const dayList = (live && _cl.day) ? cloudOthers(_cl.day).map((r) => ({ name: r.name || 'Operator', dmg: r.best_day || 0 })) : [];
+    const seaList = (live && _cl.season) ? cloudOthers(_cl.season).map((r) => ({ name: r.name || 'Operator', dmg: r.total || 0 })) : [];
     const aloneNote = (live && _cl.ok && signedIn && _cl.season && cloudOthers(_cl.season).length === 0)
-      ? '<div class="sdm-locknote soft" style="margin-top:6px">You\u2019re the only operator published so far — players appear the moment they fight <b>while signed in</b> (guest runs never reach the board).</div>' : '';
+      ? '<div class="sdm-locknote soft" style="margin-top:6px">You\u2019re the only operator published so far — pilots appear as they fight while <b>signed in</b>.</div>' : '';
     const liveNote = live
       ? (_cl.ok
           ? (signedIn
               ? '<div class="sdl-live">🌐 LIVE — real server standings · auto-updates<span class="sdl-pulse"></span></div>'
               : '<div class="sdl-live off">🌐 LIVE board (read-only) — <b style="color:#ffcf7a">you\u2019re a guest: your runs don\u2019t publish.</b> Sign in to place.</div>')
-          : '<div class="sdl-live off">🌐 Connecting to live standings… simulated rivals shown</div>')
-      : '<div class="sdl-live off">Offline — simulated rivals shown until you sign in</div>';
+          : '<div class="sdl-live off">🌐 Connecting to live standings…</div>')
+      : '<div class="sdl-live off">Offline — sign in to see the live standings</div>';
+    const emptyRow = '<div class="sdm-nodrop" style="margin:0">No operators published yet.</div>';
     return liveNote + aloneNote +
       (meDay || meSea ? '' : '<div class="sdm-locknote">Fight at least once to place. Daily ranks your <b>best single run</b> — season ranks your <b>total damage</b>.</div>') +
       '<div class="sdl-cols">' +
         '<div class="sdl-col">' +
           '<div class="sdl-col-h">⚔ DAILY<span>best single run</span></div>' +
-          (myDayRank ? '<div class="sdl-mychip">Your rank <b>#' + myDayRank + '</b></div>' : '<div class="sdl-mychip none">Not placed today</div>') +
-          '<div class="sdl-list">' + lbRows(dayList, meDay, myDayRank, 8) + '</div>' +
+          (myDayRank ? '<div class="sdl-mychip">Your rank <b>#' + myDayRank + '</b></div>' : '<div class="sdl-mychip none">' + (meDay ? 'Rank pending' : 'Not placed today') + '</div>') +
+          '<div class="sdl-list">' + (dayList.length || meDay ? lbRows(dayList, meDay, myDayRank, 8) : emptyRow) + '</div>' +
         '</div>' +
         '<div class="sdl-col">' +
           '<div class="sdl-col-h season">∑ SEASON<span>total damage</span></div>' +
-          (mySeaRank ? '<div class="sdl-mychip">Your rank <b>#' + mySeaRank + '</b></div>' : '<div class="sdl-mychip none">Not placed yet</div>') +
-          '<div class="sdl-list">' + lbRows(seaList, meSea, mySeaRank, 8) + '</div>' +
+          (mySeaRank ? '<div class="sdl-mychip">Your rank <b>#' + mySeaRank + '</b></div>' : '<div class="sdl-mychip none">' + (meSea ? 'Rank pending' : 'Not placed yet') + '</div>') +
+          '<div class="sdl-list">' + (seaList.length || meSea ? lbRows(seaList, meSea, mySeaRank, 8) : emptyRow) + '</div>' +
         '</div>' +
       '</div>';
   }
@@ -1215,7 +1212,7 @@
   // pay a mailed prize (coins/lc/gold/cores) — returns the receipt text
   function payPrize(p) {
     const s = sd(), g = G(); if (!p || !g || !g.state) return null;
-    if (p.coins && s) s.coins = (s.coins | 0) + p.coins;
+    if (p.coins && s) s.coins = coinsOf(s) + p.coins;
     if (p.lc) { if (g.addCredits) g.addCredits(p.lc); else g.state.credits = (g.state.credits || 0) + p.lc; }
     if (p.gold) g.state.gold = (g.state.gold || 0) + p.gold;
     if (p.cores) g.state.dreadCores = (g.state.dreadCores || 0) + p.cores;

@@ -178,9 +178,16 @@
   // ===========================================================================
   let sel = null, busy = false;
   function baseSlot(k) { return k.replace(/\d+$/, ''); }
+  // HARDPOINTS COUNT UP (build 710). Every secondary slot printed a flat ' II', so
+  // a seven-cannon hull read "Cannon, Cannon II, Cannon II, Cannon II…" and there
+  // was no way to tell which mount you were tempering. The slot key already IS the
+  // ordinal — bow/bow2…bow7, arrows/arrows2…, armor/armor2… — so number from it.
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+  function slotOrdinal(k) { const m = /(\d+)$/.exec(k); return m ? Math.max(1, parseInt(m[1], 10)) : 1; }
   function slotName(k) {
     const sl = C().SLOTS[baseSlot(k)] || {};
-    return (sl.name || k) + (/\d$/.test(k) ? ' II' : '');
+    const n = slotOrdinal(k);
+    return (sl.name || k) + (n > 1 ? ' ' + (ROMAN[n - 1] || n) : '');
   }
   function fmtStat(k, v) { const def = C().STATS[k] || {}; return def.fmt === 'flat' ? fmt(v) : (Math.round(v * 10) / 10) + '%'; }
 

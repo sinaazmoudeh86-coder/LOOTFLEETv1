@@ -1685,8 +1685,8 @@
   function confirmAbandon(id, name, after) {
     const c = showSheet(`<div class="sheet-head" style="color:var(--bad)">✕ ABANDON SYSTEM</div><div class="sheet-body">
       <p>Release <b>${name || id}</b>?</p>
-      <p style="font-size:12px">Its citadel and all of its hourly production are lost. The system goes <b>neutral immediately</b> — any pilot can claim it, and taking it back means fighting for it again.</p>
-      <p style="font-size:12px;color:var(--bad)"><b>You cannot re-claim this system for 24 hours.</b> Everyone else can move in straight away.</p>
+      <p style="font-size:12px">Its citadel and hourly production are lost, and the system goes <b>neutral immediately</b>.</p>
+      <p style="font-size:12px;color:var(--bad)"><b>You cannot re-claim it for 24 hours.</b> Everyone else can move in straight away.</p>
       <div class="sheet-actions"><button class="btn" data-no>Keep it</button><button class="btn danger" data-yes>Abandon</button></div></div>`);
     c.querySelector('[data-no]').addEventListener('click', () => { closeSheet(); if (after) setTimeout(() => openMySystems(), 60); });
     c.querySelector('[data-yes]').addEventListener('click', () => {
@@ -2318,12 +2318,12 @@
         <div class="ch-n">${held}<i>/${cap}</i></div>
         <div class="ch-l">SYSTEMS HELD · CAP REACHED</div>
       </div>
-      <div class="cap-why">${tgt ? `You can't claim <b>${tgt.name}</b> because your empire is full.` : 'Your empire is full.'} A pilot can hold <b>${cap}</b> systems at once. The cap is a hard limit — it is not a cooldown and does not expire, so nothing changes until you free a slot yourself.</div>
+      <div class="cap-why">${tgt ? `You can't claim <b>${tgt.name}</b> because your empire is full.` : 'Your empire is full.'} A pilot can hold <b>${cap}</b> systems at once, and the cap never expires on its own.</div>
       <div class="lo-sect">Two ways to make room</div>
-      <div class="cap-opt"><span class="co-n">1</span><div><b>Abandon a system you hold.</b> Releases it to neutral and frees a slot immediately. You keep all resources it has already produced; you lose its hourly income, and its citadel is scrapped with no refund. Anyone can then claim it — including rivals.</div></div>
-      <div class="cap-opt"><span class="co-n">2</span><div><b>Raise the cap with VIP.</b> Every VIP level adds <b>+5</b> permanent system slots on top of the base 50. Nothing is abandoned and nothing is lost.</div></div>
+      <div class="cap-opt"><span class="co-n">1</span><div><b>Abandon a system you hold.</b> Frees a slot at once. You keep what it has produced; its citadel is scrapped.</div></div>
+      <div class="cap-opt"><span class="co-n">2</span><div><b>Raise the cap with VIP.</b> Every VIP level adds <b>+5</b> permanent slots.</div></div>
       <div class="lo-sect">Your systems · lowest earners first</div>
-      <p class="cap-hint">Tap <b>Abandon</b> to free a slot now, then claim your new zone. Each needs a second tap to confirm.</p>
+      <p class="cap-hint">Each Abandon needs a second tap to confirm.</p>
       <div class="cap-list">${list || '<div class="cap-none">You hold no abandonable systems.</div>'}</div>
       <div class="sheet-actions"><button class="btn" data-x>Close</button>${tgt ? `<button class="btn gold" data-back>← Back to ${tgt.name}</button>` : ''}</div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
@@ -3562,7 +3562,12 @@
     if (data.pending) {
       html += `<div class="lbx-note">Loading…</div>`;
     } else if (data.needsSql) {
-      html += `<div class="lbx-note">This ladder is waiting on a database migration.<br><span style="opacity:.7">Until <b>${tab.sql || 'ranks-ladders.sql'}</b> runs, no real operator has published these figures — so ranking on them would credit records nobody has actually set.</span></div>`;
+      // NO SQL FILENAMES IN FRONT OF PLAYERS. This used to read "waiting on a
+      // database migration" and name the .sql file — a sentence only the developer
+      // can act on. The player-facing fact is that the board has nothing real on
+      // it yet; the diagnostic goes to the console, where it belongs.
+      try { console.warn('[ranks] ' + _lbTab + ' board hidden — ' + (tab.sql || 'ranks-ladders.sql') + ' has not run'); } catch (e) {}
+      html += `<div class="lbx-note">This board isn’t live yet — no operator has published to it.</div>`;
     } else if (data.err) {
       html += `<div class="lbx-note err">This board couldn’t load — ${esc(data.err.message || 'request failed')}</div>`;
     } else if (!data.rows.length) {

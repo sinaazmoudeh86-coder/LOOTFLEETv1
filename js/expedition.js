@@ -138,6 +138,19 @@
     const up = Math.max(0, (((st.shipLevels || {})[key] | 0) || 1) - 1);
     return 1 + up * 0.06;
   }
+  // SHIP ASCENSION COUNTS TOO (build 710). Yard levels and expedition ranks both
+  // lifted a hull's survey profile; Ascension — the deepest and most expensive
+  // per-hull investment in the game — did nothing here, so the pilot working
+  // every hull through its module tiers got no exploration credit for it. Read
+  // through ASCEND.shipStars (tier*5 + stars, summed over the four modules, 140
+  // at full ascension) rather than restating the model: +1.5% per star, so a
+  // fully ascended hull explores at 3.1x its bare profile.
+  const ASC_PER_STAR = 0.015;
+  function ascStars(key) {
+    try { if (window.ASCEND && ASCEND.shipStars) return Math.max(0, ASCEND.shipStars(key) | 0); } catch (e) {}
+    return 0;
+  }
+  function ascMult(key) { return 1 + ascStars(key) * ASC_PER_STAR; }
   function rankOf(key) { const e = ex(); return e ? Math.max(0, Math.min(5, (e.hulls[key] || {}).rank | 0)) : 0; }
   const RANK_ROMAN = ['—', 'I', 'II', 'III', 'IV', 'V'];
   // Expedition XP needed to reach each rank. Roughly: 4 short runs to I, then a
@@ -186,7 +199,7 @@
   function contribution(key, type) {
     const p = profile(key), w = (type && type.w) || [1, 1, 1];
     const raw = p.sv * w[0] + p.rg * w[1] + p.rs * w[2];
-    return raw * hullMult(key) * rankMult(key) * dmgMult(key);
+    return raw * hullMult(key) * rankMult(key) * ascMult(key) * dmgMult(key);
   }
   function fleetRating(keys, type) {
     let t = 0; (keys || []).forEach((k) => { if (k) t += contribution(k, type); });
@@ -209,7 +222,7 @@
       .map((k) => ({
         key: k,
         name: (CFG().SHIP_BY_KEY[k] || {}).name || k,
-        p: profile(k), rank: rankOf(k), dmg: damage(k),
+        p: profile(k), rank: rankOf(k), dmg: damage(k), asc: ascStars(k),
         runs: ((ex().hulls[k] || {}).runs | 0),
         flag: k === st.ship, escort: !!escorts[k], busy: busy[k] || null,
         wrecked: damage(k) >= 0.85,
@@ -369,10 +382,16 @@
   // 10.6 gold/kill), by Zone 305 it is 11x smaller, and it keeps flattening. The
   // same shape dungeonScale() already uses on itself past Zone 100.
   const GOLD_TAPER = 0.85;
+  // RESOURCE HAUL x5 (build 710, by request). The 685 pass cut gold hard and left
+  // the ore behind, so the half of the payout that is supposed to be the reason
+  // to run an expedition was the smaller half of both. Gold keeps its taper; the
+  // fuel/iron/plasma manifest is five times what it was. Dread Cores are a
+  // rarity, not a resource, and are untouched.
+  const RES_MULT = 5;
   function payout(m) {
     const j = m.j || 1;
     const kph = GOLD_KPH_BASE * (1 + GOLD_KPH_STAR * (m.stars - 1));
-    const res = Math.round(fuelCost(m, 1) * (7.0 + 0.6 * m.stars) * j);
+    const res = Math.round(fuelCost(m, 1) * (7.0 + 0.6 * m.stars) * j * RES_MULT);
     const p = {
       gold: Math.round(Math.pow(killGold(), GOLD_TAPER) * kph * m.hours * j),
       fuel: Math.round(res * 0.5), iron: Math.round(res * 0.3), plasma: Math.round(res * 0.2),
@@ -734,7 +753,7 @@
   window.EXPO = {
     GATE_LV, MAX_SHIPS, TYPES, TYPE_BY_K, TIERS, EVENTS, RANK_XP, RANK_ROMAN, OVERKILL, HOUR, REPAIR_MS,
     ex, unlocked, lvl, econ, slots, nextSlot,
-    profile, contribution, fleetRating, hullMult, rankOf, rankMult, damage, dmgMult, repairLeft, repairCost, repairNow,
+    profile, contribution, fleetRating, hullMult, rankOf, rankMult, ascStars, ascMult, ASC_PER_STAR, damage, dmgMult, repairLeft, repairCost, repairNow,
     available, canAssign, busyMap,
     board, missionById, windowEnds, fuelCost, payout, estimate,
     launch, collect, recall, active, ready, badge, byId, progress, returned, revealed, eventsOf,

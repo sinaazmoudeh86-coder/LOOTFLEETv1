@@ -65,7 +65,7 @@
         '<div class="dcr-sub">Paid the moment you head over. One time per account.</div>' +
         '<div class="dcr-list">' +
           '<div><span>\u2694</span>Live war feed \u2014 every capture, siege and citadel razed</div>' +
-          '<div><span>\u{1F4CA}</span>Daily standings for all seven ladders</div>' +
+          '<div><span>\u{1F4CA}</span>Daily standings for every ladder</div>' +
           '<div><span>\u{1F513}</span>Shield-down alerts the moment a system opens up</div>' +
           '<div><span>\u{1F6E0}</span>Patch notes, bug reports and alliance recruiting</div>' +
         '</div>' +
@@ -95,8 +95,7 @@
       if (window.MAIL) window.MAIL.push({
         ic: '\u25c8', title: 'Welcome to the fleet Discord',
         body: '<b>' + REWARD.toLocaleString() + ' LootCoins</b> have been added to your account.' +
-          '<div style="margin-top:8px;opacity:.7">The war feed posts every capture, siege and shield expiry as it happens, ' +
-          'plus the daily standings for all seven ladders.</div>',
+          '<div style="margin-top:8px;opacity:.7">The war feed posts every capture, siege and shield expiry as it happens, plus the daily standings.</div>',
       });
     } catch (e) {}
     try {

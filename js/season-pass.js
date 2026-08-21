@@ -460,7 +460,10 @@
   }
   // SHIP SHARD CRATE — one shard toward a random hull between Frigate and Titan
   // Sina. Shards ride `state.shipParts`, the same field the Season 1 event hull
-  // uses, so 100 shards assembles a hull through machinery that already exists.
+  // uses, so they assemble through machinery that already exists. How many a hull
+  // needs is SHIPWORKS' number (25 for early hulls, 2,000 for the Titan Sina) —
+  // never restate it as a flat 100, which the reward copy used to do and which
+  // was wrong for every hull in the pool.
   //
   // THE POOL IS THE SHIPWORKS ROSTER, NOT A GUESS. This used to be a hand-kept
   // exclusion list over every hull in the config, which let shards drop toward
@@ -1028,7 +1031,7 @@
       ['Prizes are fixed', 'Printed on the cell, identical for every pilot, and <b>not a percentage of anything</b>. Paid tracks pay <b>×5</b> and <b>×10</b> the free one.'],
       [lcIcon(12) + ' LootCoins', 'Ten levels pay them: <b>100</b> free, <b>250</b> Commissioned, <b>1,500</b> Admiralty — <b>1,000 / 2,500 / 15,000</b> across the season.'],
       ['Item crate', 'One fitting, rolled at <b>Zone ' + fmt(zone) + '</b> (your deepest), any rarity up to Artifact.'],
-      ['Hull shard', 'One shard toward a random hull, Frigate to Titan Sina. <b>100 shards assembles it.</b>'],
+      ['Hull shard', 'One shard toward a random buildable hull, Frigate to Titan Sina. Each hull states its own shard count in <b>Shipworks</b>.'],
       ['XP buff', 'Level 50 only, and <b>permanent</b>: <b>+1% / +2.5% / +5%</b> to the XP you earn everywhere in the game, stacking to <b>+8.5%</b>.'],
       ['Hulls', '<b>Vanguard</b> at level 40 on the free track. <b>Dread Praetorian</b> at level 100 on Admiralty.'],
       ['Season end', 'Anything unclaimed is <b>granted automatically</b> and itemised into your mailbox.'],

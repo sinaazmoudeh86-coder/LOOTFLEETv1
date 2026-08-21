@@ -157,6 +157,7 @@
       + '<span class="tp-n">' + T().count() + '</span>'
       + '<span class="tp-a">' + (up ? '\u2726 ON THE DISK' : hms(T().altarMs())) + '</span>'
       + (hold || v > 0 ? '<span class="tp-v">\u25ce ' + Math.floor(v / 60) + 'm</span>' : '')
+      + (T().linkUp && !T().linkUp() ? '<span class="tp-l" title="Live link unavailable \u2014 combat is resolving through the server, about a second slower. Everything still works.">SLOW</span>' : '')
       + '<span class="tp-x">LEAVE</span>';
   }
 

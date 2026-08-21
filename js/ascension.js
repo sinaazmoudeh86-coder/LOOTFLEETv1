@@ -354,7 +354,9 @@
     const s = document.createElement('style'); s.id = 'asc-css'; s.textContent = CSS; document.head.appendChild(s);
   }
 
-  window.ASCEND = { render, combatMods, storm, xpMult, totalScore, shipScore };
+  // shipStars/shipTierIdx are read by Fleet Exploration (expedition.js) so a
+  // hull's ascension counts toward its survey profile — one model, one number.
+  window.ASCEND = { render, combatMods, storm, xpMult, totalScore, shipScore, shipStars, shipTierIdx, STAR_MAX: MODS.length * 35 };
 
   const CSS = `
   .mega-card.cmd-ascend .mc-ic{ color:#b06bff; border-color:rgba(176,107,255,.5); background:radial-gradient(120% 120% at 50% 0%,#241238,#0e1420); box-shadow:0 0 14px -3px rgba(176,107,255,.7); }

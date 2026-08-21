@@ -216,8 +216,7 @@
       + (sh > 0 ? '<div class="ccs-row"><span>🛡 Shield</span><b style="color:#8fe0ff">' + cdTxt(sh) + ' left</b></div>' : '')
       + '</div>'
       + '<div class="ccs-note">Break the garrison to take the hold \u2014 it is won in combat, not on this screen. '
-      + 'Whoever holds it when the day closes takes the whole day; it is not pro-rated, which would only reward '
-      + 'sniping the hold seconds before reset.</div>'
+      + 'Whoever holds it at midnight takes the whole day; it is not pro-rated.</div>'
       + act + abandon + '<button class="ccs-x" data-x>Close</button>');
     v.querySelector('[data-x]').addEventListener('click', () => v.remove());
     const go = v.querySelector('[data-warp]');

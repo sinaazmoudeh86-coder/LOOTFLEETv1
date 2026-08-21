@@ -35,18 +35,24 @@
   function shipImg(k, cls) {
     return '<img class="' + cls + '" src="ships/ship-' + k + '.png" alt="" decoding="async" onerror="this.style.visibility=\'hidden\'">';
   }
+  // EVERY CHIP NAMES WHAT IT PAYS (build 710). The manifest was six glyph-and-number
+  // chips in six colours — two of them blue (⬢ fuel and ◇ Dread Cores) — so
+  // "what are the blue rewards?" was a question the screen could not answer.
+  const RW = [
+    ['gold',   'rw-g', '$', 'Gold'],
+    ['fuel',   'rw-f', '⬢', 'Fuel'],
+    ['iron',   'rw-i', '◆', 'Iron'],
+    ['plasma', 'rw-p', '✦', 'Plasma'],
+    ['cores',  'rw-c', '◇', 'Dread Cores'],
+    ['lc',     'rw-l', '◈', 'LootCoins'],
+  ];
   function rewardChips(p, opts) {
     const o = opts || {};
-    const b = [];
-    if (p.gold) b.push('<em class="rw-g">$ ' + fmt(p.gold) + '</em>');
-    if (p.fuel) b.push('<em class="rw-f">⬢ ' + fmt(p.fuel) + '</em>');
-    if (p.iron) b.push('<em class="rw-i">◆ ' + fmt(p.iron) + '</em>');
-    if (p.plasma) b.push('<em class="rw-p">✦ ' + fmt(p.plasma) + '</em>');
-    if (p.cores) b.push('<em class="rw-c">◇ ' + fmt(p.cores) + '</em>');
-    if (p.lc) b.push('<em class="rw-l">◈ ' + fmt(p.lc) + '</em>');
+    const b = RW.filter((r) => p[r[0]]).map((r) => '<em class="' + r[1] + '">' + r[2] + ' ' + fmt(p[r[0]]) + '<u>' + r[3] + '</u></em>');
     if (!b.length) b.push('<em class="rw-n">nothing recoverable</em>');
     return '<div class="ex-rw' + (o.big ? ' big' : '') + '">' + b.join('') + '</div>';
   }
+
 
   // ===========================================================================
   // SCREEN
@@ -164,12 +170,13 @@
     return '<div class="ex-h' + (s.flag ? ' flag' : '') + (s.busy ? ' busy' : '') + '">'
       + shipImg(s.key, 'ex-h-art')
       + '<div class="ex-h-main">'
-        + '<div class="ex-h-n">' + esc(s.name) + (s.rank ? '<em class="ex-rk">EXP ' + X().RANK_ROMAN[s.rank] + '</em>' : '') + st + '</div>'
+        + '<div class="ex-h-n">' + esc(s.name) + (s.rank ? '<em class="ex-rk">EXP ' + X().RANK_ROMAN[s.rank] + '</em>' : '')
+          + (s.asc ? '<em class="ex-rk asc" title="Ship Ascension — +' + Math.round(s.asc * X().ASC_PER_STAR * 100) + '% survey profile">✦ ' + s.asc + '</em>' : '') + st + '</div>'
         + '<div class="ex-h-st">'
           + '<span title="Survey — sensors, labs, bays">◎ ' + Math.round(p.sv) + '</span>'
           + '<span title="Range — endurance and reach">◈ ' + Math.round(p.rg) + '</span>'
           + '<span title="Resolve — surviving complications">⛨ ' + Math.round(p.rs) + '</span>'
-          + '<b>' + Math.round(p.tot * X().hullMult(s.key) * X().rankMult(s.key) * X().dmgMult(s.key)) + '</b>'
+          + '<b>' + Math.round(p.tot * X().hullMult(s.key) * X().rankMult(s.key) * X().ascMult(s.key) * X().dmgMult(s.key)) + '</b>'
           + (s.runs ? '<u>' + s.runs + ' run' + (s.runs === 1 ? '' : 's') + '</u>' : '')
         + '</div>'
         + rep
@@ -244,6 +251,8 @@
 
     let h = '<div class="ex-picklist">' + av.map((s) => pickCard(s, t, m)).join('') + '</div>';
 
+    h += formationBlock();
+
     h += '<div class="ex-verdict ' + est.k + '">'
       + '<div class="ex-v-row"><span>FLEET EXPLORATION RATING</span><b>' + fmt(rating) + '</b></div>'
       + '<div class="ex-v-row"><span>REQUIRED RATING</span><b>' + m.req + '</b></div>'
@@ -267,6 +276,23 @@
       + (!_pick.length ? 'SELECT AT LEAST ONE HULL' : short ? 'NOT ENOUGH FUEL' : 'LAUNCH EXPEDITION · ⬢ ' + fmt(cost)) + '</button></div>';
     return h;
   }
+  // THE FORMATION YOU ARE FLYING RIGHT NOW (build 710). The sheet listed hulls you
+  // could send and warned once a pick happened to be an escort, but never said
+  // what the battle formation IS — so "which hulls can I spare" meant leaving the
+  // screen. Flagship first (it can never go), then every escort, marked as it is
+  // picked.
+  function formationBlock() {
+    const st = G().state, BY = (window.CONFIG || {}).SHIP_BY_KEY || {};
+    const nm = (k) => esc((BY[k] || {}).name || k);
+    const wing = (st.fleet || []).filter((k) => k);
+    const pulled = wing.filter((k) => _pick.indexOf(k) !== -1).length;
+    const chips = ['<span class="ex-fm-c flag">' + nm(st.ship) + '<i>FLAGSHIP · STAYS</i></span>']
+      .concat(wing.map((k) => '<span class="ex-fm-c' + (_pick.indexOf(k) !== -1 ? ' out' : '') + '">' + nm(k)
+        + '<i>' + (_pick.indexOf(k) !== -1 ? 'PULLED OUT' : 'ESCORT') + '</i></span>'));
+    return '<div class="ex-fm"><div class="ex-fm-h"><span>⬡ YOUR FLEET RIGHT NOW</span><b>'
+      + (wing.length ? (wing.length - pulled) + ' / ' + wing.length + ' escorts stay' : 'no escorts — flagship alone')
+      + '</b></div><div class="ex-fm-l">' + chips.join('') + '</div></div>';
+  }
   function pickCard(s, t, m) {
     const on = _pick.indexOf(s.key) !== -1;
     const can = X().canAssign(s);
@@ -274,7 +300,8 @@
     const why = s.flag ? 'FLAGSHIP — stays with you' : s.busy ? 'already on an expedition' : s.wrecked ? 'too damaged to fly' : '';
     return '<button class="ex-pk' + (on ? ' on' : '') + (can ? '' : ' off') + '"' + (can ? ' data-pick="' + s.key + '"' : ' disabled') + '>'
       + shipImg(s.key, 'ex-pk-art')
-      + '<div class="ex-pk-m"><div class="ex-pk-n">' + esc(s.name) + (s.rank ? '<em class="ex-rk">' + X().RANK_ROMAN[s.rank] + '</em>' : '') + '</div>'
+      + '<div class="ex-pk-m"><div class="ex-pk-n">' + esc(s.name) + (s.rank ? '<em class="ex-rk">' + X().RANK_ROMAN[s.rank] + '</em>' : '')
+      + (s.asc ? '<em class="ex-rk asc">✦ ' + s.asc + '</em>' : '') + '</div>'
       + '<div class="ex-pk-s">' + (why || ('◎' + Math.round(s.p.sv) + '  ◈' + Math.round(s.p.rg) + '  ⛨' + Math.round(s.p.rs) + (s.dmg > 0 ? '  <u>−' + Math.round(s.dmg * 100) + '%</u>' : ''))) + '</div></div>'
       + '<div class="ex-pk-v">' + (can ? '<b>+' + fmt(c) + '</b><i>to this survey</i>' : '<span class="ex-pk-x">—</span>') + '</div>'
       + '</button>';

@@ -111,11 +111,14 @@
       }
       if (res.error) {
         // surface persistent claim failures ONCE per 5 min — a silently broken
-        // turf war (half-migrated server) is how nobody saw anyone's conquests
+        // turf war (half-migrated server) is how nobody saw anyone's conquests.
+        // THE PLAYER GETS THE FACT, THE CONSOLE GETS THE FILENAME: naming
+        // territory-v2.sql on screen is an instruction only the developer can act on.
         try {
           if (!window.__turfWarnT || Date.now() - window.__turfWarnT > 300000) {
             window.__turfWarnT = Date.now();
-            if (window.UI && window.UI.unlockToast) window.UI.unlockToast('⚠ Turf war sync failed — server migration required (territory-v2.sql)');
+            console.warn('[territory] claim_tile refused — territory-v2.sql may not have run:', res.error.message || res.error);
+            if (window.UI && window.UI.unlockToast) window.UI.unlockToast('⚠ Territory did not save — your claim is local for now');
           }
         } catch (e) {}
         return { ok: false, reason: res.error.message || 'error' };

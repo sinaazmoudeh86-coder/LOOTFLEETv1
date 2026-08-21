@@ -5469,17 +5469,35 @@
   // Real ownership overrides the local simulation; simulated rivals only ever
   // occupy tiles no real player holds, so the map is contested AND never empty.
   function realMyUid() { return (window.TERRITORY && window.TERRITORY.enabled()) ? window.TERRITORY.myId() : null; }
+  // A TILE YOU WALKED AWAY FROM IS NOT A TILE YOU LOST (build 710). Abandoning
+  // releases the server claim, but that release is a network write: until it lands
+  // — or if it never does — the shared map can still name this account as the
+  // owner, so the next convergence pull re-adopted the tile. The moment another
+  // player claimed it, the loss path fired and mailed a war report for a system the
+  // pilot had deliberately given up. abandonLockLeft() is the 24-hour record of
+  // that decision, so it answers both halves: never re-adopt, never file a report.
+  function abandonedByMe(id) { try { return abandonLockLeft(id) > 0; } catch (e) { return false; } }
   function syncRealTiles(map) {
     rt.realTiles = map || {};
     accrueResources();   // settle at PRE-sync ownership — you earn for what you actually held until now
     const myUid = realMyUid();
     Object.keys(rt.realTiles).forEach((id) => {
       const r = rt.realTiles[id];
-      if (myUid && r.ownerId === myUid) state.ownedSystems[id] = true;
-      else if (state.ownedSystems[id]) {
+      if (myUid && r.ownerId === myUid) {
+        // stale row for a tile I released — re-send the release, don't take it back
+        if (abandonedByMe(id)) {
+          delete state.ownedSystems[id];
+          delete rt.realTiles[id];
+          try { if (window.TERRITORY && window.TERRITORY.release) window.TERRITORY.release(id); } catch (e) {}
+          return;
+        }
+        state.ownedSystems[id] = true;
+      } else if (state.ownedSystems[id]) {
         delete state.ownedSystems[id];
         // lost while away — file a war report with the conqueror's fleet intel
-        try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]), id: id }); } catch (e) {}   // sysAt: void tiles mail with real names too
+        if (!abandonedByMe(id)) {
+          try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]), id: id }); } catch (e) {}   // sysAt: void tiles mail with real names too
+        }
         if (state.citadels && state.citadels[id]) delete state.citadels[id];
       }
       if (state.rivalTiles) delete state.rivalTiles[id]; // a real owner overrides any simulated one
@@ -5492,14 +5510,27 @@
     else {
       rt.realTiles[ev.tileId] = { ownerId: ev.ownerId, ownerName: ev.ownerName, cooldownUntil: ev.cooldownUntil, citadel: !!ev.citadel, citadelLv: ev.citadelLv | 0, fleetScore: ev.fleetScore || 0, defense: ev.defense || null };
       accrueResources();   // settle before ownership flips either way
-      if (myUid && ev.ownerId === myUid) { state.ownedSystems[ev.tileId] = true; }
+      if (myUid && ev.ownerId === myUid) {
+        if (abandonedByMe(ev.tileId)) {   // an echo of the claim I just released
+          delete state.ownedSystems[ev.tileId];
+          delete rt.realTiles[ev.tileId];
+          try { if (window.TERRITORY && window.TERRITORY.release) window.TERRITORY.release(ev.tileId); } catch (e) {}
+          if (window.UI) window.UI.galaxyChanged();
+          return;
+        }
+        state.ownedSystems[ev.tileId] = true;
+      }
       else if (state.ownedSystems[ev.tileId]) {
         delete state.ownedSystems[ev.tileId];
         const tn = (sysAt(ev.tileId) || {}).name || ev.tileId;   // sysAt: void tiles included
-        pushFeed(ev.ownerName + ' captured your ' + tn, true);
-        try { if (window.MAIL) window.MAIL.tileLost(tn, rt.realTiles[ev.tileId], { razed: !!(state.citadels && state.citadels[ev.tileId]), id: ev.tileId }); } catch (e) {}
+        // a tile I abandoned changing hands is news, not a defeat: no feed line,
+        // no war report, no toast (see abandonedByMe)
+        if (!abandonedByMe(ev.tileId)) {
+          pushFeed(ev.ownerName + ' captured your ' + tn, true);
+          try { if (window.MAIL) window.MAIL.tileLost(tn, rt.realTiles[ev.tileId], { razed: !!(state.citadels && state.citadels[ev.tileId]), id: ev.tileId }); } catch (e) {}
+          if (window.UI) window.UI.galaxyContestToast(ev.ownerName, tn);
+        }
         if (state.citadels && state.citadels[ev.tileId]) delete state.citadels[ev.tileId];
-        if (window.UI) window.UI.galaxyContestToast(ev.ownerName, tn);
       }
       if (state.rivalTiles) delete state.rivalTiles[ev.tileId];
     }
@@ -5521,7 +5552,7 @@
   function republishOwnedTiles(map) {
     if (state._turfRepub2) return;
     state._turfRepub2 = 1; save();
-    const mine = Object.keys(state.ownedSystems || {}).filter((id) => !(map && map[id]));
+    const mine = Object.keys(state.ownedSystems || {}).filter((id) => !(map && map[id]) && !abandonedByMe(id));
     mine.slice(0, 40).forEach((id, i) => {
       setTimeout(() => {
         try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: !!hasMyCitadel(id), citadelLv: citadelLevel(id), fleetScore: Math.round(score()), defense: defenseSnapshot() }); } catch (e) {}

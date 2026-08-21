@@ -236,6 +236,14 @@
       const readyN = Math.max(0, e - c);
       const show = mastered ? ch.n : Math.min(ch.n, (readyN ? c + 1 : c + 1)); // next claimable / next target
       const g = gradeOf(ch, show);
+      // THE CARD COUNTS BADGES IN HAND, NOT THE ONE IN PROGRESS (build 710). This
+      // printed `show` — the NEXT rank — so every unmastered chain read one badge
+      // higher than it was. Eighteen chains, so a player adding up the cards got up
+      // to 18 more than the header's claimed total (reported as 846 counted against
+      // 832 shown), and neither number was wrong on its own terms. The counter now
+      // states claimed/total and the grade beside it is the grade of the highest
+      // badge actually claimed; the bar below still tracks the rank in progress.
+      const gHave = gradeOf(ch, Math.max(1, c));
       const prev = show > 1 ? ch.t[show - 2] : 0, tgt = ch.t[show - 1];
       const pct = mastered ? 100 : Math.min(100, Math.max(0, (v - prev) / Math.max(1, tgt - prev) * 100));
       // 10 grade pips — lit when every rank in that grade is claimed
@@ -244,7 +252,7 @@
       let lcSum = 0; for (let r = c + 1; r <= e; r++) lcSum += GRADES[gradeIdx(ch, r)].lc;
       out += '<div class="msn-card ach-card' + (readyN ? ' ready' : '') + (mastered ? ' mastered' : '') + '" data-ach-row="' + ch.id + '">' +
         badge(ch, show, readyN > 0 || mastered) +
-        '<div class="msn-mid"><div class="msn-n">' + ch.name + ' <span class="ach-rk" style="--c:' + g.col + '">' + g.name + ' · ' + Math.min(show, ch.n) + '/' + ch.n + '</span></div>' +
+        '<div class="msn-mid"><div class="msn-n">' + ch.name + ' <span class="ach-rk" style="--c:' + gHave.col + '">' + gHave.name + ' · ' + c + '/' + ch.n + '</span></div>' +
         '<div class="msn-b" data-ach-prog>' + (mastered ? '<b style="color:#ff5a68">CHAIN MASTERED</b> — all ' + ch.n + ' badges claimed' : fmt(Math.min(v, tgt)) + ' / ' + fmt(tgt) + ' ' + ch.unit) + '</div>' +
         '<div class="msn-bar"><i data-ach-fill style="width:' + pct + '%;background:linear-gradient(90deg,#3f8cff,' + g.col + ')"></i></div>' +
         '<div class="ach-pips">' + pips + '</div></div>' +
@@ -334,7 +342,7 @@
     const sb = body.querySelector('[data-sina-accept]');
     if (sb) sb.addEventListener('click', acceptSina);
   }
-  window.ACHIEVE = { tick, html, bind, patch, sig, claimable, totalClaimed };
+  window.ACHIEVE = { tick, html, bind, patch, sig, claimable, totalClaimed, TOTAL, SINA_AT };
 
   const CSS = `
   .ach-shelf{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; background:linear-gradient(180deg,#10182a,#0b1120);

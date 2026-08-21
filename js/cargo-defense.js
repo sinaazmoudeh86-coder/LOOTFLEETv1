@@ -289,7 +289,7 @@
         manualCard() +
       '</div>' +
       '<div class="cd-sec-t">CHOOSE YOUR SHIPMENT</div>' +
-      '<div class="cd-intro">A <b>ten-minute</b> crawl from the southern deployment edge to the Citadel at the north, through five sectors of escalating resistance. The instance deploys <b>deeper than you normally fly</b> — Cargo I lands about 13% past your ceiling, Omega V roughly 65% deeper — so hostiles hit harder and drop better than your usual grind, and Omega holds <b>half a beacon swarm on the field permanently</b>. Payout scales with level: <b>×' + lvlMul().toFixed(1) + '</b> at Level ' + plvl() + '.</div>' +
+      '<div class="cd-intro">A <b>ten-minute</b> crawl from the southern deployment edge to the Citadel at the north, through five sectors of escalating resistance. Every tier deploys <b>deeper than you normally fly</b>, so hostiles hit harder and drop better. Payout scales with level: <b>×' + lvlMul().toFixed(1) + '</b> at Level ' + plvl() + '.</div>' +
       '<div class="cd-grid">' + TIERS.map(tierCard).join('') + '</div>' +
       eternumCard() +
       recordCard(c);
@@ -305,10 +305,10 @@
       '<div class="cd-rules-l"><i>✕</i>No skip or instant complete</div>' +
       '<div class="cd-rules-l"><i>◷</i>Ten minutes, deployment edge to Citadel</div>' +
       '<div class="cd-rules-l"><i>▶</i>Battle speed <b>allowed</b> — 1× to 5×</div>' +
-      '<div class="cd-rules-n">Speed compresses the whole run, never part of it: the freighter, the waves and the clock all advance on the same clock, so 5× means the assault arrives five times faster too. The Auto toggle is <b>removed from the arena</b> for the duration and restored when the run ends.</div>' +
+      '<div class="cd-rules-n">Speed compresses the whole run — the freighter, the waves and the clock advance together.</div>' +
       '<div class="cd-warn-hull">' +
         '<div class="cd-wh-t">☠ YOU LOSE YOUR HULL UPGRADES IF YOU DIE</div>' +
-        '<div class="cd-wh-s"><b>The ship is not taken.</b> Die on an escort run and every <b>hull upgrade level</b> the shipyard built into your flagship is <b>destroyed</b> — stripped back to stock, Lv 1. You keep the hull, its Ship Ascension and every fitted item. <b>Abandoning is not dying</b>: bail out and you lose the shipment and the run, but every upgrade level survives intact.</div>' +
+        '<div class="cd-wh-s"><b>The ship is not taken.</b> Die on an escort run and every <b>hull upgrade level</b> on your flagship is destroyed — back to stock, Lv 1. You keep the hull, its Ship Ascension and every fitted item. <b>Abandoning is not dying</b>: you lose the shipment and the run, the upgrades survive.</div>' +
       '</div>' +
       '<div class="cd-rules-f">Everything else is the normal game: your stats, your escorts, your drones, real drops from every kill.</div>' +
     '</div>';

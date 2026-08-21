@@ -60,7 +60,9 @@
   let _selfDeathAt = 0;           // when this client last applied its own death
   let _recent = [];
   let _err = '';
+  let _linkUp = false;      // is the Realtime channel actually joined?
   let _vigil = 0, _topVigil = 0, _holding = false;
+  let _seenCount = -1;
   let _uid = null;
 
   function st() { const g = G(); return g && g.state; }
@@ -107,7 +109,7 @@
     let ok = false;
     try { ok = !!G().startTemple(); } catch (e) { ok = false; }
     if (!ok) { toast('Could not deploy to the Temple'); return false; }
-    _pilots.clear(); _hitAt.clear(); _lastDeathAt = new Date(Date.now() - 5000).toISOString();
+    _pilots.clear(); _hitAt.clear(); _seenCount = -1; _lastDeathAt = new Date(Date.now() - 5000).toISOString();
     openChannel();
     beat(true); poll(true);
     try { window.TEMPLEUI && window.TEMPLEUI.ensurePill(); } catch (e) {}
@@ -124,18 +126,19 @@
   }
 
   // ---------------------------------------------------------------------------
-  // REALTIME — positions only
+  // REALTIME — the fast lane, never the only lane
   // ---------------------------------------------------------------------------
   function openChannel() {
     const c = cl(); if (!c) return;
     closeChannel();
     try {
       _chan = c.channel(CHAN, { config: { broadcast: { self: false } } });
+
+      // POSITIONS. Untrusted — a broadcast decides only where a nameplate is
+      // drawn. Nothing here can cost anyone anything, which is exactly why
+      // positions may ride it and kills may not.
       _chan.on('broadcast', { event: 'p' }, (m) => {
-        const d = (m && m.payload) || null; if (!d || !d.id) return;
-        // A broadcast is UNTRUSTED — it decides only where a nameplate is drawn.
-        // Nothing here can cost anyone anything, which is exactly why positions
-        // are allowed to ride it and kills are not.
+        const d = (m && m.payload) || null; if (!d || !d.id || d.id === _uid) return;
         const prev = _pilots.get(d.id);
         const row = { name: String(d.n || 'Operator').slice(0, 24), ship: d.s || '',
                       power: Number(d.pw) || 0, x: +d.x || 0, y: +d.y || 0,
@@ -143,40 +146,15 @@
         _pilots.set(d.id, row);
         if (prev) noteRemoteHp(d.id, row, prev.hp);
       });
-      // INCOMING FIRE. Applied to MY ship, by MY client, through the same damage
-      // path a hostile uses — so shields, invulnerability frames and the death
-      // handler all behave exactly as they do everywhere else in the game.
+
+      // INCOMING FIRE, fast path. The guaranteed path is temple_take(); both feed
+      // the same applyIncoming().
       _chan.on('broadcast', { event: 'h' }, (m) => {
         const d = (m && m.payload) || null;
-        if (!d || d.to !== _uid || !active()) return;
-        const rt = G().rt, a = rt && rt.archer;
-        if (!a || a.dead || (a.invuln || 0) > 0) return;
-        const dmg = Math.max(1, Math.round(+d.d || 1));
-        a.hp = Math.max(0, a.hp - dmg);
-        try { rt.shake = Math.min(6, (rt.shake || 0) + 2); } catch (e) {}
-        if (a.hp <= 0 && !a.dead) {
-          // Hand the engine a killer it understands and let its OWN death path
-          // run — hull levels wiped, item drop rolled, towed home. Identical to
-          // dying to a hostile, which is what the brief asked for.
-          a.killer = { isBoss: false, type: { name: String(d.fn || 'another pilot') } };
-          // THE DYING PILOT ANNOUNCES IT, IMMEDIATELY, BEFORE TEARDOWN.
-          //
-          // This is what closed the loop. The killer used to detect a kill by
-          // watching the victim's broadcast HP fall to zero — but the victim's
-          // death path tows them home and closes this channel in the same frame,
-          // so that broadcast was never sent. No detection, no temple_kill call,
-          // no logged kill, no credit: the entire PvP loop silently did nothing.
-          //
-          // The victim is only saying "I died, and it was you" — a statement it
-          // has no reason to fake in the attacker's favour. The CLAIM is still
-          // the killer's, still an RPC, still range- and presence-checked by the
-          // server. Killer-authoritative survives; it just gets told.
-          try { _chan.send({ type: 'broadcast', event: 'x', payload: { from: _uid, n: meName(), by: d.from } }); } catch (e) {}
-          // and record that this death is already accounted for, so the poll
-          // backstop does not apply it a second time
-          _selfDeathAt = Date.now();
-        }
+        if (!d || d.to !== _uid) return;
+        applyIncoming(Math.max(1, Math.round(+d.d || 1)), d.fn || 'another pilot', d.from);
       });
+
       // A PILOT DIED AND NAMED ME. Report it — the server still decides.
       _chan.on('broadcast', { event: 'x' }, (m) => {
         const d = (m && m.payload) || null;
@@ -184,9 +162,53 @@
         const p = _pilots.get(d.from); if (p) { p.hp = 0; p.dead = true; }
         if (d.by === _uid) { _hitAt.delete(d.from); reportKill(d.from); }
       });
-      _chan.subscribe();
-    } catch (e) { _err = 'channel'; }
+
+      _chan.subscribe((status) => {
+        // WHETHER THE SOCKET ACTUALLY JOINED IS SOMETHING WE HAVE TO KNOW.
+        // Sending into an unjoined channel throws nothing and delivers nothing,
+        // which is how damage could go missing with no error on either screen.
+        // This flag decides whether the fast path is even attempted, and the pill
+        // shows it, so a degraded link is visible rather than mysterious.
+        _linkUp = (status === 'SUBSCRIBED');
+      });
+    } catch (e) { _err = 'channel'; _linkUp = false; }
   }
+
+  // ONE PLACE APPLIES INCOMING DAMAGE, whichever path delivered it.
+  //
+  // Both paths run at once, deliberately. The socket is the same bytes arriving
+  // sooner, and the database path is read-and-clear, so the overlap is bounded by
+  // a single heartbeat — at worst a fight the victim was already losing ends a
+  // fraction of a second earlier. That is a far better failure than the one this
+  // replaces, where a quiet socket meant no damage at all and no error anywhere.
+  function applyIncoming(dmg, byName, byUid) {
+    if (!active() || !(dmg > 0)) return;
+    const rt = G().rt, a = rt && rt.archer;
+    if (!a || a.dead || (a.invuln || 0) > 0) return;
+    a.hp = Math.max(0, a.hp - dmg);
+    try { rt.shake = Math.min(6, (rt.shake || 0) + 2); } catch (e) {}
+    if (a.hp <= 0 && !a.dead) {
+      // Hand the engine a killer it understands and let its OWN death path run —
+      // hull levels wiped, item drop rolled, towed home. Identical to dying to a
+      // hostile, which is what the brief asked for.
+      a.killer = { isBoss: false, type: { name: String(byName || 'another pilot') } };
+      // THE DYING PILOT ANNOUNCES IT, BEFORE TEARDOWN.
+      //
+      // This is what closes the kill loop. The killer detects a kill by watching
+      // the victim's HP fall to zero — but the victim's death path tows them home
+      // and closes this channel in the same frame, so that broadcast would never
+      // be sent. No detection, no temple_kill call, no logged kill, no credit.
+      //
+      // The victim is only saying "I died, and it was you" — a statement it has
+      // no reason to fake in the attacker's favour. The CLAIM is still the
+      // killer's, still an RPC, still range- and presence-checked by the server.
+      if (byUid) {
+        try { if (_chan && _linkUp) _chan.send({ type: 'broadcast', event: 'x', payload: { from: _uid, n: meName(), by: byUid } }); } catch (e) {}
+      }
+      _selfDeathAt = Date.now();
+    }
+  }
+
   function closeChannel() {
     try { if (_chan) { cl().removeChannel(_chan); } } catch (e) {}
     _chan = null;
@@ -226,6 +248,16 @@
         p_fx: Math.max(0, Math.min(1, fx)), p_fy: Math.max(0, Math.min(1, fy)),
       });
       if (!r.error && r.data) {
+        // ARRIVALS ARE ANNOUNCED. The head-count was only ever a number on a
+        // pill; a pilot who never looked at it had no idea the arena had stopped
+        // being empty. In a zone whose whole content is other people, "someone
+        // just walked in" is the single most useful thing the game can say.
+        const n = Number(r.data.pilots) || 0;
+        if (_seenCount >= 0 && n > _seenCount && n > 1) {
+          banner('\u26a0 CONTACT', n === 2 ? 'Another pilot is in the Temple. Watch your bearings.'
+                                          : (n - 1) + ' other pilots are in the Temple.');
+        }
+        _seenCount = n;
         const wasHold = _holding;
         _vigil = Number(r.data.vigil) || 0;
         _topVigil = Number(r.data.top_vigil) || 0;
@@ -262,6 +294,32 @@
       }
     } catch (e) {}
     if (force) refreshRecent();
+  }
+
+  // Merge server presence over anything the broadcast has not delivered lately.
+  // Broadcast wins while it is flowing — it is ten times fresher — but a contact
+  // that has gone quiet on the socket is still drawn from the database rather
+  // than vanishing.
+  async function pollPilots() {
+    const c = cl(); if (!c) return;
+    try {
+      const r = await c.rpc('temple_pilots');
+      if (r.error || !Array.isArray(r.data)) return;
+      const now = Date.now();
+      for (const row of r.data) {
+        if (!row.user_id || row.user_id === _uid) continue;
+        const cur = _pilots.get(row.user_id);
+        // a broadcast inside the last 1.5s is fresher than this row
+        if (cur && now - cur.t < 1500) continue;
+        _pilots.set(row.user_id, {
+          name: String(row.name || 'Operator').slice(0, 24),
+          ship: row.ship || '', power: Number(row.power) || 0,
+          x: Number(row.x) || 0, y: Number(row.y) || 0,
+          hp: Math.max(0, Math.min(1, Number(row.hp) || 0)),
+          t: now, dead: !!row.dead, srv: 1,
+        });
+      }
+    } catch (e) {}
   }
 
   async function refreshRecent() {
@@ -344,12 +402,43 @@
   // guard in temple.sql bounds what a FORGED KILL can do, not what a client can
   // decline to feel.
   const _hitAt = new Map();       // uid -> when I last damaged them
+  const _owed = new Map();        // uid -> damage dealt but not yet posted
+  let _postT = 0;
   function onHit(uid, dmg) {
-    if (!_chan || !uid) return;
+    if (!uid) return;
+    const d = Math.max(1, Math.round(dmg || 1));
     _hitAt.set(uid, Date.now());
-    try { _chan.send({ type: 'broadcast', event: 'h', payload: { to: uid, d: Math.max(1, Math.round(dmg || 1)), from: _uid, fn: meName() } }); } catch (e) {}
+    // FAST PATH — instant, and lost silently if the socket is not joined.
+    if (_chan && _linkUp) {
+      try { _chan.send({ type: 'broadcast', event: 'h', payload: { to: uid, d, from: _uid, fn: meName() } }); } catch (e) {}
+    }
+    // GUARANTEED PATH — accumulate and post a few times a second. Batched
+    // because a fleet at endgame fire rate lands dozens of shots a second and one
+    // request per bullet would be a denial of service on our own database.
+    _owed.set(uid, (_owed.get(uid) || 0) + d);
     // local feedback so the shot does not look like it passed through them
     try { const p = _pilots.get(uid); if (p) p.hp = Math.max(0, p.hp - 0.001); } catch (e) {}
+  }
+  async function postOwed() {
+    const c = cl(); if (!c || !_owed.size) return;
+    const batch = [..._owed.entries()];
+    _owed.clear();
+    for (const [uid, d] of batch) {
+      // A refusal is not retried: it means out of range or already dead, and
+      // re-posting stale damage at a pilot who has moved is worse than losing it.
+      try { await c.rpc('temple_hit', { p_victim: uid, p_dmg: d }); } catch (e) {}
+    }
+  }
+  // Damage dealt TO me, read and cleared server-side so it can neither double up
+  // nor go missing. Applied through my own ship exactly as a broadcast hit is.
+  async function takeOwed() {
+    const c = cl(); if (!c || !active()) return;
+    try {
+      const r = await c.rpc('temple_take');
+      const d = (r && r.data) || {};
+      const dmg = Math.max(0, Number(d.dmg) || 0);
+      if (dmg > 0) applyIncoming(dmg, d.by || 'another pilot', 'srv');
+    } catch (e) {}
   }
 
   // A pilot I was shooting has just reported zero HP. Claim it. The server
@@ -420,10 +509,16 @@
   function engineTick(dt, rt) {
     if (!rt || !rt.temrun) return;
     const now = Date.now();
+    // 6s is comfortably longer than both the 130ms broadcast and the 1.5s server
+    // poll, so a contact only disappears when they have genuinely left.
     for (const [k, p] of _pilots) if (now - p.t > 6000) _pilots.delete(k);
 
     if (now - _castT >= CAST_MS) { _castT = now; cast(); }
-    if (now - _beatT >= BEAT_MS) { _beatT = now; beat(false); }
+    if (now - _beatT >= BEAT_MS) { _beatT = now; beat(false); pollPilots(); takeOwed(); }
+    // post accumulated damage a few times a second — batched, because at
+    // endgame fire rate one request per bullet would be a denial of service on
+    // our own database
+    if (now - _postT >= 350) { _postT = now; postOwed(); }
     // THE ALTAR POLL SPEEDS UP WHEN SOMEONE IS STANDING ON IT.
     // At a flat 4s the item was invisible for up to four seconds after it
     // spawned, and the winner was whoever's timer happened to fire first — a
@@ -554,35 +649,32 @@
       ctx.restore();
     }
 
-    // ---- OFF-SCREEN CONTACTS ----
-    // A doubled world with no radar meant two pilots could hunt for an hour and
-    // never meet, which is not tension, it is an empty room. Every contact off
-    // the edge of the view gets an arrow on the rim of the screen with its
-    // distance, so the hunt is a chase rather than a search. The arrow gives away
-    // a bearing, never a hull or a health bar — you still have to close.
+    // ---- CONTACT MARKERS ----
+    // Every pilot in the zone gets a bearing marker on a ring around this ship,
+    // with a distance, whenever they are far enough away to be off screen. The
+    // hunt is a chase, not a search. The marker gives away a bearing and a range
+    // and nothing else — no hull, no health, no name — so closing is still work.
     try {
-      const vw = rt.viewW || (ctx.canvas && ctx.canvas.width) || 0;
-      const vh = rt.viewH || (ctx.canvas && ctx.canvas.height) || 0;
-      const camX = (rt.camX != null) ? rt.camX : (rt.archer ? rt.archer.x - vw / 2 : 0);
-      const camY = (rt.camY != null) ? rt.camY : (rt.archer ? rt.archer.y - vh / 2 : 0);
-      if (vw && vh && rt.archer) {
-        const ax = rt.archer.x, ay = rt.archer.y;
+      const a = rt.archer;
+      if (a) {
+        const NEAR = 520;      // inside this they are on screen anyway
+        const RING = 300;      // world-space radius the marker sits on
         for (const [, p] of _pilots) {
           if (p.dead) continue;
-          const onX = p.x > camX + 40 && p.x < camX + vw - 40;
-          const onY = p.y > camY + 40 && p.y < camY + vh - 40;
-          if (onX && onY) continue;
-          const ang = Math.atan2(p.y - ay, p.x - ax);
-          const rr = Math.min(vw, vh) * 0.40;
-          const mx = ax + Math.cos(ang) * rr, my = ay + Math.sin(ang) * rr;
-          const dist = Math.round(Math.hypot(p.x - ax, p.y - ay));
+          const dx = p.x - a.x, dy = p.y - a.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < NEAR) continue;
+          const ang = Math.atan2(dy, dx);
+          const mx = a.x + Math.cos(ang) * RING, my = a.y + Math.sin(ang) * RING;
           ctx.save(); ctx.translate(mx, my); ctx.rotate(ang);
-          ctx.globalAlpha = 0.9; ctx.fillStyle = '#ff5a68';
-          ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-9, 8); ctx.lineTo(-9, -8); ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 0.95; ctx.fillStyle = '#ff5a68';
+          ctx.shadowColor = '#ff5a68'; ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, 9); ctx.lineTo(-10, -9); ctx.closePath(); ctx.fill();
           ctx.restore();
-          ctx.globalAlpha = 0.8; ctx.fillStyle = '#ffb0b8';
-          ctx.font = '700 11px Rajdhani, sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText(dist > 999 ? (dist / 1000).toFixed(1) + 'k' : dist, mx, my + 22);
+          ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffb0b8';
+          ctx.font = '700 12px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(dist > 999 ? (dist / 1000).toFixed(1) + 'k' : Math.round(dist),
+                       a.x + Math.cos(ang) * (RING + 26), a.y + Math.sin(ang) * (RING + 26));
         }
       }
     } catch (e) {}
@@ -658,7 +750,7 @@
     GATE_LV, ZONE, ALTAR_R,
     enter, leave, unlocked, betaOn, active, lvl, fmt,
     engineTick, engineRender, pilotNear, reportKill, applyDeath, onHit,
-    poll, refreshRecent, claim,
+    poll, pollPilots, refreshRecent, claim, linkUp: () => _linkUp,
     altar: () => _altar, altarMs, waitedS, itemUp,
     vigil: () => _vigil, topVigil: () => _topVigil, holding: () => _holding,
     pilots: () => [..._pilots.values()], count: () => _pilots.size,

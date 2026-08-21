@@ -35,6 +35,8 @@
 
   const G = () => window.GAME;
   const cl = () => (window.CLOUD && window.CLOUD.enabled ? window.CLOUD.client : null);
+  // How many badges the ladder holds — ACHIEVE owns the number, nothing restates it.
+  const badgeTotal = () => { try { return (window.ACHIEVE && ACHIEVE.TOTAL) | 0 || 1110; } catch (e) { return 1110; } };
 
   // Per-ladder voice. `what` is what the board measures; `win` is what topping
   // it actually says about the operator. Both are written to be true of a #1 —
@@ -82,7 +84,10 @@
     },
     badges: {
       ic: '\u2b21', name: 'Badges', unit: 'ranks', col: '#b57bff',
-      what: 'Commendations claimed, out of 1,000. Claim them all and the Titan Sina is granted.',
+      // The ladder's size is ACHIEVE's to state — it went 1,000 → 1,110 when the
+      // nanocore chains joined the count, and this letter used to keep printing
+      // the old whole.
+      get what() { return 'Commendations claimed, out of ' + badgeTotal().toLocaleString() + '. Claim them all and the Titan Sina is granted.'; },
       win: 'Further along the commendation track than any other operator.',
     },
     // ---- the three ladders added in 680 --------------------------------------

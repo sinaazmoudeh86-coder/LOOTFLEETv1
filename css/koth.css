@@ -155,3 +155,5 @@
   .kp-x{display:none}
   .koth-row{grid-template-columns:28px 26px minmax(0,1fr) auto;gap:7px}
 }
+
+.koth-sec-f{margin-top:8px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);color:#93a2ba;font-family:'Rajdhani',sans-serif;font-size:11.5px;line-height:1.5;text-wrap:pretty}

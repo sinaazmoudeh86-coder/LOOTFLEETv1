@@ -95,7 +95,7 @@
     const k = K().kills(), cur = K().tierFor(k);
     const rows = K().TIERS.map((t, i) => {
       const next = K().TIERS[i + 1];
-      const to = next ? next[0] - 1 : 1199;
+      const to = next ? next[0] - 1 : (t[0] + K().BAND - 1);
       const on = cur.idx === i;
       return '<div class="koth-tr' + (on ? ' on' : '') + (k > to ? ' past' : '') + '">'
         + '<span class="ktr-k">' + num(t[0]) + '–' + num(to) + '</span>'
@@ -103,13 +103,20 @@
         + '<span class="ktr-h">' + fmtMult(t[2]) + ' HP</span>'
         + (on ? '<span class="ktr-you">YOU</span>' : '') + '</div>';
     }).join('');
+    // PAST THE PRINTED BANDS, STATE THE RULE — not a made-up row. The old line
+    // advertised "HP triples / 100", which stopped being true in 694 when the
+    // curve went from exponential to a square law. A difficulty card that
+    // describes a curve the game no longer runs is worse than no card.
+    const openFrom = K().TIERS.length * K().BAND;
     const open = '<div class="koth-tr open' + (cur.open ? ' on' : '') + '">'
-      + '<span class="ktr-k">1,200+</span><span class="ktr-l">+200 LV / 100 kills</span>'
-      + '<span class="ktr-h">HP triples / 100</span>'
+      + '<span class="ktr-k">' + num(openFrom) + '+</span><span class="ktr-l">+' + (K().lvlFor(K().BAND) - K().lvlFor(0)) + ' LV / 100 kills</span>'
+      + '<span class="ktr-h">HP grows with kills²</span>'
       + (cur.open ? '<span class="ktr-you">LV ' + num(cur.level) + ' · ' + fmtMult(cur.hp, cur.capped) + '</span>' : '') + '</div>';
     return '<div class="koth-sec"><div class="koth-sec-h"><span class="koth-sec-t">☠ DIFFICULTY</span>'
-      + '<span class="koth-sec-n">HP scales, damage barely does — the wall is your kills per minute</span></div>'
-      + '<div class="koth-ladder">' + rows + open + '</div></div>';
+      + '<span class="koth-sec-n">HP scales, damage is zero — the wall is your kills per minute</span></div>'
+      + '<div class="koth-ladder">' + rows + open + '</div>'
+      + '<div class="koth-sec-f">Every hostile carries ×(1 + kills ÷ ' + K().HP_SOFT + ')² base HP. The cost per kill never stops rising, '
+      + 'but it rises gently enough that a stronger fleet always scores higher — there is no fixed wall.</div></div>';
   }
 
   function boardSection() {

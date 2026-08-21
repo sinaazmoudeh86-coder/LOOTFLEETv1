@@ -1,36 +1,21 @@
-# Loot Fleet — deploy v237 · build 693 · KOTH AFK FARM CLOSED · XP CAP MADE HONEST
+# Loot Fleet — deploy v238 · build 694 · KING OF THE HILL DIFFICULTY REBUILT
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v236 (build 691). Service worker cache is `lootfleet-v693`.
-**Login screen reads `BUILD 693`.**
+Supersedes v237 (build 693). Service worker cache is `lootfleet-v694`.
+**Login screen reads `BUILD 694`.**
 
 ---
 
-## WHAT YOU HAVE TO RUN
+## ONE STEP: PUSH THE SITE
 
-| | needed? | why |
-|---|---|---|
-| **Site push** | **YES** | all of 692 + 693 is client-side |
-| **SQL — `koth-reset-pilot.sql`** | only if you want the `realsina1` reset | wipes one operator from the daily race |
-| **SQL — everything else** | no | unchanged since v234 |
-| **Edge Function** | no | `FEED_VER` bumped to 693 for the cron log, but no code changed since v235 |
+No SQL. No Edge Function. Three client files changed: `js/koth.js`,
+`js/koth-ui.js`, `css/koth.css`.
 
----
-
-## STEP BY STEP
-
-1. **Push the site.** Upload the contents of this folder to the repo root Vercel
-   serves. `version.json` is inside it — one upload is fine.
-2. **Hard-reload once.** Login screen must read `BUILD 693`.
-3. **Optional — reset `realsina1`.** Supabase → SQL Editor → paste
-   `supabase/koth-reset-pilot.sql` → Run. It prints every matching operator
-   *before* touching anything, so a typo resets nobody.
-4. **Smoke test:**
-   - **King of the Hill** — enter the arena, then leave the tab in the background
-     for a moment. The pill turns grey and reads **PAUSED**; kills stop counting.
-     Touch the screen and it resumes with everything intact.
-   - **My Fleet** — hover the `✦ XP` chip. A free pilot must see a **600%**
-     ceiling, not 1000%.
+1. Upload the contents of this folder to the repo root Vercel serves.
+2. Hard-reload once — login screen must read `BUILD 694`.
+3. Enter **King of the Hill** and check the ☠ DIFFICULTY card: the bands should
+   read ×1 → ×21.78 across the first 1,200 kills, and the footer should say HP
+   grows with kills², not "HP triples / 100".
 
 ---
 
@@ -38,15 +23,75 @@ Supersedes v236 (build 691). Service worker cache is `lootfleet-v693`.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 693 |
-| root `version.json` | 693 |
-| `deploy-v237/version.json` | 693 |
-| `deploy-v237/sw.js` `CACHE` | `lootfleet-v693` |
-| `discord-feed` `FEED_VER` | 693 |
+| root `game.html` `window.LF_BUILD` | 694 |
+| root `version.json` | 694 |
+| `deploy-v238/version.json` | 694 |
+| `deploy-v238/sw.js` `CACHE` | `lootfleet-v694` |
+| `discord-feed` `FEED_VER` | 694 |
 
 Audited before hand-off: all **84** `js/`+`css/` files `game.html` references
 (67 js, 17 css) are byte-identical to the project root, none missing, every one
 cache-busted. `CODES.md` is **not** in this folder and must never be added.
+
+---
+
+## What changed in 694 — THE MODEL, NOT THE NUMBERS
+
+Reported as "the HP ramp is not viable". It was not a tuning problem, so tuning
+would not have fixed it.
+
+### Why exponential could not work
+
+679 tripled HP every 100 kills. With a `×r` ramp, doubling your DPS buys a
+**fixed** number of extra kills no matter how strong you already are — about 63
+kills at ×3. Years of fleet building and one afternoon of it hit the same wall
+within a few hundred kills of each other. That is not a difficulty curve, it is a
+stop, and everything past it is the same outcome wearing a bigger number: by kill
+1,100 a hostile carried 300,000× base HP, which at Zone 150 is 3×10¹⁴.
+
+### A square law instead
+
+```
+hp = (1 + kills / 300)²
+```
+
+| kills | OLD mult | NEW mult | reduction |
+|---|---|---|---|
+| 300 | ×20 | ×4 | 5× |
+| 600 | ×500 | ×9 | 56× |
+| 1,200 | ×900,000 | ×25 | 36,000× |
+| 5,000 | ×1.2e18 | ×312 | astronomical |
+
+Cost per kill still rises without limit, so the race keeps its natural ceiling and
+still runs forever — but the ceiling **moves with the fleet**. Modelled over 24
+hours, 1000× the DPS earns **11.1×** the kills (cube-root scaling, exactly what a
+square law predicts). Strength is properly rewarded and cannot run away with the
+board, which is what a daily ladder wants.
+
+Early game got easier too: the old table jumped ×1 → ×5 at kill 101; it is now a
+smooth ×1 → ×1.78.
+
+### Two supporting fixes
+
+- **The difficulty card was lying.** It still advertised "HP triples / 100", which
+  stopped being true the moment the curve changed. A card describing a curve the
+  game does not run is worse than no card. It now states the actual rule and
+  quotes the formula.
+- **The twelve display bands are DERIVED from the curve** rather than hand-written,
+  so the table and the maths cannot drift apart the way a literal table and a
+  formula always eventually do.
+
+### What to watch
+
+With HP this much lower the binding constraint becomes the **spawner** (about 90
+hostiles topped up every 0.25s), so top scores will now be throughput-bound rather
+than HP-bound. If daily numbers come back too high, the honest lever is
+`HP_SOFT` in `js/koth.js` — lower it and the curve steepens everywhere at once.
+
+
+---
+
+# Previous release — v237 · build 693
 
 ---
 

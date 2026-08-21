@@ -47,29 +47,52 @@
   const PRIZE_LC = 10000;
 
   // ---- THE DIFFICULTY TABLE -------------------------------------------------
-  // [minKills, enemyLevel, hpMultiplier]
+  // [minKills, enemyLevel, hpMultiplier] — DISPLAY BANDS, derived from the curve
+  // below so the table and the maths can never disagree.
   //
-  // RETUNED (build 679) TO WALL OUT ROUGHLY TWICE AS FAST. The shipped table
-  // doubled HP about every 100 kills, which put the wall past 1,300 kills for a
-  // strong build — a long, flat grind before the event's actual mechanic showed
-  // up. HP now TRIPLES every 100 kills across the whole ladder, and the enemy
-  // level ramp is steeper too (200 → 3,600 over the same span, against the old
-  // 100 → 1,000). The wall should now arrive somewhere around 700-900 kills for
-  // an endgame fleet, which is where the interesting part of the race lives.
-  const TIERS = [
-    [0,    200,  1],
-    [101,  275,  5],
-    [201,  375,  20],
-    [301,  500,  60],
-    [401,  650,  175],
-    [501,  850,  500],
-    [601,  1100, 1400],
-    [701,  1400, 4000],
-    [801,  1800, 12000],
-    [901,  2300, 35000],
-    [1001, 2900, 100000],
-    [1101, 3600, 300000],
-  ];
+  // RETUNED IN 694: THE MODEL CHANGED, NOT JUST THE NUMBERS.
+  //
+  // 679 tripled HP every 100 kills. That is EXPONENTIAL, and an exponential ramp
+  // makes a throughput race unplayable for a reason worth stating plainly: with
+  // HP ×r per band, doubling your DPS buys a FIXED number of extra kills no
+  // matter how strong you already are — about 63 kills at ×3. Years of fleet
+  // building and one afternoon of it hit the same wall within a few hundred kills
+  // of each other. That is not a challenge, it is a stop, and everything past it
+  // is the same outcome wearing a bigger number: by kill 1,100 a hostile carried
+  // 300,000× base HP, which at Zone 150 is 3×10¹⁴.
+  //
+  // POLYNOMIAL instead: hp = (1 + kills/300)². Cost per kill still rises without
+  // limit, so the race still has a natural ceiling and can still run forever —
+  // but the ceiling MOVES with the fleet. Under a square law total kills scale as
+  // the cube root of DPS, so a 10× stronger fleet earns about 2.15× the score:
+  // strength is properly rewarded and cannot run away with the board, which is
+  // exactly what a daily ladder wants.
+  //
+  //     kills      300    600   1,200   3,000   10,000   35,000
+  //     HP mult     ×4     ×9     ×25    ×121   ×1,225  ×13.7k
+  //
+  // Against 679's table that is a ~12,000× reduction at kill 1,100, and the gap
+  // keeps widening. Enemy LEVEL is cosmetic and climbs on its own gentler line.
+  const HP_SOFT = 300;            // kills per +1 on the squared term
+  const HP_POW = 2;               // square law — see the note above
+  const LV_PER_BAND = 40;         // enemy level added per 100 kills
+  const LV_BASE = 200;
+  const BAND = 100;               // display band width, in kills
+
+  function hpMultFor(kills) {
+    const k = Math.max(0, kills | 0);
+    return Math.round(Math.pow(1 + k / HP_SOFT, HP_POW) * 100) / 100;
+  }
+  function lvlFor(kills) {
+    return LV_BASE + Math.floor(Math.max(0, kills | 0) / BAND) * LV_PER_BAND;
+  }
+  // Twelve display bands, BUILT FROM THE CURVE. The ladder card reads these, the
+  // engine reads tierFor(); one source, so they cannot drift apart the way a
+  // hand-written table and a formula always eventually do.
+  const TIERS = Array.from({ length: 12 }, (_, i) => {
+    const from = i * BAND;
+    return [from, lvlFor(from), hpMultFor(from)];
+  });
   // Past 1,200: +200 levels and a TRIPLING of HP per 100 kills.
   //
   // THE TRIPLING IS CAPPED. Taken literally an open-ended curve produces numbers
@@ -88,34 +111,27 @@
   // until roughly 58,000 kills, which no 24-hour race reaches, so in practice the
   // curve never stops climbing; the cap only guarantees the arithmetic can never
   // reach Infinity and print NaN across the HUD. Enemy LEVEL is uncapped outright.
+  // THE RAMP IS ENDLESS AND NEEDS NO CAP NOW. A square law reaches 1e300 only at
+  // roughly 3×10¹⁵⁹ kills, so the overflow the old cap guarded against cannot
+  // happen inside a 24-hour race. HP_CAP survives purely as a NaN backstop and as
+  // the flag the UI reads to print WALL.
   const HP_CAP = 1e300;
   function tierFor(kills) {
     const k = Math.max(0, kills | 0);
-    if (k >= 1200) {
-      const band = Math.floor((k - 1200) / 100) + 1;
-      const raw = 300000 * Math.pow(3, band);
-      const hp = Math.min(HP_CAP, isFinite(raw) ? raw : HP_CAP);
-      return {
-        idx: TIERS.length + band - 1,
-        level: 3600 + 200 * band,
-        hp,
-        capped: hp >= HP_CAP,
-        from: 1200 + (band - 1) * 100,
-        to: 1200 + band * 100 - 1,
-        open: true,
-      };
-    }
-    for (let i = TIERS.length - 1; i >= 0; i--) {
-      if (k >= TIERS[i][0]) {
-        return {
-          idx: i, level: TIERS[i][1], hp: TIERS[i][2],
-          from: TIERS[i][0],
-          to: i + 1 < TIERS.length ? TIERS[i + 1][0] - 1 : 1199,
-          open: false,
-        };
-      }
-    }
-    return { idx: 0, level: 200, hp: 1, from: 0, to: 100, open: false };
+    const band = Math.floor(k / BAND);
+    const raw = hpMultFor(k);
+    const hp = Math.min(HP_CAP, isFinite(raw) ? raw : HP_CAP);
+    return {
+      idx: band,
+      level: lvlFor(k),
+      hp,
+      capped: hp >= HP_CAP,
+      from: band * BAND,
+      to: (band + 1) * BAND - 1,
+      // Past the twelve printed bands the ladder card switches to the formula
+      // line rather than inventing rows forever.
+      open: band >= TIERS.length,
+    };
   }
   // Visual mass ceiling. 2.4x a base hull is large enough to read as a wall and
   // small enough that a full field never occludes the pilot.
@@ -584,8 +600,8 @@
   else boot();
 
   window.KOTH = {
-    GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP,
-    tierFor, dmgMultFor, dayIdx, dayEnds, msLeft, scaleEnemy,
+    GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP, BAND, HP_SOFT, HP_POW,
+    tierFor, hpMultFor, lvlFor, dmgMultFor, dayIdx, dayEnds, msLeft, scaleEnemy,
     ks, kills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, HP_CAP, IDLE_MS,
     enter, leave, onKill, engineTick, engineRender,
     flush, pollBoard, pollHall, setOpen, claimPrize, banner,

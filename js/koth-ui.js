@@ -78,17 +78,13 @@
       + '<div class="koth-warn">NO XP &nbsp;•&nbsp; NO LOOT &nbsp;•&nbsp; KILLS ONLY</div>'
       + '</div>';
   }
-  // BIG NUMBERS MUST STILL READ AS NUMBERS. The HP multiplier climbs by doubling,
-  // so past a few million digits-on-the-card is the failure mode: a sixty-digit
-  // string is not information. Thousands stay literal, everything above a million
-  // goes scientific, and the capped top band says WALL instead of a figure.
+  // A multiplier is information up to a point. Thousands stay literal, and the
+  // ceiling reads MAX rather than a bare figure — it is the top of the ramp, not
+  // a number that keeps climbing.
   function fmtMult(m, capped) {
-    if (capped) return '✖ WALL';
     if (!isFinite(m)) return '✖ WALL';
-    if (m < 1000) return '×' + m;
-    if (m < 1e6) return '×' + Math.round(m).toLocaleString();
-    const e = Math.floor(Math.log10(m));
-    return '×' + (m / Math.pow(10, e)).toFixed(1) + 'e' + e;
+    const n = m < 1000 ? '×' + m : '×' + Math.round(m).toLocaleString();
+    return capped ? n + ' MAX' : n;
   }
 
   function ladder() {
@@ -108,15 +104,16 @@
     // curve went from exponential to a square law. A difficulty card that
     // describes a curve the game no longer runs is worse than no card.
     const openFrom = K().TIERS.length * K().BAND;
+    const ceil = K().hpCeil();
     const open = '<div class="koth-tr open' + (cur.open ? ' on' : '') + '">'
       + '<span class="ktr-k">' + num(openFrom) + '+</span><span class="ktr-l">+' + (K().lvlFor(K().BAND) - K().lvlFor(0)) + ' LV / 100 kills</span>'
-      + '<span class="ktr-h">HP grows with kills²</span>'
+      + '<span class="ktr-h">HP climbs to ×' + Math.round(ceil) + ', then holds</span>'
       + (cur.open ? '<span class="ktr-you">LV ' + num(cur.level) + ' · ' + fmtMult(cur.hp, cur.capped) + '</span>' : '') + '</div>';
     return '<div class="koth-sec"><div class="koth-sec-h"><span class="koth-sec-t">☠ DIFFICULTY</span>'
       + '<span class="koth-sec-n">HP scales, damage is zero — the wall is your kills per minute</span></div>'
       + '<div class="koth-ladder">' + rows + open + '</div>'
-      + '<div class="koth-sec-f">Every hostile carries ×(1 + kills ÷ ' + K().HP_SOFT + ')² base HP. The cost per kill never stops rising, '
-      + 'but it rises gently enough that a stronger fleet always scores higher — there is no fixed wall.</div></div>';
+      + '<div class="koth-sec-f">HP tops out at <b>×' + Math.round(ceil) + '</b> base — the same hostile a <b>Level '
+      + K().CAP_PILOT_LV + '</b> pilot fights on-level. Enemy level keeps climbing past it.</div></div>';
   }
 
   function boardSection() {

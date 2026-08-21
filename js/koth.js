@@ -68,20 +68,64 @@
   // strength is properly rewarded and cannot run away with the board, which is
   // exactly what a daily ladder wants.
   //
-  //     kills      300    600   1,200   3,000   10,000   35,000
-  //     HP mult     ×4     ×9     ×25    ×121   ×1,225  ×13.7k
+  // HALVED AND CEILINGED IN 710. Two changes, both by request.
   //
-  // Against 679's table that is a ~12,000× reduction at kill 1,100, and the gap
-  // keeps widening. Enemy LEVEL is cosmetic and climbs on its own gentler line.
+  // 1. The ramp climbs at HALF the old rate: the multiplier ABOVE base is halved,
+  //    so the anchor at kill 0 stays ×1 (a plain Zone-150 hostile) and every
+  //    figure past it is half what it was — kill 600 went ×9 → ×5, kill 1,200
+  //    ×25 → ×13.
+  // 2. It STOPS at the difficulty a Level 300 pilot already flies against, so the
+  //    top of the arena feels like endgame content rather than an arithmetic
+  //    wall. See hpCeil() — the number is read off the game's own curve, not
+  //    chosen: about ×35 today, reached at roughly kill 2,200.
+  //
+  //     kills      300    600   1,200   2,200+
+  //     HP mult    ×2.5    ×5     ×13     ×35 (max)
+  //
+  // Enemy LEVEL is cosmetic and keeps climbing on its own gentler line, so depth
+  // still reads on the card after the HP ceiling bites.
   const HP_SOFT = 300;            // kills per +1 on the squared term
   const HP_POW = 2;               // square law — see the note above
+  const HP_GROWTH = 0.5;          // 710: half the old ramp (the term ABOVE ×1)
   const LV_PER_BAND = 40;         // enemy level added per 100 kills
   const LV_BASE = 200;
   const BAND = 100;               // display band width, in kills
 
+  // ---- THE CEILING: WHAT A LEVEL-300 PILOT ALREADY FIGHTS -------------------
+  // The cap is not a number picked by feel. CAP_PILOT_LV is the pilot the top of
+  // the arena is built for; the zone that pilot flies on-level is the first zone
+  // whose zoneCombatLevel() reaches their level (Lv 300 → Zone 314), and the
+  // hostile waiting there carries enemyHp(314). The arena spawns at KOTH_ZONE, so
+  // the multiplier that makes an arena hostile feel exactly like that endgame
+  // hostile is the ratio of the two — ×35.2 on today's curve.
+  //
+  // READ, NEVER RESTATED: retune enemyHp(), dungeonScale() or the century bands
+  // and this ceiling follows them. A hardcoded 35 would silently stop meaning
+  // "Level 300" the first time the difficulty curve moved.
+  const CAP_PILOT_LV = 300;
+  const CAP_FALLBACK = 35;        // only if CONFIG is somehow unreadable
+  let _ceil = 0;
+  function capZone() {
+    try {
+      const C = window.CONFIG;
+      for (let i = KOTH_ZONE; i <= 1000; i++) if (C.zoneCombatLevel(i) >= CAP_PILOT_LV) return i;
+    } catch (e) {}
+    return 0;
+  }
+  function hpCeil() {
+    if (_ceil) return _ceil;
+    try {
+      const C = window.CONFIG, z = capZone();
+      const r = z ? C.enemyHp(z) / C.enemyHp(KOTH_ZONE) : 0;
+      _ceil = (isFinite(r) && r > 1) ? Math.round(r * 10) / 10 : CAP_FALLBACK;
+    } catch (e) { _ceil = CAP_FALLBACK; }
+    return _ceil;
+  }
+
   function hpMultFor(kills) {
     const k = Math.max(0, kills | 0);
-    return Math.round(Math.pow(1 + k / HP_SOFT, HP_POW) * 100) / 100;
+    const raw = 1 + (Math.pow(1 + k / HP_SOFT, HP_POW) - 1) * HP_GROWTH;
+    return Math.round(Math.min(hpCeil(), raw) * 100) / 100;
   }
   function lvlFor(kills) {
     return LV_BASE + Math.floor(Math.max(0, kills | 0) / BAND) * LV_PER_BAND;
@@ -93,28 +137,11 @@
     const from = i * BAND;
     return [from, lvlFor(from), hpMultFor(from)];
   });
-  // Past 1,200: +200 levels and a TRIPLING of HP per 100 kills.
-  //
-  // THE TRIPLING IS CAPPED. Taken literally an open-ended curve produces numbers
-  // that stop being numbers — sixty-digit multipliers that overflow the card and
-  // push enemy HP toward the edge of what a double can hold. It is also long past
-  // the point of meaning anything: the strongest build in the game walls out well
-  // before this, and every multiplier above that is the same outcome (nothing
-  // dies) wearing a bigger number.
-  //
-  // So HP scales as specified until HP_CAP and then stops. Enemy LEVEL keeps
-  // climbing forever, because that is the cosmetic that shows how deep a pilot
-  // pushed, and the tier reports `capped` so the UI can say WALL instead of
-  // printing a meaningless figure.
-  // THE RAMP IS ENDLESS. HP_CAP is not a difficulty ceiling — it is the point
-  // where a double stops being a number. Tripling every 100 kills stays finite
-  // until roughly 58,000 kills, which no 24-hour race reaches, so in practice the
-  // curve never stops climbing; the cap only guarantees the arithmetic can never
-  // reach Infinity and print NaN across the HUD. Enemy LEVEL is uncapped outright.
-  // THE RAMP IS ENDLESS AND NEEDS NO CAP NOW. A square law reaches 1e300 only at
-  // roughly 3×10¹⁵⁹ kills, so the overflow the old cap guarded against cannot
-  // happen inside a 24-hour race. HP_CAP survives purely as a NaN backstop and as
-  // the flag the UI reads to print WALL.
+  // THE RAMP HAS A REAL CEILING NOW (710): hpMultFor() stops at hpCeil(), the
+  // difficulty a Level 300 pilot already flies against. Enemy LEVEL is uncapped
+  // and keeps climbing, because that is the cosmetic that shows how deep a pilot
+  // pushed. HP_CAP survives purely as a NaN backstop — no reachable input can
+  // approach it now.
   const HP_CAP = 1e300;
   function tierFor(kills) {
     const k = Math.max(0, kills | 0);
@@ -125,7 +152,7 @@
       idx: band,
       level: lvlFor(k),
       hp,
-      capped: hp >= HP_CAP,
+      capped: hp >= hpCeil(),
       from: band * BAND,
       to: (band + 1) * BAND - 1,
       // Past the twelve printed bands the ladder card switches to the formula
@@ -665,7 +692,7 @@
   else boot();
 
   window.KOTH = {
-    GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP, BAND, HP_SOFT, HP_POW,
+    GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP, BAND, HP_SOFT, HP_POW, HP_GROWTH, CAP_PILOT_LV, hpCeil, capZone,
     tierFor, hpMultFor, lvlFor, dmgMultFor, dayIdx, dayEnds, msLeft, scaleEnemy,
     ks, kills, myKills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, HP_CAP, IDLE_MS,
     enter, leave, onKill, engineTick, engineRender,

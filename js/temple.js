@@ -140,9 +140,19 @@
       _chan.on('broadcast', { event: 'p' }, (m) => {
         const d = (m && m.payload) || null; if (!d || !d.id || d.id === _uid) return;
         const prev = _pilots.get(d.id);
+        // FRACTION FIRST. A payload from this build carries fx/fy; one from an
+        // older client carries raw x,y plus (in 710+) its own world size, which is
+        // enough to rescale. Absent both, the raw number is used as-is and will be
+        // wrong on a differently-shaped screen — which is the bug this replaces.
+        const fx = (d.fx != null) ? +d.fx : (d.ww ? (+d.x || 0) / d.ww : null);
+        const fy = (d.fy != null) ? +d.fy : (d.wh ? (+d.y || 0) / d.wh : null);
         const row = { name: String(d.n || 'Operator').slice(0, 24), ship: d.s || '',
-                      power: Number(d.pw) || 0, x: +d.x || 0, y: +d.y || 0,
+                      power: Number(d.pw) || 0,
+                      fx: fx != null ? Math.max(0, Math.min(1, fx)) : null,
+                      fy: fy != null ? Math.max(0, Math.min(1, fy)) : null,
+                      x: +d.x || 0, y: +d.y || 0,
                       hp: Math.max(0, Math.min(1, +d.h || 0)), t: Date.now(), dead: !!d.d };
+        place(row);
         _pilots.set(d.id, row);
         if (prev) noteRemoteHp(d.id, row, prev.hp);
       });
@@ -214,13 +224,29 @@
     _chan = null;
   }
 
+  // POSITIONS TRAVEL AS FRACTIONS OF THE WORLD, NEVER AS RAW COORDINATES (710).
+  //
+  // fitWorld() gives every device the same world AREA but lays it out at the
+  // SCREEN'S OWN ASPECT RATIO, so worldW/worldH differ from phone to desktop —
+  // and the Temple then doubles both. Raw x,y are therefore not comparable
+  // between two clients: a pilot standing on their own altar (worldW/2) broadcast
+  // a number that, read in a differently-shaped world, lands somewhere else
+  // entirely and frequently outside the map. That is why pilots could not see or
+  // hit each other while the head-count said they were both here.
+  //
+  // In fractions the altar is (0.5, 0.5) in every world, so a fraction means the
+  // same place on every screen. `w`/`h` ride along so a client that still
+  // receives a raw-coordinate payload from an older build can rescale it.
   function cast() {
     if (!_chan || !active()) return;
     const rt = G().rt, a = rt && rt.archer; if (!a) return;
     try {
       _chan.send({ type: 'broadcast', event: 'p', payload: {
         id: _uid, n: meName(), s: st().ship || '', pw: myPower(),
+        fx: rt.worldW ? +(a.x / rt.worldW).toFixed(5) : 0.5,
+        fy: rt.worldH ? +(a.y / rt.worldH).toFixed(5) : 0.5,
         x: Math.round(a.x), y: Math.round(a.y),
+        ww: rt.worldW | 0, wh: rt.worldH | 0,
         h: Math.max(0, Math.min(1, (a.hp || 0) / (rt.stats.maxHp || 1))),
         d: !!a.dead,
       } });
@@ -296,6 +322,18 @@
     if (force) refreshRecent();
   }
 
+  // WHERE A CONTACT IS *ON THIS SCREEN*. Fractions are the wire format; this is
+  // the only place they become pixels, and it re-runs every tick so a rotation or
+  // a resize (fitWorld reshapes the world) never strands a nameplate.
+  function place(p) {
+    if (!p || p.fx == null || p.fy == null) return p;
+    try {
+      const rt = G().rt; if (!rt || !rt.worldW) return p;
+      p.x = p.fx * rt.worldW; p.y = p.fy * rt.worldH;
+    } catch (e) {}
+    return p;
+  }
+
   // Merge server presence over anything the broadcast has not delivered lately.
   // Broadcast wins while it is flowing — it is ten times fresher — but a contact
   // that has gone quiet on the socket is still drawn from the database rather
@@ -311,13 +349,19 @@
         const cur = _pilots.get(row.user_id);
         // a broadcast inside the last 1.5s is fresher than this row
         if (cur && now - cur.t < 1500) continue;
-        _pilots.set(row.user_id, {
+        // fx/fy are what temple_beat stored; x/y are the sender's own world
+        // pixels and are only a fallback for a server that predates the columns
+        // being returned (see temple.sql · temple_pilots).
+        const hasF = row.fx != null && row.fy != null;
+        _pilots.set(row.user_id, place({
           name: String(row.name || 'Operator').slice(0, 24),
           ship: row.ship || '', power: Number(row.power) || 0,
+          fx: hasF ? Math.max(0, Math.min(1, Number(row.fx))) : null,
+          fy: hasF ? Math.max(0, Math.min(1, Number(row.fy))) : null,
           x: Number(row.x) || 0, y: Number(row.y) || 0,
           hp: Math.max(0, Math.min(1, Number(row.hp) || 0)),
           t: now, dead: !!row.dead, srv: 1,
-        });
+        }));
       }
     } catch (e) {}
   }
@@ -511,7 +555,10 @@
     const now = Date.now();
     // 6s is comfortably longer than both the 130ms broadcast and the 1.5s server
     // poll, so a contact only disappears when they have genuinely left.
-    for (const [k, p] of _pilots) if (now - p.t > 6000) _pilots.delete(k);
+    for (const [k, p] of _pilots) {
+      if (now - p.t > 6000) { _pilots.delete(k); continue; }
+      place(p);   // fractions -> this device's world, every frame
+    }
 
     if (now - _castT >= CAST_MS) { _castT = now; cast(); }
     if (now - _beatT >= BEAT_MS) { _beatT = now; beat(false); pollPilots(); takeOwed(); }
@@ -545,11 +592,12 @@
     ctx.save();
 
     // ---- THE DISK ----
-    // A solid platform, not a glow. The altar was a soft radial wash with a thin
-    // ring, which read as an area effect rather than a PLACE — and the item it
-    // spawns has to look like it is sitting ON something or the whole "hold the
-    // centre" idea has nowhere to stand. Concentric plates, a machined rim, and
-    // a slow rotation so it reads as built rather than painted.
+    // A DARK CIRCLE YOU CAN SEE FROM ANYWHERE, WITH AN OBVIOUS SOCKET IN IT.
+    // The previous pass drew near-black plates at 3-4% white over a near-black
+    // arena, so from a few hundred units out there was nothing there — the place
+    // the whole zone is about read as empty floor, and an empty altar gave no clue
+    // that an item was ever going to appear on it. Now: a hard-edged dark well, a
+    // bright rim, and a socket at the centre that is visibly WAITING when empty.
     const pulse = 0.5 + 0.5 * Math.sin(time * 2);
     const up = itemUp();
     const hue = up ? '#ffd24d' : _holding ? '#7ce0a0' : '#8f7bff';
@@ -561,36 +609,38 @@
     ctx.fillStyle = gw;
     ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 2.1, 0, Math.PI * 2); ctx.fill();
 
-    // the deck
+    // THE WELL — a dark disk, darker than any arena background, so the circle is
+    // the thing you see rather than the thing you have to look for.
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#141024';
+    const well = ctx.createRadialGradient(cx, cy, 0, cx, cy, ALTAR_R);
+    well.addColorStop(0, '#01030a');
+    well.addColorStop(0.72, '#05070f');
+    well.addColorStop(1, '#0b1020');
+    ctx.fillStyle = well;
     ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.03)';
-    ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 0.78, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.04)';
-    ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 0.44, 0, Math.PI * 2); ctx.fill();
+
+    // two concentric plate edges — lit, not filled, so the floor stays dark
+    ctx.globalAlpha = 0.55; ctx.strokeStyle = hue; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 0.78, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 0.5, 0, Math.PI * 2); ctx.stroke();
 
     // radial ribs, turning slowly
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(time * 0.06);
-    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = 'rgba(180,200,255,.16)'; ctx.lineWidth = 2;
     for (let i = 0; i < 12; i++) {
       const a2 = (Math.PI * 2 / 12) * i;
       ctx.beginPath();
-      ctx.moveTo(Math.cos(a2) * ALTAR_R * 0.44, Math.sin(a2) * ALTAR_R * 0.44);
+      ctx.moveTo(Math.cos(a2) * ALTAR_R * 0.5, Math.sin(a2) * ALTAR_R * 0.5);
       ctx.lineTo(Math.cos(a2) * ALTAR_R * 0.97, Math.sin(a2) * ALTAR_R * 0.97);
       ctx.stroke();
     }
     ctx.restore();
 
-    // inner plate edges
-    ctx.globalAlpha = 0.5; ctx.strokeStyle = hue; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 0.78, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R * 0.44, 0, Math.PI * 2); ctx.stroke();
-
     // machined rim
     ctx.globalAlpha = 0.95;
     ctx.strokeStyle = hue; ctx.lineWidth = _holding ? 6 : 4;
-    ctx.shadowColor = hue; ctx.shadowBlur = up ? 30 : 14;
+    ctx.shadowColor = hue; ctx.shadowBlur = up ? 30 : 16;
     ctx.beginPath(); ctx.arc(cx, cy, ALTAR_R, 0, Math.PI * 2); ctx.stroke();
     ctx.shadowBlur = 0;
     // VIGIL ARC — how much of an hour has been banked, drawn on the ring itself
@@ -603,17 +653,35 @@
       ctx.stroke();
     }
 
-    // the plinth the item stands on
+    // THE SOCKET — where the item lands. Drawn whether or not anything is on it,
+    // because "something appears HERE" is the one thing the centre has to say.
+    // Empty: a dark inset ring with a dashed collar turning slowly. Occupied: the
+    // same socket lit, with the item standing in it.
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#1c1636';
-    ctx.strokeStyle = hue; ctx.lineWidth = 2.5;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 4);
-    ctx.beginPath(); ctx.rect(-28, -28, 56, 56); ctx.fill(); ctx.stroke();
+    const SOCK = 34;
+    const sg = ctx.createRadialGradient(cx, cy, 2, cx, cy, SOCK);
+    sg.addColorStop(0, up ? 'rgba(255,210,77,.22)' : 'rgba(140,120,255,.10)');
+    sg.addColorStop(1, '#01030a');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(cx, cy, SOCK, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hue; ctx.lineWidth = 2;
+    ctx.globalAlpha = up ? 1 : 0.5 + pulse * 0.3;
+    ctx.beginPath(); ctx.arc(cx, cy, SOCK, 0, Math.PI * 2); ctx.stroke();
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(time * (up ? 0.5 : 0.22));
+    ctx.globalAlpha = up ? 0.9 : 0.45 + pulse * 0.25;
+    ctx.strokeStyle = hue; ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      const a3 = (Math.PI * 2 / 8) * i;
+      ctx.beginPath();
+      ctx.arc(0, 0, SOCK + 9, a3, a3 + 0.24);
+      ctx.stroke();
+    }
     ctx.restore();
 
     // ---- IN-WORLD COUNTDOWN ----
-    // On the disk itself. A pilot holding the centre should never have to look
-    // away from the fight to find out how long they have to hold it.
+    // On the disk itself, and clear of the socket — a pilot holding the centre
+    // should never have to look away from the fight to read the clock.
     if (!up) {
       const ms = altarMs();
       const soon = ms > 0 && ms < 600000;
@@ -621,16 +689,16 @@
       ctx.globalAlpha = 0.9;
       ctx.font = '800 13px Rajdhani, sans-serif';
       ctx.fillStyle = soon ? '#ff8a3d' : '#8f7bff';
-      ctx.fillText(soon ? 'THE ALTAR IS WAKING' : 'NEXT SPAWN', cx, cy - ALTAR_R * 0.52);
+      ctx.fillText(soon ? 'THE ALTAR IS WAKING' : 'NEXT SPAWN', cx, cy - SOCK - 26);
       ctx.font = '900 ' + (soon ? 40 : 34) + 'px Orbitron, sans-serif';
       ctx.fillStyle = soon ? '#ffb37a' : '#cbbcff';
       if (soon) { ctx.shadowColor = '#ff8a3d'; ctx.shadowBlur = 18 + pulse * 14; }
-      ctx.fillText(ms > 0 ? hmsWorld(ms) : 'ANY MOMENT', cx, cy + ALTAR_R * 0.06);
+      ctx.fillText(ms > 0 ? hmsWorld(ms) : 'ANY MOMENT', cx, cy + SOCK + 48);
       ctx.shadowBlur = 0;
       if (_vigil > 0) {
         ctx.font = '700 12px Rajdhani, sans-serif';
         ctx.fillStyle = '#7ce0a0';
-        ctx.fillText('VIGIL ' + Math.floor(_vigil / 60) + 'm', cx, cy + ALTAR_R * 0.42);
+        ctx.fillText('VIGIL ' + Math.floor(_vigil / 60) + 'm', cx, cy + SOCK + 70);
       }
     }
 
@@ -639,8 +707,8 @@
       ctx.textAlign = 'center';
       ctx.globalAlpha = 0.95; ctx.font = '800 13px Rajdhani, sans-serif';
       ctx.fillStyle = '#ffd24d';
-      ctx.fillText('TAKE IT', cx, cy - ALTAR_R * 0.55);
-      ctx.save(); ctx.translate(cx, cy - 6 - pulse * 5); ctx.rotate(time * 0.8);
+      ctx.fillText('TAKE IT', cx, cy - SOCK - 26);
+      ctx.save(); ctx.translate(cx, cy - pulse * 4); ctx.rotate(time * 0.8);
       ctx.fillStyle = '#fff6d0';
       ctx.shadowColor = '#ffd24d'; ctx.shadowBlur = 26;
       ctx.beginPath();

@@ -4029,7 +4029,12 @@
     save();
     return true;
   }
-  function addCredits(n) { state.credits = (state.credits || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); }
+  // GRANT AMOUNTS ARE NOT int32. `n | 0` coerces to a SIGNED 32-BIT integer, so
+  // any grant above 2,147,483,647 wraps: the 100-billion LootCoin coupon called
+  // addCredits(1e11) and the player received 1,215,752,192 — a hundredth of what
+  // the code promised, with no error anywhere. Math.floor keeps the "whole units
+  // only" intent without the ceiling.
+  function addCredits(n) { state.credits = (state.credits || 0) + Math.max(0, Math.floor(Number(n) || 0)); save(); if (window.UI) window.UI.refreshAll(); }
 
   // ---- GOLD SHOP (rotating, refreshes every 15 min) ------------------------
   function shopWindow() { return Math.floor(Date.now() / (C.SHOP.refreshMin * 60000)); }
@@ -7760,7 +7765,8 @@
     startDreadHunt, dreadLevelFor, startServerDread, startAllianceRaid, goSafeHangar,
     setLevel,
     getDreadCores: () => state.dreadCores || 0,
-    addDreadCores: (n) => { state.dreadCores = (state.dreadCores || 0) + Math.max(0, n | 0); save(); if (window.UI) window.UI.refreshAll(); },
+    // same int32 wrap as addCredits above — see the note there
+    addDreadCores: (n) => { state.dreadCores = (state.dreadCores || 0) + Math.max(0, Math.floor(Number(n) || 0)); save(); if (window.UI) window.UI.refreshAll(); },
     invCap, invSlotCost, buyInvSlots,
     setPickupFilter: (t) => { state.pickupFilter = Math.max(0, t | 0); save(); },
     setAutoSellTier: (t) => {

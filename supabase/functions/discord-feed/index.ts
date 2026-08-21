@@ -35,6 +35,9 @@
 // =============================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { CATALOG, COLOR, DEF, TIER_OF, bannerFor } from './catalog.ts';
+import { split, ambientDigest, stamp, headlineBanner, MAX_EMBEDS as CAP, type Ev as REv } from './render.ts';
+import { LINES_688, HC_ERA, EXPO_MARKS, HC_MARKS, HC_ERA_MARKS } from './voice-688.ts';
 
 const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 // Version marker — echoed in every response and the bootstrap message, so a
@@ -42,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 677;
+const FEED_VER = 690;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -51,29 +54,9 @@ const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // rolled into a single summary line rather than spamming the channel.
 const MAX_EMBEDS = 10;
 
-const COLOR = {
-  open:     0x00d18f,
-  repel:    0x4db4ff,
-  void:     0x9b4dff,
-  crown:    0xffd24d,
-  steal:    0xff5a4d,
-  citadel:  0xffcf4d,
-  claim:    0x8fb7d9,
-  lost:     0x5a6472,
-  throne:   0xb57bff,
-  ascend:   0xf5c542,
-  armada:   0xff8a3d,
-  dread:    0xff4d6d,
-  zone:     0x5bc8ff,
-  level:    0x4da3ff,
-  top10:    0x3dd68c,
-  alliance: 0x3dd68c,
-  pilot:    0x6e7a8a,
-  xen:      0xc26bff,
-  sitrep:   0x6f7dff,
-  bigbet:   0xffd66a,
-  whale:    0xff3b6b,
-};
+// COLOUR AND PRIORITY NOW LIVE IN catalog.ts. Both were declared here AND
+// there, which is exactly the drift this restructure exists to stop: two
+// files quietly disagreeing about what colour a Void event is.
 
 // ---- THE KAEVITH INCURSION -------------------------------------------------
 // Five recovered hulls, earned only by clearing an alien-held zone in My Galaxy.
@@ -294,6 +277,14 @@ const QUIPS: Record<string, string[]> = {
     "🚚 Heavy cargo docked. {a} flew the whole lane manually and the hull has the marks to prove it.",
   ],
 };
+// Build-688 voices live in voice-688.ts so the three new features can be read
+// and edited as a set rather than hunted for inside this file.
+function quip688(kind: string, seed: string, vars: Record<string, string | number>): string {
+  const pool = LINES_688[kind] || [''];
+  let t = pickBy(seed, pool);
+  for (const k in vars) t = t.split('{' + k + '}').join(String(vars[k]));
+  return t;
+}
 function quip(kind: string, seed: string, vars: Record<string, string | number>): string {
   let t = pickBy(seed, QUIPS[kind] || ['']);
   for (const k in vars) t = t.split('{' + k + '}').join(String(vars[k]));
@@ -309,8 +300,6 @@ const SITREP_MS = 3 * 60 * 60 * 1000;
 // 'nano' was missing from this list, which sorted it to -1 — ahead of Kaevith
 // hulls by accident rather than by intent. It sits where it belongs now:
 // rarer than an ascension, quieter than a Void spire.
-const PRIORITY = ['xen', 'void', 'nano', 'throne', 'ascend', 'casino', 'bigbet', 'repel', 'armada', 'citadel', 'steal', 'dread', 'hull', 'cargo', 'top10',
-                  'zone', 'level', 'open', 'claim', 'alliance', 'lost', 'pilot'];
 
 // One player rewriting many tiles at once is the republishOwnedTiles() repair
 // loop, not a conquest. Owner-unchanged rewrites produce no event at all, but
@@ -576,6 +565,7 @@ Deno.serve(async (req) => {
   // and no cargo or Nanocore milestone could cross. Degrade a column set at a
   // time so a server that has not run the migrations still gets everything else
   // instead of a 500.
+  const LB_NEW   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier,hcwave,expo,expo_best';
   const LB_ART   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier';
   const LB_FULL  = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god';
   const LB_CARGO = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best';
@@ -583,7 +573,8 @@ Deno.serve(async (req) => {
 
   const [lb, sd, al, seenRows] = await Promise.all([
     (async () => {
-      let r = await selectAll(db, 'leaderboard', LB_ART, ['user_id']);
+      let r = await selectAll(db, 'leaderboard', LB_NEW, ['user_id']);
+      if (r.error) r = await selectAll(db, 'leaderboard', LB_ART, ['user_id']);
       if (r.error) r = await selectAll(db, 'leaderboard', LB_FULL, ['user_id']);
       if (r.error) r = await selectAll(db, 'leaderboard', LB_CARGO, ['user_id']);
       if (r.error) r = await selectAll(db, 'leaderboard', LB_BASE, ['user_id']);
@@ -673,6 +664,9 @@ Deno.serve(async (req) => {
       nanoGod: Number((p as any).nano_god) || 0,
       hulls: Number((p as any).ships) || 0,
       top10: top10.has(p.user_id) ? 1 : 0,
+      hcwave: Number((p as any).hcwave) || 0,
+      expo: Number((p as any).expo) || 0,
+      expoBest: Number((p as any).expo_best) || 0,
     };
     snap.push({ kind: 'pilot', ref: p.user_id, data: cur, updated_at: now });
     if (bootstrap) continue;
@@ -930,6 +924,112 @@ Deno.serve(async (req) => {
           description: quip('cargoClean', 'cgp:' + p.user_id, { a: '**' + p.name + '**' }),
         },
       });
+    }
+
+    // ---- ◎ FLEET EXPLORATION (688) ------------------------------------------
+    // MILESTONES ONLY, AND SPARSE ONES. An active pilot lands several
+    // expeditions a day; a card for each would be the single noisiest thing in
+    // the channel and would teach people to mute it. EXPO_MARKS is deliberately
+    // thin — first, then 10/25/50/100 and up.
+    //
+    // `hadExpo` guards the migration: before new-ladders.sql the column is
+    // undefined on every row, so `was` reads 0, `cur` reads 0, and nothing can
+    // cross. After it runs, the FIRST tick would otherwise see every veteran
+    // pilot cross every mark at once and dump a hundred cards. Requiring a
+    // previous non-zero reading means a pilot's first announced milestone is one
+    // they crossed while the feed was watching.
+    const hadExpo = (p as any).expo !== undefined;
+    if (hadExpo && cur.expo > (was.expo || 0)) {
+      const first = (was.expo || 0) === 0 && cur.expo >= 1 && (was as any).expo !== undefined;
+      const mark = crossed(was.expo || 0, cur.expo, EXPO_MARKS);
+      if (mark !== null && (first || (was.expo || 0) > 0)) {
+        const es = 'expo:' + p.user_id + ':' + mark;
+        const eg = mark >= 100 ? gifFor('nano', es) : null;
+        events.push({
+          kind: 'expo',
+          actor: p.name,
+          line: mark === 1 ? `**${p.name}** filed their first expedition report`
+                           : `**${p.name}** has flown ${fmt(mark)} expeditions`,
+          embed: {
+            color: CATALOG.expo.color,
+            author: { name: '◎  FLEET EXPLORATION' },
+            title: mark === 1 ? `${up(p.name)} — FIRST SURVEY FILED`
+                              : `${up(p.name)}  ◎  ${Number(mark).toLocaleString()} EXPEDITIONS`,
+            description:
+              quip688(mark === 1 ? 'expoFirst' : 'expoMilestone', es, { a: '**' + p.name + '**', n: Number(mark).toLocaleString() }) +
+              ((cur.expoBest | 0) ? `\n\n**best wing rating** \`${cur.expoBest}\`  ·  **level** \`${cur.level}\`` : ''),
+            ...thumb(shipArt((p as any).hull_last)),
+            ...(eg ? { image: { url: eg } } : {}),
+          },
+        });
+      }
+    }
+
+    // A ★★★★★ WING. The top expedition tier needs a fleet rating of 350, which
+    // four of the best hulls in the game cannot reach — it takes five. The
+    // leaderboard carries the rating, not a per-run outcome, so this announces
+    // the thing the data actually proves: a wing was fielded that can take the
+    // hardest contract. Fires once, on the crossing.
+    const EXPO_ELITE = 350;
+    if (hadExpo && cur.expoBest >= EXPO_ELITE && (was.expoBest || 0) < EXPO_ELITE && (was.expoBest || 0) > 0) {
+      const xs = 'expoel:' + p.user_id;
+      events.push({
+        kind: 'expoElite',
+        actor: p.name,
+        line: `**${p.name}** fielded a ★★★★★ expedition wing`,
+        embed: {
+          color: CATALOG.expoElite.color,
+          author: { name: '◎  FLEET EXPLORATION' },
+          title: `${up(p.name)}  ◎  ★★★★★ WING — RATING ${cur.expoBest}`,
+          description:
+            quip688('expoElite', xs, { a: '**' + p.name + '**' }) +
+            `\n\n**wing rating** \`${cur.expoBest}\`  ·  **required** \`${EXPO_ELITE}\`  ·  **expeditions flown** \`${fmt(cur.expo)}\`` +
+            `\n-# The top contract tier needs five hulls. Four of the best in the game fall short.`,
+          ...thumb(shipArt((p as any).hull_last)),
+          ...(gifFor('victory', xs) ? { image: { url: gifFor('victory', xs)! } } : {}),
+        },
+      });
+    }
+
+    // ---- ⛨ HOME DEFENSE (688) ------------------------------------------------
+    // Two events, deliberately different in weight. An ordinary wave milestone
+    // is a card; crossing an ERA boundary — the four points where the game
+    // itself changes what spawns and doubles production at 100 — is a headline.
+    const hadHc = (p as any).hcwave !== undefined;
+    if (hadHc && cur.hcwave > (was.hcwave || 0) && (was.hcwave || 0) > 0) {
+      const era = crossed(was.hcwave || 0, cur.hcwave, HC_ERA_MARKS);
+      const mark = crossed(was.hcwave || 0, cur.hcwave, HC_MARKS);
+      if (era !== null) {
+        const hs = 'hcera:' + p.user_id + ':' + era;
+        events.push({
+          kind: 'hcEra',
+          actor: p.name,
+          line: `**${p.name}** reached Wave ${era} — ${HC_ERA(era)}`,
+          embed: {
+            color: CATALOG.hcEra.color,
+            author: { name: '⛨  HOME DEFENSE' },
+            title: `${up(p.name)}  ⛨  WAVE ${era} — ${HC_ERA(era).toUpperCase()}`,
+            description:
+              quip688('hcEra', hs, { a: '**' + p.name + '**', n: era, era: '**' + HC_ERA(era) + '**' }) +
+              (era >= 100 ? '\n\n-# Past Wave 100 the home citadel produces at double rate, permanently.' : ''),
+            ...(gifFor('victory', hs) ? { image: { url: gifFor('victory', hs)! } } : {}),
+          },
+        });
+      } else if (mark !== null) {
+        const hs = 'hcw:' + p.user_id + ':' + mark;
+        events.push({
+          kind: 'hcwave',
+          actor: p.name,
+          line: `**${p.name}** is holding Wave ${mark}`,
+          embed: {
+            color: CATALOG.hcwave.color,
+            author: { name: '⛨  HOME DEFENSE' },
+            title: `${up(p.name)}  ⛨  WAVE ${mark}`,
+            description: quip688('hcWave', hs, { a: '**' + p.name + '**', n: mark }) +
+              `\n\n-# ${HC_ERA(mark)}  ·  level \`${cur.level}\``,
+          },
+        });
+      }
     }
   }
 
@@ -1647,6 +1747,36 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ---- 👑 A DYNASTY (688) --------------------------------------------------
+    // Winning the hill once is the crown card above. Winning it repeatedly is a
+    // different and better story, and nothing was telling it: koth_hall has
+    // always held the record and nothing ever read it in aggregate.
+    //
+    // Only fires on a champion the tick already recognised, so it costs one
+    // extra query a DAY rather than one every two minutes.
+    if (champ && champ.name && Number(champ.day) === Number(next.hall)) {
+      const wins = await db.from('koth_hall').select('day', { count: 'exact', head: true })
+                           .eq('name', champ.name);
+      const w = Number(wins.count) || 0;
+      if (!wins.error && w >= 2) {
+        const ds = 'kothdyn:' + champ.name + ':' + w;
+        events.push({
+          kind: 'kothDyn',
+          actor: champ.name,
+          line: `**${champ.name}** has won the hill ${w} times`,
+          embed: {
+            color: CATALOG.kothDyn.color,
+            author: { name: '👑  HALL OF KINGS' },
+            title: `${up(champ.name)}  👑  ${w} CROWNS`,
+            description: quip688('kothDyn', ds, { a: '**' + champ.name + '**', w }) +
+              `\n\n-# Lifetime crowns are counted from every closed event. See Ranks ▸ King of the Hill ▸ CROWNS.`,
+            ...thumb(shipArt(champ.ship)),
+            ...(gifFor('maxed', ds) ? { image: { url: gifFor('maxed', ds)! } } : {}),
+          },
+        });
+      }
+    }
+
     snap.push({ kind: '_meta', ref: 'koth', data: next, updated_at: now });
   }
 
@@ -1868,7 +1998,7 @@ Deno.serve(async (req) => {
     snap.push({ kind: '_meta', ref: 'bootstrap', data: { at: Date.now() }, updated_at: now });
     await saveSeen(db, snap);
     await post({
-      content: '## ⚡  FLEET DISPATCH IS LIVE\n-# v' + FEED_VER + ' · Ascensions, rank changes, deep-zone breaks, Season Dread records and Armada kills will appear here as they happen.',
+      content: '## ⚡  FLEET DISPATCH IS LIVE\n-# v' + FEED_VER + ' · Crowns, ascensions, rank changes, deep-zone breaks, Dread records, Armada kills, Legendary Nanocores, Fleet Exploration and Home Defense. Headlines post on their own; smaller news is digested so the channel stays readable.',
     });
     return json({ ok: true, ver: FEED_VER, bootstrap: true, tracked: snap.length });
   }
@@ -1899,20 +2029,57 @@ Deno.serve(async (req) => {
     return json({ ok: true, ver: FEED_VER, events: voidEvents.length, void: voidEvents.length });
   }
 
-  events.sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
-  const shown = events.slice(0, MAX_EMBEDS);
-  const rest = events.slice(MAX_EMBEDS);
+  // ---- TIER-AWARE PUBLISH (688) ----------------------------------------------
+  // The old path sorted everything into one list and posted the first ten. That
+  // let a busy tick push a crown out of the batch behind six level-ups, and it
+  // gave a pilot signing up exactly the same visual weight as a galaxy first.
+  //
+  // Now the tier in catalog.ts decides the treatment: headlines get their own
+  // message under a banner and are never dropped, notables fill a second
+  // message, and ambient events are rolled into one digest line each instead of
+  // spending a card. See render.ts for the reasoning in full.
+  const tiers = split(events as REv[]);
+  let posted = 0;
 
-  const stamped = shown.map((e) => ({ ...e.embed, timestamp: now, footer: { text: 'LootFleet' } }));
-  let content: string | undefined;
-  if (rest.length) {
-    content = `-# …and ${rest.length} more: ` + rest.slice(0, 6).map((e) => e.line).join(' · ');
+  if (tiers.headline.length) {
+    await post({
+      content: headlineBanner(tiers.headline),
+      embeds: tiers.headline.slice(0, CAP).map((e) => stamp(e, now, 'LootFleet')),
+      allowed_mentions: { parse: [] },
+    });
+    posted += Math.min(tiers.headline.length, CAP);
   }
 
-  await post({ content, embeds: stamped, allowed_mentions: { parse: [] } });
+  const digest = ambientDigest(tiers.ambient);
+  // The digest occupies one embed slot, so the notable budget accounts for it.
+  const room = CAP - (digest ? 1 : 0);
+  const shown = tiers.notable.slice(0, room);
+  const cut = tiers.notable.slice(room);
+  const embeds = shown.map((e) => stamp(e, now, 'LootFleet'));
+  if (digest) embeds.push({ ...digest, timestamp: now, footer: { text: 'LootFleet' } });
+
+  if (embeds.length) {
+    await post({
+      // Only genuinely CUT events are named here. The old overflow line mixed
+      // "just missed the cut" with "deliberately not worth a card", which made
+      // it read as a dumping ground.
+      content: cut.length
+        ? `-# …and ${cut.length} more: ` + cut.slice(0, 6).map((e) => e.line).join(' · ')
+        : undefined,
+      embeds,
+      allowed_mentions: { parse: [] },
+    });
+    posted += embeds.length;
+  }
+
   await saveSeen(db, snap);
 
-  return json({ ok: true, ver: FEED_VER, events: events.length + voidEvents.length, posted: shown.length, void: voidEvents.length });
+  return json({
+    ok: true, ver: FEED_VER,
+    events: events.length + voidEvents.length,
+    posted, void: voidEvents.length,
+    tiers: { headline: tiers.headline.length, notable: tiers.notable.length, ambient: tiers.ambient.length },
+  });
 });
 
 // PostgREST caps every select at 1000 rows, SILENTLY. That cap is how this feed

@@ -228,7 +228,16 @@
     const rating = X().fleetRating(_pick, t);
     const est = X().estimate(rating, m.req);
     const cost = X().fuelCost(m, _pick.length);
-    const fuel = ((G().state.resources || {}).fuel) | 0;
+    // NEVER `| 0` A RESOURCE BALANCE. Bitwise OR coerces to a SIGNED 32-BIT int, so
+    // any fuel total above 2,147,483,647 wraps to a large negative — an endgame
+    // pilot with 2.4 billion fuel read as −1,924,456,846 here. Every launch then
+    // failed the `cost > fuel` test below, the button locked to NOT ENOUGH FUEL,
+    // and the feature was unusable for exactly the players with the most fuel.
+    //
+    // The model itself was never wrong: launch() compares `(res.fuel || 0) < cost`
+    // with no coercion, so the fuel was really there and really spendable. This
+    // was a display read that then gated the button.
+    const fuel = Math.max(0, Number((G().state.resources || {}).fuel) || 0);
     const pay = _pick.length ? X().payout(m) : null;
     const over = est.ratio >= X().OVERKILL && _pick.length > 1;
     const short = cost > fuel;

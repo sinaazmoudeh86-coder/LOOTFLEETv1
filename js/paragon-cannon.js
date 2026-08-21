@@ -212,7 +212,9 @@
   function buy() {
     const g = G(), s = g.state;
     if (owned()) return { ok: false, reason: 'owned' };
-    if ((s.credits | 0) < PRICE) return { ok: false, reason: 'credits' };
+    // NEVER `| 0` A BALANCE — it wraps past 2.1 billion and locks out exactly the
+    // players who can afford this. Same bug class as the Fleet Exploration fuel gate.
+    if ((Number(s.credits) || 0) < PRICE) return { ok: false, reason: 'credits' };
     if (s.inventory.length >= (g.invCap ? g.invCap() : 100)) return { ok: false, reason: 'full' };
     s.credits -= PRICE;
     s.purchases = s.purchases || {};

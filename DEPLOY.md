@@ -1,64 +1,72 @@
-# Loot Fleet — deploy v234 · build 688 · THREE NEW LADDERS · CITADEL ABANDON LOCKOUT
+# Loot Fleet — deploy v235 · build 690 · DISCORD FEED REBUILD · INTEGER-OVERFLOW FIXES
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v233 (build 687 — if v233 was never pushed, this folder replaces it entirely).
-Service worker cache is `lootfleet-v688`.
-**Login screen reads `BUILD 688`.**
+Supersedes v234 (build 688). If v233/v234 were never pushed, this folder replaces both.
+Service worker cache is `lootfleet-v690`.
+**Login screen reads `BUILD 690`.**
 
 ---
 
-## ⚠ RUN THE SQL FIRST — TWO FILES, IN THIS ORDER
+## ⚠ THREE THINGS TO RUN, IN THIS ORDER
 
-Both are idempotent and safe to re-run.
+### 1 · SQL — Supabase → SQL Editor
+
+All idempotent and safe to re-run.
 
 | # | file | why | skip if |
 |---|---|---|---|
-| 1 | `supabase/koth.sql` | creates the King of the Hill tables, RPCs and cron | already run for v233 |
-| 2 | `supabase/koth-ratefix.sql` | `koth_bump` with the `p_seq` argument + retuned rate cap | already run for v233 |
-| 3 | `supabase/new-ladders.sql` | **NEW** — `hcwave`/`expo` columns, rebuilt `lb_upsert`, `koth_hall_top()` | never |
+| 1 | `supabase/koth.sql` | King of the Hill tables, RPCs, cron | already run |
+| 2 | `supabase/koth-ratefix.sql` | `koth_bump` with `p_seq` + retuned rate cap | already run |
+| 3 | `supabase/new-ladders.sql` | `hcwave`/`expo` columns, rebuilt `lb_upsert`, `koth_hall_top()` | already run |
 
-After the last file, reload the API schema cache:
+Then, in the same editor:
 
 ```sql
 notify pgrst, 'reload schema';
 ```
 
-**Why order matters.** The client sends `p_seq` to `koth_bump` and `p_hcwave`/`p_expo`
-to `lb_upsert` as of this build. Push the site before the SQL and kill submissions
-fail and the two new boards rank every human at zero until you catch up.
+### 2 · EDGE FUNCTION — the Discord feed was restructured
 
-**`new-ladders.sql` is now the canonical `lb_upsert`.** Re-running
-`cargo-ladder.sql`, `nanocore-ladder.sql` or `discord-art-publish.sql` re-adds an
-older overload and requires re-running `new-ladders.sql`. Both migrations that
-touch a function signature drop every overload by catalogue lookup and then assert
-exactly one survives, so the three-copy `lb_upsert` failure cannot recur.
+```bash
+supabase functions deploy discord-feed
+```
 
-No Edge Function redeploy is required.
+**This is required this release.** The function is no longer one file — it now
+imports `catalog.ts`, `render.ts` and `voice-688.ts` from the same folder. A
+partial upload that misses one of them will fail to boot.
+
+Verify it landed:
+
+```sql
+select content from net._http_response order by created desc limit 3;
+```
+
+must show `{"ok":true,"ver":690,...}`. A lower `ver` means the old build is
+still running.
+
+### 3 · SITE, THEN BEACON
+
+Upload the contents of this folder to the repo root Vercel serves. `version.json`
+is inside it — one upload is fine, because the files land together. Only split if
+your host publishes incrementally, in which case `version.json` goes last:
+`update-gate.js` polls it every 90s and force-reloads anyone on a lower build.
 
 ---
 
 ## STEP BY STEP
 
-1. **Supabase → SQL Editor.** Run `koth.sql`, then `koth-ratefix.sql`, then
-   `new-ladders.sql`. Each prints a `NOTICE` naming how many overloads it dropped
-   and asserting one survives — if an `exception` fires, stop and read it.
-2. **Run `notify pgrst, 'reload schema';`** in the same editor.
-3. **Push the site.** Upload the contents of this folder to the repo root Vercel
-   serves. Wait for the deploy to go green.
-4. **Hard-reload the live site once** and confirm the login screen reads
-   `BUILD 688`.
-5. **Push the beacon last.** `version.json` is the only file that evicts players
-   (`update-gate.js` polls it every 90s and force-reloads anyone on a lower build).
-   It is already inside this folder — if you upload everything in one go, that is
-   fine, because the files land together. Only split the upload if your host
-   publishes incrementally.
-6. **Smoke test, in this order:**
-   - Ranks screen shows **twelve** tabs, ending HOME DEFENSE · EXPLORATION · KING OF THE HILL.
-   - Tap KING OF THE HILL → the TODAY / CROWNS pair appears under the tab strip.
-   - Command ▸ King of the Hill → log one kill → the counter moves (proves `p_seq` landed).
-   - My Galaxy → abandon a spare system → the confirm sheet warns about 24 hours,
-     and trying to warp back in is refused with a countdown.
-   - Console: `CLOUD.lbState()` — every rung should read `off: false`.
+1. Run the three SQL files in order, then `notify pgrst, 'reload schema';`
+2. `supabase functions deploy discord-feed`
+3. Check `net._http_response` shows `"ver":690`
+4. Push the folder contents to the repo root
+5. Hard-reload the live site once — login screen must read `BUILD 690`
+6. Smoke test:
+   - **Fleet Exploration → open any contract.** FUEL COST shows your real fuel, not a negative number, and the launch button is enabled. *(This is the fix you reported.)*
+   - Ranks shows **twelve** tabs; King of the Hill has the TODAY / CROWNS pair
+   - Log one arena kill → the counter moves (proves `p_seq` landed)
+   - Abandon a spare system → 24h warning on the sheet, warp back refused with a countdown
+   - Console: `CLOUD.lbState()` → every rung `off: false`
+   - Discord: within ~2 minutes the channel should show tiered output (headlines separate, small news digested)
 
 ---
 
@@ -66,17 +74,128 @@ No Edge Function redeploy is required.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 688 |
-| root `version.json` | 688 |
-| `deploy-v234/version.json` | 688 |
-| `deploy-v234/sw.js` `CACHE` | `lootfleet-v688` |
+| root `game.html` `window.LF_BUILD` | 690 |
+| root `version.json` | 690 |
+| `deploy-v235/version.json` | 690 |
+| `deploy-v235/sw.js` `CACHE` | `lootfleet-v690` |
+
+`discord-feed` `FEED_VER` is also 690, matching the client build that ships it.
 
 Audited before hand-off: all **84** `js/`+`css/` files `game.html` references
 (67 js, 17 css) are byte-identical to the project root, none missing, every one
-cache-busted. All 88 js files parse clean.
+cache-busted.
 
-`CODES.md` is **not** in this folder and must never be added — it holds the
-plaintext coupon codes.
+`CODES.md` is **not** in this folder and must never be added.
+
+---
+
+## What changed in 690 — INTEGER OVERFLOW, FIVE PLACES
+
+A player reported Fleet Exploration always saying NOT ENOUGH FUEL. The cause was
+`resources.fuel | 0` in the confirm sheet. **Bitwise OR coerces to a signed
+32-bit integer**, so any balance above 2,147,483,647 wraps negative — 2.4 billion
+fuel displayed as −1,924,456,846, and the launch button compared against that.
+
+The model was never wrong: `launch()` compares `(res.fuel || 0) < cost` with no
+coercion, so the fuel was really there and really spendable. It was a display read
+that then gated the button, which is why it hit **only** the players with the most
+fuel.
+
+Auditing for the pattern found four more, two of them worse:
+
+| where | what it did |
+|---|---|
+| `game-v93.js` `addCredits(n)` | `n \| 0` on the GRANT AMOUNT. The 100-billion LootCoin coupon calls `addCredits(1e11)` and paid **1,215,752,192** — one percent of the promise, silently. Coupons, season pass, achievements and alliance rewards all route through it. |
+| `game-v93.js` `addDreadCores(n)` | identical wrap on core grants |
+| `paragon-cannon.js` | `(s.credits \| 0) < PRICE` — a player past 2.1B LootCoins could not buy it |
+| `expedition.js` payout | `R.fuel \| 0` etc. on the REWARD. At depth `econ()` clears 2.1B easily, and the wrap goes negative — **subtracting** resources as the reward for a clean run |
+| `expedition.js` recall | same wrap on the refunded launch cost |
+
+All now use `Math.floor(Number(x) || 0)`: same whole-units intent, no ceiling. The
+only `| 0` left anywhere near a resource name is an array index, which is correct.
+
+**Player impact worth knowing:** anyone who redeemed the 100B LootCoin coupon
+received 1.2B. A make-good has not been issued.
+
+---
+
+## What changed in 689 — THE DISCORD FEED, REBUILT
+
+`index.ts` had grown to ~1,950 lines with about thirty event kinds declared
+inline, each carrying its own colour literal, icon and header string. Three
+consequences, all visible in the channel:
+
+- **Nothing had a priority.** A pilot signing up and a galaxy-first crown were both
+  "one embed" competing for the same ten slots. On a busy tick the crown could be
+  the thing that got cut.
+- **Ten cards of equal weight read as noise**, several of them "X hit level 220".
+- **Colours were duplicated and drifting** — `COLOR` was declared in two files.
+
+### The new structure
+
+| file | role |
+|---|---|
+| `catalog.ts` | the event registry — every kind's feature, tier, colour, icon, label, GIF mood. One place that answers "what can the feed say". |
+| `render.ts` | tier-aware publishing: the split, the ambient rollup, the banner |
+| `voice-688.ts` | copy for the three new features, each in its own register |
+| `index.ts` | sources and collectors only |
+
+### Three tiers, and the tier decides presentation
+
+- **headline** — own message under a full-width banner, always art or a GIF,
+  **never dropped for volume**
+- **notable** — an embed when there is room
+- **ambient** — never gets a card. Rolled into one digest line per kind:
+  "⚑ **4×** claimed — Vex, Orin, Rell +1" carries the same information as four
+  cards for one line.
+
+Overflow now names only genuinely CUT events. The old line mixed "just missed the
+cut" with "deliberately not worth a card", which made it read as a dumping ground.
+
+### New announcements
+
+- **Fleet Exploration** — sparse milestone counts (first, then 10/25/50/100…),
+  because an active pilot lands several a day. Plus a headline when someone fields
+  a **★★★★★ wing** (rating 350 — four of the best hulls in the game fall short).
+- **Home Defense** — wave milestones as notables; the four era boundaries
+  (20/50/100/250) as headlines, since those are where the game itself changes what
+  spawns and doubles production.
+- **King of the Hill dynasty** — lifetime crowns from `koth_hall`. Winning once
+  was already announced; winning repeatedly is the better story and nothing was
+  telling it.
+
+### Two judgement calls
+
+**No `release` event for citadel abandons.** The tile vanishing from `territory`
+already fires `lost` through the two-miss detector — the same news from a source
+that exists. A separate kind would need the client reporting its own abandons,
+which is forgeable and redundant.
+
+**`expoElite` says "fielded a ★★★★★ wing", not "came home clean."** The
+leaderboard carries the wing rating, not a per-run outcome. The copy states what
+the data proves.
+
+Five older events (the KOTH suite, a finished Nanocore) post their own messages
+directly and predate the tier system. They already behave like headlines, so they
+are marked `selfPost: true` in the registry rather than rewritten — churning a
+live feed's loudest paths to satisfy a refactor is how a working thing breaks.
+Registry audit: **zero orphans** — every entry has a producer or is flagged.
+
+---
+
+## Known gaps carried into this release
+
+- **`restoreEscorts` skips silently** when the player has refilled the battle
+  formation while an expedition was out. Deliberate, but unannounced.
+- **22 orphaned files** in `js/`+`css/` that `game.html` never loads still ship
+  (`lf-*.b6/b7`, `sim-*`, `tweaks.js`, `showcase.js`, `features-data.js`,
+  `css/features.css`).
+- **Merge receipts start from build 684.** Currency lost before that has no record.
+
+
+---
+
+# Previous release — v234 · build 688
 
 ---
 

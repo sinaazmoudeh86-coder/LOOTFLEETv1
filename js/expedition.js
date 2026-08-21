@@ -601,8 +601,13 @@
     let goldMul = 1; try { if (window.VIP && window.VIP.mult) goldMul = window.VIP.mult('gold') || 1; } catch (er) {}
     const paid = {
       gold: Math.round((R.gold || 0) * goldMul),
-      fuel: R.fuel | 0, iron: R.iron | 0, plasma: R.plasma | 0,
-      cores: R.cores | 0, lc: R.lc | 0,
+      // RESOURCE PAYOUTS PASS int32 AT DEPTH. econ() scales the whole bill with
+      // zone, so a deep ★★★★★ haul clears 2.1 billion easily — and `| 0` would
+      // wrap it NEGATIVE, subtracting resources as the reward for a clean run.
+      // Cores and LootCoins are small, but they use the same form so nobody has
+      // to work out which of these five is the dangerous one.
+      fuel: Math.floor(Number(R.fuel) || 0), iron: Math.floor(Number(R.iron) || 0), plasma: Math.floor(Number(R.plasma) || 0),
+      cores: Math.floor(Number(R.cores) || 0), lc: Math.floor(Number(R.lc) || 0),
     };
     st.gold = (st.gold || 0) + paid.gold;
     res.fuel = (res.fuel || 0) + paid.fuel;
@@ -650,7 +655,8 @@
     const a = byId(id); if (!a || a.done) return { ok: false, reason: 'gone' };
     if (returned(a)) return { ok: false, reason: 'landed' };
     a.done = 1; a.recalled = 1;
-    const back = Math.floor((a.fuel | 0) / 2);
+    // the launch bill itself passes int32 at depth — see the payout note above
+    const back = Math.floor((Number(a.fuel) || 0) / 2);
     const escorts = restoreEscorts(a);
     const res = st.resources || (st.resources = { fuel: 0, iron: 0, plasma: 0 });
     res.fuel = (res.fuel || 0) + back;

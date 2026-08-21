@@ -29,6 +29,21 @@
     // Opens a feature that is SHIPPED BUT HIDDEN so admins can test it on
     // production. See `tourbeta` below.
     '7f96669af9a455f4146ef636eb98acc7ce439bb6d35496438a62c60a83c6920d': 'tourbeta',
+    // ---- VOIDMAW COMPENSATION, Aug 2026 (build 683) ----------------------
+    // Ten single-use grants issued to players whose Voidmaw progress was lost.
+    // Each is one-per-account like any non-repeatable code; hand ONE to each
+    // affected player. A second one redeemed by the same account reports the
+    // hull is already held and grants nothing, so a leaked code cannot compound.
+    '9ff2504a7fc15161327c39e288114d3ad050badd03c5f43ba4856aeab1bbe07d': 'voidmaw',   // VOIDMAW-LHXU-V9LE
+    '7bbf1ecf605cd6cc7d1bbeb6dc4b48fbe3ecfc76661684f0bee329749ba86555': 'voidmaw',   // VOIDMAW-KASK-9YKR
+    'da1c04fa06c0616f7d8a66f95b9df791d0fc2e5f3bc96e4c430ba4db2177a67a': 'voidmaw',   // VOIDMAW-CTPE-RGQ5
+    'f8acb1c9057d2f38fa843cb3eba80494ba00392178a544113e027709c18adfa9': 'voidmaw',   // VOIDMAW-N95V-TGHW
+    '38c15cc47b8411eb0d90c86312049c0d3ec279055be48dc1f0a61b5cf9d2e984': 'voidmaw',   // VOIDMAW-7WPN-96V2
+    '3c90b668569b3122870e306a6150641b61d42528ae7cf0064f916960622d0c5f': 'voidmaw',   // VOIDMAW-7RVB-UNLS
+    '707d1def31f6780741a6a3bdf5d7d62cb9a8464ddcd396d28eb6ed6d38a13719': 'voidmaw',   // VOIDMAW-GMYJ-B3GG
+    '8943651a20c271de77ab19456dfaec5bf8c2ae3ed210708c7bd3973081d37cb2': 'voidmaw',   // VOIDMAW-GBUL-HY6G
+    'bfc2480f4b2c6820edecde10310a5c54670a6deadfe8d96c429370ae3cded934': 'voidmaw',   // VOIDMAW-SHMV-LLVM
+    '94116824cb4b3cc82d3154d4da9995782132f21d5d04a623a73335d01ee51be4': 'voidmaw',   // VOIDMAW-24FT-S667
     // ---- legacy (plaintext lost — kept alive for codes already issued) ---
     '7154891c38981a593183a2bd5056954c602702768d17bc16db7f729c366c9c28': 'allships',
     'c85be0226b8210972b976cd432ef2f7b930cc7744a61fc20c8a2e1b7049b3ea3': 'cur100b',
@@ -92,6 +107,19 @@
         if (st.ownedShips[s.key]) added++;
       });
       return added ? added + ' new hull' + (added > 1 ? 's' : '') + ' unlocked — all flight requirements waived' : 'Fleet already complete — flight requirements waived on every hull';
+    } },
+    // VOIDMAW — the event carrier, normally assembled from 150 Voidmaw Parts
+    // earned only during the event. Granted outright here because the parts
+    // themselves are what went missing. NOT repeatable, and deliberately no
+    // flightWaiver: the Voidmaw carries no flyReq licence (only the Eternum
+    // does), so setting the waiver would silently unlock every other hull's
+    // licence too — a compensation grant must give back exactly what was lost.
+    voidmaw: { name: 'VOIDMAW — event carrier unlocked', apply(g) {
+      const st = g.state; st.ownedShips = st.ownedShips || {};
+      if (st.ownedShips.voidmaw) return 'Voidmaw is already in your hangar — nothing to grant';
+      try { g.grantShip('voidmaw'); } catch (e) {}
+      if (!st.ownedShips.voidmaw) { st.ownedShips.voidmaw = 1; }
+      return 'Voidmaw added to your hangar — switch to it in Ships';
     } },
     cur100b: { name: '100B of every currency', apply(g) {
       const st = g.state;

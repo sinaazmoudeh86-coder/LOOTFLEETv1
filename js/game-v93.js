@@ -1237,6 +1237,7 @@
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     voidSkin(e);
     e.node = node; node.enemy = e;
+    kothScale(e);
     rt.enemies.push(e);
   }
   function updateNodes(dt) {
@@ -1670,9 +1671,21 @@
     if (killed) onKill(e);
   }
   function onKill(e) {
-    state.totalKills++;
-    state.shipKills[state.ship] = (state.shipKills[state.ship] || 0) + 1;
-    maybeDropDrone(e);
+    // KING OF THE HILL PAYS NOTHING. That is the whole premise of the event, and
+    // the reason entering it has a real opportunity cost: no XP, no gold, no
+    // resources, no fittings, no drones — and no LIFETIME COUNTERS either.
+    // totalKills and shipKills gate hull unlocks and lifetime badges, so banking
+    // them here would quietly make the zone that pays nothing the fastest unlock
+    // route in the game. The only thing a kill in here produces is one point on
+    // the ladder, which is exactly what the pilot signed up for.
+    const _kothRun = !!(rt.kothrun && rt.kothrun.active);
+    if (_kothRun) {
+      try { window.KOTH && window.KOTH.onKill(); } catch (_k) {}
+    } else {
+      state.totalKills++;
+      state.shipKills[state.ship] = (state.shipKills[state.ship] || 0) + 1;
+      maybeDropDrone(e);
+    }
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
     // SPACE CARGO DEFENSE PAYS ON DELIVERY, NOT PER KILL. The instance deploys
     // far past the pilot's own ceiling, so its hostiles carry the XP and loot of
@@ -1703,7 +1716,7 @@
     // This covers the casino House Citadels too: they are `void: true` tiles with
     // the identical ×1.5 difficulty inflation, so they are the same exploit.
     const _voidRun = inVoidSystem();
-    if (!_cargoRun && !_homeRun && !_voidRun) {
+    if (!_cargoRun && !_homeRun && !_voidRun && !_kothRun) {
       // BOSSES PAY NO XP BONUS. The 12× multiplier made boss dungeons the
       // fastest XP in the game by a wide margin — a repeatable boss is one kill
       // worth twelve, on a fight you can queue back to back, which is a farm
@@ -1730,6 +1743,7 @@
       }
       if (xp > 0) gainXp(xp);
     }
+    if (!_kothRun) {
     state.gold += C.enemyGold(e.dungeon) * (e.isBoss ? 12 : 1) * (e.tithe || 1) * (window.DREAD ? window.DREAD.mult('goldFind') : 1) * (window.PASCEND ? window.PASCEND.mult('gold') : 1) * proMods().gold;   // PILOT: Gold Find · ASCENSION: Prize Courts · BEACON: Wreckfield Tithe
     // RESOURCE SCAVENGE — kills now leak Galaxy Resources. Fuel is common;
     // iron & plasma are the rare finds (rarer, but a real grind faucet now).
@@ -1751,13 +1765,14 @@
       const rg = kind === 'fuel' ? '⬢' : kind === 'iron' ? '◆' : '✦';
       rt.floats.push(new E.FloatText(e.x, e.y - e.size - 14, rg + ' +' + formatNum(amt), { color: rc, size: 13, vy: -34, life: 0.8 }));
     }
+    }
     if (e.isClone) bumpLife('clones', 1);            // FLEETBREAKER badge
     // ✦ FRACTURE ZONE — anything that dies in the Aeternum's rift drops one EXTRA
     // fitting, rolled two rarity tiers above the zone's normal quality. The tithe
     // (gold / xp / salvage) is stamped on the entity itself in lanceTick.
     if (e.fracT) {
       e.fracT = 0;
-      if (!inVoidSystem()) try {
+      if (!inVoidSystem() && !_kothRun) try {
         const zone = e.dungeon || state.currentDungeon;
         const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 3));
         const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
@@ -1770,7 +1785,7 @@
     if (e.isCitadel) { citadelDown(e); if (window.UI) window.UI.syncStatsTab(); return; }
 
     // PRISM MINING — kills inside a Prism Field refine into Prism Ingots.
-    if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.onKill) {
+    if (!_kothRun && state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.onKill) {
       const _pn = window.PRISM.onKill(e.dungeon || state.currentDungeon, e.isBoss);
       if (_pn > 0) rt.floats.push(new E.FloatText(e.x, e.y - e.size - 26, '◈ +' + formatNum(_pn), { color: '#ff2a2f', size: 14, vy: -42, life: 0.95 }));
     }
@@ -1806,7 +1821,7 @@
     commitTileShield();   // first blood in a contested tile arms its 24 h shield
     // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
     const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
-    if (!_cargoRun && !_voidRun && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
+    if (!_cargoRun && !_voidRun && !_kothRun && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
       const _q = _swarmKill ? 1 : lootQ();
       let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
@@ -2627,6 +2642,8 @@
     if (state.dreadRun && state.dreadRun.active && window.DREAD && window.DREAD.tick) { try { window.DREAD.tick(dt, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — seasonal world-boss run (timer, stages, boss scaling).
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineTick) { try { window.SDREAD.engineTick(dt, rt); } catch (e) {} }
+    // KING OF THE HILL — the 24h kill race: tier scaling and field top-up.
+    if (rt.kothrun && rt.kothrun.active && window.KOTH && window.KOTH.engineTick) { try { window.KOTH.engineTick(dt, rt); } catch (e) {} }
     // HOLLOW ARMADA — alliance live raid on the real engine (timer, zones, transmit).
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineTick) { try { window.ALBOSS.engineTick(dt, rt); } catch (e) {} }
     // HOME CITADEL — wave defense on the real engine (fort objective, raider waves).
@@ -2646,6 +2663,19 @@
     // death handling — drop a piece of gear, then auto-tow back to the hangar
     if (a.justDied) {
       a.justDied = false;
+      // KING OF THE HILL — death is free AND the race carries on. The zone pays
+      // nothing, so it must take nothing (no item loss, no hull reset), and
+      // ending the run on death would make the ladder a measure of survival
+      // rather than of throughput, which is not the event that was scoped. The
+      // pilot is patched up on the spot with a long invulnerability window to
+      // fly clear; the 24-hour clock is the only thing that stops them.
+      if (rt.kothrun && rt.kothrun.active) {
+        burst(a.x, a.y, '#ffc43c', 48, { speed: 250, life: 1.0, glow: true });
+        a.dead = false; a.killer = null; a.hp = rt.stats.maxHp; a.invuln = 5;
+        rt.awaitingRespawn = false;
+        try { window.KOTH && window.KOTH.banner('☠ HULL DOWN', 'Patched and back in — the clock never stopped.'); } catch (e) {}
+        return;
+      }
       // EVENT DEATHS (Voidmaw / Hollow Armada) — these bosses are DESIGNED to
       // kill you eventually: an event death ends the run with NO penalty
       // (no item loss, no hull reset) and tows you to the safe hangar.
@@ -3045,6 +3075,8 @@
     if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — void aura + weak-point FX over the arena.
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineRender) { try { window.SDREAD.engineRender(ctx, rt.time, rt); } catch (e) {} }
+    // KING OF THE HILL — crown-gold arena vignette.
+    if (rt.kothrun && rt.kothrun.active && window.KOTH && window.KOTH.engineRender) { try { window.KOTH.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOLLOW ARMADA — collapse zones + siege aura over the arena.
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineRender) { try { window.ALBOSS.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOME CITADEL — the fort, its shield and turret fire, drawn in-world.
@@ -4290,6 +4322,63 @@
     if (window.UI) window.UI.bossEvent('super');
     return b;
   }
+  // ===========================================================================
+  // KING OF THE HILL — the 24-hour PvE kill race, on the REAL battle engine.
+  // ---------------------------------------------------------------------------
+  // A private instance: normal zone nodes (so hostiles keep coming), no boss, no
+  // siege, no waves. window.KOTH.engineTick owns tier scaling and tops the field
+  // up; onKill() above strips every reward the zone would normally pay.
+  //
+  // THE SPAWN ZONE IS FIXED AND reachZone() IS NEVER CALLED. The arena deploys
+  // at a fixed zone regardless of where the pilot has actually reached, so banking
+  // it as highestDungeonReached would launder free zone-unlock ceiling out of an
+  // event that pays nothing — the same rule the Hollow Armada raid follows.
+  // ===========================================================================
+  function startKoth(zone) {
+    const z = Math.max(1, (zone | 0) || 100);
+    state.currentDungeon = z;
+    state.currentSystem = null;
+    state.dreadRun = null; rt.siege = null; rt.waves = null;
+    // dense field, fast respawns — a strong build must never stand around
+    // waiting for targets, or the ladder measures spawn luck instead of DPS
+    rt.tileDensity = 3; rt.tileLoot = 1; rt.tileRespawnMult = 6; rt.deepDeath = false;
+    resetZone();
+    rt.siege = null; rt.waves = null;      // strip anything resetZone re-armed
+    rt.bossInit = rt.bossTimer = 1e9;      // no boss clock — this is a throughput race
+    rt.alrun = null; rt.hcrun = null; rt.cgrun = null; rt.sdrun = null;
+    rt.kothrun = { active: true, started: Date.now(), tier: null, t: 0 };
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 4;
+    if (window.UI) window.UI.refreshAll(); save();
+    return true;
+  }
+  // Field top-up, called by the module when the arena thins out. Spawns OUTSIDE
+  // weapon range so hostiles have to be flown at rather than appearing on top of
+  // the pilot, and never attaches to a node — these are extras above the zone's
+  // own respawns and must not compete for node slots.
+  // KING OF THE HILL — apply the current kill-tier to a hostile AT SPAWN.
+  // Every enemy-creation path that can fire inside the arena routes through here
+  // before pushing. Scaling on the next engine tick instead was the build-680
+  // bug: at endgame DPS the hostile is already dead by then, so the entire
+  // difficulty table silently did nothing. No-op outside a KOTH run.
+  function kothScale(e) {
+    if (!e || !rt.kothrun || !rt.kothrun.active) return e;
+    try { if (window.KOTH && window.KOTH.scaleEnemy) window.KOTH.scaleEnemy(e); } catch (_e) {}
+    return e;
+  }
+  function spawnKothEnemy() {
+    if (!rt.kothrun || !rt.archer) return null;
+    if (rt.enemies.length > 90) return null;      // frame-time ceiling
+    const a = rt.archer;
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 640 + Math.random() * 520;
+    const x = Math.max(24, Math.min(rt.worldW - 24, a.x + Math.cos(ang) * rad));
+    const y = Math.max(24, Math.min(rt.worldH - 24, a.y + Math.sin(ang) * rad));
+    const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
+    kothScale(e);
+    rt.enemies.push(e);
+    return e;
+  }
   // SAFE HANGAR — tow the pilot somewhere nothing can shoot them: clear every
   // hostile, full heal + 6s invulnerability, and open the Hangar screen.
   // Used after every event exit (retreat / timer / death) and every shipwreck.
@@ -4488,6 +4577,11 @@
   }
   function resetZone() {
     rt.dmgShow = 1;   // never let an event's display scale survive into normal play
+    // EVERY DEPLOY ENDS A KING OF THE HILL RUN. Cleared here rather than at the
+    // seven separate call sites that null the other event runs: resetZone() is
+    // the one thing all of them go through, including goSafeHangar(). startKoth
+    // arms rt.kothrun AFTER calling this, so it is unaffected.
+    rt.kothrun = null;
     state.prismRun = null;   // any (re)deploy ends a Prism Field run
     state.prismFleetRun = null;   // ...and a Prism Fleet gauntlet run
     sweepLoot();
@@ -5149,6 +5243,7 @@
       owned: isOwned(k), rival: rivalOf(k), active: state.currentSystem === k,
       ally: isAllyTile(k),
       cooldown: tileCooldownLeft(k),
+      abandonLock: abandonLockLeft(k),
       myCitadel: hasMyCitadel(k) && isOwned(k), rivalCitadelScore: rivalCitadelScore(k), defense: rivalDefense(k),
       lootQ: (t.deep ? GX.DEEP_MULT.loot : 1),
       cit: citadelRankOf(k),
@@ -5355,6 +5450,12 @@
     if (tile.level > state.level + 10) return { ok: false, reason: 'locked', ownGate: owned };
     // contest cooldown blocks EVERY non-owned warp-in (rival, neutral, citadel)
     if (!owned && tileCooldownLeft(k) > 0) return { ok: false, reason: 'cooldown' };
+    // AND THE ABANDONING PILOT CANNOT WALK STRAIGHT BACK IN. Blocks only this
+    // account, and only on a tile it released itself — see ABANDON_LOCK_MS.
+    if (!owned) {
+      const lock = abandonLockLeft(k);
+      if (lock > 0) return { ok: false, reason: 'abandoned', secs: lock };
+    }
     // ENTRY COST — every warp burns resources; deeper rings are punishing
     const cost = entryCostFor(k);
     if (cost) {
@@ -5481,6 +5582,7 @@
       e.maxHp *= 4.5; e.hp = e.maxHp;
       e.damage *= 0.32; e.speed *= 0.72; e.size *= 1.25;
     }
+    kothScale(e);
     rt.enemies.push(e);
   }
   function spawnWave(n, densityMul) {
@@ -5919,6 +6021,26 @@
   // only: you (and real players) can claim the tile back immediately.
   // Self-pruning — an expired entry is dropped the first time it is read.
   const FREE_GRACE_MS = 24 * 3600 * 1000;
+  // ABANDON LOCKOUT — how long the pilot who WALKED AWAY is barred from taking the
+  // same tile back. Deliberately the same 24 hours as the contest shield, because
+  // that shield is the thing it exists to protect.
+  //
+  // WHY THIS HAS TO EXIST. Abandoning clears state.tileCd[id] — the tile stops
+  // being contested because nobody owns it. So a pilot under siege, or sitting on
+  // a shield about to expire, could abandon and immediately re-claim to hand
+  // themselves a fresh 24-hour shield, keep the citadel rank, and pay only the
+  // entry cost. The grace period meant to protect a released tile from bots was
+  // being used as a free reset by its own former owner.
+  //
+  // Only the abandoning account is blocked. Rivals and real players can move in
+  // straight away, which is the entire point of walking away from a system.
+  const ABANDON_LOCK_MS = 24 * 3600 * 1000;
+  function abandonLockLeft(id) {
+    const m = state.tileAband; if (!m) return 0;
+    const t = m[id]; if (!t) return 0;
+    if (t <= Date.now()) { delete m[id]; return 0; }
+    return Math.max(0, Math.ceil((t - Date.now()) / 1000));
+  }
   function simBlocked(id) {
     const m = state.tileFree; if (!m) return false;
     const t = m[id]; if (!t) return false;
@@ -5931,16 +6053,22 @@
     if (!isOwned(id)) return { ok: false, reason: 'owned' };
     const t = sysAt(id); if (!t || t.home) return { ok: false, reason: 'home' };
     accrueResources();   // settle earnings up to the abandon
+    const hadCit = !!(state.citadels && state.citadels[id]);
     delete state.ownedSystems[id];
     if (state.citadels) delete state.citadels[id];
     if (state.tileCd) delete state.tileCd[id];
     if (!state.tileFree) state.tileFree = {};
     state.tileFree[id] = Date.now() + FREE_GRACE_MS;
+    // THE 24-HOUR LOCKOUT ON THE PILOT WHO LEFT. Recorded on every abandon, not
+    // only on citadel tiles: the shield reset is worth exploiting on a bare tile
+    // too, and a rule that applies sometimes is a rule players have to guess at.
+    if (!state.tileAband) state.tileAband = {};
+    state.tileAband[id] = Date.now() + ABANDON_LOCK_MS;
     if (state.currentSystem === id) state.currentSystem = null;
     try { if (window.TERRITORY && window.TERRITORY.enabled() && window.TERRITORY.release) window.TERRITORY.release(id); } catch (e) {}
     if (rt.realTiles && rt.realTiles[id]) delete rt.realTiles[id];
     save(); if (window.UI) window.UI.galaxyChanged();
-    return { ok: true };
+    return { ok: true, hadCit, lockH: Math.round(ABANDON_LOCK_MS / 3600000) };
   }
   function citadelCount() { return Object.keys(state.citadels || {}).length; }
   function hasMyCitadel(id) { return !!(state.citadels && state.citadels[id]); }
@@ -7583,6 +7711,7 @@
     levelCap: () => C.levelCap(), atLevelCap: () => state.level >= C.levelCap(),
     startHomeDefense, spawnHomeRaider, endHomeDefense,
     startCargoRun, spawnCargoRaider, endCargoRun, stripHullUpgrades,
+    startKoth, spawnKothEnemy,
     fleetSlots, fleetShips, setFleetSlot, getFleet: () => state.fleet || [],
     isCitadelZone, citadelCooldownLeft, isSwarmZone, zoneReqLevel,
     getCitadel: () => rt.enemies.find((en) => en.isCitadel && !en.dead) || null,
@@ -7606,7 +7735,7 @@
     bumpLife, peakLife,
     pilotAscend, ascStars,
     // galaxy map
-    warp, sysAt, isOwned, rivalOf, tileCooldownLeft, tileInfo, entryCostFor, isAllyTile,
+    warp, sysAt, isOwned, rivalOf, tileCooldownLeft, abandonLockLeft, tileInfo, entryCostFor, isAllyTile,
     // Kaevith Incursion
     inXenZone, xenXpBonus, xenXpMult, xenDry: () => state.xenDry || 0, xenPityAt: () => 0, xenSplit, xenChanceNow,
     // House Citadels (casino holds — real tiles, sieged like Void spires)

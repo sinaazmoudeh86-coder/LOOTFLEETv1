@@ -419,8 +419,11 @@
     // Pilot Tree — Dread Cores ready to spend on an unlockable node
     const pilotReady = (lvl() >= UNLOCK_LEVEL && cores() >= 1) ? cores() : 0;
     setBadge('cmd-pilot-badge', pilotReady);
-    // Command nav button — aggregate count of sections that need attention
-    const sections = (skillPts > 0 ? 1 : 0) + (pilotReady > 0 ? 1 : 0) + (dreadReady > 0 ? 1 : 0);
+    // Command nav button — aggregate count of sections that need attention.
+    // Fleet Exploration counts as one: a landed expedition is rewards the pilot
+    // has already earned sitting behind two taps, so the nav has to say so.
+    let expoReady = 0; try { expoReady = (window.EXPO && window.EXPO.badge()) | 0; } catch (e) {}
+    const sections = (skillPts > 0 ? 1 : 0) + (pilotReady > 0 ? 1 : 0) + (dreadReady > 0 ? 1 : 0) + (expoReady > 0 ? 1 : 0);
     const navB = $('cmd-badge');
     if (navB) { navB.style.display = sections > 0 ? 'block' : 'none'; navB.textContent = sections; }
   }

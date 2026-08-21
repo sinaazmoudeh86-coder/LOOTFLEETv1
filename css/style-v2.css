@@ -532,6 +532,13 @@ html,body{height:100%;background:#aeb9c9;color:var(--text);font-family:var(--fon
 .lbx-tab{min-width:0;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--font-ui);font-weight:700;font-size:11px;letter-spacing:.05em;white-space:nowrap;overflow:hidden;cursor:pointer;min-height:44px}
 @media (max-width:400px){.lbx-tabs{grid-template-columns:repeat(auto-fit,minmax(92px,1fr))}.lbx-tab{font-size:10px;letter-spacing:.02em;gap:4px;padding:7px 3px}}
 .lbx-ic{flex:0 0 auto;font-style:normal;font-size:13px;line-height:1;color:var(--c);opacity:.85}
+/* SUB-VIEW STRIP — only King of the Hill uses it (TODAY / CROWNS). A segmented
+   pair sitting directly under the tab grid, deliberately quieter than a tab so
+   the hierarchy reads: this is a view of one board, not a twelfth board. */
+.lbx-views{display:flex;gap:6px;margin:-4px 0 10px}
+.lbx-view{flex:1 1 0;min-width:0;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-family:'Orbitron',sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.12em;cursor:pointer}
+.lbx-view.on{border-color:var(--c);color:#eaf0fa;background:color-mix(in srgb,var(--c) 12%,transparent)}
+.lbx-view:active{transform:translateY(1px)}
 .lbx-tab.on{border-color:var(--c);color:#eaf0fa;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 16%,transparent),transparent);box-shadow:0 0 14px -6px var(--c)}
 .lbx-tab.on .lbx-ic{opacity:1}
 .lbx-tab:not(.on):hover{border-color:color-mix(in srgb,var(--c) 45%,var(--line));color:var(--text)}

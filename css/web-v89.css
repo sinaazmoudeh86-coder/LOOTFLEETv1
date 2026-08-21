@@ -1147,4 +1147,4 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   background:linear-gradient(105deg, transparent, rgba(210,180,255,.16) 45%, rgba(255,255,255,.22) 50%, rgba(210,180,255,.16) 55%, transparent);
   animation:proComet 4.5s linear infinite; }
 @keyframes proComet{ 0%{ left:-40%; } 60%,100%{ left:110%; } }
-@media (prefers-reduced-motion: reduce){ .pro-offer.active, .pro-offer.active::before, .pro-offer.active::after{ animation:none; }
+@media (prefers-reduced-motion: reduce){ .pro-offer.active, .pro-offer.active::before, .pro-offer.active::after{ animation:none; } }

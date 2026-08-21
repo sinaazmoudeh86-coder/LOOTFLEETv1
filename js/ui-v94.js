@@ -21,7 +21,8 @@
   // it the Ranks error path threw mid-build, leaving the board unpainted and its
   // tab handlers unbound.
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-  let _lbTab = 'power';    // which of the seven Ranks ladders is showing
+  let _lbTab = 'power';    // which of the eleven Ranks ladders is showing
+  let _lbView = null;      // sub-view within a tab that has them (King of the Hill)
   let _lbPage = 0;         // 60 rows a page; the roster runs to several hundred
   let _lcmTimer = null;    // LootCoin market countdowns (Cosmic Cache / Primordial Vault)
   let _buildTick = null;   // live countdown refresh while an Oblivion hull is under construction
@@ -195,6 +196,8 @@
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
     else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
     else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
+    else if (name === 'expo') { if (window.EXPOUI) window.EXPOUI.render(); }
+    else if (name === 'koth') { if (window.KOTHUI) window.KOTHUI.render(); }
     if (name === 'battle') {
       try {
         const rt = G.rt || {};
@@ -1638,18 +1641,25 @@
     rewire();
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
   }
+  // Short duration label for the abandon lockout — "7h 12m", "41m".
+  function abandHms(s) {
+    s = Math.max(0, s | 0);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h ? h + 'h ' + m + 'm' : (m || 1) + 'm';
+  }
   // Abandon confirmation — destructive, so it always asks first.
   function confirmAbandon(id, name, after) {
     const c = showSheet(`<div class="sheet-head" style="color:var(--bad)">✕ ABANDON SYSTEM</div><div class="sheet-body">
       <p>Release <b>${name || id}</b>?</p>
       <p style="font-size:12px">Its citadel and all of its hourly production are lost. The system goes <b>neutral immediately</b> — any pilot can claim it, and taking it back means fighting for it again.</p>
+      <p style="font-size:12px;color:var(--bad)"><b>You cannot re-claim this system for 24 hours.</b> Everyone else can move in straight away.</p>
       <div class="sheet-actions"><button class="btn" data-no>Keep it</button><button class="btn danger" data-yes>Abandon</button></div></div>`);
     c.querySelector('[data-no]').addEventListener('click', () => { closeSheet(); if (after) setTimeout(() => openMySystems(), 60); });
     c.querySelector('[data-yes]').addEventListener('click', () => {
       const r = G.abandonTile ? G.abandonTile(id) : { ok: false };
       closeSheet();
       if (r && r.ok) {
-        toast('✕ ' + (name || id) + ' released', '#8fa3bd');
+        toast('✕ ' + (name || id) + ' released — locked to you for ' + (r.lockH || 24) + 'h', '#8fa3bd');
         refreshAll();
         if (screen === 'galaxy') renderGalaxy();
         setTimeout(() => openMySystems(), 80);
@@ -2249,7 +2259,7 @@
       const r = G.warp(id);
       if (r.ok) { closeSheet(); toast((t.rival ? 'Attacking ' : t.owned ? 'Deploying to ' : 'Claiming ') + t.name, '#5b9cff'); showScreen('battle'); }
       else if (r.reason === 'tilecap') { closeSheet(); openTileCapSheet(id); }
-      else toast(r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
+      else toast(r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'abandoned' ? '✕ You abandoned this system — you can re-claim it in ' + abandHms(r.secs || 0) : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
     });
   }
   // ==========================================================================
@@ -3494,12 +3504,21 @@
     // the same pool (or read their own table) through RANKBOARDS.
     const RB = window.RANKBOARDS;
     if (!RB) { renderBoardLegacy(html, signedIn); return; }
-    const data = RB.board(_lbTab, () => { if (screen === 'board') renderBoard(); });
+    const data = RB.board(_lbTab, () => { if (screen === 'board') renderBoard(); }, _lbView);
     const tab = data.tab;
     el['board-sub'].textContent = tab.sub;
 
     html += '<div class="lbx-tabs">' + RB.TABS.map((t) =>
       `<button class="lbx-tab${t.id === _lbTab ? ' on' : ''}" data-lbtab="${t.id}" style="--c:${t.col || '#5fd1ff'}"><i class="lbx-ic">${t.ic || ''}</i>${t.label}</button>`).join('') + '</div>';
+    // SUB-VIEWS — only King of the Hill has them. Two boards answering the same
+    // question on different clocks belong under one tab, not as two more entries
+    // in a strip that is already eleven wide.
+    const views = tab.views || null;
+    const curView = views ? (views.some((v) => v.id === _lbView) ? _lbView : views[0].id) : null;
+    if (views) {
+      html += '<div class="lbx-views">' + views.map((v) =>
+        `<button class="lbx-view${v.id === curView ? ' on' : ''}" data-lbview="${v.id}" style="--c:${tab.col}">${v.label}</button>`).join('') + '</div>';
+    }
     html += `<div class="lb-info">${tab.info}</div>`;
 
     if (data.pending) {
@@ -3509,7 +3528,7 @@
     } else if (data.err) {
       html += `<div class="lbx-note err">This board couldn’t load — ${esc(data.err.message || 'request failed')}</div>`;
     } else if (!data.rows.length) {
-      html += `<div class="lbx-note">${tab.empty || 'Nothing on this board yet.'}</div>`;
+      html += `<div class="lbx-note">${(curView === 'hall' && tab.emptyHall) || tab.empty || 'Nothing on this board yet.'}</div>`;
     } else if (_lbTab === 'power' && (data.real || 0) === 0) {
       html += `<div style="text-align:center;padding:26px 18px;border:1px dashed var(--line-2,#37475f);border-radius:14px;margin:4px 0 12px;background:rgba(95,209,255,.04);">
         <div style="font-size:30px;line-height:1;margin-bottom:8px;">🛰️</div>
@@ -3532,7 +3551,7 @@
           <div class="lb-topline"><span class="lb-name">${p.isMe ? '★ ' : ''}${p.name}</span>${ascBadge(p)}${simChip(p)}
             ${showFleet ? `<span class="lb-fleet">${fleetThumbs(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.rows.length) : []))}</span>` : ''}</div>
           <div class="lb-meta">${tab.meta(p)}</div></div>
-        <div class="lb-pow"><span class="pl">${tab.unit}</span>${tab.fmt(tab.metric(p), p)}</div></div>`).join('');
+        <div class="lb-pow"><span class="pl">${((views && views.find((v) => v.id === curView)) || tab).unit}</span>${tab.fmt(tab.metric(p), p)}</div></div>`).join('');
 
     if (pages > 1) {
       const mine = data.rows.findIndex((p) => p.isMe);
@@ -3557,8 +3576,16 @@
     wireHangarTabs(el['board-body']);
     el['board-body'].querySelectorAll('[data-lbtab]').forEach((b) => b.addEventListener('click', () => {
       _lbTab = b.dataset.lbtab; _lbPage = 0;
+      // a tab change resets the sub-view, so leaving King of the Hill and coming
+      // back never lands on CROWNS unannounced
+      _lbView = null;
       el['board-body']._lbHtml = null;      // force a repaint past the flicker guard
       el['board-body'].scrollTop = 0;
+      renderBoard();
+    }));
+    el['board-body'].querySelectorAll('[data-lbview]').forEach((b) => b.addEventListener('click', () => {
+      _lbView = b.dataset.lbview; _lbPage = 0;
+      el['board-body']._lbHtml = null;
       renderBoard();
     }));
     el['board-body'].querySelectorAll('[data-pg]').forEach((b) => b.addEventListener('click', () => {
@@ -3738,6 +3765,70 @@
     tactics: 'Control of the fight. Reach, mobility, extra targets and field repair.',
   };
   const skFmt = (v, unit) => '+' + (Math.round(v * 100) / 100) + (unit || '%');
+  // id -> node, filled as the tree renders. The in-place updater below needs the
+  // node definition (max, per, unit) without re-walking the tree.
+  const skNodeById = {};
+
+  // SPENDING A POINT NO LONGER REBUILDS THE SCREEN.
+  //
+  // Every `+` used to call renderSkills(), which assigns a fresh innerHTML to
+  // the whole body. That tears down and recreates every node in the tree, so
+  // each click replayed every entry transition at once and reset the scroll
+  // position — read as a hard full-screen flicker, and it got worse the deeper
+  // the tree grew. Nothing about spending one point requires rebuilding the
+  // other forty nodes.
+  //
+  // This updates only what actually changed: the point counter, the node that
+  // was bought, and the affordability state of every other node (spending can
+  // make a neighbour unaffordable). Returns false when the change is STRUCTURAL
+  // — a tier just unlocked, so new nodes have to exist — and the caller falls
+  // back to a full render for that one click.
+  function skillsInPlace(id) {
+    const body = el['skills-body']; if (!body) return false;
+    if (el['skills-sub']) el['skills-sub'].textContent = (G.state.skillPoints || 0) + ' pts';
+
+    // A locked tier whose requirement is now met needs real new markup.
+    let structural = false;
+    body.querySelectorAll('.skt-locked b').forEach((b) => {
+      const left = Math.max(0, (parseInt(b.textContent, 10) || 0) - 1);
+      if (left <= 0) { structural = true; return; }
+      b.textContent = String(left);
+      // keep the singular/plural honest as the number ticks down
+      const host = b.parentElement;
+      if (host) host.innerHTML = host.innerHTML.replace(/more points?/, 'more point' + (left > 1 ? 's' : ''));
+    });
+    if (structural) return false;
+
+    let ok = true;
+    body.querySelectorAll('[data-node]').forEach((card) => {
+      const n = skNodeById[card.dataset.node];
+      if (!n) { ok = false; return; }
+      const rank = G.skillRank(n.id), maxed = rank >= n.max, able = !maxed && G.canInvest(n);
+      card.classList.toggle('done', maxed);
+      const pips = card.querySelectorAll('.sn-pip');
+      for (let i = 0; i < pips.length; i++) pips[i].classList.toggle('on', i < rank);
+      const rk = card.querySelector('.sn-rk'); if (rk) rk.textContent = rank + '/' + n.max;
+      const nowEl = card.querySelector('.sn-now'); if (nowEl) nowEl.textContent = skFmt(rank * n.per, n.unit);
+      const nextEl = card.querySelector('.sn-next'); if (nextEl) nextEl.textContent = skFmt((rank + 1) * n.per, n.unit);
+      const btn = card.querySelector('.sn-buy');
+      if (btn) {
+        if (maxed) {
+          // MAX is a different button; swap its face, never its identity — the
+          // click handler is delegated on the body so replacing text is safe.
+          btn.textContent = 'MAX'; btn.disabled = true;
+          btn.classList.add('maxed'); btn.classList.remove('able');
+          btn.removeAttribute('data-sk');
+        } else {
+          btn.classList.toggle('able', able); btn.disabled = !able;
+        }
+      }
+      // maxed hides the "-> next" pair; mirror what the renderer would emit
+      const arw = card.querySelector('.sn-arw');
+      if (arw) arw.style.display = maxed ? 'none' : '';
+      if (nextEl) nextEl.style.display = maxed ? 'none' : '';
+    });
+    return ok;
+  }
   function renderSkills() {
     const sp = G.state.skillPoints || 0;
     el['skills-sub'].textContent = sp + ' pts';
@@ -3870,6 +3961,7 @@
       if (open && !isNext) {
         html += '<div class="skt-body">';
         tier.nodes.forEach((n) => {
+          skNodeById[n.id] = n;
           const rank = G.skillRank(n.id), able = G.canInvest(n), maxed = rank >= n.max;
           let pips = ''; for (let i = 0; i < n.max; i++) pips += `<div class="sn-pip ${i < rank ? 'on' : ''}"></div>`;
           const btn = maxed ? `<button class="sn-buy maxed" disabled>MAX</button>` : `<button class="sn-buy ${able?'able':''}" data-sk="${n.id}" ${able?'':'disabled'}>+</button>`;
@@ -3878,7 +3970,7 @@
           const numRow = maxed
             ? `<span class="sn-now">${skFmt(now, n.unit)}</span><em class="sn-lab">${h[0]} · maxed</em>`
             : `<span class="sn-now">${skFmt(now, n.unit)}</span><i class="sn-arw">→</i><span class="sn-next">${skFmt(next, n.unit)}</span><em class="sn-lab">${h[0]}</em>`;
-          html += `<div class="skill-node ${maxed?'done':''} ${n.cap?'cap':''}" style="border-left-color:${br.color};--bc:${br.color}">
+          html += `<div class="skill-node ${maxed?'done':''} ${n.cap?'cap':''}" data-node="${n.id}" style="border-left-color:${br.color};--bc:${br.color}">
             <div class="sn-main"><div class="sn-name">${n.name}${n.cap?'<span class="capm">CAPSTONE</span>':''}</div>
               <div class="sn-desc">${h[1]}</div>
               <div class="sn-num">${numRow}</div>
@@ -3892,7 +3984,11 @@
     });
     if (hiddenTiers > 0) html += `<div class="sk-more">\u25be ${hiddenTiers} deeper tier${hiddenTiers>1?'s':''} reveal as you invest in ${br.name}</div>`;
 
+    // SCROLL SURVIVES A FULL RENDER. Structural rebuilds are rare now, but when
+    // one does happen it must not throw the player back to the top of the tree.
+    const keepScroll = el['skills-body'].scrollTop || 0;
     el['skills-body'].innerHTML = html;
+    if (keepScroll) el['skills-body'].scrollTop = keepScroll;
     const rb = $('sk-reset'); if (rb) rb.addEventListener('click', openReset);
     el['skills-body'].querySelectorAll('.sk-tab').forEach((b) => b.addEventListener('click', () => { skillBranch = b.dataset.br; renderSkills(); }));
     el['skills-body'].querySelectorAll('[data-acc]').forEach((b) => b.addEventListener('click', () => {
@@ -3900,7 +3996,17 @@
       skillOpen[b.dataset.acc] = !(tier && tier.classList.contains('open'));
       renderSkills();
     }));
-    el['skills-body'].querySelectorAll('[data-sk]').forEach((b) => b.addEventListener('click', () => { if (G.investSkill(b.dataset.sk)) renderSkills(); }));
+    // DELEGATED, not one listener per button — the in-place updater rewrites
+    // button faces, and per-element listeners would not survive that.
+    if (!el['skills-body'].dataset.skWired) {
+      el['skills-body'].dataset.skWired = '1';
+      el['skills-body'].addEventListener('click', (ev) => {
+        const b = ev.target.closest && ev.target.closest('[data-sk]');
+        if (!b || b.disabled) return;
+        if (!G.investSkill(b.dataset.sk)) return;
+        if (!skillsInPlace(b.dataset.sk)) renderSkills();
+      });
+    }
   }
   function openReset() {
     const sheet = showSheet(`<div class="sheet-head">Reset Skills</div><div class="sheet-body">

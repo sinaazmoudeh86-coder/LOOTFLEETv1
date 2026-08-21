@@ -1,455 +1,343 @@
-# Loot Fleet — deploy v232 · build 673 · VOIDMAW SHARDS RESTORED · DRONE BAYS STAY FULL · PRISM RAIDERS HUNT THE RIGS
+# Loot Fleet — deploy v234 · build 688 · THREE NEW LADDERS · CITADEL ABANDON LOCKOUT
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v231. Service worker cache is `lootfleet-v673`.
-**Login screen reads `BUILD 673`.**
+Supersedes v233 (build 687 — if v233 was never pushed, this folder replaces it entirely).
+Service worker cache is `lootfleet-v688`.
+**Login screen reads `BUILD 688`.**
 
-### NOTHING TO RUN ON THE SERVER FOR THIS RELEASE
+---
 
-**No SQL, no Edge Function redeploy, no cron change.** 673 is entirely client-side
-— push the folder and you are done.
+## ⚠ RUN THE SQL FIRST — TWO FILES, IN THIS ORDER
 
-### Build stamps — all four agree
+Both are idempotent and safe to re-run.
+
+| # | file | why | skip if |
+|---|---|---|---|
+| 1 | `supabase/koth.sql` | creates the King of the Hill tables, RPCs and cron | already run for v233 |
+| 2 | `supabase/koth-ratefix.sql` | `koth_bump` with the `p_seq` argument + retuned rate cap | already run for v233 |
+| 3 | `supabase/new-ladders.sql` | **NEW** — `hcwave`/`expo` columns, rebuilt `lb_upsert`, `koth_hall_top()` | never |
+
+After the last file, reload the API schema cache:
+
+```sql
+notify pgrst, 'reload schema';
+```
+
+**Why order matters.** The client sends `p_seq` to `koth_bump` and `p_hcwave`/`p_expo`
+to `lb_upsert` as of this build. Push the site before the SQL and kill submissions
+fail and the two new boards rank every human at zero until you catch up.
+
+**`new-ladders.sql` is now the canonical `lb_upsert`.** Re-running
+`cargo-ladder.sql`, `nanocore-ladder.sql` or `discord-art-publish.sql` re-adds an
+older overload and requires re-running `new-ladders.sql`. Both migrations that
+touch a function signature drop every overload by catalogue lookup and then assert
+exactly one survives, so the three-copy `lb_upsert` failure cannot recur.
+
+No Edge Function redeploy is required.
+
+---
+
+## STEP BY STEP
+
+1. **Supabase → SQL Editor.** Run `koth.sql`, then `koth-ratefix.sql`, then
+   `new-ladders.sql`. Each prints a `NOTICE` naming how many overloads it dropped
+   and asserting one survives — if an `exception` fires, stop and read it.
+2. **Run `notify pgrst, 'reload schema';`** in the same editor.
+3. **Push the site.** Upload the contents of this folder to the repo root Vercel
+   serves. Wait for the deploy to go green.
+4. **Hard-reload the live site once** and confirm the login screen reads
+   `BUILD 688`.
+5. **Push the beacon last.** `version.json` is the only file that evicts players
+   (`update-gate.js` polls it every 90s and force-reloads anyone on a lower build).
+   It is already inside this folder — if you upload everything in one go, that is
+   fine, because the files land together. Only split the upload if your host
+   publishes incrementally.
+6. **Smoke test, in this order:**
+   - Ranks screen shows **twelve** tabs, ending HOME DEFENSE · EXPLORATION · KING OF THE HILL.
+   - Tap KING OF THE HILL → the TODAY / CROWNS pair appears under the tab strip.
+   - Command ▸ King of the Hill → log one kill → the counter moves (proves `p_seq` landed).
+   - My Galaxy → abandon a spare system → the confirm sheet warns about 24 hours,
+     and trying to warp back in is refused with a countdown.
+   - Console: `CLOUD.lbState()` — every rung should read `off: false`.
+
+---
+
+## Build stamps — all four agree
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 673 |
-| root `version.json` | 673 |
-| `deploy-v232/version.json` | 673 |
-| `deploy-v232/sw.js` `CACHE` | `lootfleet-v673` |
+| root `game.html` `window.LF_BUILD` | 688 |
+| root `version.json` | 688 |
+| `deploy-v234/version.json` | 688 |
+| `deploy-v234/sw.js` `CACHE` | `lootfleet-v688` |
 
-Audited before hand-off: all 78 `js/`+`css/` files `game.html` references are byte-identical
-to the project root, none missing, every one cache-busted.
+Audited before hand-off: all **84** `js/`+`css/` files `game.html` references
+(67 js, 17 css) are byte-identical to the project root, none missing, every one
+cache-busted. All 88 js files parse clean.
 
-### Save migrations — self-running, once per account
+`CODES.md` is **not** in this folder and must never be added — it holds the
+plaintext coupon codes.
 
-| flag | what it does |
+---
+
+## What changed in 688
+
+### ⛨ Home Defense ladder
+
+Ranked by the deepest Home Citadel wave you are **holding**. A breach damages the
+base and halts mining but never rolls the wave back, so "holding" and "career best"
+are the same number and the board states the stronger one honestly. The meta line
+names the production era — RARE at 20, EPIC at 50, LEGENDARY (×2 production) at 100,
+MYTHIC at 250. Ties break on fleet power.
+
+### ◎ Exploration ladder
+
+Expeditions completed and **debriefed**. A fleet still in flight is not yet worth
+anything and a recalled run never counts. Ties break on the strongest wing ever sent
+out, so a pilot who runs ★★★★★ wings outranks one who farms ★ runs at the same count.
+
+### 👑 King of the Hill ladder — one tab, two views
+
+**TODAY** is the live race, read straight from `koth_top()` and reset at 00:05 UTC.
+**CROWNS** is the career record: days won, counted from `koth_hall`, ties broken on
+total kills across winning days.
+
+Neither view goes through `lb_upsert`. A crown is awarded by `koth_close()`
+server-side, so it cannot be self-reported and the board needs no anti-cheat probe
+of its own — the eligibility test already ran at close. Two boards answering the same
+question on different clocks belong under one tab, not as two more entries in a strip
+that is already twelve wide.
+
+### ✕ Citadel abandon lockout — 24 hours, and it closes a real exploit
+
+Abandoning a system clears `state.tileCd`, because a tile nobody owns is not
+contested. That made abandon-and-reclaim a **free shield reset**: a pilot under siege,
+or sitting on a protection about to expire, could release the system and immediately
+take it back for the price of one warp — fresh 24-hour shield, citadel rank intact.
+The neutral grace period that exists to protect a released tile from bots was being
+used as a reset by its own former owner.
+
+The account that walked away is now barred from that tile for 24 hours. **Rivals and
+real players can move in straight away** — that is the entire point of abandoning.
+Applied on every abandon, not only citadel tiles: the shield reset is worth exploiting
+on a bare tile too, and a rule that applies sometimes is a rule players have to guess at.
+
+The confirm sheet states the penalty before you commit, and a blocked warp is refused
+with a live countdown rather than a generic "cannot deploy".
+
+**The lockout is unioned in the save merge, latest-expiry-wins.** Left unnamed it would
+be decided by the base pick like anything else — and a second device holding a
+pre-abandon copy would clear the penalty, making the merge itself the exploit the
+lockout exists to close.
+
+### ✉ Mail copy now covers every ladder
+
+`rank-rewards.js` carries podium copy for all twelve boards. The three added here
+were written in 680 against ladders that did not exist yet; they are live now.
+
+---
+
+## Rollout notes
+
+- **Both new boards refuse to render until the migration is detected**, showing a
+  "waiting on a database migration" note rather than ranking every human at zero.
+  That is deliberate: a board that silently credits simulated pilots with records no
+  human can be shown to have set is worse than no board.
+- **The publish path degrades independently.** The new columns are the topmost rung
+  with a 5-minute back-off (not six hours like the settled rungs) — a refusal here
+  usually means "the SQL has not run yet" or "PostgREST has not reloaded", both
+  measured in minutes. `CLOUD.lbState()` reports every rung's status.
+- **Simulated pilots get derived figures** for both new boards, seeded on the pilot's
+  name so they never drift between devices or refreshes, and tapered so a bot's
+  expedition count stays bounded by plausible real-world time rather than by level.
+
+---
+
+## Known gaps carried into this release
+
+- **`restoreEscorts` skips silently** when the player has refilled the battle
+  formation themselves while an expedition was out. Deliberate — their choice
+  outranks our bookkeeping — but unannounced.
+- **22 orphaned files** in `js/`+`css/` that `game.html` never loads still ship as
+  dead weight (`lf-*.b6/b7`, `sim-*`, `tweaks.js`, `showcase.js`,
+  `features-data.js`, `css/features.css`).
+- **Merge receipts start from build 684.** Currency lost before that has no record;
+  reports from here on can be sized from `state.mergeLog` instead of guessed.
+
+
+---
+
+# Previous release — v233 · build 687
+
+---
+
+## What changed since 674
+
+### ◈ Fleet Exploration (675–676, 681, 685–686)
+
+Dispatch up to **five hulls** on real-time expeditions from Command ▸ Fleet
+Exploration. The flagship never leaves; escorts are pulled out of the battle
+formation while they are away and **returned to a free slot when they land**.
+The outcome is sealed at launch by a seeded PRNG over (mission, launch time,
+account), so closing the tab cannot reroll it and neither can the player.
+
+Five difficulty tiers, ★ (req 20) through ★★★★★ (req 350). The top tier needs a
+genuine five-hull wing — four of the best hulls in the game fall short.
+
+**Gold was retuned twice and the second pass mattered.** Kill gold is exponential
+in zone but the things gold buys are fixed constants (Dread Omega 50B, Titan Sina
+~5T), so any purely kills-anchored payout eventually buys a hull per run no matter
+how small the multiplier. The per-kill anchor is now raised to a fractional power
+(0.85), which bends the faucet toward the price ladder instead of racing it:
+
+| zone | ★ 3h | ★★★ 6h | ★★★★★ 18h |
+|---|---|---|---|
+| 8 | 3.17K | 17.7K | 87.4K |
+| 45 | 105K | 588K | 2.90M |
+| 150 | 42.5M | 238M | 1.17B |
+| 305 | 256M | 1.44B | 7.08B |
+| 600 | 1.47B | 8.24B | 40.6B |
+
+Early game is essentially unchanged; the compounding comes off the deep end
+(Zone 305 ★★★★★ went 1.11T → 7.08B across the two passes).
+
+### ♛ King of the Hill (677–681, 687)
+
+A 24-hour galaxy-wide kill race in its own arena, reached from Command. Endless
+difficulty ramp — every 100 kills raises the tier, and there is no cap.
+
+- **Punching-bag zone.** Hostiles deal **zero** damage. The arena already revived
+  the pilot with invulnerability on death, so damage only ever cost tempo in a mode
+  measured entirely in tempo. Enemy fire still renders.
+- **Hostiles grow with the wall.** Size scales on `1 + log10(hpMult) × 0.05`,
+  hard-capped at **2.4×**, and bigger ones lumber. A full 90-hostile field never
+  occludes the pilot.
+- **Scaling happens at spawn, not on the next tick.** The build-680 fix: at endgame
+  DPS a hostile dies inside the frame it spawned in, so the tick-sweep scaler never
+  saw it and the entire difficulty table silently did nothing.
+
+### ✉ Ladder winnings arrive by mail (680)
+
+Every ranked ladder — including King of the Hill — now writes its own letter.
+A podium finish (1st–3rd) gets that board's own copy naming what it measures and
+what the finish means; 4th–100th arrives as one compact digest for the day. Every
+award row's LootCoins are carried by exactly one letter either way. A podium finish
+worth no LootCoins sends as an ordinary letter rather than a prize with a dead
+Claim button.
+
+---
+
+## Bug fixes
+
+### The KOTH anti-cheat was disqualifying the best players (681)
+
+`koth.sql` conflated "exceeded the rate limit" with "is cheating". The cap was
+6 kills/s with a flag after 12 clamps; the arena holds 90 hostiles and the tier
+table starts at ×1, so an endgame pilot legitimately does 20–50 kills/s for the
+first few hundred kills. **Every flush clamped, every clamp flagged, and about
+thirty seconds in they were silently ineligible for the crown — permanently, every
+race.** Their queued surplus also drained at 6/s, so their visible score ran
+minutes behind their real one all day.
+
+The rate cap is now a database protection set above anything the spawner can
+physically produce (60/s sustained, 300 burst). Cheat detection is a separate test:
+only a claim **3× past that ceiling** counts as evidence. Ordinary clamping is still
+recorded in `koth_audit` for forensics but no longer touches `flags`. The
+migration zeroes existing flags, since every one was raised by the broken test.
+
+### The KOTH replay guard could permanently stop a player scoring (687)
+
+`koth_bump` is at-least-once, so a committed transaction whose response is lost
+would be retried and applied twice. The 681 fix added a per-player monotonic
+sequence — but the client counter was never reset on the day boundary and was not
+unioned in the save merge, so a merge, a restored backup or an offline device could
+hand a player a counter **below** what the server had already accepted. Every
+submission then came back `replay`, and the client cleared the pending delta on the
+assumption that meant "already counted". It does not: it means "this seq was seen",
+which after a merge is a different delta entirely. **The player keeps killing and
+their score never moves again for the rest of the day.**
+
+The client now reconciles against `d.kills` — the server's authoritative total —
+minus what it last saw counted. That difference is exactly what landed, whatever the
+seq did, so it can neither double-count nor lose a kill. A replay that reconciles to
+zero jumps the counter forward instead of bouncing. The counter resets on the day
+boundary (matching the server), the merge takes max-wins on it, and any in-flight
+marker is dropped on merge.
+
+### Expeditions were quietly dismantling the battle formation (681)
+
+`launch()` pulled an escort out of the fleet and nothing ever put it back — the slot
+stayed empty after the fleet landed. Invisible, too: nothing on the Expedition screen
+mentions the fleet, so it presented as "my ship score keeps dropping" with no cause.
+Escorts now return to a free slot on collect **and** on recall, never over a hull the
+player has since slotted themselves.
+
+### Pilot Skills flickered the whole screen on every point spent (682)
+
+Every `+` called `renderSkills()`, which reassigns `innerHTML` for the entire tree —
+destroying and recreating every node, replaying every entry transition at once and
+resetting scroll. Spending a point now updates only the counter, the bought node and
+the affordability state of its neighbours. A tier unlock is genuinely structural and
+still does one full render; full renders now preserve scroll position. Skill buttons
+moved to delegated click handling.
+
+### Save hardening — additive only (684, 687)
+
+`mergeSaves()` names ~35 fields, and any field it does not name is decided wholesale
+by the base pick — the losing copy's version is discarded silently. Added unions for
+the fields where a union is **provably** safe because they only ever move one
+direction:
+
+| field | guard |
 |---|---|
-| `state.vmShardRestore` | returns ship shards the build-666 orphan sweep deleted, read from this device's pre-sweep save snapshots |
-| `state.shardOrphanFix = 2` | re-runs the orphan sweep under the corrected rule (only keys naming no hull in the game) |
-| `state.droneBays` | seeds per-hull drone bays; a hull with no record inherits the old global count on its first switch |
+| `purchases` | none — no reset revokes a purchase |
+| `invSlotsBought` | max-wins |
+| `blueprints` | epoch-guarded |
+| one-way latches (`flightWaiver`, `unlimited`, `discordJoin`, `nameSet`, …) | OR |
+| `casino` lifetime records | max-wins |
 
-**Push the site FIRST, then the beacon.** `js/update-gate.js` polls `version.json` every
-90s and force-reloads any client on a lower build within ~90s — bumping the beacon ahead
-of the files evicts players onto code that is not live yet.
+**Deliberately excluded: gold, credits, resources, dreadCores, prismIngots,
+inventory, equipped, fittings.** Those are spendable and there is no correct union
+for two divergent balances — max-wins refunds whatever the other device spent (buy a
+hull on the phone, merge with the tablet's older copy, keep both the hull and the
+gold), base-wins loses real earnings.
 
-### What changed in 673 — player bug reports
+So for currency the base pick has to be right, and when it is wrong the loss must be
+**recoverable**. Every merge that discards a copy holding more of something spendable
+now writes a **receipt** — what won, what lost, and how much was on the losing copy —
+capped at the last 5 and wrapped so a receipt failure can never fail a merge. It
+grants nothing. The next wipe report can be sized from data instead of guessed.
+As of 687 the receipt is itself unioned, so it survives the merge it documents.
 
-**❖ Voidmaw shards were wiped by a cleanup migration.** `shipworks.js`
-`recoverOrphanShards()` shipped in the 660–666 window to buy back shards banked
-against hulls the Shipworks cannot build. It defined "cannot build" as **absent from
-`PARTS_NEED`** — but Voidmaw Parts are redeemed by `server-dreadnaught.js` at 150,
-not by the Shipworks, and `voidmaw` has no `PARTS_NEED` entry. On the first load
-after that patch the sweep **deleted the entire Voidmaw grind and paid salvage gold
-for it**, with a toast calling six weeks of daily play "unusable shards". It was live
-in 670, which is why the reports land now. Two halves:
+### Voidmaw compensation codes (683)
 
-- **The rule is now the honest one.** A shard is an orphan only if its key names **no
-  hull in the game**. A real hull's shards are never swept — the Shipworks is not the
-  only thing in the galaxy that redeems them, and a balance sitting in a save costs
-  nothing while a deleted one cannot be recovered. Anything the sweep does buy back is
-  written to `shardSweepLog` first, so a future repair has a receipt instead of guesswork.
-- **Restitution, from the player's own pre-sweep data.** `account.js` keeps three
-  whole-save snapshots on the device — the untouched cloud copy stashed before every
-  merge (`lf-backup`), the losing side of a save conflict (`lf-conflict`) and the
-  heaviest save this account has ever had here (`lf-best`). Where one predates the
-  sweep it still holds the true count, so the repair takes the **per-key max** across
-  all three and returns the difference, with a mail explaining what happened.
-  Deliberately narrow: only keys the old sweep could touch (no `PARTS_NEED` entry),
-  only hulls **not owned** (assembling spends shards, so a low balance on an owned hull
-  is correct rather than damage), and **the salvage gold is not clawed back** — it was
-  paid weeks ago and has been spent.
+Ten single-use codes grant the Voidmaw event carrier to players hit by the wipes.
+One per account, not repeatable; a second code redeemed by the same account reports
+the hull is already held and grants nothing. Only SHA-256 hashes ship. Plaintext
+lives in `CODES.md` at the project root, which is **not** in this folder.
 
-**This was never Voidmaw-only.** The old rule would sweep shards for any real hull
-without a Shipworks entry — Chroma Fang, Veridian, the Kaevith hulls, the Praetorian
-line. The restore covers all of them.
+### A live stylesheet was truncated mid-block (687)
 
-**Where no snapshot survives, no number is invented.** The sweep banked gold without
-itemising it, so a player whose snapshots have already rolled over has no surviving
-record of their count. Those accounts are flagged `vmShardRestore.n === 0` and can be
-targeted by a flat goodwill grant if one is decided; the same two-tier rule the
-build-670 moon-colony repair used.
+`css/web-v89.css` ended inside an unclosed `@media (prefers-reduced-motion)` rule.
+Browsers auto-close at EOF so nothing visibly broke, but anything appended to that
+file would have silently landed inside the media query.
 
-**`shipParts` now unions on save merge.** A system absent from `mergeSaves()`'s union
-list is decided wholesale by the base pick, so a stale cloud copy could re-zero shards
-the repair had just restored. Max per hull, **skipping owned hulls** so a copy that had
-not assembled yet cannot refund the price of a ship already in the hangar.
+---
 
-**Drone bays emptied when you switched hulls and came back.** `state.drones` was one
-account-wide counter clamped to the ACTIVE hull's capacity, so leaving a full 8-bay
-Titan for anything smaller **destroyed the surplus permanently** — switch back and the
-bays were empty and had to be re-earned at 16% a kill. Bays are now stored per hull in
-`state.droneBays`, exactly as `fittings` stores gear; `state.drones` remains the live
-view of the hull being flown, so every reader (damage, power, HUD, the death penalty)
-is unchanged. `clampDrones()` writes through, and it already runs after every mutation.
-A hull with no record inherits the old global count on its first switch, so nobody
-loses drones to the migration itself. Unioned in `mergeSaves()` inside the epoch guard —
-both ascension resets disband the wing, and unioning across epochs would hand it back.
+## Known gaps carried into this release
 
-**Prism Field raiders ignored the rigs and chased the pilot.** Only half of them ever
-dove for the dig (`RAID_FRAC` 0.5), and the ones that did were being moved by
-`prism-v5.js` writing `x/y` directly **while `Enemy.update()` steered the same ship
-toward the pilot in the same frame** — two systems, one position, so raiders crabbed
-sideways and stalled between the two targets. Every non-boss hostile is now bound to a
-miner through the engine's own `raidTarget` hook, the same one Home Citadel and the
-cargo escort use, so seek, hold-at-range, contact and fire gating all run against the
-rig; `isRaider` also stops their standoff volleys at the pilot. Damage to a rig stays
-in `prism-v5.js` (the engine has no notion of miner HP, and `RAID_DPS`/`RAID_HP_CAP`
-are what stop a deep-zone hostile one-shotting one). Targets are re-bound each frame
-and released when the run ends, so a finished field hands its survivors back to the
-pilot. **Bosses still come for you.**
-
-Carries builds 583–673.
-
-### What changed in 670 — player bug reports
-
-Ten reports, plus a Kaevith rarity review. All client-side.
-
-- **The moon colony paid less than the collect card promised.** `accrueMoon()`
-  recomputes `stored` from scratch on every accrual — and the screen's own
-  `pending()` accrues on every render — so a raid outcome written INTO `stored`
-  survived exactly one tick. A repelled raid showed its +15% in the card and then
-  paid the base amount: **389k shown, 338k banked (389 / 1.15), on top of the 7.8k
-  already held — the reported 347k almost exactly.** Raid outcomes are now banked in
-  `mm.radj` and applied at accrual time, cleared when you collect, so what the card
-  shows is what the shipment pays. A breach skim is equally permanent now (it used to
-  be refunded by the next tick). Prism can also no longer be dropped on the floor:
-  the ingot bag is created on demand instead of being skipped when absent.
-- **Fighter bays appeared in cannon slots on most hulls.** Registering `fighter` in
-  `WEAPON_CLASSES` put it in the modulus of the legacy-cannon hash, so **1 in 7 old
-  cannons resolved to "Fighter Bay"** — name, glyph, colour and projectile. The hash
-  now runs over cannon classes only, and a cannon saved with a fighter `wclass` (bays
-  were briefly cannon-slot items) falls through to it rather than reading as a launch
-  rack. Which slot an item sits in decides what it is.
-- **The Starforge offered a Fighter Bay hardpoint on a Dreadnought.** `slotKeys()`
-  listed every key present in `state.equipped`, and that map keeps keys from hulls you
-  flew before. It reads `CONFIG.shipSlots()` now — the same layout the Hero screen and
-  `computeStats` use — so the forge cannot show a hardpoint the hull does not have.
-- **Both badge counts were wrong, and they disagreed with each other.** The header
-  printed `totalClaimed()` (all 1,110 rendered badges) over a hardcoded 1,000, while
-  the Titan Sina card printed the original-ladder count over the 1,110 total: 826/1000
-  beside 803/1110, neither being the number of badges held. **By request the capstone
-  now counts every rendered badge — claim all 1,110 and the ship is granted** — and one
-  count, one whole, is printed everywhere.
-- **A completed mission or badge did not light its tab.** The red dot was written only
-  by `tabsHtml()`, i.e. only when the VISIBLE board's structure changed, so a weekly
-  order completing while you stood on the daily board left that tab bare until you
-  tapped it. `patchTabs()` now writes all four dots in place on every tick and on
-  every badge sync.
-- **The Badges tab flickered.** `ACHIEVE.html()` is 1,110 badge cards plus the Titan
-  Sina hero image, and the 1s tick re-`innerHTML`'d all of it. It now has the same
-  contract the mission boards have had: `sig()` rebuilds only when the ladder's
-  structure moves, `patch()` writes the moving numbers into the live nodes.
-- **Autopilot sometimes would not fly.** With an unreachable hostile (outside the world
-  box) as the nearest enemy, the operator steered to a **dead stop and returned, every
-  tick**, for as long as it stayed nearest — which is why flying manually and re-arming
-  cleared it. It now takes the nearest REACHABLE hostile, and with none falls through to
-  the spawn-node drift instead of parking.
-- **Bots claimed tiles the moment you abandoned them.** The rival sim treats a shielded
-  tile as off the board, but abandoning CLEARED the shield — so a bot could take the
-  tile on the next 6-minute galaxy tick, or on the next load through `seedRivals()`.
-  A released tile now carries 24h of neutral grace that blocks the **sim only**: you and
-  real players can retake it immediately.
-- **Nanocore buffs retuned.** Damage Reduction 1–5% → **0.1–0.5%** (it is a divisor on
-  every hit taken and stacks with the Pilot Tree's Armor, which pays 0.5% a node, so a
-  five-slot Legendary was handing out up to 25% flat mitigation). XP Gain floor 2% → 1%,
-  so the range has room for a genuinely bad roll. Live DR rolls are rescaled /10 by
-  `n.drFix` and keep their relative quality — a god 5% roll is still a god 0.5% roll.
-- **The PRO chip opens Pro.** It sits inside the VIP badge but it is a different
-  product, and tapping it opened the VIP ladder — there was no route in the game to what
-  Pro actually includes. VIP pill → VIP sheet, PRO chip → the Pro sheet.
-- **The Pilot Tree was drowning in crit chance.** `critChance` was one of eight
-  equally-likely offense rolls paying 1.5–3% a node, while a whole Primordial fitting's
-  crit line is ~0.1%. Three in four crit rolls now become another offense stat; ring 1 is
-  exempt because those six nodes are the curated opening. Magnitudes are untouched, so no
-  node you already own loses value.
-
-### Kaevith Incursion — rarity reviewed (670)
-
-**A winning roll threw.** `xenTechRoll()` returned `pity: pity` with `pity` never
-declared — a `ReferenceError` on the one path that matters. The hull was granted and
-saved a line earlier, so the ship arrived silently while the caller's claim handling
-died with the throw: **winning the event looked like nothing happening.**
-
-**And the odds were too thin to reach.** The Aug 2026 pass cut them 5× (1%/10% →
-0.2%/2%) and removed the pity floor at the same time. At 0.2% a pilot working the inner
-rings could clear invaded zone after invaded zone for weeks and see nothing.
-
-Rather than lifting the base rate back to where hulls stopped reading as prizes, **the
-drought now pays**: base odds go to 0.8% (ring 1) → 5% (rim), and every invaded clear
-that misses raises the next roll by 40% of base, capped at 12× (and 75% absolute). A win
-resets it. Ring 1 tops out near 9.6%, the rim near 60%. `state.xenDry` already existed
-as a debug counter and is the escalator's memory. The tile sheet reads the effective
-number through `GAME.xenChanceNow()`, so the odds shown are the odds rolled.
-
-### What changed in 669 — player bug reports
-
-Six reports from the Discord, all fixed. No balance changes, no new content.
-
-- **Weekly mission "Logistics Run" could never progress.** It counts delivered
-  manifests off `state.lifeStats.cargo` — a counter nothing in the game had ever
-  written, so the mission sat at 0/3 forever while the player kept delivering.
-  Cargo Defense now increments it on every successful run. Existing players get a
-  one-time backfill from their career win count, and the Tour's live weekly
-  baseline is raised by the same amount so the seed cannot hand out a completion
-  nobody earned.
-
-- **The Ember Choir was appearing in Prism Mining fields.** A prism run borrows
-  the Zone Grind arena and its enemy stream, and `isEmberBossPending()` only
-  asked "Zone Grind, no system" — so a Choir-claimed zone reskinned the field boss
-  in the middle of a dig. The Choir belongs to zone grinding proper; while a prism
-  run is live the zone now fields its ordinary garrison.
-
-- **LootCoins read as an abbreviation.** The HUD chip ran the balance through the
-  K/M/B ladder that bulk resources use. LootCoins are spent in exact amounts
-  against exact prices, so the balance now prints in full with separators.
-
-- **Kaevith and Choir popups fired with nothing to win.** Killing a Choir hull you
-  already own, or clearing an alien zone with all five Kaevith hulls in the
-  hangar, still opened a result card to report a roll that could not pay out. Both
-  rolls now return nothing and no card is built.
-
-- **Home Citadel frame rate.** `boot()` runs on DOMContentLoaded and again on a
-  1.2s safety timer; the HUD tick had no guard, so every session carried two
-  one-second intervals. Guarded. The fort's render pass also ignored the LOD
-  governor that the rest of the game sheds on — `RENDER.getLOD()` is now exposed
-  and the citadel consults it, dropping canvas text, the patrol ring, cargo drones
-  and ambient sparks under load. Towers and the fx pass never shed: the defense
-  itself always resolves at full fidelity.
-
-- **Tour shards for hulls the Exchange cannot redeem.** The shard pool was a
-  hand-kept exclusion list that had drifted from the Shipworks roster, so shards
-  dropped toward ten hulls with no part requirement — no Inventory row, no
-  Exchange row, no ASSEMBLE. The pool now reads `SHIPWORKS.buildableKeys()`
-  directly, so the two lists cannot disagree. Shards already banked against those
-  hulls are bought back once at the hull's own salvage rate, with a toast naming
-  what was converted; the orphaned keys are cleared from the save.
-
-### What changed in 666
-
-- **EVERY CARRIER IN THE FLEET FLIES ITS WING NOW.** A wing belonged to the
-  flagship alone — capacity, bays and rig all read `state.ship` — so a Corvus
-  sitting in the fleet fed its stat lines into the hull total and then flew
-  nothing. Eleven bays of visible hardware, no craft on screen. Escort carriers
-  launch, orbit, target independently and return exactly as the flagship's do,
-  **from their own hull position**, out of their **own stowed fittings**
-  (`state.fittings[key]`) — so upgrading a benched carrier's bays upgrades that
-  carrier's craft.
-- **Escort strikes are paid at the fleet share (30%).** An escort's hull mods and
-  stowed gear already reach `rt.stats` at `C.FLEET.statShare`, so a full-price
-  escort wing would be the same hardware counted twice over. The share keeps a
-  benched carrier worth fielding without letting a bench of them out-damage the
-  hull actually being flown.
-- **Ship Score counts them, each at its share.** `dpsRatio()` sums every wing
-  rather than the flagship's — leaving escort wings out would have repeated, one
-  level down in the fleet, the exact fault that function exists to fix: a hull
-  scored as though its bays were empty. Verified: a cannon Dreadnought flying a
-  Vanguard + Corvus bench reports `wingRatio` **1.238**, which is
-  `((4/4 + 11/4) × 1.10) × 0.30` to the third decimal.
-- Per-wing normalisation, launch fan and stagger are all measured **within** the
-  craft's own wing, so one carrier's loadout never rescales another's and an
-  escort's craft do not fan out at an angle derived from the flagship's bay count.
-
-### What changed in 664
-
-- **GOOGLE SIGN-IN NO LONGER PUBLISHES YOUR REAL NAME.** `finalizeCloud()` resolved
-  the pilot name as `meta.name || meta.full_name || meta.user_name || <email local
-  part>` — the person's actual first and last name, or `firstname.lastname` from the
-  address. The pilot name is PUBLIC: leaderboards, territory claims, battle reports,
-  the Discord feed. Signing in with Google published your legal name to a game
-  channel. Provider fields and the email are now never read.
-- **New accounts get a generated callsign** — `Voidhawk-417`, `Emberfang-238` —
-  derived deterministically from the account id, so one account reads as the same
-  pilot on every device before it is renamed (a per-device random name would make
-  one player look like several mid-sync). The first-login gate then asks them to
-  choose their own, with the field starting EMPTY so it asks a real question rather
-  than inviting a blind Enter, and the copy states we never use a real name.
-- **Names already leaked are scrubbed.** Established accounts are carrying the
-  adopted Google name in the save and on the leaderboard. Where the stored name
-  matches what the provider calls that person AND they never chose it themselves
-  (no `lf_name`, the key `setName()` writes), it was adopted rather than picked: it
-  is replaced with a callsign, the leaderboard row is overwritten, and the naming
-  prompt is forced via a `csTemp` flag that overrides the veteran-save skip. A name
-  the player DID set is left untouched, even if it is their real one — that was
-  their decision to make.
-
-### What changed in 662
-
-- **MOON COLONY WAS BEING WIPED BY ONE LINE IN THE SAVE MERGE, AND PLAYERS ARE
-  GETTING THEIR COLONIES BACK.** `mergeSaves()` folded each colony's building map
-  with `Math.max(bb[k] | 0, ob[k] | 0)` — but a building is an OBJECT,
-  `{ kind, lv }`, and `{...} | 0` is `0`. Every structure in every colony became
-  the number zero on any conflicted login. **This is both Moon Colony reports from
-  a single line:** before build 653 a numeric entry threw inside render()
-  (`B[undefined].ic`) and the screen went blank; 653's shape-repair pass then
-  correctly deleted the junk, which converted the blank screen into a wiped colony.
-  The merge now folds the objects — higher level wins, `kind` is never lost, and a
-  building repaired on either device counts as repaired.
-- **Restitution, two tiers, at most once per colony.** `account.js` stashes the
-  untouched cloud copy at `lf-backup::<uid>` before every merge, so where that
-  snapshot survives the real colony is restored **slot for slot at its true
-  levels** — exactly as it was built. Where no snapshot survives, **we do not invent
-  a colony.** An earlier cut of this filled the empty slots with plausible mines and
-  it read as precisely what it was: random structures the player never placed, at
-  levels they never chose. The slots are now left EMPTY and the **build cost is
-  refunded** instead — priced off a baseline Ore Mine at a level derived from
-  terraform depth (the one development signal the corruption left intact) — so the
-  pilot rebuilds their own layout with their own choices, for free. Sectors and
-  terraforming were never affected. The in-game mail itemises the refund and says
-  plainly why it is a refund rather than a restore.
-
-### What changed in 661
-
-- **GAME SPEED IS HONEST AGAIN — the recurring "AI broke the speed" regression,
-  fixed at the root.** A 2m30s Voidmaw run was finishing in 1m18s at 5x. Two
-  separate places were throwing sim time away: `dt` was clamped to 50ms (so a
-  phone holding 12fps simulated 0.25s per 0.083s frame = 3x, not 5x), and the
-  sub-step CEILING (3 or 6) capped it a second time. The 651 "debt bank" did not
-  help — it only repaid on a frame FASTER than the cap, and under sustained load
-  there is no such frame, so the debt pinned at its ceiling and the overrun was
-  deleted regardless. There is no bookkeeping now: the frame's REAL elapsed time
-  is always simulated, sub-steps absorb it (ceiling 16, so long frames stay
-  granular), and the only bound is a genuine 0.25s stall boundary that
-  `computeOffline()` already owns. 5x now means 5x at any frame rate.
-- **Voidmaw black holes and their red telegraph are visible again.** The wells
-  painted BEFORE the flagship, so on a capital hull — the Voidmaw draws at 2.8x —
-  the ship's own aura covered them completely. Hazards now draw in a pass ABOVE
-  the whole fleet: anything you have to read and avoid is painted last.
-- **Capital-hull auras no longer glare over the arena.** Halo radius keyed off the
-  hull footprint (651) so big sprites keep their glow clear of the art, but it was
-  unbounded — at 2.8-5.2x it grew into screen-filling light. Bounded at 96px local
-  radius, with the prism halo's bloom scaled back to match.
-
-### What changed in 660
-
-- **Shard crates are weighted by the ladder now.** The hull pick was uniform, so
-  an apex Titan Sina shard was as common as a Frigate shard. Weight decays 18%
-  per rung (floor 1.5): early hulls dominate the haul, an apex shard is ~0.3% a
-  crate.
-
-### What changed in 659
-
-- **TOUR OF DUTY IS LAUNCHED — for real this time.** All four beta doors are gone:
-  the Command card shows for everyone from Level 1 (no level lock), the screen
-  opens, its hulls buy, the toast speaks. No code needed; `LF-TOUR-BETA-ACCESS`
-  now redeems as a harmless no-op. Level price stands at 3,000 ◈, prorated.
-- **Tour progress is ascension-proof and merge-proof** (verified, not new code):
-  `tour` and `tourBeta` sit in ASC_KEEP so a Pilot Ascension carries the whole
-  pass across untouched, and the account merge unions xp/own/claim so no device
-  or relog can regress it.
-
-### What changed in 656
-
-- **TOUR OF DUTY IS BACK BEHIND THE BETA GATE** — it was launched in 655 and
-  re-armed the same day for more testing. All four doors read `state.tourBeta`
-  again; `LF-TOUR-BETA-ACCESS` opens them. Season XP still accrues for everyone
-  while hidden, so nobody arrives at launch behind.
-- **TOUR.setXp(n) console repair + XP correction epoch.** Hard-sets season XP,
-  stamps `tour.xf`, drops claim marks above the new level, clamps the overtime
-  counter, saves and pushes. The merge honours the NEWER `xf` outright (xp, ov,
-  claims), so a downward correction survives conflicted logins instead of the
-  old "higher xp wins" rule resurrecting leaked test XP.
-- **RENDER LOD GOVERNOR — the ×10 cargo-run slideshow.** Three levels driven by
-  smoothed frame time (0 full · 1 trimmed · 2 survival), one step per 0.8s so it
-  never flaps. What each level sheds, in cost order: the **full-canvas CSS
-  grade** (saturate/contrast/brightness recomposited every frame at device
-  resolution — the biggest fixed cost on the screen), the wide under-pass stroke
-  of every projectile trail, then at survival: single-stroke trails, no bloom
-  halos, no lightning shadowBlur, crit-only floats, and the vignette overlay.
-  Float spawn cadence and caps tighten under load. Everything walks back up the
-  moment frames recover. The simulation is never touched — only paint.
-
-### What changed in 654
-
-- **ONE MAP ON EVERY DEVICE.** The arena was sized as `viewport × zone multiplier`,
-  so the world was as big as the screen it was drawn on — while every gameplay
-  distance in the engine is a fixed number of world pixels (fire range 250, loot
-  magnet 620, spawn spreads, beacon rings). A phone therefore got a world a third
-  the width of a desktop one with the same ranges laid over it: hostiles spawned
-  inside magnet range so loot arrived without moving, the same ~55 spawn nodes
-  packed into a quarter of the area, and kills per minute ran far higher than on
-  desktop. It was not a look-and-feel difference, it was a different farming rate.
-  The world is now authored against one reference viewport and has the **same area
-  everywhere**, laid out at the screen's own aspect ratio; zoom carries the
-  difference, eased out on small screens and bounded so sprites stay legible.
-  Desktop is the reference, so desktop is unchanged.
-- **A won citadel is now inherited at ONE choke point.** Every path that flips a
-  tile — ordinary siege, clone-fleet turf war, Void assault, razing claim — ends
-  in `captureSystem()`, and that is where the fortress is inherited now. It used
-  to be inherited only in `captureCitadel()`, so a tile won through the generic
-  siege path (the common case in My Galaxy: the server row carries the rival's
-  citadel but the local waves object never set `playerCit`) handed the winner a
-  plain tile and deleted a Rank 5 fortress. Winning a citadel means owning that
-  citadel, at the rank it was built to. Captured fortresses ignore the build cap.
-- **Moon Colony can no longer show a blank screen.** One bad field anywhere in
-  `state.moon` threw inside the renderer and the screen painted nothing. A save
-  carrying a building `kind` a later build renamed threw on **every** render,
-  which is why it hit established colonies and never fresh ones. Every field the
-  renderer reads is now normalised once before it is read (unknown structures are
-  dropped, indexes clamped, missing stores rebuilt), the diorama can't take the
-  screen with it, and a failed render shows a readable card with the reason.
-- **Damage reduction now actually applies, and is capped at 20%.** It was applied
-  BEFORE the 22%-of-max-hull one-shot clamp, so at endgame — where hits land far
-  above that — the clamp threw the reduced number away and re-imposed the same
-  22%: DR measured as zero, exactly as reported. It now reduces the clamped
-  figure, so it always removes its full share of what you actually take. Ceiling
-  is 20% (`DR_CAP_PCT`), and Pilot Tree / skill nodes drop to **0.5% per node**
-  (Armor and Damage Reduction 1.5–3% → 0.5%, Aegis Lattice 6% → 0.5%, Resolve
-  1% → 0.5%).
-- **XP RATE: the stack was right, one screen was lying.** Ship Ascension's Combat
-  Computer still advertised +0.5% XP per level after the August cut to +0.35%, so
-  a pilot with 175 levels counted 87.5% and was paid 61.25% — the whole 26.3-point
-  gap in the 658.1% vs 631.8% report. The screen now quotes what it pays.
-- **Kaevith copy matches the hulls.** The Incursion briefing computed its stack
-  total from the roster instead of the retired `+250%` (it is **+160%**), the
-  Splinter's blurb quoted 10% for an 8% hull, and the Godshard no longer claims to
-  double XP — it says +64%.
-- **TOUR OF DUTY — buy the level you are standing in.** 3,000 ◈ for a full level,
-  **prorated against progress already made**: at 40/100 XP the rest costs 1,800 ◈.
-  Bought XP goes through the same award path as earned XP.
-- **TOUR OF DUTY — past 100 it is "100+" and the crates stack.** Levels 101–125
-  were 25 ladder rows and then a hard stop, which capped a pilot who bought levels
-  at 25 crates no matter what they spent. Now every 100 XP past 100 is one more
-  fitting crate, they stack, they are opened in one tap, and there is no ceiling.
-  The season's own XP still funds exactly 25 of them (12,560 earned vs 12,400 for
-  level 125), so nothing about earning the pass changed.
-- **CARGO DEFENSE: frame rate is now the first constraint.** The run held up to
-  ~42 live hostiles, 26 collapsing rings and a dozen anomalies at up to 5× — all
-  numbers set for fairness, none of which asked whether the device could draw
-  them. The run now measures its own frame time and holds a load level (1.0 →
-  0.35) that scales the hostile ceiling, ring cap and anomaly cap live, walking
-  down on slow frames and back up on recovery. Alongside it: sub-steps capped at 3
-  during a run (it is hand-flown, so latency beats sub-step smoothness), the
-  particle budget halved, and the portrait canvas dropped to 12Hz. The run still
-  lasts ten minutes and the boss still arrives — nothing is skipped.
-- **The battle screen survives tabbing away.** iOS Safari hands the canvas back
-  with its CSS box intact but the drawing buffer still at the size it had while
-  hidden, and it changes the device pixel ratio under us; either one painted the
-  arena into one small corner and left the rest of the element blank. The fit
-  guard now checks the **backing store and the DPR**, not just the CSS box,
-  re-fits on `visualViewport` / `pageshow` / rotation, refuses to re-fit to 0×0
-  while hidden, and the frame clears to deep space instead of transparent (which
-  is what showed as white).
-- **XP and combat no longer lose time off the battle screen.** The 50ms frame
-  clamp was throwing the overrun away, so every long frame — a menu doing DOM
-  work, iOS at 30fps, a hot phone — silently deleted sim time, multiplied by five
-  at 5×. The overrun is now banked as debt and paid back, bounded at 1.5s.
-- **Discord shows art for EVERY hull.** Only Kaevith hulls ever had a sprite,
-  because `log_xen_hull()` was the only acquisition anyone reported to the server
-  and it whitelists the five xen keys; the leaderboard-count route needs art
-  columns that competing `lb_upsert` overloads keep dropping. `log_hull()` is the
-  same reliable path widened to every hull, reported from the one choke point both
-  acquisition paths already call. Idempotent per pilot per hull, xen keys refused
-  (they keep their louder card), and the count-based card stands down for anyone
-  the reliable path covered.
-- **Prism aura is visible on a Dreadnaught.** Every halo sized itself from hull
-  tier alone, so on a sprite drawn 2–3× larger the ring sat inside the artwork.
-  Radii now take the larger of the tier figure and the hull's real footprint.
-- **Coupon redemption marks now survive save merges** — `redeemedCodes` joins the
-  merge union (it was decided wholesale by the base pick, so a stale copy winning
-  a conflicted login re-armed every one-time code, including this giveaway).
-- **New coupon: `LF-DISCORD-UNVEIL`** — +1,000 ◈, one redemption per account, for
-  the redesigned Discord server.
+- **Three ladders are specified but not built** — Home Defense (deepest wave),
+  Exploration (expeditions completed) and King of the Hill (daily + lifetime wins).
+  `rank-rewards.js` already carries the mail copy for all three (`hcwave`, `expo`,
+  `koth`); the boards themselves are not in `ranks-boards.js` yet. Harmless — the
+  copy falls back — but the ladders do not exist.
+- **Citadel abandon timer** — the 24-hour lockout on re-claiming an abandoned
+  citadel is not implemented.
+- **`restoreEscorts` skips silently** when the player has refilled the formation
+  themselves. Deliberate (their choice outranks the bookkeeping) but unannounced.
+- **22 orphaned files** in `js/`+`css/` that `game.html` never loads ship in this
+  folder as dead weight (`lf-*.b6/b7`, `sim-*`, `tweaks.js`, `showcase.js`,
+  `features-data.js`, `css/features.css`).
 
 ---
 

@@ -769,6 +769,213 @@
         for (const k in other.achieve[f]) base.achieve[f][k] = Math.max(base.achieve[f][k] | 0, other.achieve[f][k] | 0);
       });
     }
+    // ---- FLEET EXPLORATION (`expo`). Named here for the standing reason: a
+    // system absent from this union is decided wholesale by the base pick. An
+    // expedition is up to 24 REAL HOURS long, so losing the base pick on the
+    // wrong device would delete a day of a hull's time and the fuel that bought
+    // it — and the hull ranks under it are permanent progression that nothing in
+    // saveWeight() is large enough to defend.
+    //
+    // NOT EPOCH-GUARDED, deliberately: neither pilot ascension nor the epoch
+    // reset touches `expo` (it is not in the PASC_EPOCH migration's clear list
+    // and pilotAscend() never assigns it), so unioning it cannot undo a reset —
+    // the test every entry in this block has to pass.
+    //
+    // `act` IS THE DANGEROUS FIELD, because collecting one PAYS OUT. It is
+    // unioned by id with done-wins: if EITHER copy saw an expedition collected
+    // or recalled, the merged copy is collected too. A lost expedition is a bad
+    // day; a resurrected one is a repeatable gold, ore and ◇ core press.
+    if (other.expo) {
+      const bx = (base.expo = base.expo || { v: 1 });
+      const ox = other.expo;
+      bx.salt = bx.salt || ox.salt;
+      // lifetime counters only ever rise
+      bx.log = bx.log || {}; const ol = ox.log || {};
+      bx.log.done = Math.max(bx.log.done | 0, ol.done | 0);
+      bx.log.best = Math.max(bx.log.best | 0, ol.best | 0);
+      // per-hull expedition record: XP, rank and run count are earned and
+      // monotonic. DAMAGE IS NOT UNIONED — it is a live repair clock owned by
+      // one timeline, and maxing it would re-break a hull that already healed.
+      if (ox.hulls) {
+        bx.hulls = bx.hulls || {};
+        for (const k in ox.hulls) {
+          const o = ox.hulls[k] || {}, b = (bx.hulls[k] = bx.hulls[k] || {});
+          b.xp = Math.max(b.xp | 0, o.xp | 0);
+          b.rank = Math.max(b.rank | 0, o.rank | 0);
+          b.runs = Math.max(b.runs | 0, o.runs | 0);
+        }
+      }
+      // in-flight expeditions, unioned by id — done/recalled wins on either side
+      if (Array.isArray(ox.act)) {
+        const seen = {};
+        bx.act = Array.isArray(bx.act) ? bx.act : [];
+        bx.act.forEach((a) => { if (a && a.id) seen[a.id] = a; });
+        ox.act.forEach((a) => {
+          if (!a || !a.id) return;
+          const cur = seen[a.id];
+          if (!cur) { bx.act.push(a); seen[a.id] = a; return; }
+          if (a.done) cur.done = 1;
+          if (a.recalled) cur.recalled = 1;
+          cur.mailed = cur.mailed || a.mailed;
+        });
+        // an uncollected expedition can never outlive its own landing by much;
+        // keep the ledger bounded the same way collect() does
+        const live = bx.act.filter((a) => !a.done), old = bx.act.filter((a) => a.done);
+        bx.act = live.concat(old.slice(-6));
+      }
+      // BOARD CONTRACTS ALREADY TAKEN. `taken` is what stops one mission being
+      // launched twice; it is keyed by board window, so unioning it is safe and
+      // the stale window's marks are dropped by board() on the next rotation.
+      if (ox.taken) {
+        bx.taken = bx.taken || {};
+        for (const k in ox.taken) bx.taken[k] = 1;
+      }
+      // the board itself belongs to whichever copy is on the current window —
+      // board() regenerates it deterministically anyway, so never union it
+    }
+    // ---- KING OF THE HILL (`koth`). The LADDER is server-owned, so almost
+    // nothing here matters across devices — except `pend`, the kills counted
+    // locally that have not been acknowledged by koth_bump() yet. Losing the
+    // base pick with a queued delta on the losing copy silently eats kills out
+    // of a live race, so `pend` takes the HIGHER value and `ack` follows the
+    // server's own high-water mark. Everything else is per-day notification
+    // bookkeeping and is allowed to belong to the base copy.
+    //
+    // Not epoch-guarded: the event is a daily race that no reset touches, and
+    // `koth` is never cleared by pilot ascension.
+    if (other.koth && base.koth && (other.koth.day | 0) === (base.koth.day | 0)) {
+      const bk = base.koth, ok = other.koth;
+      bk.ack = Math.max(bk.ack | 0, ok.ack | 0);
+      bk.pend = Math.max(bk.pend | 0, ok.pend | 0);
+      bk.best = Math.max(bk.best | 0, ok.best | 0);
+      bk.entered = bk.entered || ok.entered;
+      // an alert that already fired on one device must not fire again on the other
+      ['wasKing', 'top5', 'h1', 'm10'].forEach((f) => { bk[f] = bk[f] || ok[f]; });
+      // THE REPLAY COUNTER MUST NEVER GO BACKWARDS ACROSS A MERGE.
+      // koth_bump refuses any seq at or below the last one it accepted. If a
+      // merge handed the player the LOWER of two counters, every submission for
+      // the rest of the day would be answered as a replay. Max-wins, and any
+      // in-flight marker is dropped: whatever call it belonged to died with the
+      // session that started it.
+      bk.seq = Math.max(bk.seq | 0, ok.seq | 0);
+      bk.inflight = 0;
+    } else if (other.koth && !base.koth) {
+      base.koth = other.koth;
+      if (base.koth) base.koth.inflight = 0;
+    }
+    // =========================================================================
+    // ADDITIVE ENTITLEMENTS — things that can only ever be ACQUIRED
+    // =========================================================================
+    // The August 2026 wipe reports (colony, Voidmaw, "currency randomly gone")
+    // all trace to the same structural fact: this function names ~35 fields, and
+    // ANY field it does not name is decided wholesale by the base pick. The
+    // losing copy's version is discarded silently.
+    //
+    // The fields below are the subset where a union is provably safe, because
+    // they only ever move in one direction — you acquire a blueprint, you buy an
+    // inventory slot, you accept a waiver. None of them is ever spent, sold or
+    // consumed, so taking the union can only give a player something they really
+    // earned, never something they already used.
+    //
+    // WHAT IS DELIBERATELY *NOT* HERE: gold, credits, resources, dreadCores,
+    // prismIngots, inventory, equipped and fittings. Those are SPENDABLE, and
+    // there is no correct union for two divergent balances. Max-wins refunds
+    // whatever the other device spent (buy a hull on the phone, merge with the
+    // tablet's older copy, keep both the hull and the gold — an infinite press).
+    // Base-wins loses genuinely earned currency. The honest answer is that the
+    // base pick has to be right, and when it is wrong the loss must be
+    // RECOVERABLE — which is what the merge receipt below exists for.
+    //
+    // PURCHASES ARE THE ONE THING THAT MUST NEVER BE LOST. Real money and
+    // LootCoins were spent; a bad base pick erasing them is a refund request,
+    // not a bug report. Unguarded by epoch: no reset revokes a purchase.
+    if (other.purchases) {
+      base.purchases = base.purchases || {};
+      for (const k in other.purchases) {
+        const o = other.purchases[k], b = base.purchases[k];
+        if (b == null) { base.purchases[k] = o; continue; }
+        if (typeof o === 'number' && typeof b === 'number') base.purchases[k] = Math.max(b, o);
+        else base.purchases[k] = b || o;
+      }
+    }
+    // Bought with real currency, only ever increases.
+    base.invSlotsBought = Math.max(base.invSlotsBought | 0, other.invSlotsBought | 0);
+    // ONE-WAY LATCHES. Every one of these is "this account has been granted X"
+    // and nothing in the game turns them back off, so OR-ing them can only
+    // preserve an entitlement the player already holds.
+    ['flightWaiver', 'unlimited', 'discordJoin', 'nameSet', 'dreadFirstKill', 'embFound',
+     'tourBeta', 'lv100Warned', 'deathExplained', 'capNotified'].forEach((f) => {
+      if (other[f] && !base[f]) base[f] = other[f];
+    });
+    // BLUEPRINTS — recovered schematics, never consumed on use. Epoch-guarded
+    // only because the reset's clear list has changed before and a blueprint is
+    // cheap to re-earn but expensive to wrongly restore across a wipe.
+    if (el === ec && other.blueprints) {
+      base.blueprints = base.blueprints || {};
+      for (const k in other.blueprints) {
+        const o = other.blueprints[k], b = base.blueprints[k];
+        base.blueprints[k] = (typeof o === 'number' && typeof b === 'number') ? Math.max(b, o) : (b || o);
+      }
+    }
+    // CASINO — lifetime records and jackpot history, not a balance.
+    if (other.casino && base.casino) {
+      ['wins', 'best', 'jackpots', 'spins'].forEach((f) => {
+        if (typeof other.casino[f] === 'number') base.casino[f] = Math.max(base.casino[f] | 0, other.casino[f] | 0);
+      });
+    }
+
+    // =========================================================================
+    // MERGE RECEIPT — make a bad pick DIAGNOSABLE AND REPAIRABLE
+    // =========================================================================
+    // Every wipe report so far has been unfalsifiable after the fact: by the
+    // time a player says "my gold is gone", the copy that held it is overwritten
+    // and there is no record of what the merge chose or what it discarded. That
+    // is why the Voidmaw shard repair could only reach players whose device
+    // snapshots happened to survive.
+    //
+    // This writes down what the losing copy was carrying, every time a merge
+    // resolves a real conflict. It grants nothing and changes no balance — it is
+    // purely a black box. When a player reports a wipe, the receipt says whether
+    // a merge caused it, which copy won, and exactly how much was on the copy
+    // that lost, so a grant can be sized from data instead of guessed.
+    //
+    // Bounded to the last 5 so it can never grow a save. Wrapped end to end: a
+    // receipt failing must never be able to fail a merge.
+    try {
+      const wallet = (s) => ({
+        gold: Math.round(Number(s.gold) || 0),
+        lc: Math.round(Number(s.credits) || 0),
+        fuel: Math.round(Number((s.resources || {}).fuel) || 0),
+        iron: Math.round(Number((s.resources || {}).iron) || 0),
+        plasma: Math.round(Number((s.resources || {}).plasma) || 0),
+        cores: Math.round(Number(s.dreadCores) || 0),
+        lv: s.level | 0,
+        stars: (s.pasc && (s.pasc.stars | 0)) || 0,
+        ep: pascEpoch(s),
+      });
+      const lost = wallet(other), kept = wallet(base);
+      // Only worth recording when the discarded copy actually held more of
+      // something spendable — an ordinary merge between a device and its own
+      // cloud copy is not an event.
+      const meaningful = lost.gold > kept.gold || lost.lc > kept.lc || lost.cores > kept.cores
+        || lost.fuel > kept.fuel || lost.iron > kept.iron || lost.plasma > kept.plasma;
+      if (meaningful) {
+        const log = Array.isArray(base.mergeLog) ? base.mergeLog : [];
+        log.push({ at: Date.now(), base: (base === local ? 'local' : 'cloud'), kept, lost });
+        base.mergeLog = log.slice(-5);
+      }
+      // THE RECEIPT HAS TO SURVIVE THE MERGE IT IS RECORDING. mergeLog was not
+      // in any union, so the losing copy's receipts were discarded by the very
+      // event they exist to document — and the copy that loses is the one whose
+      // history matters. Union both sides, de-duplicated on the timestamp.
+      if (Array.isArray(other.mergeLog) && other.mergeLog.length) {
+        const seenAt = {};
+        base.mergeLog = (base.mergeLog || []).concat(other.mergeLog)
+          .filter((r) => r && !seenAt[r.at] && (seenAt[r.at] = 1))
+          .sort((a, b) => (a.at | 0) - (b.at | 0))
+          .slice(-5);
+      }
+    } catch (e) { /* a receipt must never break a merge */ }
     // ---- TERRITORY — THE ONE UNION HERE THAT MUST BE EPOCH-GUARDED.
     // Tiles are unioned and a citadel is kept at its HIGHER rank, because a lost
     // merge could otherwise demolish a Rank 5 fortress — five build-and-rank-up
@@ -813,6 +1020,35 @@
       if (other.droneBays) {
         base.droneBays = base.droneBays || {};
         for (const k in other.droneBays) base.droneBays[k] = Math.max(base.droneBays[k] | 0, other.droneBays[k] | 0);
+      }
+      // ---- ABANDON LOCKOUTS. A PENALTY MUST SURVIVE THE MERGE THAT COULD ERASE
+      // IT. tileAband records the 24 hours a pilot is barred from re-taking a
+      // system they walked away from. Left out of this union it would be decided
+      // by the base pick like anything else unnamed — and a second device holding
+      // a pre-abandon copy would clear the lockout, which turns the merge itself
+      // into the exploit the lockout exists to close.
+      //
+      // LATEST EXPIRY WINS, never earliest: two devices disagreeing about a
+      // penalty resolve to the longer one. Expired entries are dropped rather
+      // than carried, so the map cannot grow without bound.
+      if (other.tileAband) {
+        const now = Date.now();
+        base.tileAband = base.tileAband || {};
+        for (const id in other.tileAband) {
+          const o = other.tileAband[id] | 0;
+          if (o > now) base.tileAband[id] = Math.max(base.tileAband[id] | 0, o);
+        }
+        for (const id in base.tileAband) if ((base.tileAband[id] | 0) <= now) delete base.tileAband[id];
+      }
+      // The neutral grace on a released tile is the same kind of fact, and the
+      // same reasoning applies — it just protects the tile rather than the pilot.
+      if (other.tileFree) {
+        const now2 = Date.now();
+        base.tileFree = base.tileFree || {};
+        for (const id in other.tileFree) {
+          const o = other.tileFree[id] | 0;
+          if (o > now2) base.tileFree[id] = Math.max(base.tileFree[id] | 0, o);
+        }
       }
     }
     // =========================================================================

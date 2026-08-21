@@ -42,7 +42,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 592;
+const FEED_VER = 677;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -112,6 +112,59 @@ const pickBy = <T>(seed: string, arr: T[]): T => arr[seedHash(seed) % arr.length
 const GIF_EVERY = 1;
 const gifFor = (kind: keyof typeof GIFS, seed: string) =>
   GIFS[kind] && GIFS[kind].length && seedHash('gif:' + seed) % GIF_EVERY === 0 ? pickBy(seed, GIFS[kind]) : null;
+
+// ---- 👑 KING OF THE HILL VOICE ----------------------------------------------
+// The daily kill race is the loudest thing in the game and the only event with a
+// hard 24-hour deadline, so it gets its own register: short, mean, and aimed at
+// dragging people back in. Picks are seeded from the day and the pilot name, so
+// a retried cron tick re-posts the identical line rather than rerolling.
+//
+// Two players trading #1 all afternoon must not turn the channel into a
+// scoreboard ticker — hence the cooldown, which the crown card checks BEFORE it
+// posts. The game itself shows the swap instantly; Discord waits.
+const KOTH_CROWN_COOLDOWN_MS = 30 * 60 * 1000;
+const KOTH_QUIPS: Record<string, string[]> = {
+  open: [
+    "🏁 Fresh hill. Fresh bodies. Nobody has killed anything yet — that is the most equal this leaderboard will be all day.",
+    "☠️ Twenty-four hours of Level 100 hostiles and absolutely nothing to show for it except a number. Perfect.",
+    "⚔️ The hill is empty. Someone is about to spend their entire evening making sure it stays theirs.",
+    "🕛 New race, clean board, zero excuses. Your build either kills fast or it does not.",
+    "💀 No XP. No loot. No resources. Just a number and the people trying to beat it.",
+  ],
+  crown: [
+    "💀 {a} just walked over {d} and planted a flag in the corpse. 🏴‍☠️",
+    "🚨 {d} held that crown for a while. {a} held it for less time and hit harder. 📉",
+    "👑 New management. {a} is on the hill and {d} is looking up at them.",
+    "⚡ {a} did not overtake {d} so much as drive straight through them.",
+    "🔥 {d} is now the second-best killer on this server, which is a very polite way of putting it.",
+    "🎯 {a} takes the hill. {d} takes notes.",
+  ],
+  close: [
+    "😰 Neither of these two has blinked in six hours and it shows.",
+    "⚔️ Whoever puts their phone down first loses. That is genuinely the whole strategy now.",
+    "🔥 This is no longer a leaderboard, it is a staring contest with guns.",
+    "🚨 One bad reload and the crown moves. That is how thin this is.",
+  ],
+  clock: [
+    "⏳ The hill does not care how tired you are.",
+    "📉 Every hour you are not killing, someone else is.",
+    "⚔️ Plenty of time to lose this. Plenty of time to take it.",
+    "🎯 The HP wall is brutal by now. Kills per minute is the only stat that matters.",
+  ],
+  last: [
+    "🚨 Ten minutes. Undock. Now.",
+    "💀 Whatever you are doing, it is less important than this.",
+    "⏱️ Ten minutes to change the name on the trophy.",
+    "🔥 Last call. The crown gets welded shut at the reset.",
+  ],
+  champ: [
+    "👑 {a} spent all day killing things for absolutely no material reward and won ten thousand Loot Coins doing it. Worth it.",
+    "🏆 {a} out-killed the entire server. Not out-lucked. Out-killed.",
+    "💀 Everyone else was farming. {a} was working.",
+    "⚔️ {a} takes the crown, the coins, and a permanent line in the Hall of Kings.",
+    "🥇 {a} found the HP wall, hit it repeatedly, and won.",
+  ],
+};
 
 // {a} attacker · {d} defender · {s} system · {n} count
 const QUIPS: Record<string, string[]> = {
@@ -1421,6 +1474,180 @@ Deno.serve(async (req) => {
         allowed_mentions: { parse: [] },
       });
     }
+  }
+
+  // ---- 👑 KING OF THE HILL ---------------------------------------------------
+  // The daily kill race. This is the loudest, most time-sensitive thing in the
+  // game — a 24-hour window with one prize — so it gets its own cursor, its own
+  // voice, and the leader's REAL HULL on every card.
+  //
+  // WHAT IT POSTS, AND NOTHING ELSE (spec §18):
+  //   race opens · the crown changes hands (30-min cooldown) · the race gets
+  //   close · 6h left · 1h left · 10 min left · the champion.
+  // Two players trading #1 every ninety seconds must never spam the channel, so
+  // the crown card is gated on a cooldown AND on the name actually changing.
+  {
+    const meta = seen.get('_meta:koth') || {};
+    const day = Math.floor(Date.now() / 86400000);
+    const endsAt = (day + 1) * 86400000;
+    const left = endsAt - Date.now();
+    const fresh = Number(meta.day) !== day;
+
+    const [board, hall] = await Promise.all([
+      db.from('koth_scores').select('user_id,name,kills,tier,ship,day')
+        .eq('day', day).gt('kills', 0).order('kills', { ascending: false }).limit(6),
+      db.from('koth_hall').select('day,name,kills,ship,tier,entrants')
+        .order('day', { ascending: false }).limit(1),
+    ]);
+    const rows = (board.error ? [] : (board.data || [])) as any[];
+    const lead = rows[0] || null;
+    const chase = rows[1] || null;
+    const next: Record<string, unknown> = {
+      day, leader: meta.leader ?? null, leaderAt: Number(meta.leaderAt) || 0,
+      opened: fresh ? 0 : (meta.opened || 0),
+      r6: fresh ? 0 : (meta.r6 || 0), r1: fresh ? 0 : (meta.r1 || 0),
+      r10: fresh ? 0 : (meta.r10 || 0), close: fresh ? 0 : (meta.close || 0),
+      hall: Number(meta.hall) || 0,
+    };
+    if (fresh) { next.leader = null; next.leaderAt = 0; }
+
+    // 1 — YESTERDAY'S CHAMPION. Read straight from koth_hall so the card only
+    // ever fires on a row koth_close() actually wrote — no double-crowning if a
+    // cron tick retries.
+    const champ = (hall.error ? null : (hall.data || [])[0]) as any;
+    if (champ && Number(champ.day) > Number(next.hall)) {
+      next.hall = Number(champ.day);
+      const cs = 'koth:champ:' + champ.day;
+      if (champ.name) {
+        await post({
+          content: `# 👑  KING OF THE HILL — CHAMPION\n-# ${champ.entrants || 0} operators entered. One walked out with the crown.`,
+          embeds: [{
+            color: COLOR.crown,
+            author: { name: '👑  THE CROWN IS CLAIMED' },
+            title: `👑  ${up(champ.name)}  ⚔  ${Number(champ.kills).toLocaleString()} KILLS`,
+            description:
+              pickBy(cs, KOTH_QUIPS.champ).replace('{a}', `**${champ.name}**`) +
+              `\n\n**kills** \`${Number(champ.kills).toLocaleString()}\`  ·  **tier reached** \`${champ.tier || 1}\`  ·  **field** \`${champ.entrants || 0}\`` +
+              `\n\n🪙 **10,000 Loot Coins awarded** — already in their mail.` +
+              `\n-# The crown is theirs… until the next race begins.`,
+            ...thumb(shipArt(champ.ship)),
+            image: { url: pickBy(cs, GIFS.victory) },
+          }],
+          allowed_mentions: { parse: [] },
+        });
+      }
+    }
+
+    // 2 — A NEW RACE HAS OPENED.
+    if (fresh && !next.opened) {
+      next.opened = 1;
+      await post({
+        content: `# 👑  KING OF THE HILL IS LIVE\n-# A new 24-hour kill race has begun. <t:${Math.floor(endsAt / 1000)}:R> on the clock.`,
+        embeds: [{
+          color: COLOR.crown,
+          author: { name: '⚔  24 HOURS. ONE KING.' },
+          title: '👑  THE HILL IS OPEN — TAKE IT',
+          description:
+            pickBy('koth:open:' + day, KOTH_QUIPS.open) +
+            '\n\n⚔️ Private PvE zone — nobody can touch you but the clock' +
+            '\n💀 Most kills wins. That is the whole game' +
+            '\n🚫 No XP · 🚫 No loot · 🚫 No resources' +
+            '\n🪙 **10,000 Loot Coins to #1**' +
+            '\n\n-# Level 100 hostiles to start. HP doubles every hundred kills after 1,200. Your build is the only thing that decides how far you get.',
+          image: { url: pickBy('koth:open:' + day, GIFS.owned) },
+        }],
+        allowed_mentions: { parse: [] },
+      });
+    }
+
+    // 3 — THE CROWN CHANGED HANDS. Cooldown-gated so a two-player slugfest does
+    // not turn the channel into a scoreboard ticker.
+    if (lead && lead.name && lead.name !== next.leader) {
+      const cool = Date.now() - Number(next.leaderAt) > KOTH_CROWN_COOLDOWN_MS;
+      const was = next.leader;
+      next.leader = lead.name;
+      if (cool && was) {
+        next.leaderAt = Date.now();
+        const cs = 'koth:crown:' + day + ':' + lead.name;
+        await post({
+          content: `# 👑  THE CROWN HAS CHANGED HANDS`,
+          embeds: [{
+            color: COLOR.steal,
+            author: { name: '⚔  NEW KING OF THE HILL' },
+            title: `👑  ${up(lead.name)} TAKES #1 — ${Number(lead.kills).toLocaleString()} KILLS`,
+            description:
+              pickBy(cs, KOTH_QUIPS.crown)
+                .replace('{a}', `**${lead.name}**`)
+                .replace('{d}', `**${was}**`) +
+              `\n\n👑 **${lead.name}** — \`${Number(lead.kills).toLocaleString()}\`` +
+              (chase ? `\n⚔️ ${chase.name} — \`${Number(chase.kills).toLocaleString()}\`` : '') +
+              `\n\n-# <t:${Math.floor(endsAt / 1000)}:R> left to take it back.`,
+            ...thumb(shipArt(lead.ship)),
+            image: { url: pickBy(cs, GIFS.owned) },
+          }],
+          allowed_mentions: { parse: [] },
+        });
+      } else if (!was) {
+        next.leaderAt = Date.now();
+      }
+    }
+
+    // 4 — IT IS CLOSE. Fires once per race, when the top two are within 5%.
+    if (!next.close && lead && chase && Number(lead.kills) > 40) {
+      const gap = Number(lead.kills) - Number(chase.kills);
+      if (gap > 0 && gap <= Number(lead.kills) * 0.05) {
+        next.close = 1;
+        await post({
+          content: `# 🚨  WE HAVE A RACE`,
+          embeds: [{
+            color: 0xff8a3d,
+            author: { name: '⚔  TOO CLOSE TO CALL' },
+            title: `🚨  ${gap.toLocaleString()} KILL${gap === 1 ? '' : 'S'} SEPARATE #1 AND #2`,
+            description:
+              pickBy('koth:close:' + day, KOTH_QUIPS.close) +
+              `\n\n👑 **${lead.name}** — \`${Number(lead.kills).toLocaleString()}\`` +
+              `\n⚔️ **${chase.name}** — \`${Number(chase.kills).toLocaleString()}\`` +
+              `\n\n-# Get back in there.`,
+            ...thumb(shipArt(lead.ship)),
+            image: { url: pickBy('koth:close:' + day, GIFS.fine) },
+          }],
+          allowed_mentions: { parse: [] },
+        });
+      }
+    }
+
+    // 5 — THE CLOCK. Three cards, each once, each louder than the last.
+    const marks: Array<[string, number, string, string, number]> = [
+      ['r6',  6 * 3600000, '⏰  6 HOURS LEFT',        'The Top 5 are still hunting.', 0xffcf4d],
+      ['r1',  1 * 3600000, '🚨  FINAL HOUR',          'Sixty minutes. Then the crown is locked.', 0xff8a3d],
+      ['r10', 10 * 60000,  '🚨🚨  10 MINUTES LEFT 🚨🚨', 'This is it.', 0xff3b6b],
+    ];
+    for (const [key, at, title, tail, color] of marks) {
+      if (next[key] || left > at || left <= 0) continue;
+      next[key] = 1;
+      const cs = 'koth:' + key + ':' + day;
+      const ladder = rows.slice(0, 3).map((r, i) =>
+        `${['👑', '⚔️', '🔥'][i]} **${r.name}** — \`${Number(r.kills).toLocaleString()}\``).join('\n');
+      const gap = lead && chase ? Number(lead.kills) - Number(chase.kills) : 0;
+      await post({
+        content: `# ${title}`,
+        embeds: [{
+          color,
+          author: { name: '👑  KING OF THE HILL' },
+          title: `${title} — 10,000 LOOT COINS ON THE LINE`,
+          description:
+            pickBy(cs, KOTH_QUIPS[key === 'r10' ? 'last' : 'clock']) +
+            (ladder ? `\n\n${ladder}` : '\n\n-# Nobody has logged a kill yet. The hill is empty.') +
+            (gap > 0 ? `\n\n**${gap.toLocaleString()}** kill${gap === 1 ? '' : 's'} separate first and second.` : '') +
+            `\n-# ${tail} Ends <t:${Math.floor(endsAt / 1000)}:R>.`,
+          ...thumb(shipArt(lead && lead.ship)),
+          ...(key === 'r10' ? { image: { url: pickBy(cs, GIFS.fine) } } : {}),
+        }],
+        allowed_mentions: { parse: [] },
+      });
+    }
+
+    snap.push({ kind: '_meta', ref: 'koth', data: next, updated_at: now });
   }
 
   // ---- SITUATION REPORT ------------------------------------------------------

@@ -160,6 +160,61 @@
       },
       empty: 'No badges claimed yet.',
     },
+    {
+      // HOME DEFENSE — the deepest wave the pilot is HOLDING. The Home Citadel
+      // never rolls a wave back on a breach (a breach damages the base and halts
+      // mining; the wave stands), so "holding" and "best" are the same number
+      // and the board can say the stronger of the two honestly.
+      id: 'hcwave', ic: '\u26e8', col: '#6fe0a0', label: 'HOME DEFENSE', sub: 'Deepest Wave',
+      sql: 'new-ladders.sql',
+      info: 'Ranked by the deepest Home Citadel wave you are holding. Every wave cleared raises passive production forever — this is the one board that shows whose base earns hardest. Ties break on fleet power.',
+      unit: 'WAVE',
+      metric: (p) => (p.hcwave | 0) * 1e15 + Math.min(1e15 - 1, p.power || 0),
+      fmt: (v, p) => String(p.hcwave | 0),
+      meta: (p) => {
+        const w = p.hcwave | 0;
+        const era = w >= 250 ? 'MYTHIC era' : w >= 100 ? 'LEGENDARY era · ×2 production' : w >= 50 ? 'EPIC era' : w >= 20 ? 'RARE raiders' : 'building up';
+        return (w ? era : 'No waves cleared') + ' · Lv ' + (p.level | 0);
+      },
+      empty: 'Nobody is holding a wave yet. Clear Wave 1 in the Home Citadel and you take this board outright.',
+    },
+    {
+      // EXPLORATION — counts DEBRIEFED expeditions only, so a fleet still in
+      // flight is not yet worth anything here and a recalled one never counts.
+      id: 'expo', ic: '\u25ce', col: '#7fe0ff', label: 'EXPLORATION', sub: 'Expeditions Flown',
+      sql: 'new-ladders.sql',
+      info: 'Fleet Exploration — expeditions completed and debriefed. Recalled runs do not count. Ties break on the strongest wing ever sent out.',
+      unit: 'FLOWN',
+      metric: (p) => (p.expo | 0) * 1e9 + Math.min(1e9 - 1, p.expo_best | 0),
+      fmt: (v, p) => fmt(p.expo | 0),
+      meta: (p) => ((p.expo_best | 0) ? 'best wing rating ' + (p.expo_best | 0) + ' · ' : '') + 'Lv ' + (p.level | 0),
+      empty: 'No expeditions flown yet. Launch one from Command ▸ Fleet Exploration.',
+    },
+    {
+      // KING OF THE HILL — the only board with two views, because the event has
+      // two honest answers to "who is winning". TODAY is the live race from
+      // koth_top(); CROWNS is the career record from koth_hall. Neither is
+      // published by the client — both are server-owned, so nothing here can be
+      // self-reported and no migration probe is needed.
+      id: 'koth', ic: '\u{1F451}', col: '#ffd24d', label: 'KING OF THE HILL', sub: 'Daily · Crowns',
+      sql: 'koth.sql',
+      info: 'The 24-hour kill race. TODAY is the live board and resets at 00:05 UTC; CROWNS counts days won for good. Ties on crowns break on total kills across winning days.',
+      unit: 'KILLS',
+      views: [
+        { id: 'day', label: 'TODAY', unit: 'KILLS' },
+        { id: 'hall', label: 'CROWNS', unit: 'WINS' },
+      ],
+      metric: (p) => (p.view === 'hall'
+        ? (p.wins | 0) * 1e12 + Math.min(1e12 - 1, Number(p.kills) || 0)
+        : (Number(p.kills) || 0)),
+      fmt: (v, p) => (p.view === 'hall' ? String(p.wins | 0) : fmt(Number(p.kills) || 0)),
+      meta: (p) => (p.view === 'hall'
+        ? fmt(Number(p.kills) || 0) + ' kills across ' + (p.wins | 0) + ' winning day' + ((p.wins | 0) === 1 ? '' : 's')
+        : 'Tier ' + Math.max(1, p.tier | 0) + (p.ship ? ' · ' + String(p.ship) : '')),
+      empty: 'The race has not started. Enter from Command ▸ King of the Hill.',
+      emptyHall: 'No crowns awarded yet. The first event closes at 00:05 UTC.',
+      async: true,
+    },
   ];
   const BY_ID = {};
   TABS.forEach((t) => { BY_ID[t.id] = t; });
@@ -233,6 +288,17 @@
 
     p.tiles = tiles; p.citadels = citadels; p.tile_rev = rev;
     p.ships = ships; p.missions = missions; p.badges = badges;
+
+    // HOME DEFENSE — a wave is cleared roughly every two levels early and slows
+    // sharply once raiders outscale a casual fleet, so this tracks career with a
+    // hard taper rather than growing linearly forever.
+    p.hcwave = Math.max(0, Math.floor(Math.pow(career, 0.78) * (0.5 + r() * 0.7)));
+    // EXPLORATION — real-time gated: even a permanent resident cannot run more
+    // than a handful of expeditions a day, so the count is bounded by how long
+    // the account has plausibly existed rather than by how strong it is.
+    p.expo = Math.max(0, Math.floor(Math.pow(career, 0.62) * (0.35 + r() * 0.9)));
+    p.expo_best = p.expo ? Math.min(420, 40 + Math.floor(Math.pow(career, 0.55) * (1.2 + r() * 2.4))) : 0;
+
     p._derived = true;
     return p;
   }
@@ -258,10 +324,27 @@
     return [...best.values()];
   }
 
+  // KING OF THE HILL — both views come straight from the KOTH module, which owns
+  // the RPCs and their caching. Nothing is derived and nothing is published: a
+  // daily standing and a crown are both decided server-side.
+  async function fetchKoth(view) {
+    const K = window.KOTH;
+    if (!K) return [];
+    if (view === 'hall') {
+      const rows = await K.pollHall(true);
+      return (rows || []).map((r) => Object.assign({}, r, { view: 'hall' }));
+    }
+    await K.pollBoard();
+    return (K.board() || []).map((r) => Object.assign({}, r, { view: 'day' }));
+  }
+
   function loadAsync(id, cb) {
     const hit = _cache[id];
     if (hit && Date.now() - hit.at < TTL) { cb(hit.rows, hit.err); return; }
-    const job = id === 'voidmaw' ? fetchVoidmaw() : Promise.resolve([]);
+    const job = id === 'voidmaw' ? fetchVoidmaw()
+      : id === 'koth' ? fetchKoth('day')
+      : id === 'koth:hall' ? fetchKoth('hall')
+      : Promise.resolve([]);
     job.then((rows) => { _cache[id] = { at: Date.now(), rows, err: null }; cb(rows, null); })
        .catch((err) => { _cache[id] = { at: Date.now(), rows: [], err }; cb([], err); });
   }
@@ -273,12 +356,18 @@
   // quietly credit simulated pilots with records no human could be shown to
   // beat. Detected by absence of the property (not a zero value), and those
   // boards refuse to render until the columns exist.
-  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1 };
+  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, hcwave: 1, expo: 1 };
   // Which property proves the migration for THIS board ran. Haulage and Nanocore
   // ship in their OWN migrations (cargo-ladder.sql, nanocore-ladder.sql), so the
   // shared lb-onefunction probe would pass on a server that had run neither and
-  // both boards would quietly rank every human at zero.
-  const SQL_PROBE = { cargo: ['cargo', 'cargo_best'], nano: ['nano_legend', 'nano_slots'] };
+  // both boards would quietly rank every human at zero. Home Defense and
+  // Exploration are the same story again, in new-ladders.sql.
+  const SQL_PROBE = {
+    cargo: ['cargo', 'cargo_best'],
+    nano: ['nano_legend', 'nano_slots'],
+    hcwave: ['hcwave'],
+    expo: ['expo', 'expo_best'],
+  };
   function migrated(rows, id) {
     const keys = SQL_PROBE[id] || ['missions', 'tile_rev'];
     for (const p of rows) {
@@ -291,7 +380,7 @@
   // ---- board assembly --------------------------------------------------------
   // Returns { rows, real, tab, pending, err }. `pending` means an async board is
   // still loading and the caller should re-render when `onReady` fires.
-  function board(id, onReady) {
+  function board(id, onReady, view) {
     const tab = BY_ID[id] || TABS[0];
     const LB = window.LEADERBOARD;
     const g = G();
@@ -299,16 +388,20 @@
 
     // ASYNC LADDERS — their own tables, not the leaderboard row
     if (tab.async) {
-      const hit = _cache[id];
+      // A tab with VIEWS caches each view under its own key: they are different
+      // questions against different tables and must never share a slot.
+      const vId = (tab.views && view && view !== tab.views[0].id
+        && tab.views.some((v) => v.id === view)) ? id + ':' + view : id;
+      const hit = _cache[vId];
       if (!hit || Date.now() - hit.at >= TTL) {
-        loadAsync(id, () => { if (onReady) onReady(); });
-        if (!hit) return { rows: [], real: 0, tab, pending: true };
+        loadAsync(vId, () => { if (onReady) onReady(); });
+        if (!hit) return { rows: [], real: 0, tab, view, pending: true };
       }
       const mine = myName();
       const rows = (hit ? hit.rows : []).map((p) => Object.assign({}, p, { isMe: p.name === mine }));
       rows.sort((a, b) => tab.metric(b) - tab.metric(a));
       rows.forEach((p, i) => { p.rank = i + 1; });
-      return { rows, real: rows.length, tab, pending: false, err: hit && hit.err };
+      return { rows, real: rows.length, tab, view, pending: false, err: hit && hit.err };
     }
 
     // LEADERBOARD LADDERS — the same pool the power board uses, re-sorted
@@ -344,6 +437,11 @@
     // art for the thing that just happened. These three name it.
     q.cargo_tier = Math.min(5, Math.max(0, (s.cargo && s.cargo.lastTier) | 0));
     q.hull_last = String((s.lastHull && s.lastHull.key) || '').slice(0, 32);
+    // HOME DEFENSE + EXPLORATION — read live from the save, same as every other
+    // figure on this row, so your own rank never lags the publish heartbeat.
+    q.hcwave = (s.homecit && s.homecit.wave) | 0;
+    q.expo = (s.expo && s.expo.log && s.expo.log.done) | 0;
+    q.expo_best = (s.expo && s.expo.log && s.expo.log.best) | 0;
     // Nanocores read through the module so this row, the badge chains and the
     // Discord feed all quote one number.
     try {
@@ -405,6 +503,9 @@
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,
+        hcwave: (s.homecit && s.homecit.wave) | 0,
+        expo: (s.expo && s.expo.log && s.expo.log.done) | 0,
+        expo_best: (s.expo && s.expo.log && s.expo.log.best) | 0,
         cargo: (s.cargo && s.cargo.wins) | 0,
         cargo_best: Math.min(100, (s.cargo && s.cargo.best) | 0),
         cargo_tier: Math.min(5, Math.max(0, (s.cargo && s.cargo.lastTier) | 0)),

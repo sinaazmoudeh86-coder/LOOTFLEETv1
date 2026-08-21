@@ -1,0 +1,153 @@
+/* =============================================================================
+   koth.css — KING OF THE HILL
+   ---------------------------------------------------------------------------
+   Crown gold on near-black. Follows the layout fit contract: nothing pairs a
+   fixed height with overflow:hidden, every grid uses minmax(0,1fr) so long
+   pilot names wrap instead of shearing, and the arena pill is pointer-events
+   enabled but never taller than the HUD strip it sits under.
+============================================================================= */
+#koth-body{display:flex;flex-direction:column;gap:14px;padding:12px}
+.koth-sec{display:flex;flex-direction:column;gap:9px}
+.koth-sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.koth-sec-t{font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.16em;color:#ffd24d}
+.koth-sec-n{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.05em;color:var(--muted-2)}
+.koth-none{padding:14px;border:1px dashed var(--line-2);border-radius:10px;background:rgba(20,28,42,.5);color:var(--muted);font-size:12.5px;line-height:1.6;text-wrap:pretty}
+
+.koth-empty{display:grid;place-items:center;gap:8px;text-align:center;padding:38px 22px;color:var(--muted)}
+.koth-empty-ic{font-size:44px;filter:grayscale(1);opacity:.5}
+.koth-empty h3{font-family:'Orbitron',sans-serif;font-size:15px;color:var(--text);margin:0}
+.koth-empty p{max-width:36em;font-size:12.5px;line-height:1.65;margin:0;text-wrap:pretty}
+.koth-empty b{color:#ffd24d}
+
+/* ---- hero ---------------------------------------------------------------- */
+.koth-hero{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 16px 16px;border-radius:16px;overflow:hidden;
+  background:radial-gradient(120% 90% at 50% 0%,#2a2008,#120e06 60%,#0b0a08);border:1px solid #5a4413;box-shadow:0 0 40px -14px rgba(255,210,77,.55)}
+.koth-hero::before{content:'';position:absolute;inset:-40% -10% auto;height:70%;background:radial-gradient(60% 100% at 50% 0%,rgba(255,210,77,.20),transparent 70%);pointer-events:none}
+.koth-crown{font-size:36px;line-height:1;filter:drop-shadow(0 0 16px rgba(255,210,77,.8))}
+.koth-t{font-family:'Orbitron',sans-serif;font-weight:900;font-size:20px;letter-spacing:.06em;color:#ffe9a8;text-shadow:0 0 26px rgba(255,210,77,.55);text-align:center}
+.koth-k{font-family:'Rajdhani',sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.28em;color:#c9a44c}
+.koth-timer{font-family:'Orbitron',sans-serif;font-weight:900;font-size:30px;letter-spacing:.04em;color:#fff6dc;text-shadow:0 0 24px rgba(255,210,77,.6);font-variant-numeric:tabular-nums}
+.koth-line{font-size:12.5px;color:#c8b78d;text-align:center;text-wrap:pretty;max-width:34em}
+.koth-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%;margin-top:2px}
+.koth-stats span{display:flex;flex-direction:column;gap:2px;align-items:center;padding:8px 6px;border-radius:9px;background:rgba(10,8,4,.55);border:1px solid #4a3a12;min-width:0}
+.koth-stats i{font-family:'Rajdhani',sans-serif;font-style:normal;font-weight:700;font-size:8.5px;letter-spacing:.11em;color:#8e7a45}
+.koth-stats b{font-family:'Orbitron',sans-serif;font-size:13px;color:#ffe9a8;max-width:100%;overflow-wrap:anywhere;text-align:center}
+.koth-stats u{text-decoration:none;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10.5px;color:#a8945f}
+.koth-prize{font-family:'Rajdhani',sans-serif;font-weight:800;font-size:12.5px;letter-spacing:.08em;color:#ffd24d;margin-top:2px;white-space:nowrap;text-align:center}
+.koth-prize b{color:#fff6dc}
+.koth-go{width:100%;min-height:52px;margin-top:4px;border-radius:12px;cursor:pointer;
+  font-family:'Orbitron',sans-serif;font-weight:900;font-size:13px;letter-spacing:.09em;color:#2a1c02;
+  background:linear-gradient(180deg,#ffd24d,#d99a1c);border:1px solid #ffe28a;box-shadow:0 6px 22px -6px rgba(255,210,77,.75),inset 0 1px 0 rgba(255,255,255,.4)}
+.koth-go:active{transform:translateY(1px) scale(.99)}
+.koth-go.in{background:linear-gradient(180deg,#3fc56b,#1d8a48);border-color:#5fe08c;color:#04180c}
+.koth-warn{font-family:'Rajdhani',sans-serif;font-weight:800;font-size:10px;letter-spacing:.18em;color:#b06a5c}
+.koth-warn.signin{color:#ffc7a0;letter-spacing:.01em;font-size:11.5px;line-height:1.55;text-align:center;text-transform:none;font-weight:600;
+  padding:10px 12px;border-radius:10px;background:rgba(255,138,150,.1);border:1px solid rgba(255,138,150,.4);width:100%}
+.koth-warn.signin b{color:#ffe0d2}
+
+/* ---- difficulty ladder --------------------------------------------------- */
+.koth-ladder{display:flex;flex-direction:column;gap:3px}
+.koth-tr{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center;
+  padding:7px 10px;border-radius:8px;background:#0d141f;border:1px solid var(--line);
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11.5px;color:var(--muted)}
+.koth-tr.past{opacity:.42}
+.koth-tr.on{border-color:#ffd24d;background:linear-gradient(90deg,rgba(255,210,77,.14),rgba(255,210,77,.03));color:#ffe9a8;opacity:1}
+.koth-tr.open{border-style:dashed}
+.ktr-k{color:inherit}
+.ktr-l{font-family:'Orbitron',sans-serif;font-size:10.5px;color:#8fd0ff}
+.koth-tr.on .ktr-l{color:#bfe6ff}
+.ktr-h{font-family:'Orbitron',sans-serif;font-size:10.5px;color:#ff8a96}
+.koth-tr.on .ktr-h{color:#ffb0b8}
+.ktr-you{font-family:'Orbitron',sans-serif;font-weight:800;font-size:9px;letter-spacing:.1em;color:#2a1c02;background:#ffd24d;border-radius:5px;padding:2px 6px;white-space:nowrap}
+
+/* ---- board --------------------------------------------------------------- */
+.koth-board{display:flex;flex-direction:column;gap:3px}
+.koth-row{display:grid;grid-template-columns:34px 30px minmax(0,1fr) auto;gap:9px;align-items:center;
+  padding:7px 10px;border-radius:9px;background:#0d141f;border:1px solid var(--line)}
+.koth-row.king{border-color:rgba(255,210,77,.5);background:linear-gradient(90deg,rgba(255,210,77,.12),#0d141f 60%)}
+.koth-row.me{border-color:#5fd1ff;background:linear-gradient(90deg,rgba(95,209,255,.13),#0d141f 60%);box-shadow:0 0 0 1px rgba(95,209,255,.25) inset}
+.kr-r{font-family:'Orbitron',sans-serif;font-weight:800;font-size:12px;color:var(--muted);text-align:center}
+.koth-row.king .kr-r{font-size:15px}
+.kr-s{width:30px;height:22px;object-fit:contain}
+.kr-s.none{display:block}
+.kr-n{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;color:var(--text);min-width:0;overflow-wrap:anywhere}
+.kr-n em{font-style:normal;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:9px;letter-spacing:.1em;color:#5fd1ff;margin-left:5px}
+.kr-k{font-family:'Orbitron',sans-serif;font-weight:800;font-size:13px;color:#ffd24d;font-variant-numeric:tabular-nums}
+.koth-gap{text-align:center;color:var(--muted-2);letter-spacing:.4em;font-size:11px;padding:2px 0}
+
+/* ---- hall ---------------------------------------------------------------- */
+.koth-hall{display:flex;flex-direction:column;gap:3px}
+.koth-hrow{display:grid;grid-template-columns:58px 30px minmax(0,1fr) auto;gap:9px;align-items:center;
+  padding:7px 10px;border-radius:9px;background:#0d141f;border:1px solid var(--line)}
+.kh-d{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.05em;color:var(--muted-2)}
+.kh-s{width:30px;height:22px;object-fit:contain}
+.kh-s.none{display:block}
+.kh-n{font-family:'Orbitron',sans-serif;font-weight:700;font-size:11.5px;color:#ffe9a8;min-width:0;overflow-wrap:anywhere}
+.kh-k{font-family:'Orbitron',sans-serif;font-weight:800;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ---- in-arena pill ------------------------------------------------------- */
+#koth-pill{display:flex;align-items:center;gap:7px;margin-top:6px;padding:6px 11px;border-radius:11px;cursor:pointer;position:relative;z-index:2;pointer-events:auto;
+  background:rgba(30,22,4,.9);border:1px solid #6a5216;box-shadow:0 0 18px -6px rgba(255,210,77,.8);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);font-family:'Rajdhani',sans-serif;
+  -webkit-tap-highlight-color:transparent;min-height:34px;touch-action:manipulation}
+#koth-pill:active{transform:translateY(1px)}
+#koth-pill.king{border-color:#ffd24d;box-shadow:0 0 22px -4px rgba(255,210,77,1);animation:kothKing 1.8s ease-in-out infinite}
+@keyframes kothKing{0%,100%{box-shadow:0 0 18px -6px rgba(255,210,77,.7)}50%{box-shadow:0 0 26px -3px rgba(255,210,77,1)}}
+.kp-c{font-size:13px;line-height:1}
+.kp-t{font-weight:800;font-size:10px;letter-spacing:.13em;color:#c9a44c}
+.kp-r{font-family:'Orbitron',sans-serif;font-weight:800;font-size:12px;color:#ffe9a8}
+.kp-k{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;color:#fff6dc;font-variant-numeric:tabular-nums}
+.kp-x{font-weight:700;font-size:10px;color:#8e7a45;font-variant-numeric:tabular-nums;margin-left:2px}
+
+/* ---- overlay ------------------------------------------------------------- */
+/* Above the HUD and the arena pill, below nothing that matters. The pill sits in
+   #top-stack, which the arena keeps at a high layer, so 80 was not always enough
+   and the overlay could open behind the very thing that opened it. */
+#koth-ov{position:fixed;inset:0;z-index:95;display:grid;place-items:center;padding:16px;background:rgba(4,6,10,.72);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.kov-card{position:relative;width:min(420px,100%);max-height:86dvh;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:18px 16px 16px;border-radius:16px;
+  background:radial-gradient(120% 80% at 50% 0%,#2a2008,#100d07 65%);border:1px solid #6a5216;box-shadow:0 24px 60px -20px #000}
+.kov-x{position:absolute;top:8px;right:9px;width:30px;height:30px;border-radius:8px;border:1px solid var(--line-2);background:rgba(0,0,0,.4);color:var(--muted);cursor:pointer;font-size:13px}
+.kov-h{font-family:'Orbitron',sans-serif;font-weight:900;font-size:14px;letter-spacing:.06em;color:#ffe9a8;text-align:center}
+.kov-clock{font-family:'Orbitron',sans-serif;font-weight:800;font-size:19px;color:#fff6dc;text-align:center;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(255,210,77,.5)}
+.kov-list{display:flex;flex-direction:column;gap:3px;margin-top:4px}
+.kov-r{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:9px;align-items:center;padding:6px 9px;border-radius:8px;background:rgba(10,8,4,.6);border:1px solid #3a2e10}
+.kov-r.me{border-color:#5fd1ff;background:rgba(95,209,255,.1)}
+.kv-r{font-family:'Orbitron',sans-serif;font-weight:800;font-size:11.5px;color:#c9a44c;text-align:center}
+.kv-n{font-family:'Orbitron',sans-serif;font-weight:700;font-size:11.5px;color:#ffe9a8;min-width:0;overflow-wrap:anywhere}
+.kv-k{font-family:'Orbitron',sans-serif;font-weight:800;font-size:12px;color:#fff6dc;font-variant-numeric:tabular-nums}
+.kov-none{color:#8e7a45;font-size:12px;text-align:center;padding:10px}
+.kov-you{display:flex;align-items:baseline;gap:9px;justify-content:center;padding:9px;border-radius:10px;background:rgba(95,209,255,.09);border:1px solid rgba(95,209,255,.3);margin-top:4px}
+.kov-you i{font-style:normal;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:9.5px;letter-spacing:.14em;color:#7fb4d6}
+.kov-you b{font-family:'Orbitron',sans-serif;font-weight:900;font-size:17px;color:#cfeaff}
+.kov-you span{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;color:#9fd0ee;font-variant-numeric:tabular-nums}
+.kov-next{text-align:center;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:12px;letter-spacing:.05em;color:#6fe0a0}
+.kov-next b{color:#c8ffdd}
+.kov-next.king{color:#ffd24d}
+.kov-full{width:100%;min-height:44px;margin-top:4px;border-radius:10px;cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.09em;
+  background:rgba(255,210,77,.12);border:1px solid #6a5216;color:#ffd24d}
+.kov-full:active{transform:translateY(1px)}
+.kov-warn{margin-top:6px;padding:8px 10px;border-radius:9px;border:1px solid rgba(255,107,122,.45);background:rgba(255,107,122,.1);color:#ff8a96;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;line-height:1.45;letter-spacing:.03em;text-align:center;text-wrap:pretty}
+
+/* ---- big banner ---------------------------------------------------------- */
+#koth-banner{position:fixed;left:50%;top:19%;transform:translate(-50%,-14px);z-index:85;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 24px;border-radius:14px;text-align:center;
+  background:radial-gradient(120% 120% at 50% 0%,rgba(48,36,6,.96),rgba(12,10,6,.94));border:1px solid #7a5f1c;
+  box-shadow:0 0 44px -10px rgba(255,210,77,.8);opacity:0;transition:opacity .25s,transform .25s;max-width:min(92vw,460px)}
+#koth-banner.on{opacity:1;transform:translate(-50%,0)}
+#koth-banner b{font-family:'Orbitron',sans-serif;font-weight:900;font-size:16px;letter-spacing:.04em;color:#ffe9a8;text-shadow:0 0 22px rgba(255,210,77,.7);text-wrap:balance}
+#koth-banner i{font-style:normal;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:#c8b78d;text-wrap:pretty}
+
+@media (max-width:420px){
+  #koth-body{padding:10px;gap:12px}
+  .koth-timer{font-size:25px}
+  .koth-t{font-size:17px}
+  .koth-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+  /* the leader's name is the one field that can be a long pilot handle — give it
+     the full width rather than letting a 3-up grid shear it mid-word */
+  .koth-stats span:first-child{grid-column:1/-1}
+  .koth-stats b{font-size:11.5px;overflow-wrap:break-word}
+  .koth-tr{grid-template-columns:minmax(0,1fr) auto auto;gap:6px;font-size:10.5px}
+  .ktr-you{grid-column:1/-1;justify-self:start}
+  .kp-x{display:none}
+  .koth-row{grid-template-columns:28px 26px minmax(0,1fr) auto;gap:7px}
+}

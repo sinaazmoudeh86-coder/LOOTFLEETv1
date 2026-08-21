@@ -189,6 +189,7 @@
   let _lbNoCargo = false, _lbCargoRetryAt = 0;
   let _lbNoNano = false, _lbNanoRetryAt = 0;
   let _lbNoArt = false, _lbArtRetryAt = 0, _lbArtWarned = false;
+  let _lbNoNew = false, _lbNewRetryAt = 0, _lbNewWarned = false;
   function lbFail(where, err) {
     _lbFails++;
     // A row that never publishes makes the player INVISIBLE on Ranks while they
@@ -246,6 +247,7 @@
       if (_lbNoCargo && Date.now() > _lbCargoRetryAt) _lbNoCargo = false;
       if (_lbNoNano && Date.now() > _lbNanoRetryAt) _lbNoNano = false;
       if (_lbNoArt && Date.now() > _lbArtRetryAt) _lbNoArt = false;
+      if (_lbNoNew && Date.now() > _lbNewRetryAt) _lbNoNew = false;
 
       // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
       // p_asc. Folding them into the p_asc attempt would mean a server with
@@ -257,6 +259,34 @@
         p_tile_rev: bignum(p.tile_rev),
         p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
       } : null;
+      // NEW LADDERS (new-ladders.sql) — Home Defense wave and Exploration runs.
+      // The topmost rung, tried before ART. Same five-minute back-off as ART and
+      // for the same reason: this is the rung currently rolling out, so a refusal
+      // usually means "the SQL has not run yet" or "PostgREST has not reloaded",
+      // both measured in minutes, not the standing six-hour fact the lower rungs
+      // are describing.
+      const fresh = (p.hcwave !== undefined || p.expo !== undefined) ? {
+        p_hcwave: Math.max(0, Math.min(100000, p.hcwave | 0)),
+        p_expo: Math.max(0, p.expo | 0),
+        p_expo_best: Math.max(0, p.expo_best | 0),
+      } : null;
+      if (fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+            p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
+            base, ladder, art, fresh));
+        if (!error) { _lbFails = 0; return; }
+        if (!isLegacy(error)) { lbFail('new', error); return; }
+        _lbNoNew = true; _lbNewRetryAt = Date.now() + 5 * 60 * 1000;
+        if (!_lbNewWarned) {
+          _lbNewWarned = true;
+          try {
+            console.warn('[LOOTFLEET] leaderboard hcwave / expo rejected — the Home Defense and Exploration ladders will rank every human at zero. '
+              + 'Run supabase/new-ladders.sql, then "notify pgrst, \'reload schema\';". Retrying automatically every 5 minutes. '
+              + 'Inspect with CLOUD.lbState().');
+          } catch (e) {}
+        }
+      }
       // ART FIELDS are the newest rung (discord-art-publish.sql) and try FIRST.
       // WHY THIS RUNG EXISTS AT ALL: the columns were added, the client computed
       // hull_last / nano_last / cargo_tier, and the feed selected them by name —
@@ -345,8 +375,14 @@
       // Nanocore ladder was impossible to build. Each migration gets its own
       // rung on the ladder below, so a server missing one still serves the rest.
       let { data, error } = await client.from('leaderboard')
-        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god')
+        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best')
         .order('power', { ascending: false }).limit(n || 100);
+      if (error) {   // new-ladders.sql not run yet
+        const rW = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = rW.data; error = rW.error;
+      }
       if (error) {   // nanocore-ladder.sql not run yet
         const rN = await client.from('leaderboard')
           .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best')
@@ -438,6 +474,7 @@
     // re-arms. One line in the console instead of reading source to find out why
     // a column is not moving.
     lbState: () => ({
+      new:    { off: _lbNoNew,    retryIn: Math.max(0, Math.round((_lbNewRetryAt    - Date.now()) / 1000)) },
       art:    { off: _lbNoArt,    retryIn: Math.max(0, Math.round((_lbArtRetryAt    - Date.now()) / 1000)) },
       nano:   { off: _lbNoNano,   retryIn: Math.max(0, Math.round((_lbNanoRetryAt   - Date.now()) / 1000)) },
       cargo:  { off: _lbNoCargo,  retryIn: Math.max(0, Math.round((_lbCargoRetryAt  - Date.now()) / 1000)) },

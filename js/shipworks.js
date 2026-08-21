@@ -546,13 +546,29 @@
     try { C().SHIPS.forEach((s) => { k[s.key] = 1; }); } catch (e) {}
     return k;
   }
+  // THE SWEEP MUST NEVER RUN AGAINST A HALF-BUILT STATE. Two ways that could turn
+  // a safe rule back into a wipe, both guarded here rather than trusted to timing:
+  //
+  //   • CONFIG not up yet → `known` is empty → EVERY key looks like a retired hull.
+  //   • the save not loaded yet → the live state is the defaults object, so the
+  //     sweep would run against an inventory that is not the player's, and the
+  //     restore would measure a snapshot against an empty one.
+  //
+  // Both return false, which leaves the guard flag UNSET so the caller retries on
+  // its next tick. `lastSave` is written by save() and by every load, so it is the
+  // one field that cannot be present before the real inventory is.
+  function stateReady() {
+    const g = G();
+    if (!g || !g.state || !g.state.lastSave) return false;
+    return !!Object.keys(knownHullKeys()).length;
+  }
   function recoverOrphanShards() {
-    const g = G(); if (!g || !g.state) return;
+    const g = G(); if (!stateReady()) return false;
     const st = g.state;
-    if (st.shardOrphanFix === 2 || !st.shipParts) return;
+    if (st.shardOrphanFix === 2) return true;
+    if (!st.shipParts) { st.shardOrphanFix = 2; return true; }
     st.shardOrphanFix = 2;   // 2 = swept under the key-names-a-real-hull rule
     const known = knownHullKeys();
-    if (!Object.keys(known).length) { st.shardOrphanFix = 1; return; }   // CONFIG not up — try again next boot
     let gold = 0, parts = 0;
     const log = [];
     for (const k in st.shipParts) {
@@ -571,6 +587,7 @@
     }
     try { g.save(); } catch (e) {}
     try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
+    return true;
   }
 
   // ===========================================================================
@@ -596,12 +613,12 @@
   //     spent; taking it back now would be a second silent loss.
   // Runs once per account, and only where the old sweep actually ran.
   function restoreSweptShards() {
-    const g = G(); if (!g || !g.state) return;
+    const g = G(); if (!stateReady()) return false;
     const st = g.state;
-    if (st.vmShardRestore || !st.shardOrphanFix) return;
+    if (st.vmShardRestore || !st.shardOrphanFix) return true;
     let uid = null;
     try { uid = window.ACCOUNT && window.ACCOUNT.uid && window.ACCOUNT.uid(); } catch (e) {}
-    if (!uid) return;   // signed out: wait for a session rather than banking "nothing survived"
+    if (!uid) return false;   // signed out: wait for a session rather than banking "nothing survived"
     const best = {};
     ['lf-backup::', 'lf-conflict::', 'lf-best::'].forEach((p) => {
       let snap = null;
@@ -636,14 +653,24 @@
     }
     try { g.save(); } catch (e) {}
     try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
+    return true;
   }
 
   function boot() {
     injectCSS();
-    // deferred: CONFIG and the save both have to be up before the sweep can run.
-    // Restitution goes FIRST — it reads the pre-sweep snapshots, and the sweep
-    // under the new rule must not see a half-restored inventory.
-    setTimeout(() => { try { restoreSweptShards(); } catch (e) {} try { recoverOrphanShards(); } catch (e) {} }, 2500);
+    // CONFIG and the SAVE both have to be up before either pass may touch the
+    // inventory, and neither has a ready event — so both passes report whether they
+    // ran and this retries until they do (or gives up rather than forcing it).
+    // Restitution goes FIRST: it reads the pre-sweep snapshots, and the sweep under
+    // the new rule must not see a half-restored inventory.
+    let tries = 0;
+    const t = setInterval(() => {
+      if (++tries > 12) { clearInterval(t); return; }
+      let done = true;
+      try { if (!restoreSweptShards()) done = false; } catch (e) {}
+      try { if (!recoverOrphanShards()) done = false; } catch (e) {}
+      if (done) clearInterval(t);
+    }, 2500);
     setInterval(() => { if (document.hidden) return; try { if (window.GAME && GAME.state) updateBadge(); } catch (e) {} }, 2500);
   }
   function injectCSS() {

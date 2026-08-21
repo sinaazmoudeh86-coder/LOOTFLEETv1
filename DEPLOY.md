@@ -1,4 +1,250 @@
-# Loot Fleet — deploy v241 · build 707 · TEMPLE SQL FIXES · KOTH COUNTER FIX · COPY PASS
+# Loot Fleet — deploy v242 · build 710 · EXPLORATION PASS · BADGE COUNTS · NO BOT BOARDS
+
+Push the **contents of this folder** to the repo root Vercel serves.
+Supersedes v241 (build 707). Service worker cache is `lootfleet-v710`.
+**Login screen reads `BUILD 710`.**
+
+Client-side only. **No SQL to run, no Edge Function to redeploy.**
+
+---
+
+## THIS RELEASE FORCES EVERY PLAYER TO REFRESH
+
+| mechanism | how it forces the reload |
+|---|---|
+| `version.json` = **710** vs clients running `LF_BUILD` 707 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
+| `sw.js` `CACHE` = **lootfleet-v710** | the cache name changed, so the old bundle is evicted rather than served from disk |
+| every changed `js/`+`css/` ref carries `?v=710` | no browser can serve a stale copy of a changed file |
+
+**Push the site FIRST, then `version.json` last** if your host publishes
+incrementally — bumping the beacon ahead of the files evicts players onto code
+that is not live yet. A single upload of the whole folder is fine.
+
+---
+
+## Build stamps — all agree
+
+| stamp | value |
+|---|---|
+| root `game.html` `window.LF_BUILD` | 710 |
+| root `version.json` | 710 |
+| `deploy-v242/version.json` | 710 |
+| `deploy-v242/sw.js` `CACHE` | `lootfleet-v710` |
+
+**Sixteen files changed**, all byte-identical to the project root and every one
+cache-busted to `?v=710`:
+
+| area | files |
+|---|---|
+| Fleet Exploration | `js/expedition.js`, `js/expedition-ui.js`, `js/ascension.js`, `css/expedition.css` |
+| Voidmaw event | `js/server-dreadnaught.js` |
+| Badges + ladders | `js/achievements.js`, `js/ranks-boards.js`, `js/rank-rewards.js` |
+| Territory | `js/game-v93.js`, `js/territory.js`, `js/ui-v94.js`, `js/casino-citadels.js` |
+| Starforge | `js/starforge.js` |
+| Copy pass | `js/cargo-defense.js`, `js/season-pass.js`, `js/discord-reward.js` |
+
+Plus `game.html` (build stamp + `?v=` bumps) and a DO-NOT-RUN header on the
+superseded `supabase/ranks-ladders.sql`. Audited: **87/87** referenced files
+present and identical to root — zero stale, zero missing. All 90 scripts parse
+clean, all 19 stylesheets balanced, no duplicate DOM ids, every nav and Command
+target resolves.
+
+---
+
+## STEP BY STEP
+
+1. **Nothing to run on the server.** No SQL, no `discord-feed` deploy. If you
+   want the feed's own copy fixed ("all six ladders" in the daily digest footer),
+   that is a separate Edge Function deploy and is NOT part of this build.
+2. **Push the contents of this folder** to the repo root Vercel serves. One upload
+   of the whole folder is the safe way — the beacon then lands with the files.
+   If your host publishes incrementally, push everything EXCEPT `version.json`
+   first, then `version.json`.
+3. **Watch the eviction.** Within ~90 seconds every live client blocks and reloads
+   onto 710 (`js/update-gate.js` polls `version.json`).
+4. **Confirm the login screen reads `BUILD 710`.**
+5. **Smoke test, in this order:**
+   - **Fleet Exploration ▸ any contract ▸ ASSIGN FLEET** — reward chips name their
+     currency (Gold / Fuel / Iron / Plasma / Dread Cores / LootCoins); the
+     formation strip lists your flagship and escorts and flips a picked escort to
+     **PULLED OUT**; an ascended hull shows a **✦ N** chip and a higher rating.
+   - **Launch one short run** — the resource lines on the debrief are ~5× what they
+     were. (Expect fuel to come home in profit; see the note at the end.)
+   - **Command ▸ Missions ▸ Badges** — the header total and the sum of the chain
+     cards now agree. On your save: **846 / 1110** everywhere.
+   - **Command ▸ Ranks ▸ BADGES** — reads `/1110`, and the copy says 1,110.
+   - **Command ▸ Ranks ▸ KING OF THE HILL** — hull names, not `dread6`.
+   - **Voidmaw ▸ 🏆 Leaderboards** — real operators only. Signed out or offline the
+     board is EMPTY, never populated with names; your rank chip reads
+     "Rank pending" rather than a number.
+   - **Starforge** — a multi-cannon hull reads Cannon, Cannon II, Cannon III …
+     Same for munitions and hulls.
+   - **My Galaxy ▸ abandon a tile**, then let someone claim it (or wait for the
+     60s convergence pull) — **no** war-report mail, no feed line, no toast, and
+     the tile does not come back to you.
+   - **Starforge locked (a sub-100 account)** — the veil is one line, the unlock
+     level and a progress bar.
+6. **Run the clip auditor on the changed screens**: open with `?fitaudit` and check
+   Fleet Exploration (assignment sheet), Badges, Ranks, the Voidmaw leaderboard
+   sheet and the Empire-at-capacity sheet at **360×640 portrait** and a **~450px-tall
+   landscape** window. Zero red outlines.
+
+### Rollback
+
+Push `deploy-v241` (build 707) and set `version.json` back to 707. 710 writes no
+new save fields, so a rollback loses nothing: the badge/board/copy fixes are all
+render-time, the abandon guard reads `tileAband` (which 707 already wrote), and
+Event Coin balances stay whole numbers either way.
+
+---
+
+## ⚠ One balance change worth watching
+
+The ×5 resource haul makes Fleet Exploration a net **fuel** source: a five-hull
+launch now pays roughly six times its own fuel cost, where it used to about break
+even. Ore and plasma were the intended target. If fuel inflation shows up in the
+first day, the knob is `RES_MULT` in `js/expedition.js` — or split it so fuel
+scales lower than iron and plasma.
+
+---
+
+## What changed in 710
+
+### ◎ Ship Ascension now counts toward a hull's exploration rating
+
+A hull's survey profile already read yard upgrades and expedition rank. Ascension
+— the deepest per-hull investment in the game — did nothing for it, so working a
+hull through its module tiers bought no exploration credit. `contribution()` now
+carries an `ascMult`: **+1.5% per ascension star**, read through
+`ASCEND.shipStars()` rather than restating the model (four modules × 35 = 140
+stars, so a fully ascended hull explores at 3.1× its bare profile). Shown on the
+hangar row and the pick card as a **✦ N** chip, and folded into the printed total
+so the number on the card is the number the maths uses.
+
+### ◈ Every reward chip now says what it pays
+
+The manifest was six glyph-and-number chips in six colours — two of them blue
+(⬢ Fuel and ◇ Dread Cores) — so "what are the blue rewards?" was a question the
+screen could not answer. Each chip carries its currency name: Gold, Fuel, Iron,
+Plasma, Dread Cores, LootCoins.
+
+### ⬢ Expedition resource hauls ×5
+
+The 685 pass cut expedition gold hard and left the ore where it was, so the half
+of the payout that is meant to be the reason to run one was the smaller half of
+both. Fuel/iron/plasma are now **5×**; gold keeps its depth taper, Dread Cores
+(a rarity, not a resource) are untouched.
+
+### ⬡ The launch sheet shows the fleet you are flying now
+
+It listed the hulls you could send and warned once a pick happened to be an
+escort, but never said what the battle formation IS — so "which hulls can I
+spare" meant leaving the screen. A formation strip now names the flagship
+(marked as staying) and every escort, flipping to **PULLED OUT** as you pick it,
+with a running "N / M escorts stay".
+
+### ☠ The Voidmaw boards have no bots
+
+Both boards were padded with 99 generated names apiece, and that fake field also
+decided the pilot's rank whenever the live board was unavailable. Gone. Every row
+is a real published operator; a rank is only ever the one the server reports. An
+empty board says it is empty instead of inventing rivals.
+
+Settlements no longer read a fabricated placing either: with no known rank the
+daily/season prize pays the participation tier and the letter says why, rather
+than crediting a #1 nobody earned.
+
+### 👑 KOTH ranks print hull NAMES
+
+The rows carry the raw save key, so the board showed lowercase internals —
+`dread6` for the Dread Omega. Resolved through `CONFIG.SHIP_BY_KEY`, with a
+title-cased fallback so a key that outlives its ship entry still can't leak.
+
+### ⬡ The badge count on the cards was one high, per chain
+
+The header counts badges **claimed**; each chain card printed the NEXT rank. With
+eighteen chains a player adding up the cards got up to 18 more than the header —
+reported as 846 counted against 832 shown, and neither number was wrong on its
+own terms. The card counter now states claimed/total, and the grade beside it is
+the grade of the highest badge actually claimed. The bar below still tracks the
+rank in progress.
+
+### ⬡ The badge ladder's size is stated once
+
+The Ranks board hardcoded 1,000 in four places — the board copy ("out of 1,000"),
+the `/1000` unit, the "badges to the Titan Sina" line, and two publish caps that
+clamped a real count at 1,000. All of them now read `ACHIEVE.TOTAL` (**1,110**
+today), so adding a chain moves every readout at once.
+
+### ⚒ Starforge hardpoints count up
+
+Every secondary slot printed a flat ` II`, so a seven-cannon hull read "Cannon,
+Cannon II, Cannon II, Cannon II…" and there was no way to tell which mount you
+were tempering. The slot key already IS the ordinal (`bow`/`bow2`…`bow7`), so
+they number from it: **Cannon → Cannon VII**. Same for munitions and hulls.
+
+### 🔎 Second pass — more of the same bug classes
+
+- **A false number in reward copy.** The season pass said a hull shard crate takes
+  **"100 shards to assemble it"**. Shards roll any buildable hull and each hull's
+  requirement is SHIPWORKS' own (25 for early hulls, 2,000 for a Titan Sina), so the
+  figure was wrong for every hull in the pool. The card now points at Shipworks
+  instead of stating a number nothing supports.
+- **The badge total drifted in the mail too.** The podium letter for the Badges
+  ladder still read "out of 1,000"; it reads `ACHIEVE.TOTAL` now, like the board.
+- **"All seven ladders."** The Discord card and its reward letter both said seven.
+  There are thirteen. They now say "every ladder" and cannot drift again.
+- **Event Coins were `| 0`'d in ten places.** A balance, coerced to signed int32 —
+  the house rule exists because a grant or a migration eventually pushes one of these
+  past 2.1 billion and it wraps negative. Now `Math.floor(Number(x) || 0)`.
+
+### ✂ Text pass — less on screen, nothing lost
+
+Two rules: a screen the player cannot use yet does not teach mechanics, and no
+message names a thing only a developer can act on.
+
+- **The locked Starforge veil** taught four mechanics in 121 words to players who
+  cannot open the screen for another 99 levels. Now one line, the unlock level and
+  the progress bar — the same shape as every other lock veil. (The four-panel CSS
+  went with it.)
+- **"This ladder is waiting on a database migration … until `ranks-ladders.sql`
+  runs"** → "This board isn't live yet — no operator has published to it." The
+  filename goes to `console.warn`, where the person who can act on it is looking.
+- **"Turf war sync failed — server migration required (territory-v2.sql)"** →
+  "Territory did not save — your claim is local for now." Same split.
+- **Empire at capacity** — 145 words to 75. It explained that a cap is not a
+  cooldown, that rivals can claim what you drop, and that VIP loses you nothing.
+  Two one-line options and the list of systems say it.
+- **The Voidmaw how-it-works sheet, its store footer and its board notes** — every
+  rule cut to one sentence, the sales pitch ("even Ranked pays 500 a day") dropped,
+  and the retry mechanics behind "score not published yet" replaced with what the
+  player actually needs to know.
+- **Cargo Defense** — the intro's per-tier depth percentages and the paragraph
+  re-explaining battle speed are gone. The one warning that costs the player
+  something real (dying strips hull upgrade levels) stays.
+- **Abandon confirm, capacity sheet, casino hold note** — design justifications
+  ("which would only reward sniping the hold seconds before reset") removed; the
+  rules they justify remain.
+
+---
+
+### ⚑ Abandoning a tile no longer mails you a war report
+
+Abandoning releases the server claim, but that release is a network write: until
+it lands — or if it never does — the shared map can still name this account as
+the owner, so the next convergence pull re-adopted the tile. The moment another
+player claimed it, the loss path filed a war report for a system the pilot had
+deliberately given up.
+
+`abandonLockLeft()` is the 24-hour record of that decision, so it now answers
+both halves: a tile you released is **never re-adopted** (the release is re-sent
+instead) and its change of hands files **no mail, no feed line and no toast**.
+
+---
+
+# Previous release — v241 · build 707
+
+---
 
 Push the **contents of this folder** to the repo root Vercel serves.
 Supersedes v240 (build 706). Service worker cache is `lootfleet-v707`.

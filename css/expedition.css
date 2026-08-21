@@ -79,6 +79,7 @@
 .ex-rw em{font-style:normal;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;padding:3px 7px;border-radius:6px;background:#0d141f;border:1px solid var(--line);white-space:nowrap}
 .ex-rw.big em{font-size:13px;padding:5px 10px}
 .rw-g{color:#f2b24b}.rw-f{color:#5bc0ff}.rw-i{color:#d0a060}.rw-p{color:#c07bff}.rw-c{color:#8fd0ff}.rw-l{color:#ff9ee0}.rw-n{color:var(--muted-2)}
+.ex-rw em u{text-decoration:none;font-weight:600;font-size:.9em;letter-spacing:.04em;opacity:.66;margin-left:5px}
 
 /* ---- hangar -------------------------------------------------------------- */
 .ex-hang{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:8px}
@@ -88,6 +89,7 @@
 .ex-h-art{width:52px;height:38px;object-fit:contain;flex:none}
 .ex-h-main{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
 .ex-h-n{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:'Orbitron',sans-serif;font-weight:700;font-size:11.5px;color:var(--text)}
+.ex-rk.asc{color:#7df3ff;background:rgba(125,243,255,.12);border-color:rgba(125,243,255,.38)}
 .ex-rk{font-style:normal;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:9.5px;letter-spacing:.08em;color:#ffd24d;background:rgba(255,210,77,.12);border:1px solid rgba(255,210,77,.35);border-radius:5px;padding:1px 5px}
 .ex-tag{font-family:'Rajdhani',sans-serif;font-weight:800;font-size:9px;letter-spacing:.1em;padding:2px 6px;border-radius:5px;border:1px solid var(--line-2);color:var(--muted-2)}
 .ex-tag.ok{color:#6fe0a0;border-color:rgba(111,224,160,.4);background:rgba(111,224,160,.1)}
@@ -146,6 +148,18 @@
 .ex-note.warn{color:#ffd0a0;background:rgba(255,154,77,.09);border-color:rgba(255,154,77,.32)}
 .ex-note b{color:var(--text)}
 .ex-note.warn b{color:#ffe0bd}
+
+/* the formation you are flying right now — shown on the assignment sheet */
+.ex-fm{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border-radius:9px;background:rgba(95,120,170,.06);border:1px solid var(--line)}
+.ex-fm-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:10px;letter-spacing:.12em;color:var(--muted-2)}
+.ex-fm-h b{font-family:'Orbitron',sans-serif;font-size:9.5px;letter-spacing:.06em;color:var(--text)}
+.ex-fm-l{display:flex;flex-wrap:wrap;gap:5px}
+.ex-fm-c{display:flex;flex-direction:column;gap:1px;padding:4px 8px;border-radius:7px;background:#0d141f;border:1px solid var(--line-2);font-family:'Orbitron',sans-serif;font-size:10px;color:var(--text)}
+.ex-fm-c i{font-style:normal;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:8.5px;letter-spacing:.1em;color:var(--muted-2)}
+.ex-fm-c.flag{border-color:rgba(255,210,77,.35);background:rgba(255,210,77,.08)}
+.ex-fm-c.flag i{color:#ffd24d}
+.ex-fm-c.out{border-color:rgba(255,154,77,.4);background:rgba(255,154,77,.09)}
+.ex-fm-c.out i{color:#ff9a4d}
 
 .ex-conf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .ex-c-row{display:flex;flex-direction:column;gap:3px;padding:8px;border-radius:8px;background:#0d141f;border:1px solid var(--line);min-width:0}

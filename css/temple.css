@@ -74,3 +74,4 @@
    inline display simply re-applies the none below and the card stays hidden. */
 .mega-card.cmd-temple{display:none}
 .mega-card.cmd-temple.beta-on{display:flex}
+.tp-l{padding:3px 6px;border-radius:6px;background:rgba(255,184,77,.16);color:#ffb84d;font-size:9px;letter-spacing:.1em}

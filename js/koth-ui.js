@@ -56,7 +56,7 @@
   }
 
   function hero() {
-    const k = K().kills(), r = K().rank(), t = K().tierFor(k);
+    const k = K().myKills(), r = K().rank(), t = K().tierFor(k);
     const b = K().board(), lead = (b && b[0]) || null;
     const live = K().active();
     const signed = K().signedIn();
@@ -126,7 +126,7 @@
   }
   function boardRows() {
     const b = K().board() || [];
-    const me = K().rank(), mine = K().kills();
+    const me = K().rank(), mine = K().myKills();
     let rows = b.map((r) => row(r.rank, r.name, r.kills, r.ship, r.rank === me)).join('');
     if (!rows) rows = '<div class="koth-none">No kills logged yet today. Be the first name on the board.</div>';
     // the player's own row is always visible, even outside the top 25
@@ -214,7 +214,7 @@
   function removePill() { const p = $('koth-pill'); if (p) p.remove(); closeOverlay(); }
   function syncPill() {
     const p = $('koth-pill'); if (!p || !K()) return;
-    const r = K().rank(), k = K().kills();
+    const r = K().rank(), k = K().myKills();
     // PAUSED IS A STATE THE PILL HAS TO SHOW. Kills silently not counting is
     // indistinguishable from a broken feature, so it says PAUSED outright rather
     // than just freezing the number and letting the player guess.
@@ -265,7 +265,7 @@
     const ov = ovNode();
     if (!ov || !K()) { if (_ovT) { clearInterval(_ovT); _ovT = null; } return; }
     const b = (K().board() || []).slice(0, 5);
-    const me = K().rank(), mine = K().kills(), next = K().nextRankAt();
+    const me = K().rank(), mine = K().myKills(), next = K().nextRankAt();
     const gap = (next != null && next > mine) ? (next - mine) : 0;
     ov.innerHTML = '<div class="kov-card">'
       + '<button class="kov-x" data-close type="button">✕</button>'

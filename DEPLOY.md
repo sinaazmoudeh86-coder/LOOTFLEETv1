@@ -1,66 +1,50 @@
-# Loot Fleet — deploy v239 · build 704 · THE TEMPLE (CLOSED BETA, CODE-GATED) · KOTH PHANTOM-KILL FIX · NAME-SCRUB FIX
+# Loot Fleet — deploy v240 · build 706 · KOTH BOARD-RESET FIX · TEMPLE BETA CARD FIX
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v238 (build 694 — live). Service worker cache is `lootfleet-v704`.
-**Login screen reads `BUILD 704`.**
+Supersedes v239 (build 704). Service worker cache is `lootfleet-v706`.
+**Login screen reads `BUILD 706`.**
 
 ---
 
-## ⚠ THREE THINGS TO RUN, IN THIS ORDER
+## ⚠ THE ORDER IS THE OPPOSITE OF THE USUAL ONE
 
-### 1 · SQL — Supabase SQL Editor
+**Deploy the site FIRST. Run the King of the Hill reset SECOND.**
+
+Pre-705 clients ratchet their local kill total upward only — they never accept a
+lower figure from the server. Resetting the board while they are live means the
+next flush hands the stale count straight back, which is exactly what happened on
+the last attempt: the board was wiped and came back at 458 kills, tier 1168,
+within seconds. Build 706 is the one that makes a wipe stick.
+
+---
+
+## STEP BY STEP
+
+1. **Push the site.** Upload the contents of this folder to the repo root.
+2. **Wait ~90 seconds.** `update-gate.js` polls `version.json` and force-reloads
+   every live client onto 706.
+3. **Run the SQL**, Supabase → SQL Editor:
 
 | # | file | why | skip if |
 |---|---|---|---|
-| 1 | `supabase/temple.sql` | **NEW** — the whole Temple server layer: presence, kills, altar, vigil, ladder | never |
-| 2 | `supabase/koth-reset-day.sql` | zeroes TODAY's King of the Hill board (the pend-replay inflation) | you want inflated scores to stand until 00:05 UTC |
-| 3 | `supabase/koth-reset-pilot.sql` | optional — wipes `realsina1` alone | already run, or the day reset makes it moot |
+| 1 | `supabase/temple.sql` | the whole Temple server layer | already run |
+| 2 | `supabase/koth-reset-day.sql` | wipes TODAY's KOTH board — **run after step 2, not before** | never (the board is still inflated) |
 
-Then: `notify pgrst, 'reload schema';`
+   Then `notify pgrst, 'reload schema';`
 
-### 2 · EDGE FUNCTION — required (Temple claims announce on Discord)
+4. **Edge Function** (only if not already on 704+):
+   `supabase functions deploy discord-feed` — all four files. Verify
+   `select content from net._http_response order by created desc limit 3;` → `"ver":706`.
 
-```bash
-supabase functions deploy discord-feed
-```
-
-Four files (`index.ts`, `catalog.ts`, `render.ts`, `voice-688.ts`) — deploy the whole
-folder; a partial upload does not boot. Verify:
-`select content from net._http_response order by created desc limit 3;` → `"ver":703`.
-
-### 3 · SITE, THEN BEACON
-
-Upload the folder contents. `version.json` is inside — one upload is fine; only
-split if your host publishes incrementally (beacon last).
-
----
-
-## ⛩ THE TEMPLE SHIPS DARK — CLOSED BETA (704)
-
-The zone is fully deployed but INVISIBLE and REFUSED for everyone until their
-account redeems a beta code (⚙ Settings ▸ Coupon code). The gate is a one-way
-save flag (`templeBeta`), enforced in four places: the Command card (CSS-dark,
-revealed per-account), the screen (beta wall), `TEMPLE.enter()` (refused — a
-console call gets the same answer), and the Ranks tab (filtered out). The flag
-survives save merges. Codes live in the project root `CODES.md` — six of them,
-one per account, NOT in this folder.
-
-To open it to everyone later: ship a build that sets `state.templeBeta = 1` in a
-migration, or replace `betaOn()` with `true` — one line in `js/temple.js`.
-
-## SMOKE TEST
-
-1. Login screen reads `BUILD 703`.
-2. **Command** does NOT show a Temple card. Redeem a beta code (⚙ Settings ▸ Coupon code) — the card appears without a reload.
-3. Enter the Temple (Lv 60+, signed in): rim spawn, disk platform at centre with
-   the countdown ON the disk, joystick present, speed row and auto button GONE.
-4. Pill top-left: countdown · LEAVE arms to "SURE?" on first tap.
-5. Two accounts: shoot each other — hits land, death tows the loser home with the
-   normal penalty, kill appears in the Temple screen feed and `temple_kills`.
-6. **Ranks**: TEMPLE tab visible ONLY on beta accounts; everyone else sees the usual strip.
-7. KOTH: sit in the hangar on a second device after playing — score must NOT rise
-   (the pend-replay fix).
-8. Discord: a Temple claim posts within ~2 min of someone lifting an item.
+5. **Smoke test:**
+   - Login screen reads `BUILD 706`.
+   - **Ranks ▸ KING OF THE HILL** is empty after the reset and stays empty until
+     someone actually enters the arena. Your own count snaps to the server figure
+     within a few seconds of loading, with a "BOARD RESET" banner.
+   - Rank and kill count on the overlay agree — no "#2 with more kills than #1".
+   - **Redeem a Temple beta code** (⚙ Settings ▸ Coupon code): the violet TEMPLE
+     card appears on the Command menu immediately, no reload. Non-beta accounts
+     see no card, no Ranks tab, and `TEMPLE.enter()` refuses from the console.
 
 ---
 
@@ -68,14 +52,57 @@ migration, or replace `betaOn()` with `true` — one line in `js/temple.js`.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 704 |
-| root `version.json` | 704 |
-| `deploy-v239/version.json` | 704 |
-| `deploy-v239/sw.js` `CACHE` | `lootfleet-v704` |
-| `discord-feed` `FEED_VER` | 704 |
+| root `game.html` `window.LF_BUILD` | 706 |
+| root `version.json` | 706 |
+| `deploy-v240/version.json` | 706 |
+| `deploy-v240/sw.js` `CACHE` | `lootfleet-v706` |
+| `discord-feed` `FEED_VER` | 706 |
 
 Audited: all **87** referenced files (69 js, 18 css) byte-identical to the project
 root, zero stale, zero missing. `CODES.md` is not in this folder.
+
+---
+
+## What changed
+
+### 👑 The board could not be reset (705–706)
+
+Three faults, compounding.
+
+**The local total was a one-way ratchet.** Both read sites did
+`k.ack = Math.max(k.ack, d.kills)`. The max exists for a real reason — a second
+device can legitimately be ahead, and a poll must never claw back kills another
+session banked — but it meant a wiped board left the client holding its old
+number forever. A server total *below* what we already acknowledged has exactly
+one cause: the row was reset. That is now treated as an instruction, not noise —
+snap down, drop the pending queue (those kills belonged to the erased run), pull
+today's best back with it, restart the sequence, and tell the player the board
+was reset so the drop is not a second mystery.
+
+**Rank and count came from different sources.** `rank()` is the server's answer,
+`kills()` was the save's, and they were drawn side by side — which is how a pilot
+ends up reading "#2 · 2,481 KILLS" above a leader on 458. Whenever the server
+board carries this pilot's own row, that row now supplies both numbers.
+
+**The reset script's sequence fence did nothing.** It advanced `last_seq` by 1000
+to fence off in-flight work, but `koth_bump` only answers `replay` when
+`last_res` is non-null and the script nulls it — so an old client's next flush
+was accepted normally. It now sets `last_seq = 0`, which a reconciled client
+resumes from cleanly at seq 1 with an empty queue and no bouncing.
+
+### ⛩ The Temple beta card never appeared (705)
+
+`revealCard()` set `style.display = ''` to show it. That *removes* the inline
+style, handing the element straight back to `.mega-card.cmd-temple{display:none}`
+in the stylesheet — `.mega-card` is `display:flex`, so the fallback is hidden.
+The coupon granted correctly and the card could never show. Now a class toggle
+(`.beta-on`), so the stylesheet owns both states, evaluated on boot as well as on
+the 2-second loop.
+
+
+---
+
+# Previous release — v239 · build 704
 
 ---
 

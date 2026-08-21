@@ -176,6 +176,59 @@
     if (!(k.pend >= 0)) k.pend = 0;
     return k;
   }
+  // THE SERVER TOTAL IS AUTHORITATIVE IN BOTH DIRECTIONS.
+  //
+  // Both read sites used to do `k.ack = Math.max(k.ack, d.kills)`. The max is
+  // there for a real reason — a second device can be AHEAD of this one, and a
+  // poll must never claw back kills another session legitimately banked. But it
+  // also made the local total a one-way ratchet, so when the board was wiped the
+  // client kept the number it had: the server said 0, this save said 2,481, and
+  // the overlay drew the server's RANK next to the save's COUNT. That is how a
+  // pilot ends up "#2 with 2,481 kills" underneath a leader on 458 — two numbers
+  // from two different sources, one of them from a run that no longer exists.
+  //
+  // A server total BELOW what we already acknowledged has exactly one cause: the
+  // row was reset. Nothing else can take kills away. So a lower total is not
+  // noise to be filtered out, it is an instruction — snap down, drop the pending
+  // queue (those kills belonged to the erased run), and pull today's best back
+  // with it so the card cannot quote a figure the ladder has disowned.
+  function reconcile(k, serverKills) {
+    const sv = Math.max(0, serverKills | 0);
+    if (sv < (k.ack | 0)) {
+      k.ack = sv; k.pend = 0;
+      k.best = Math.min(k.best | 0, sv);
+      // THE SEQUENCE RESTARTS WITH THE BOARD. koth-reset-day.sql zeroes the
+      // server's last_seq, so a client still counting up from its old position
+      // would sit above the server for no reason; and if a future reset advances
+      // it instead, starting from zero here is still correct because the very
+      // next flush re-learns the answer. Any in-flight call belonged to the run
+      // that was just erased.
+      k.seq = 0; k.inflight = 0;
+      // the tier the server was told is derived from a count that no longer
+      // exists — let it be re-derived on the next kill
+      k.rank = 0;
+      if (!_snapped) { _snapped = 1; try { banner('\u21ba BOARD RESET', 'King of the Hill was reset. Your count starts from zero \u2014 the race is live now.'); } catch (e) {} }
+    } else {
+      k.ack = Math.max(k.ack | 0, sv);
+      k.best = Math.max(k.best | 0, k.ack | 0);
+    }
+  }
+  // THE COUNT SHOWN BESIDE A RANK MUST COME FROM THE SAME PLACE AS THE RANK.
+  //
+  // rank() is the server's answer; kills() is this save's. Drawing them side by
+  // side lets them disagree, and when they do the card is nonsense — "#2, 2,481
+  // kills" above a leader on 458. Whenever the server board carries this pilot's
+  // own row, that row is BOTH numbers; kills() is the fallback for the seconds
+  // before the first poll lands and for an unranked pilot who has not published.
+  function myKills() {
+    const k = ks(); if (!k) return 0;
+    const r = (k.rank | 0);
+    if (r > 0 && Array.isArray(_board)) {
+      const mine = _board.find((x) => (x.rank | 0) === r);
+      if (mine) return Math.max(mine.kills | 0, 0);
+    }
+    return (k.ack | 0) + (k.pend | 0);
+  }
   const kills = () => { const k = ks(); return k ? (k.ack | 0) + (k.pend | 0) : 0; };
   const rank = () => { const k = ks(); return k ? (k.rank | 0) : 0; };
   function lvl() { try { return (G().state.level | 0) || 1; } catch (e) { return 1; } }
@@ -187,6 +240,7 @@
   // ===========================================================================
   // CLOUD
   // ===========================================================================
+  let _snapped = 0;
   let _board = [], _boardAt = 0, _entrants = 0, _next = null, _flushing = false, _lastErr = '';
   // LIFETIME CROWNS — a separate, much slower board. koth_hall only changes once
   // a day at close, so this is fetched on demand and cached for the session
@@ -266,8 +320,7 @@
       // than bouncing forever.
       if (d.replay && took === 0) k.seq = (k.seq | 0) + 8;
       k.pend = Math.max(0, (k.pend | 0) - took);
-      k.ack = Math.max(k.ack | 0, d.kills | 0);
-      k.best = Math.max(k.best | 0, k.ack | 0);
+      reconcile(k, d.kills);
       const prev = k.rank | 0;
       k.rank = d.rank | 0;
       _lastErr = '';
@@ -307,10 +360,9 @@
       const k = ks(); if (!k) return;
       _entrants = d.entrants | 0;
       _next = d.next == null ? null : (d.next | 0);
-      // The server total can be AHEAD of ours (another device) but never behind
-      // what we have already acknowledged.
-      k.ack = Math.max(k.ack | 0, d.kills | 0);
-      k.best = Math.max(k.best | 0, k.ack | 0);
+      // Ahead of us means another device banked kills; behind us means the row
+      // was reset. reconcile() is the one place that decides which.
+      reconcile(k, d.kills);
       const prev = k.rank | 0;
       if (d.rank) k.rank = d.rank | 0;
       rankMoved(prev, k.rank);
@@ -609,7 +661,7 @@
   window.KOTH = {
     GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP, BAND, HP_SOFT, HP_POW,
     tierFor, hpMultFor, lvlFor, dmgMultFor, dayIdx, dayEnds, msLeft, scaleEnemy,
-    ks, kills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, HP_CAP, IDLE_MS,
+    ks, kills, myKills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, HP_CAP, IDLE_MS,
     enter, leave, onKill, engineTick, engineRender,
     flush, pollBoard, pollHall, setOpen, claimPrize, banner,
     board: () => _board, boardAt: () => _boardAt, entrants: () => _entrants,

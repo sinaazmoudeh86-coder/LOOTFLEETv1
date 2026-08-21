@@ -69,5 +69,8 @@
 .tp-x{cursor:pointer;transition:background .12s,color .12s}
 .tp-x:hover{background:rgba(255,255,255,.08);color:#e6d4ff}
 .tp-x.arm{background:rgba(255,90,104,.2);border-color:rgba(255,90,104,.6);color:#ff8a96}
-/* closed beta: dark by default, revealed per-account by TEMPLEUI.revealCard() */
+/* CLOSED BETA — dark by default, revealed per-account by TEMPLEUI.revealCard().
+   A CLASS, not an inline style: .mega-card is display:flex, so clearing an
+   inline display simply re-applies the none below and the card stays hidden. */
 .mega-card.cmd-temple{display:none}
+.mega-card.cmd-temple.beta-on{display:flex}

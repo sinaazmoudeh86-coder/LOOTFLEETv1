@@ -169,7 +169,10 @@
   // CSS-first so non-testers never see it flash on boot.
   function revealCard() {
     const c = document.querySelector('.mega-card.cmd-temple');
-    if (c) c.style.display = (T() && T().betaOn && T().betaOn()) ? '' : 'none';
+    if (!c) return;
+    const on = !!(T() && T().betaOn && T().betaOn());
+    c.classList.toggle('beta-on', on);
+    c.style.removeProperty('display');   // clear the old inline attempt
   }
   async function pollStatus() {
     const card = document.querySelector('.mega-card.cmd-temple .mc-n'); if (!card) return;
@@ -209,5 +212,9 @@
     } catch (e) {}
   }, 2000);
 
+  // The coupon calls revealCard() the instant it grants, but the Command sheet
+  // may not be built yet on a fresh load — so also try on boot and let the 2s
+  // loop keep it honest.
+  try { revealCard(); } catch (e) {}
   window.TEMPLEUI = { render, ensurePill, removePill, syncPill, revealCard };
 })();

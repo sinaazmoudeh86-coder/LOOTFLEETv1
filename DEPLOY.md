@@ -1,10 +1,13 @@
-# Loot Fleet — deploy v242 · build 710 · EXPLORATION PASS · BADGE COUNTS · NO BOT BOARDS
+# Loot Fleet — deploy v242 · build 710 · TEMPLE PvP FIX · KOTH DIFFICULTY · EXPLORATION PASS
 
 Push the **contents of this folder** to the repo root Vercel serves.
 Supersedes v241 (build 707). Service worker cache is `lootfleet-v710`.
 **Login screen reads `BUILD 710`.**
 
-Client-side only. **No SQL to run, no Edge Function to redeploy.**
+**⚠ ONE SQL FILE TO RE-RUN: `supabase/temple.sql`.** Required — the Temple PvP fix
+needs `temple_pilots()` to return the position fractions it already stores. It is
+`create or replace` throughout (with one explicit `drop function` for that one
+signature change) and safe to re-run on a live database. No Edge Function deploy.
 
 ---
 
@@ -31,7 +34,7 @@ that is not live yet. A single upload of the whole folder is fine.
 | `deploy-v242/version.json` | 710 |
 | `deploy-v242/sw.js` `CACHE` | `lootfleet-v710` |
 
-**Sixteen files changed**, all byte-identical to the project root and every one
+**Twenty files changed**, all byte-identical to the project root and every one
 cache-busted to `?v=710`:
 
 | area | files |
@@ -41,6 +44,8 @@ cache-busted to `?v=710`:
 | Badges + ladders | `js/achievements.js`, `js/ranks-boards.js`, `js/rank-rewards.js` |
 | Territory | `js/game-v93.js`, `js/territory.js`, `js/ui-v94.js`, `js/casino-citadels.js` |
 | Starforge | `js/starforge.js` |
+| King of the Hill | `js/koth.js`, `js/koth-ui.js` |
+| The Temple | `js/temple.js`, `supabase/temple.sql` |
 | Copy pass | `js/cargo-defense.js`, `js/season-pass.js`, `js/discord-reward.js` |
 
 Plus `game.html` (build stamp + `?v=` bumps) and a DO-NOT-RUN header on the
@@ -53,9 +58,11 @@ target resolves.
 
 ## STEP BY STEP
 
-1. **Nothing to run on the server.** No SQL, no `discord-feed` deploy. If you
-   want the feed's own copy fixed ("all six ladders" in the daily digest footer),
-   that is a separate Edge Function deploy and is NOT part of this build.
+1. **Supabase → SQL Editor → run `supabase/temple.sql`**, then
+   `notify pgrst, 'reload schema';`. Required for the Temple fix. No
+   `discord-feed` deploy — if you want the feed's own copy corrected ("all six
+   ladders" in the daily digest footer), that is a separate Edge Function deploy
+   and is NOT part of this build.
 2. **Push the contents of this folder** to the repo root Vercel serves. One upload
    of the whole folder is the safe way — the beacon then lands with the files.
    If your host publishes incrementally, push everything EXCEPT `version.json`
@@ -84,6 +91,13 @@ target resolves.
      the tile does not come back to you.
    - **Starforge locked (a sub-100 account)** — the veil is one line, the unlock
      level and a progress bar.
+   - **The Temple, two accounts, DIFFERENT SHAPED SCREENS** (a phone in portrait
+     and a desktop window is the exact case that was broken): each pilot sees the
+     other's nameplate move, the contact arrow points at them, and shots connect.
+     Then both stand on the altar and confirm neither banks vigil.
+   - **The Temple centre** — a dark circular well with a lit rim and a visibly
+     empty socket at its middle, the countdown above and below it, and the item
+     standing IN the socket when it spawns.
 6. **Run the clip auditor on the changed screens**: open with `?fitaudit` and check
    Fleet Exploration (assignment sheet), Badges, Ranks, the Voidmaw leaderboard
    sheet and the Empire-at-capacity sheet at **360×640 portrait** and a **~450px-tall
@@ -98,13 +112,88 @@ Event Coin balances stay whole numbers either way.
 
 ---
 
-## ⚠ One balance change worth watching
+### ⛩ The Temple — pilots could not see or hit each other
+
+Positions travelled as RAW world coordinates. `fitWorld()` gives every device the
+same world AREA but lays it out at **the screen's own aspect ratio**, and the
+Temple then doubles both dimensions — so `worldW`/`worldH` differ from phone to
+desktop. A pilot standing on their own altar broadcast `worldW / 2`, which read on
+a differently-shaped screen points somewhere else entirely, frequently outside the
+map. The head-count said two pilots were present, the nameplates were drawn off in
+the void, and `pilotNear()` tested shots against those same wrong positions — so
+the guns did nothing either. One root cause, both halves of the report.
+
+**Fractions are the wire format now.** `cast()` sends `fx`/`fy` (0–1 of the
+sender's world) and `temple_pilots()` returns the `fx`/`fy` that `temple_beat` has
+been storing all along. A new `place()` step converts fractions to this device's
+pixels **every tick**, so a rotation or a resize mid-fight cannot strand a
+nameplate. The altar is (0.5, 0.5) in every world, so the shared reference holds.
+A payload from an older client is rescaled from its declared world size when it
+carries one, and `x`/`y` still ride along for anything still reading them.
+
+### ◎ The altar reads as a place now
+
+The centre was near-black plates at 3–4% white over a near-black arena: from a few
+hundred units out there was nothing there, and an empty altar gave no clue that an
+item was ever going to appear on it. It is now a **dark well** — a hard-edged
+circle darker than any arena background — with a lit rim, two lit plate edges,
+slowly turning ribs, and an **empty socket at the centre** with a pulsing dashed
+collar. The socket is drawn whether or not anything is on it, because "something
+appears HERE" is the one thing the centre has to say. The countdown moved clear of
+the socket, and the item now stands in it.
+
+---
+
+### 👑 King of the Hill — the HP ramp is halved and has a real ceiling
+
+Two changes, both by request.
+
+**The ramp climbs at half the old rate.** The multiplier ABOVE base is halved, so
+kill 0 is still ×1 (a plain Zone-150 hostile) and everything past it is half what
+it was: kill 300 ×4 → ×2.5, kill 600 ×9 → ×5, kill 1,200 ×25 → ×13.
+
+**And it stops at what a Level 300 pilot already fights.** The ceiling is not a
+number picked by feel — it is read off the game's own curve every render:
+
+| step | value |
+|---|---|
+| pilot the ceiling is built for | **Level 300** (`CAP_PILOT_LV`) |
+| the zone that pilot flies on-level | **Zone 314** (first zone whose `zoneCombatLevel()` reaches 300) |
+| hostile HP there | `enemyHp(314)` = **1.388e12** |
+| arena base at `KOTH_ZONE` 150 | `enemyHp(150)` = **3.940e10** |
+| so the ceiling is | **×35.2**, reached at **kill 2,200** |
+| arena HP at the ceiling | **1.387e12** — the same fight, to three digits |
+
+Retune `enemyHp()`, `dungeonScale()` or the century bands and the ceiling follows
+them. Enemy LEVEL is uncapped and keeps climbing past kill 2,200, so depth still
+reads on the card.
+
+The twelve printed bands now run ×1 → ×11.39 (LV 200 → 640), the open row reads
+"HP climbs to ×35, then holds", and the difficulty card states the ceiling and the
+pilot level it is quoted from. The capped readout says **×35.2 MAX** instead of
+✖ WALL — the top of the ramp is endgame content now, not an arithmetic wall.
+
+**No server change.** The arena tops its field up by at most 6 hostiles per 0.25s
+— **24 kills/s sustained** — against a server allowance of 60/s plus a 300 burst,
+so a softer arena cannot push a flush into the rate clamp.
+
+---
+
+## ⚠ Balance changes worth watching
 
 The ×5 resource haul makes Fleet Exploration a net **fuel** source: a five-hull
 launch now pays roughly six times its own fuel cost, where it used to about break
 even. Ore and plasma were the intended target. If fuel inflation shows up in the
 first day, the knob is `RES_MULT` in `js/expedition.js` — or split it so fuel
 scales lower than iron and plasma.
+
+**KOTH scores will rise, and the top end becomes an attendance race.** Softer
+hostiles plus a ceiling mean a strong fleet pins at the arena's spawn throughput
+(~24 kills/s) once past kill 2,200, so beyond that point the ladder measures
+minutes present rather than DPS. That is the trade a difficulty cap makes. The
+presence rule still applies — kills only count with the tab visible and input
+inside 4 minutes — so it cannot be farmed by an open tab. The knobs if it needs
+pulling back: `HP_GROWTH` (0.5) and `CAP_PILOT_LV` (300) in `js/koth.js`.
 
 ---
 

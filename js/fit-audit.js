@@ -39,7 +39,11 @@
     marked.forEach((el) => el.classList.remove('fit-clip'));
     marked = []; last = [];
     const seen = new Set();
-    document.querySelectorAll('.screen.active .scr-body, .sheet-body').forEach((root) => {
+    // THE COMMAND SHEET IS A ROOT TOO. It is neither a .scr-body nor a
+    // .sheet-body — it is #mega .mega-grid — so the one screen with fourteen
+    // stacked cards on a phone was the one screen this auditor never looked at.
+    // That is where the clipped Pilot Ascension title lived, unflagged.
+    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid').forEach((root) => {
       if (seen.has(root)) return; seen.add(root);
       const els = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
       for (const el of els) {

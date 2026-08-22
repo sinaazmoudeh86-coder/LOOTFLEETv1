@@ -645,9 +645,11 @@
       if (r.error) return;              // koth.sql not run yet — stay quiet
       rows = r.data || [];
     } catch (e) { return; }
-    if (!rows.length) return;
+    if (!rows.length) { reconcileCrowns(); return; }
+    let crowned = 0;
     for (const a of rows) {
       const lc = a.lc | 0; if (!lc) continue;
+      crowned++;
       const when = new Date((a.day | 0) * DAY_MS).toISOString().slice(0, 10);
       window.MAIL.push({
         ic: '👑',
@@ -658,7 +660,26 @@
         meta: { kind: 'prize', prize: { lc }, koth: a.day },
       });
     }
+    // EACH ROW IS ONE CROWN. claim_koth_awards() marks them delivered inside the
+    // same statement that returns them, so a row can never arrive twice — which
+    // makes this the one honest place to count a win client-side.
+    if (crowned) { try { G().addKothCrowns(crowned); } catch (e) {} }
+    reconcileCrowns();
     save();
+  }
+  // THE CROWN TOTAL COMES FROM THE SERVER, NOT FROM COUNTING OUR OWN MAIL.
+  // koth_wins() counts koth_hall rows for this account, the only authoritative
+  // statement of how many races this pilot has won: an undelivered award, a save
+  // merge that picked the copy without it, or a reinstall all leave the local
+  // tally short — and two hull blueprints are gated on it. Strictly a FLOOR, so
+  // it can only ever raise the count.
+  async function reconcileCrowns() {
+    const c = cl(); if (!c || !G() || !G().state || !G().setKothCrowns) return;
+    try {
+      const r = await c.rpc('koth_wins');
+      if (r.error || r.data == null) return;      // koth.sql not run yet — stay quiet
+      G().setKothCrowns(r.data);
+    } catch (e) {}
   }
 
   // ===========================================================================

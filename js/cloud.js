@@ -445,6 +445,20 @@
       return { ok: true };
     } catch (e) { return { ok: false, reason: (e && e.message) || 'network' }; }
   }
+  // NO `_lbShape` WRITE IN ANY OF THE THREE READS BELOW (fixed Aug 2026).
+  //
+  // Each one carried `if (!error) _lbShape = shape;` copied from lbTop — but
+  // `shape` is lbTop's own local, declared inside lbTop and nowhere else. So the
+  // line threw ReferenceError on EVERY successful read, the surrounding catch
+  // turned that into `return null`, and all three Voidmaw reads failed 100% of
+  // the time while looking exactly like an empty board:
+  //   • the sheet sat on "Connecting to live standings…" forever (_cl.ok never set)
+  //   • both boards read "No operators published yet" with rows in the table
+  //   • sdMine never landed, so the server row could not act as the floor for a
+  //     lost local run — the reported "my run vanishes when I reload".
+  // sdread_scores has ONE column shape (there is no migration ladder here), so
+  // there is nothing for these to report. The line is simply gone.
+  //
   // MY OWN ROW, FETCHED DIRECTLY BY user_id — not scanned out of a board slice.
   // The boards are `limit(100)`, and the season board spans the whole season, so
   // a mid-table pilot simply is not in the array: "no row of mine" and "my row is
@@ -459,7 +473,6 @@
       const { data, error } = await client.from('sdread_scores')
         .select('user_id,name,season,day,best_day,total,stage')
         .eq('user_id', id).eq('season', season || 1).maybeSingle();
-      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }
@@ -470,7 +483,6 @@
         .select('user_id,name,best_day,total,stage')
         .eq('season', season || 1).eq('day', day || 0).gt('best_day', 0)
         .order('best_day', { ascending: false }).limit(n || 100);
-      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }
@@ -481,7 +493,6 @@
         .select('user_id,name,best_day,total,stage')
         .eq('season', season || 1).gt('total', 0)
         .order('total', { ascending: false }).limit(n || 100);
-      if (!error) _lbShape = shape;
       return error ? null : (data || null);
     } catch (e) { return null; }
   }

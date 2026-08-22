@@ -931,6 +931,13 @@
      'tourBeta', 'lv100Warned', 'deathExplained', 'capNotified'].forEach((f) => {
       if (other[f] && !base[f]) base[f] = other[f];
     });
+    // ---- KING OF THE HILL CROWNS. A lifetime count of #1 finishes, and the gate
+    // on the two carrier apexes (25 → Titan Aquila, 100 → Celestial Corvus). It is
+    // named here for the standing reason: a system absent from this union is
+    // decided wholesale by the base pick, and a crown cannot be re-earned — the
+    // race it was won in is over. Never spent, so max-wins is provably safe, and
+    // the server ledger (koth_wins) raises it again on the next login anyway.
+    base.kothCrowns = Math.max(Math.floor(Number(base.kothCrowns) || 0), Math.floor(Number(other.kothCrowns) || 0));
     // BLUEPRINTS — recovered schematics, never consumed on use. Epoch-guarded
     // only because the reset's clear list has changed before and a blueprint is
     // cheap to re-earn but expensive to wrongly restore across a wipe.

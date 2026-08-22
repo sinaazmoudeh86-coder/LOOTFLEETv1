@@ -1186,15 +1186,14 @@
     rt.beaconXpBudget = 0.5 * C.xpToNext(state.level);
     for (let i = 0; i < n; i++) {
       const ang = (Math.PI * 2 * i) / n + Math.random() * 0.5;
-      const rad = BEACON.ring + Math.random() * 700;
-      const x = Math.max(24, Math.min(rt.worldW - 24, a.x + Math.cos(ang) * rad));
-      const y = Math.max(24, Math.min(rt.worldH - 24, a.y + Math.sin(ang) * rad));
+      const p = ringSpawn(a.x, a.y, BEACON.ring, BEACON.ring + 700, 24, ang);
+      const x = p.x, y = p.y;
       const e = new E.Enemy(pickType(), zone, x, y);
       e.beacon = true;
       e.tithe = tithe;
       e.rush = 1;                          // charge the pilot instead of holding station
       e.spawnFx = 0.5;
-      if (!pushEnemy(e)) break;            // Temple: nothing to summon
+      pushEnemy(e);
     }
     rt.shake = Math.min(5, (rt.shake || 0) + 3);
     burst(a.x, a.y, '#ff8a3d', 70, { speed: 420, life: 1.1, glow: true });
@@ -1217,10 +1216,8 @@
         // the skill tree, which is not work to repeat per spawned ship
         const tithe = rt.beaconTithe || 1;
         for (let k = 0; k < 2 && rt.enemies.length < BEACON.cap; k++) {
-          const a2 = rt.archer, ang = Math.random() * Math.PI * 2, rad = BEACON.ring + Math.random() * 600;
-          const e2 = new E.Enemy(pickType(), state.currentDungeon,
-            Math.max(24, Math.min(rt.worldW - 24, a2.x + Math.cos(ang) * rad)),
-            Math.max(24, Math.min(rt.worldH - 24, a2.y + Math.sin(ang) * rad)));
+          const a2 = rt.archer, p2 = ringSpawn(a2.x, a2.y, BEACON.ring, BEACON.ring + 600, 24);
+          const e2 = new E.Enemy(pickType(), state.currentDungeon, p2.x, p2.y);
           e2.beacon = true; e2.rush = 1; e2.spawnFx = 0.5;
           e2.tithe = tithe;
           pushEnemy(e2);
@@ -1241,28 +1238,56 @@
     if (!beaconVisible() && rt.beaconSwarm > 0) rt.beaconSwarm = 0.01;
   }
 
+  // WHERE A HOSTILE ENTERS THE MAP.
+  //
+  // Every "spawn at a radius around the pilot" path used to CLAMP the result into
+  // the world: Math.min(worldW - pad, …). Mid-map that does nothing. In a corner
+  // most of the ring falls outside the world and every one of those angles
+  // collapses onto the corner — on top of the pilot. So camping a corner had
+  // hostiles delivered at point-blank instead of the intended 640–1160px out,
+  // travel time went to zero, and kills/second rose for POSITION ALONE. On a kill
+  // ladder that is the entire score.
+  //
+  // Sample angles until one lands in bounds instead, which keeps DISTANCE the
+  // constant it was always meant to be regardless of where the pilot sits. If the
+  // pilot is wedged so tightly that no angle on the ring fits, fall back to a
+  // uniformly random point in the world that is at least rMin away — further,
+  // never nearer. `prefAng` keeps an evenly-spaced ring evenly spaced in open
+  // space (the beacon summon) while still being fair against an edge.
+  function ringSpawn(cx, cy, rMin, rMax, pad, prefAng) {
+    pad = pad || 24;
+    const w = rt.worldW, h = rt.worldH, span = Math.max(0, rMax - rMin);
+    const ok = (x, y) => x >= pad && x <= w - pad && y >= pad && y <= h - pad;
+    for (let i = 0; i < 24; i++) {
+      const ang = (i === 0 && prefAng != null) ? prefAng : Math.random() * Math.PI * 2;
+      const rad = rMin + Math.random() * span;
+      const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+      if (ok(x, y)) return { x, y };
+    }
+    for (let i = 0; i < 40; i++) {
+      const x = pad + Math.random() * (w - pad * 2), y = pad + Math.random() * (h - pad * 2);
+      if (Math.hypot(x - cx, y - cy) >= rMin) return { x, y };
+    }
+    return { x: pad + Math.random() * (w - pad * 2), y: pad + Math.random() * (h - pad * 2) };
+  }
   function spawnAtNode(node) {
     const a = Math.random() * Math.PI * 2, r = Math.random() * RESPAWN_SPREAD;
     const x = Math.max(20, Math.min(rt.worldW - 20, node.x + Math.cos(a) * r));
     const y = Math.max(20, Math.min(rt.worldH - 20, node.y + Math.sin(a) * r));
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     voidSkin(e);
-    if (rt.temrun && rt.temrun.active) return;   // Temple: no node hostiles
     e.node = node; node.enemy = e;
     kothScale(e);
     pushEnemy(e);
   }
-  // THE TEMPLE ADMITS NO HOSTILES, EVER.
+  // THE SINGLE CHOKE POINT EVERY HOSTILE PASSES THROUGH.
   //
-  // Setting tileDensity to 0 stops the node layer, but at least six other paths
-  // push straight into rt.enemies — beacon swarms, the siege wave engine, boss
-  // spawns, other modules' spawners. Guarding them one at a time would leave the
-  // next one to be found by a player standing in a PvP zone shooting a raider.
-  // This is the single choke point every hostile has to pass through, so the rule
-  // is stated once and cannot be routed around.
+  // At least six paths push straight into rt.enemies — beacon swarms, the siege
+  // wave engine, boss spawns, other modules' spawners. Anything that has to be
+  // true of every hostile in the game is stated here once rather than guarded
+  // one caller at a time.
   function pushEnemy(e) {
     if (!e) return e;
-    if (rt.temrun && rt.temrun.active) return null;
     rt.enemies[rt.enemies.length] = e;
     return e;
   }
@@ -1742,7 +1767,15 @@
     // This covers the casino House Citadels too: they are `void: true` tiles with
     // the identical ×1.5 difficulty inflation, so they are the same exploit.
     const _voidRun = inVoidSystem();
-    if (!_cargoRun && !_homeRun && !_voidRun && !_kothRun) {
+    // THE DREADNAUGHT HUNT PAYS NO XP EITHER (build 711). Same door again: the
+    // hunt deploys into a zone priced off its TIER, not off the pilot — T20 is
+    // Level 505 content — and killXpFor() pays on the zone it is handed. Thirty
+    // escalating waves of hostiles carrying zone-505 XP is the fastest levelling
+    // in the game and it is available to anyone who can survive one deploy.
+    // The hunt's reward is the hunt's reward: Dread Cores, the raid-boss drop
+    // table, gold and loot, all untouched below. It is not a levelling route.
+    const _dreadRun = !!(state.dreadRun && state.dreadRun.active);
+    if (!_cargoRun && !_homeRun && !_voidRun && !_kothRun && !_dreadRun) {
       // BOSSES PAY NO XP BONUS. The 12× multiplier made boss dungeons the
       // fastest XP in the game by a wide margin — a repeatable boss is one kill
       // worth twelve, on a fight you can queue back to back, which is a farm
@@ -2670,8 +2703,6 @@
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineTick) { try { window.SDREAD.engineTick(dt, rt); } catch (e) {} }
     // KING OF THE HILL — the 24h kill race: tier scaling and field top-up.
     if (rt.kothrun && rt.kothrun.active && window.KOTH && window.KOTH.engineTick) { try { window.KOTH.engineTick(dt, rt); } catch (e) {} }
-    // THE TEMPLE — remote pilot sync, altar pickup, presence heartbeat.
-    if (rt.temrun && rt.temrun.active && window.TEMPLE && window.TEMPLE.engineTick) { try { window.TEMPLE.engineTick(dt, rt); } catch (e) {} }
     // HOLLOW ARMADA — alliance live raid on the real engine (timer, zones, transmit).
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineTick) { try { window.ALBOSS.engineTick(dt, rt); } catch (e) {} }
     // HOME CITADEL — wave defense on the real engine (fort objective, raider waves).
@@ -2755,28 +2786,6 @@
 
     // projectiles
     for (const p of rt.projectiles) { p.update(dt); if (p.hit) resolveHit(p); }
-    // THE TEMPLE — PvP HIT ATTRIBUTION.
-    //
-    // Remote pilots are nameplates driven by a broadcast, not engine entities, so
-    // they are invisible to targeting and to resolveHit(). Rather than fake them
-    // as enemies — which would put them in every nearbyEnemies() sweep, every
-    // drone target list and every loot roll — the collision is resolved here, on
-    // the projectiles the player actually fired.
-    //
-    // A hit does NOT decide anything. It reports a claim; temple.sql decides
-    // whether it counts, and refuses it unless both pilots are present, adjacent
-    // and off cooldown. The client is asserting "I shot at them", not "they died".
-    if (rt.temrun && rt.temrun.active && window.TEMPLE) {
-      for (const p of rt.projectiles) {
-        if (p.dead || p.enemy || p._temHit) continue;
-        // the swept segment: where it was last frame to where it is now
-        const uid = window.TEMPLE.pilotNear(p.x, p.y, 30, p._tpx, p._tpy);
-        p._tpx = p.x; p._tpy = p.y;
-        if (!uid) continue;
-        p._temHit = 1; p.dead = true;
-        try { window.TEMPLE.onHit(uid, p.damage || 0); } catch (e) {}
-      }
-    }
     sweepDead(rt.projectiles);
 
     // ground loot pickups + LOOT MAGNET: drops within range fly toward the
@@ -2935,6 +2944,30 @@
   // RENDER
   // --------------------------------------------------------------------------
   function draw() {
+    // ---- IS THE ARENA ACTUALLY ON SCREEN? ----------------------------------
+    // draw() is pure painting. Every array cap and every sweepDead() lives in
+    // update(), above — so when a menu covers the arena there is nothing to lose
+    // by not painting it, and a whole frame's budget to gain. Until now the full
+    // arena was composited at device resolution behind an opaque sheet on every
+    // frame, along with the minimap, the LOD colour grade and the 8Hz HUD writes.
+    // That is the reported "menu items are delayed while the game is running":
+    // the tap queued behind a render of pixels nobody could see.
+    //
+    // THE SIMULATION IS UNTOUCHED. It keeps real wall-clock time exactly as
+    // before — the rule the whole step() comment block above exists to protect.
+    // Only invisible pixels are skipped, so nothing about progression, XP, drops
+    // or event timers changes.
+    //
+    // Throttled to ~7Hz: one querySelector is cheap but not free at 60fps, and a
+    // screen change landing mid-window costs at most two frames of staleness.
+    if (!rt._avT || rt.time - rt._avT > 0.14) {
+      rt._avT = rt.time;
+      // #screen-battle is not an overlay and never carries .active — the battle
+      // screen IS "no overlay active" (see UI.showScreen). The Command sheet is a
+      // separate full-inset layer, so it counts too.
+      rt._hidden = !!document.querySelector('.screen.overlay.active, #mega.open');
+    }
+    if (rt._hidden) return;
     // SELF-HEAL canvas fit — runs for BOTH the home-bay and combat paths, before
     // any drawing. Re-fit on a 0 backing store, or when the canvas's CSS size has
     // drifted from the cached rt.w/h (e.g. it was measured small while hidden
@@ -3127,8 +3160,6 @@
     if (rt.sdrun && rt.sdrun.active && window.SDREAD && window.SDREAD.engineRender) { try { window.SDREAD.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // KING OF THE HILL — crown-gold arena vignette.
     if (rt.kothrun && rt.kothrun.active && window.KOTH && window.KOTH.engineRender) { try { window.KOTH.engineRender(ctx, rt.time, rt); } catch (e) {} }
-    // THE TEMPLE — the altar and every other pilot in the zone.
-    if (rt.temrun && rt.temrun.active && window.TEMPLE && window.TEMPLE.engineRender) { try { window.TEMPLE.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOLLOW ARMADA — collapse zones + siege aura over the arena.
     if (rt.alrun && rt.alrun.active && window.ALBOSS && window.ALBOSS.engineRender) { try { window.ALBOSS.engineRender(ctx, rt.time, rt); } catch (e) {} }
     // HOME CITADEL — the fort, its shield and turret fire, drawn in-world.
@@ -3696,7 +3727,12 @@
   // `tour` joins for the same reason `unreleased` did: a hull with no price, no
   // megaCost and no build order reads as "unlocked and affordable" and hands itself
   // over for free. Both are award-only routes, like missionShip and event.
-  function awardOnly(s) { return !!(s && (s.celestial || s.missionShip || s.event || s.alienTech || s.emberTech || s.flyReq || s.unreleased || s.tour)); }
+  // `build` JOINS THE LIST TOO. A hull with a build order is never a gold
+  // purchase, and every one of them carries `price: 0` — so `state.gold < 0` is
+  // false and buyShip() would have handed the Oblivion Spears, the Planetbreaker
+  // and now the two carrier apexes over for nothing the moment shipUnlocked()
+  // passed. Exactly the failure this guard exists for.
+  function awardOnly(s) { return !!(s && (s.celestial || s.missionShip || s.event || s.alienTech || s.emberTech || s.flyReq || s.unreleased || s.tour || s.build)); }
   function buyShip(key) {
     const ship = C.SHIP_BY_KEY[key];
     if (!ship || state.ownedShips[key]) return { ok: false, reason: 'owned' };
@@ -4275,8 +4311,6 @@
   // Armed on ENTRY only (not from resetZone, which also fires mid-zone), so
   // turning it off to dodge something by hand stays off for that whole visit.
   function armAuto() {
-    // never re-arm inside the Temple — see setAuto()
-    try { if (rt.temrun && rt.temrun.active) return; } catch (e) {}
     if (state.auto) return;
     state.auto = true;
     rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
@@ -4411,77 +4445,6 @@
     if (window.UI) window.UI.refreshAll(); save();
     return true;
   }
-  // ===========================================================================
-  // THE TEMPLE — true PvP arena
-  // ===========================================================================
-  // A very large empty world with an altar at the centre and NO hostiles: every
-  // threat here is another pilot. Deliberately different from every other arena
-  // in three ways.
-  //
-  //   NO SPAWNS. tileDensity 0 and the boss clock pushed out of reach. A hostile
-  //   wandering in would be free XP in a zone that is supposed to pay nothing but
-  //   the altar, and it would give a camper something to farm while they wait.
-  //
-  //   1x SPEED, HANDS ON. Game speed is forced to 1 and autopilot is disarmed —
-  //   see setGameSpeed()/setAuto(), which refuse to change either while temrun is
-  //   live. Speed is bought with money and auto is the idle half of the game;
-  //   neither belongs in a fight against a person.
-  //
-  //   FOUR TIMES THE WORLD. Finding someone should take a moment, and holding the
-  //   centre should mean something. A normal arena would put every pilot on top
-  //   of the altar from the first second.
-  function startTemple() {
-    state.currentDungeon = 200;
-    state.currentSystem = null;
-    state.dreadRun = null; rt.siege = null; rt.waves = null;
-    rt.tileDensity = 0; rt.tileLoot = 0; rt.tileRespawnMult = 0; rt.deepDeath = false;
-    resetZone();
-    rt.siege = null; rt.waves = null;
-    rt.enemies.length = 0; rt.ground.length = 0;
-    rt.bossInit = rt.bossTimer = 1e9;
-    rt.alrun = null; rt.hcrun = null; rt.cgrun = null; rt.sdrun = null; rt.kothrun = null;
-    rt.worldW = Math.round(rt.worldW * 2); rt.worldH = Math.round(rt.worldH * 2);
-    rt.temrun = { active: true, started: Date.now(), prevSpeed: state.gameSpeed || 1, prevAuto: !!state.auto };
-    // forced before the first frame, not on the next tick
-    state.gameSpeed = 1; state.auto = false;
-    rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
-    // SPAWN AT THE RIM, ON A RANDOM BEARING.
-    //
-    // The first cut dropped every pilot within 700 units of the centre in a world
-    // four times normal size — so two entrants started almost stacked, and both
-    // started standing on the altar. Neither "a very large area where you look
-    // for other pilots" nor "hold the centre" survives that: the search is over
-    // before it starts and the centre is where you happen to appear.
-    //
-    // Entering now costs a real flight in, on a bearing nobody can predict, which
-    // is also what stops a killed pilot re-entering directly on top of the pilot
-    // who just killed them.
-    {
-      const cx = rt.worldW / 2, cy = rt.worldH / 2;
-      const ang = Math.random() * Math.PI * 2;
-      const rad = Math.min(cx, cy) * (0.72 + Math.random() * 0.22);
-      rt.archer.x = Math.max(80, Math.min(rt.worldW - 80, cx + Math.cos(ang) * rad));
-      rt.archer.y = Math.max(80, Math.min(rt.worldH - 80, cy + Math.sin(ang) * rad));
-    }
-    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
-    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 0;
-    try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
-    try { if (window.UI && window.UI.syncJoystick) window.UI.syncJoystick(); } catch (e) {}
-    if (window.UI) window.UI.refreshAll(); save();
-    return true;
-  }
-  // Restore what the Temple took. Called from goSafeHangar/deploy teardown so a
-  // pilot who dies, warps out or closes the zone gets their speed tier and their
-  // autopilot back — losing a paid 5x permanently because you visited a PvP zone
-  // would be a far worse bug than anything the zone itself can do.
-  function endTemple() {
-    if (!rt.temrun) return;
-    const t = rt.temrun; rt.temrun = null;
-    try { state.gameSpeed = t.prevSpeed || 1; state.auto = !!t.prevAuto; } catch (e) {}
-    try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
-    try { if (window.TEMPLE) window.TEMPLE.leave(); } catch (e) {}
-    save();
-  }
   // Field top-up, called by the module when the arena thins out. Spawns OUTSIDE
   // weapon range so hostiles have to be flown at rather than appearing on top of
   // the pilot, and never attaches to a node — these are extras above the zone's
@@ -4500,11 +4463,10 @@
     if (!rt.kothrun || !rt.archer) return null;
     if (rt.enemies.length > 90) return null;      // frame-time ceiling
     const a = rt.archer;
-    const ang = Math.random() * Math.PI * 2;
-    const rad = 640 + Math.random() * 520;
-    const x = Math.max(24, Math.min(rt.worldW - 24, a.x + Math.cos(ang) * rad));
-    const y = Math.max(24, Math.min(rt.worldH - 24, a.y + Math.sin(ang) * rad));
-    const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
+    // 640–1160px out, from any position on the map — see ringSpawn. A corner used
+    // to collapse this ring onto the pilot and hand out free kills/second.
+    const p = ringSpawn(a.x, a.y, 640, 1160, 24);
+    const e = new E.Enemy(pickType(), state.currentDungeon, p.x, p.y);
     kothScale(e);
     pushEnemy(e);
     return e;
@@ -4712,9 +4674,6 @@
     // the one thing all of them go through, including goSafeHangar(). startKoth
     // arms rt.kothrun AFTER calling this, so it is unaffected.
     rt.kothrun = null;
-    // THE TEMPLE ends through endTemple(), not by nulling the flag: speed and
-    // autopilot have to be handed back or a pilot loses a paid 5x tier by dying.
-    if (rt.temrun) { try { endTemple(); } catch (e) {} }
     state.prismRun = null;   // any (re)deploy ends a Prism Field run
     state.prismFleetRun = null;   // ...and a Prism Fleet gauntlet run
     sweepLoot();
@@ -5734,9 +5693,9 @@
       x = 30 + Math.random() * (rt.worldW - 60);
       y = 30 + Math.random() * rt.worldH * 0.30;
     } else {
-      const a = Math.random() * Math.PI * 2, rad = Math.min(rt.worldW, rt.worldH) * (0.28 + Math.random() * 0.18);
-      x = Math.max(30, Math.min(rt.worldW - 30, rt.archer.x + Math.cos(a) * rad));
-      y = Math.max(30, Math.min(rt.worldH - 30, rt.archer.y + Math.sin(a) * rad));
+      const base = Math.min(rt.worldW, rt.worldH);
+      const p = ringSpawn(rt.archer.x, rt.archer.y, base * 0.28, base * 0.46, 30);
+      x = p.x; y = p.y;
     }
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
     voidSkin(e);
@@ -6580,23 +6539,11 @@
   // moment anything else happened to call syncAuto(). That is the intermittent
   // "locks in on the 3rd or 4th boss jump" freeze.
   function setAuto(v) {
-    // NO AUTOPILOT IN THE TEMPLE. Hands-off flying is the whole idle half of this
-    // game and it has no place in a zone where the opponent is a person: it would
-    // be bots duelling bots for a Paragon, and the 20% auto damage penalty is not
-    // a substitute for actually being there.
-    try { if (rt.temrun && rt.temrun.active && v) { state.auto = false; return; } } catch (e) {}
     state.auto = !!v; rt.joy.x = rt.joy.y = 0; rt.joy.active = false; save();
     try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
   }
   function setJoystick(x, y, active) { rt.joy.x = x; rt.joy.y = y; rt.joy.active = active; }
   function setGameSpeed(mult) {
-    // THE TEMPLE IS ALWAYS 1×. Speed multiplies movement, fire rate and everything
-    // else the fight is made of, so a pilot at 10× does not beat a pilot at 1× —
-    // they are playing a different game at ten times the clock. There is no
-    // version of that which is PvP, and it is a purchasable advantage besides.
-    // The lock lives HERE rather than in the UI because the speed row is not the
-    // only caller and a hidden button is not a rule.
-    try { if (rt.temrun && rt.temrun.active) { state.gameSpeed = 1; return false; } } catch (e) {}
     // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it
     if (mult === 10) { if (!state.secretSpeed) return false; state.gameSpeed = 10; save(); return true; }
     // 4× is the PREMIUM tier — ONLY a 500-LootCoin unlock opens it
@@ -7377,6 +7324,8 @@
     state.pilot.nodes['0,0'] = 1;                                // origin core is always unlocked
     if (!state.dreadLock) state.dreadLock = {};                  // weekly lockout: { tier: ISO-week completed }
     state.dreadRun = null;                                       // a hunt never resumes across a reload
+    if (state.kothCrowns == null) state.kothCrowns = 0;          // lifetime KOTH #1 finishes
+    try { syncCrownBlueprints(); } catch (e) {}
     if (!state.fleet) state.fleet = [];
     if (!state.citadelCd) state.citadelCd = {};
     if (!state.citadels) state.citadels = {};          // YOUR player-built citadels { tileId:{score} } (cap 5)
@@ -7809,6 +7758,12 @@
     // Some hulls aren't unlocked by a blueprint at all — the Aeternum's gate is
     // ASCENSION RANK, which no drop or purchase can substitute for.
     const hasBp = b.noBlueprint ? true : !!(state.blueprints && state.blueprints[key]);
+    // KING OF THE HILL CROWNS — the gate on the two carrier apexes. Lifetime #1
+    // finishes, counted from the server ledger (see kothCrowns), never from a
+    // client tally of its own runs.
+    const reqCrowns = b.reqCrowns || 0;
+    const crownsHave = kothCrowns();
+    const crownsMet = crownsHave >= reqCrowns;
     const reqAsc = b.reqAsc || 0;
     const ascHave = ascStars();
     const ascMet = ascHave >= reqAsc;
@@ -7816,29 +7771,84 @@
     const killsHave = state.totalKills || 0;         // ANY ship — no specific-hull grind
     const killsMet = killsHave >= reqKills;
     const cost = b.cost || {};
-    const have = { gold: state.gold || 0, fuel: (state.resources && state.resources.fuel) || 0, iron: (state.resources && state.resources.iron) || 0, plasma: (state.resources && state.resources.plasma) || 0, prism: prismIngots() };
-    let affordable = true; for (const k in cost) { if ((have[k] || 0) < cost[k]) affordable = false; }
+    // NEVER `| 0` A BALANCE OR A COST. These costs run to 100e12 — forty-six
+    // thousand times past the int32 ceiling — so a bitwise coerce anywhere in
+    // this comparison would wrap the number negative and either lock the button
+    // forever or hand the hull over free. Whole units via Math.floor(Number(x)).
+    const num = (x) => Math.floor(Number(x) || 0);
+    const have = { gold: num(state.gold), fuel: num(state.resources && state.resources.fuel), iron: num(state.resources && state.resources.iron), plasma: num(state.resources && state.resources.plasma), prism: num(prismIngots()), credits: num(state.credits) };
+    let affordable = true; for (const k in cost) { if (have[k] < num(cost[k])) affordable = false; }
     let status;
     if (owned) status = 'owned';
     else if (!ascMet) status = 'needasc';
+    else if (!crownsMet) status = 'needcrowns';
     else if (!hasBp) status = 'noblueprint';
     else if (!killsMet) status = 'needkills';
     else status = affordable ? 'buildable' : 'needres';
-    return { key, ship, build: b, owned, hasBp, reqShip, reqKills, killsHave, killsMet, reqAsc, ascHave, ascMet, cost, have, affordable,
+    return { key, ship, build: b, owned, hasBp, reqShip, reqKills, killsHave, killsMet, reqAsc, ascHave, ascMet,
+             reqCrowns, crownsHave, crownsMet, cost, have, affordable,
              building: false, otherBuilding: false, status, arrivesAt: 0, startedAt: 0, days: 0, instant: true };
+  }
+  // ===========================================================================
+  // KING OF THE HILL CROWNS — the count, and the blueprints it unlocks
+  // ===========================================================================
+  // `state.kothCrowns` is a LIFETIME, MONOTONIC count of #1 finishes. It is only
+  // ever raised, and only from the server: koth.js increments it as the award
+  // ledger is drained (one row per crown, marked delivered server-side, so a row
+  // arrives exactly once) and reconciles it against koth_wins() on login. A
+  // client never counts its own crowns — the ladder decides who won.
+  function kothCrowns() { return Math.floor(Number(state.kothCrowns) || 0); }
+  function addKothCrowns(n) {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (!v) return kothCrowns();
+    state.kothCrowns = kothCrowns() + v;
+    syncCrownBlueprints(); save();
+    return kothCrowns();
+  }
+  // Server-authoritative floor. koth_wins() counts koth_hall rows for this
+  // account, so it is the true total even if a crown mail was never opened or a
+  // save merge picked the copy that had not seen it yet.
+  function setKothCrowns(n) {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v <= kothCrowns()) { syncCrownBlueprints(); return kothCrowns(); }
+    state.kothCrowns = v;
+    syncCrownBlueprints(); save();
+    return v;
+  }
+  // A CROWN THRESHOLD IS A BLUEPRINT. Latched into state.blueprints the moment
+  // the count reaches it, so it reads exactly like every other recovered
+  // schematic (the ✔ BP chip, the merge union, the build sheet) and cannot be
+  // lost by dropping back below the threshold — there is no way to lose a crown,
+  // but a latch is the right shape for an earned thing regardless.
+  function syncCrownBlueprints() {
+    const have = kothCrowns();
+    let hit = 0;
+    for (const s of C.SHIPS) {
+      const need = s.build && s.build.reqCrowns; if (!need) continue;
+      if (have < need) continue;
+      if (!state.blueprints) state.blueprints = {};
+      if (!state.blueprints[s.key]) { state.blueprints[s.key] = 1; hit = 1; }
+    }
+    if (hit && window.UI && window.UI.refreshAll) { try { window.UI.refreshAll(); } catch (e) {} }
+    return hit;
   }
   function startBuildShip(key) {
     const inf = buildShipInfo(key); if (!inf) return { ok: false, reason: 'invalid' };
     if (inf.owned) return { ok: false, reason: 'owned' };
     if (!inf.ascMet) return { ok: false, reason: 'ascension' };
+    if (!inf.crownsMet) return { ok: false, reason: 'crowns' };
     if (!inf.hasBp) return { ok: false, reason: 'blueprint' };
     if (!inf.killsMet) return { ok: false, reason: 'kills' };
     if (!inf.affordable) return { ok: false, reason: 'resources' };
     const cost = inf.cost;
+    const _n = (x) => Math.floor(Number(x) || 0);
     if (!state.resources) state.resources = { fuel: 0, iron: 0, plasma: 0 };
-    if (cost.gold) state.gold = Math.max(0, (state.gold || 0) - cost.gold);
-    state.resources.fuel -= cost.fuel || 0; state.resources.iron -= cost.iron || 0; state.resources.plasma -= cost.plasma || 0;
-    if (cost.prism && state.prism) state.prism.ingots = Math.max(0, (state.prism.ingots || 0) - cost.prism);
+    if (cost.gold) state.gold = Math.max(0, _n(state.gold) - _n(cost.gold));
+    state.resources.fuel = _n(state.resources.fuel) - _n(cost.fuel);
+    state.resources.iron = _n(state.resources.iron) - _n(cost.iron);
+    state.resources.plasma = _n(state.resources.plasma) - _n(cost.plasma);
+    if (cost.prism && state.prism) state.prism.ingots = Math.max(0, _n(state.prism.ingots) - _n(cost.prism));
+    if (cost.credits) state.credits = Math.max(0, _n(state.credits) - _n(cost.credits));
     // delivered on the spot
     grantShip(key); save();
     if (window.UI) { if (window.UI.shipBuilt) window.UI.shipBuilt(C.SHIP_BY_KEY[key]); else if (window.UI.refreshAll) window.UI.refreshAll(); }
@@ -7877,11 +7887,11 @@
     init, state, rt, save, computeStats, refreshStats,
     shipLevel, shipUpInfo, upgradeShip, spawnFleetBoss,
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
-    startTemple, endTemple, inTemple: () => !!(rt.temrun && rt.temrun.active),
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
     buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
+    kothCrowns, addKothCrowns, setKothCrowns, syncCrownBlueprints,
     lanceState,
     canFlyShip,
     beamCount,

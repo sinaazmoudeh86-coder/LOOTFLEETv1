@@ -951,7 +951,8 @@
     _cl.inflight = true; _cl.inflightAt = Date.now(); _cl.t = Date.now();
     Promise.all([window.CLOUD.sdDaily(SEASON.num, s.day, 100), window.CLOUD.sdSeason(SEASON.num, 100),
       window.CLOUD.sdMine ? window.CLOUD.sdMine(SEASON.num) : Promise.resolve(null)]).then(([d, se, mine]) => {
-      _cl.inflight = false; _cl.ok = !!(d || se);
+      _cl.inflight = false; _cl.ok = !!(d || se); _cl.tries = (_cl.tries | 0) + 1;
+      if (!_cl.ok) console.warn('[voidmaw] board read returned nothing — pass ' + _cl.tries);
       if (d) { _cl.day = d; _cl.dayIdx = s.day; }
       if (se) _cl.season = se;
       if (mine) _cl.mine = mine;
@@ -960,16 +961,52 @@
       try { reconcileFromServer(); } catch (e) {}
       syncRanks();
       if (cb) cb();
-    }).catch(() => { _cl.inflight = false; });
+    }).catch((e) => {
+      // A FAILED PASS IS A STATE, NOT A NO-OP. This used to only release the
+      // inflight latch, so a board that could never load stayed on "Connecting…"
+      // for the whole session with nothing on screen or in the console to say so.
+      _cl.inflight = false; _cl.ok = false; _cl.tries = (_cl.tries | 0) + 1;
+      console.warn('[voidmaw] board read failed', e);
+    });
   }
-  function liveDailyRank() { const s = sd(); if (!s || !s.bestDay || !_cl.day) return null; return 1 + cloudOthers(_cl.day).filter((r) => (r.best_day || 0) > s.bestDay).length; }
-  function liveSeasonRank() { const s = sd(); if (!s || !s.total || !_cl.season) return null; return 1 + cloudOthers(_cl.season).filter((r) => (r.total || 0) > Math.floor(s.total)).length; }
+  function liveDailyRank() {
+    const s = sd(); if (!s || !s.bestDay || !_cl.day) return null;
+    // A RANK NEEDS A KNOWN IDENTITY. cloudOthers() cannot exclude my own row when
+    // myUid() is null (AUTH not ready yet), so it keeps everything — and my own
+    // published row then counts as a rival ahead of me. That is the reported
+    // "#2 when I'm the only one on the board": one row, mine, counted twice.
+    if (!myUid()) return null;
+    return 1 + cloudOthers(_cl.day).filter((r) => (r.best_day || 0) > s.bestDay).length;
+  }
+  function liveSeasonRank() {
+    const s = sd(); if (!s || !s.total || !_cl.season) return null;
+    if (!myUid()) return null;
+    return 1 + cloudOthers(_cl.season).filter((r) => (r.total || 0) > Math.floor(s.total)).length;
+  }
   // remember the latest observed live ranks — the daily/season settlements use
   // them so rewards match the REAL board, not the offline fallback.
+  //
+  // A SAVED RANK IS ALSO CLEARED, not only written (fixed Aug 2026). This only
+  // ever wrote, so a rank observed once outlived the board that produced it: a
+  // placing from the era when the board padded itself with generated rivals sat
+  // in the save and kept printing "#2" against a board that now has one real row
+  // on it. A board that loaded is authoritative in BOTH directions — if it does
+  // not place me, I am not placed. Each board only speaks for its own rank, so a
+  // daily read that landed says nothing about the season rank.
   function syncRanks() {
     const s = sd(); if (!s) return;
-    const d = liveDailyRank(); if (d) s.lbRank = { day: s.day, rank: d };
-    const sr = liveSeasonRank(); if (sr) s.lbSeasonRank = sr;
+    let hit = 0;
+    if (_cl.day && myUid()) {
+      const d = liveDailyRank();
+      const next = d ? { day: s.day, rank: d } : null;
+      const prev = s.lbRank;
+      if (!next !== !prev || (next && prev && (prev.rank !== next.rank || prev.day !== next.day))) { s.lbRank = next; hit = 1; }
+    }
+    if (_cl.season && myUid()) {
+      const sr = liveSeasonRank() || null;
+      if ((s.lbSeasonRank || null) !== sr) { s.lbSeasonRank = sr; hit = 1; }
+    }
+    if (hit) { try { G().save(); } catch (e) {} }
   }
   // publish my row after every run (identity = auth.uid(); server keeps maxes)
   //
@@ -1076,7 +1113,9 @@
           ? (signedIn
               ? '<div class="sdl-live">🌐 LIVE — real server standings · auto-updates<span class="sdl-pulse"></span></div>'
               : '<div class="sdl-live off">🌐 LIVE board (read-only) — <b style="color:#ffcf7a">you\u2019re a guest: your runs don\u2019t publish.</b> Sign in to place.</div>')
-          : '<div class="sdl-live off">🌐 Connecting to live standings…</div>')
+          : ((_cl.tries | 0) >= 2
+              ? '<div class="sdl-live off">🌐 Live standings aren’t reachable right now — retrying</div>'
+              : '<div class="sdl-live off">🌐 Connecting to live standings…</div>'))
       : '<div class="sdl-live off">Offline — sign in to see the live standings</div>';
     const emptyRow = '<div class="sdm-nodrop" style="margin:0">No operators published yet.</div>';
     return liveNote + aloneNote +

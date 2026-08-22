@@ -193,28 +193,6 @@
       empty: 'No expeditions flown yet. Launch one from Command ▸ Fleet Exploration.',
     },
     {
-      // THE TEMPLE — PvP standing. Ranked on ALTARS TAKEN first, kills second:
-      // a pure kill board would reward farming whoever is weakest at the rim and
-      // ignoring the altar, and the altar is the point of the zone. Deaths are
-      // SHOWN but never ranked on — the hull reset already punished them once,
-      // and a public shame number would make the whole zone a place to avoid.
-      // Server-owned end to end (temple_claims + temple_kills, both written only
-      // by security-definer RPCs), so nothing here can be self-reported.
-      id: 'temple', ic: '\u2694', col: '#c98bff', label: 'TEMPLE', sub: 'PvP \u00b7 Altars \u00b7 Kills',
-      sql: 'temple.sql',
-      info: 'The Temple \u2014 altars claimed off the disk, then kills. Deaths are shown, never ranked. Every row is a real pilot; nothing in the Temple can be reported by the player who did it.',
-      unit: 'ALTARS',
-      metric: (p) => (p.altars | 0) * 1e9 + (p.kills | 0) * 1e3 + (p.best_rarity | 0),
-      fmt: (v, p) => String(p.altars | 0),
-      meta: (p) => {
-        const r = (window.CONFIG && window.CONFIG.RARITY[p.best_rarity | 0]) || null;
-        return (p.kills | 0) + ' kill' + ((p.kills | 0) === 1 ? '' : 's') + ' \u00b7 ' + (p.deaths | 0) + ' death' + ((p.deaths | 0) === 1 ? '' : 's')
-          + ((p.best_rarity | 0) >= 11 && r ? ' \u00b7 best: ' + r.name : '');
-      },
-      empty: 'No altars have been taken. The first pilot to lift one off the disk owns this board.',
-      async: true,
-    },
-    {
       // KING OF THE HILL — the only board with two views, because the event has
       // two honest answers to "who is winning". TODAY is the live race from
       // koth_top(); CROWNS is the career record from koth_hall. Neither is
@@ -379,20 +357,12 @@
     return (K.board() || []).map((r) => Object.assign({}, r, { view: 'day' }));
   }
 
-  async function fetchTemple() {
-    const c = cl(); if (!c) return [];
-    const r = await c.rpc('temple_top', { p_n: 50 });
-    if (r.error) throw r.error;
-    return r.data || [];
-  }
-
   function loadAsync(id, cb) {
     const hit = _cache[id];
     if (hit && Date.now() - hit.at < TTL) { cb(hit.rows, hit.err); return; }
     const job = id === 'voidmaw' ? fetchVoidmaw()
       : id === 'koth' ? fetchKoth('day')
       : id === 'koth:hall' ? fetchKoth('hall')
-      : id === 'temple' ? fetchTemple()
       : Promise.resolve([]);
     job.then((rows) => { _cache[id] = { at: Date.now(), rows, err: null }; cb(rows, null); })
        .catch((err) => { _cache[id] = { at: Date.now(), rows: [], err }; cb([], err); });

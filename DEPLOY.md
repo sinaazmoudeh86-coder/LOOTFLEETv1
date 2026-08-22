@@ -1,23 +1,33 @@
-# Loot Fleet — deploy v242 · build 710 · TEMPLE PvP FIX · KOTH DIFFICULTY · EXPLORATION PASS
+# Loot Fleet — deploy v242 · build 711 · TEMPLE REMOVED · KOTH CROWN HULLS · MOBILE + PERF
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v241 (build 707). Service worker cache is `lootfleet-v710`.
-**Login screen reads `BUILD 710`.**
+Supersedes v241 (build 707). Service worker cache is `lootfleet-v711`.
+**Login screen reads `BUILD 711`.**
 
-**⚠ ONE SQL FILE TO RE-RUN: `supabase/temple.sql`.** Required — the Temple PvP fix
-needs `temple_pilots()` to return the position fractions it already stores. It is
-`create or replace` throughout (with one explicit `drop function` for that one
-signature change) and safe to re-run on a live database. No Edge Function deploy.
+**This folder carries builds 708–711.** 708, 709 and 710 were staged here and
+never pushed, so everything below ships in one go.
+
+**⚠ ONE SQL FILE TO RUN: `supabase/koth-archive.sql`.** Required — without it
+King of the Hill keeps crowning the wrong pilot (see below), and the two new
+carrier blueprints read a crown count that stays at zero. It drops and recreates
+`koth_bump` by catalogue lookup and asserts exactly one copy survives, so run the
+whole file in one go, not in pieces. No Edge Function deploy; `discord-feed`
+stays at `FEED_VER 694`.
+
+**`supabase/temple.sql` IS GONE and must NOT be run.** The Temple was removed in
+711; the file no longer exists in this folder. Earlier notes below still describe
+the Temple fix that shipped into 710 — they are historical record, superseded.
+The Postgres tables it created are harmless if left in place; nothing reads them.
 
 ---
 
-## THIS RELEASE FORCES EVERY PLAYER TO REFRESH
+## THIS RELEASE EVICTS EVERY LIVE CLIENT
 
 | mechanism | how it forces the reload |
 |---|---|
-| `version.json` = **710** vs clients running `LF_BUILD` 707 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
-| `sw.js` `CACHE` = **lootfleet-v710** | the cache name changed, so the old bundle is evicted rather than served from disk |
-| every changed `js/`+`css/` ref carries `?v=710` | no browser can serve a stale copy of a changed file |
+| `version.json` = **711** vs clients running `LF_BUILD` 707 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
+| `sw.js` `CACHE` = **lootfleet-v711** | the cache name changed, so the old bundle is evicted rather than served from disk |
+| every changed `js/`+`css/` ref carries `?v=711` | no browser can serve a stale copy of a changed file |
 
 **Push the site FIRST, then `version.json` last** if your host publishes
 incrementally — bumping the beacon ahead of the files evicts players onto code
@@ -25,90 +35,247 @@ that is not live yet. A single upload of the whole folder is fine.
 
 ---
 
-## Build stamps — all agree
+## THE FOUR BUILD STAMPS
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 710 |
-| root `version.json` | 710 |
-| `deploy-v242/version.json` | 710 |
-| `deploy-v242/sw.js` `CACHE` | `lootfleet-v710` |
+| root `game.html` `window.LF_BUILD` | 711 |
+| root `version.json` | 711 |
+| `deploy-v242/version.json` | 711 |
+| `deploy-v242/sw.js` `CACHE` | `lootfleet-v711` |
 
-**Twenty files changed**, all byte-identical to the project root and every one
-cache-busted to `?v=710`:
+Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
+origin and is never versioned.
 
-| area | files |
-|---|---|
-| Fleet Exploration | `js/expedition.js`, `js/expedition-ui.js`, `js/ascension.js`, `css/expedition.css` |
-| Voidmaw event | `js/server-dreadnaught.js` |
-| Badges + ladders | `js/achievements.js`, `js/ranks-boards.js`, `js/rank-rewards.js` |
-| Territory | `js/game-v93.js`, `js/territory.js`, `js/ui-v94.js`, `js/casino-citadels.js` |
-| Starforge | `js/starforge.js` |
-| King of the Hill | `js/koth.js`, `js/koth-ui.js` |
-| The Temple | `js/temple.js`, `supabase/temple.sql` |
-| Copy pass | `js/cargo-defense.js`, `js/season-pass.js`, `js/discord-reward.js` |
-
-Plus `game.html` (build stamp + `?v=` bumps) and a DO-NOT-RUN header on the
-superseded `supabase/ranks-ladders.sql`. Audited: **87/87** referenced files
-present and identical to root — zero stale, zero missing. All 90 scripts parse
-clean, all 19 stylesheets balanced, no duplicate DOM ids, every nav and Command
-target resolves.
+Audited: all **84** referenced files byte-identical to the project root, zero
+stale, zero missing, every one cache-busted. `game.html` in this folder is
+identical to the project root copy. No `temple` reference survives anywhere in
+the shipped HTML.
 
 ---
 
 ## STEP BY STEP
 
-1. **Supabase → SQL Editor → run `supabase/temple.sql`**, then
-   `notify pgrst, 'reload schema';`. Required for the Temple fix. No
-   `discord-feed` deploy — if you want the feed's own copy corrected ("all six
-   ladders" in the daily digest footer), that is a separate Edge Function deploy
-   and is NOT part of this build.
+1. **Supabase → SQL Editor → run `supabase/koth-archive.sql`** (whole file, one
+   go), then `notify pgrst, 'reload schema';`. Read section 6 of that file first
+   if you want to know which bug took day 1 — the queries are read-only.
 2. **Push the contents of this folder** to the repo root Vercel serves. One upload
    of the whole folder is the safe way — the beacon then lands with the files.
    If your host publishes incrementally, push everything EXCEPT `version.json`
    first, then `version.json`.
 3. **Watch the eviction.** Within ~90 seconds every live client blocks and reloads
-   onto 710 (`js/update-gate.js` polls `version.json`).
-4. **Confirm the login screen reads `BUILD 710`.**
+   onto 711.
+4. **Confirm the login screen reads `BUILD 711`.**
 5. **Smoke test, in this order:**
-   - **Fleet Exploration ▸ any contract ▸ ASSIGN FLEET** — reward chips name their
-     currency (Gold / Fuel / Iron / Plasma / Dread Cores / LootCoins); the
-     formation strip lists your flagship and escorts and flips a picked escort to
-     **PULLED OUT**; an ascended hull shows a **✦ N** chip and a higher rating.
-   - **Launch one short run** — the resource lines on the debrief are ~5× what they
-     were. (Expect fuel to come home in profit; see the note at the end.)
-   - **Command ▸ Missions ▸ Badges** — the header total and the sum of the chain
-     cards now agree. On your save: **846 / 1110** everywhere.
-   - **Command ▸ Ranks ▸ BADGES** — reads `/1110`, and the copy says 1,110.
-   - **Command ▸ Ranks ▸ KING OF THE HILL** — hull names, not `dread6`.
-   - **Voidmaw ▸ 🏆 Leaderboards** — real operators only. Signed out or offline the
-     board is EMPTY, never populated with names; your rank chip reads
-     "Rank pending" rather than a number.
-   - **Starforge** — a multi-cannon hull reads Cannon, Cannon II, Cannon III …
-     Same for munitions and hulls.
-   - **My Galaxy ▸ abandon a tile**, then let someone claim it (or wait for the
-     60s convergence pull) — **no** war-report mail, no feed line, no toast, and
-     the tile does not come back to you.
-   - **Starforge locked (a sub-100 account)** — the veil is one line, the unlock
-     level and a progress bar.
-   - **The Temple, two accounts, DIFFERENT SHAPED SCREENS** (a phone in portrait
-     and a desktop window is the exact case that was broken): each pilot sees the
-     other's nameplate move, the contact arrow points at them, and shots connect.
-     Then both stand on the altar and confirm neither banks vigil.
-   - **The Temple centre** — a dark circular well with a lit rim and a visibly
-     empty socket at its middle, the countdown above and below it, and the item
-     standing IN the socket when it spawns.
-6. **Run the clip auditor on the changed screens**: open with `?fitaudit` and check
-   Fleet Exploration (assignment sheet), Badges, Ranks, the Voidmaw leaderboard
-   sheet and the Empire-at-capacity sheet at **360×640 portrait** and a **~450px-tall
-   landscape** window. Zero red outlines.
+   - **Command sheet on a phone (360px and 390px wide)** — no card title sliced
+     along its top edge, no subtitle running under a count badge, and every card
+     icon still centred in its tile. Then open with `?fitaudit`: the chip must
+     read **✔ NO CLIPPING** with the Command sheet open (the auditor covers that
+     sheet for the first time in 711).
+   - **Voidmaw ▸ LEADERBOARDS** — the note reads **LIVE**, not "Connecting to live
+     standings". Do a run, reload, and confirm the figure survives. If you are the
+     only published operator the board says so and shows **no rank at all** rather
+     than #2.
+   - **Any zone, attack running, then tap between Command items** — the menu
+     should respond immediately. The simulation keeps real time regardless: check
+     a Voidmaw or KOTH run's clock still matches the wall clock.
+   - **Fleet Exploration ▸ any contract ▸ ASSIGN FLEET** — scroll to the bottom of
+     the hull list and pick several. The sheet must stay where you left it.
+   - **King of the Hill** — fight through the UTC midnight rollover on one account
+     while a second account sits idle with a smaller score. Next day the crown goes
+     to the bigger score. (This is the day-1 bug; it needs the SQL.)
+   - **KOTH, a corner of the arena** — hostiles still arrive from 640–1160px out,
+     not on top of you. Kills/second in a corner should match the middle.
+   - **Dreadnaught Hunt, any tier** — kills pay **no XP**. Cores, drops and gold
+     unchanged.
+   - **Hangar ▸ Ships ▸ Titan Aquila / Celestial Corvus** — each reads
+     `👑 n / 25` or `👑 n / 100` crowns with a progress bar and its full build
+     cost, instead of "Not yet available".
+   - **Command** — no Temple card, and `#screen-temple` is gone from the DOM.
 
 ### Rollback
 
-Push `deploy-v241` (build 707) and set `version.json` back to 707. 710 writes no
-new save fields, so a rollback loses nothing: the badge/board/copy fixes are all
-render-time, the abandon guard reads `tileAband` (which 707 already wrote), and
-Event Coin balances stay whole numbers either way.
+Push `deploy-v241` (build 707) and set `version.json` back to 707. 711 writes one
+new save field (`kothCrowns`, a monotonic count) which 707 ignores, so a rollback
+costs nothing. `koth-archive.sql` is additive — the archive table and the frozen
+close are safe to leave in place under 707.
+
+---
+
+## What changed in 711
+
+### ⛩ The Temple is removed
+
+Deleted outright, at your request: `js/temple.js`, `js/temple-ui.js`,
+`css/temple.css` and `supabase/temple.sql`. Stripped from `game.html` (stylesheet,
+both script tags, `#screen-temple`, the Command card, the `.cmd-temple` palette
+rules, the `temple:60` level gate, the Command-highlight selector), from
+`game-v93.js` (`startTemple`/`endTemple`/`inTemple`, the engine tick and render
+hooks, the PvP hit-attribution pass over every projectile, and the `temrun` guards
+in `pushEnemy`/`spawnAtNode`/`armAuto`/`setAuto`/`setGameSpeed`), from
+`ui-v94.js` (screen route, `templeLock()`, the Ranks tab gate), from
+`ranks-boards.js` (the board and `fetchTemple`), `rank-rewards.js`, and
+`redeem.js` (six beta codes and the grant).
+
+Two deliberate leftovers. `templeBeta` stays in `account.js`'s merge union list —
+removing a name from that list changes save-merge behaviour, and the flag is now
+inert. And the Ranks board resets an **unrecognised** tab to POWER rather than
+special-casing one id, so an account whose saved tab was TEMPLE lands somewhere
+real.
+
+### 👑 King of the Hill crowned the wrong pilot on day 1
+
+`koth_scores` holds **one row per player** with the event day as a column on it.
+`koth_bump()` zeroes that row the moment it sees a bump belonging to a newer day.
+`koth_close()` runs at 00:01 and reads the finished day out of that same table —
+so for the first minute of every race the only copy of the day being judged is a
+row that any bump will wipe.
+
+And the pilots who bump in that minute are exactly the pilots still in the arena
+at midnight. `js/koth.js` rolls over the instant the clock passes it:
+
+```js
+if (ks().day !== dayIdx()) { flush(true); … }
+```
+
+That flush lands stamped with the new day, the row resets to `kills = 0`, and a
+minute later the close cannot see the leader at all. It crowns the best pilot who
+had **stopped playing** before midnight. Being present at the reset was a
+disqualification — and the biggest lead is the most likely to still be flying when
+the day turns, so the bug selected against the leader specifically.
+
+`supabase/koth-archive.sql` fixes it: a `koth_final` archive table, `koth_bump`
+archives the outgoing row **before** zeroing it, and `koth_close` freezes whatever
+is still on the closing day into the same archive and judges the snapshot. A pilot
+can now fight through midnight without erasing the race they just ran.
+
+Day 1 itself is not recoverable — the leader's total was overwritten with 0 and the
+server kept no second copy. Section 6 of that file has read-only queries that say
+which bug hit (this one, or the old rate-cap flag rule if day 1 predates
+`koth-ratefix.sql`), and `koth_crown_override(day, user, kills)` re-decides a day
+and pays the real winner without clawing back what was already delivered.
+
+### ✦ Voidmaw's leaderboard was dead for everyone, always
+
+`sdMine`, `sdDaily` and `sdSeason` in `cloud.js` each carried
+`if (!error) _lbShape = shape;` copied from `lbTop` — where `shape` is `lbTop`'s
+own local, declared inside it and nowhere else. So the line threw a ReferenceError
+on every **successful** read, the surrounding catch turned that into
+`return null`, and all three reads failed 100% of the time while looking exactly
+like an empty board:
+
+- the sheet sat on "Connecting to live standings…" forever (`_cl.ok` never set)
+- both boards read "No operators published yet" with rows in the table
+- `sdMine` never landed, so the server row could not act as the floor for a lost
+  local run — the reported "my run vanishes when I reload"
+
+`sdread_scores` has one column shape; there is no migration ladder for these to
+report. The line is simply gone.
+
+**The phantom "#2 when I'm the only one on the board"** was two things.
+`cloudOthers()` keeps every row when `myUid()` is null (AUTH not ready), so the
+player's own published row counted as a rival ahead of them — one row, theirs,
+counted twice. Ranks now require a known identity. And `syncRanks()` only ever
+**wrote** a rank, never cleared one, so a placing observed back when the board
+padded itself with generated rivals sat in the save and kept printing. A board
+that loaded is now authoritative in both directions: if it does not place you, you
+are not placed.
+
+### 🎯 Corner camping paid better spawn rates
+
+Every "spawn at a radius around the pilot" path clamped the result into the world:
+`Math.min(worldW - pad, …)`. Mid-map that does nothing. In a corner most of the
+ring falls outside the world and every one of those angles collapses onto the
+corner — on top of the pilot. So camping a corner had hostiles delivered at
+point-blank instead of the intended 640–1160px out, travel time went to zero, and
+kills/second rose for **position alone**. On a kill ladder that is the entire
+score.
+
+`ringSpawn()` samples angles until one lands in bounds instead, which keeps
+distance the constant it was always meant to be. If the pilot is wedged so tightly
+that no angle on the ring fits, it falls back to a uniformly random point at least
+`rMin` away — further, never nearer. Applied to the KOTH arena top-up, the beacon
+swarm (both paths) and the siege wave engine.
+
+### ⚡ Menus lagged while a zone was running
+
+`draw()` is pure painting — every array cap and every `sweepDead()` lives in
+`update()`. But it ran unconditionally, so the full arena was composited at device
+resolution **behind an opaque menu** on every frame, along with the minimap, the
+LOD colour grade and the 8Hz HUD writes. That is the delay: the tap queued behind
+a render of pixels nobody could see.
+
+It now returns early when no overlay screen and no Command sheet is covering the
+canvas (checked at ~7Hz — `#screen-battle` is not an overlay and never carries
+`.active`, so the battle screen *is* "no overlay active"). **The simulation is
+untouched** and keeps real wall-clock time exactly as before, which is the rule the
+whole `step()` comment block exists to protect. Only invisible pixels are skipped.
+
+### 📱 Mobile: the Command sheet clipped its own cards
+
+The base `.mega-card` rule sets `padding`, `flex-direction` and `align-items` with
+`!important` — it exists to force every card into one compact chip shape — so
+every unprefixed per-card override in the `max-width:480px` block was silently
+losing. The Pilot Ascension pill kept 9px padding and `align-items:center`, and
+53px of content centred inside a 50px box with `overflow:hidden` is cut at **both**
+ends. That is the title sliced along its top edge.
+
+Fixed by aligning the pill's content to the top and letting height follow content,
+with `min-height` as the floor it was always meant to be — the rule
+`css/fit-guard.css` states globally. `.pa-pill-lock` was `position:static` while
+the mobile rule set `top`/`right`, so it took a flex slot and shoved the chips;
+it is absolute now. And cards carrying a badge reserve its width on their **text
+column only** — `:not(.mc-ic)` is load-bearing there, since a bare `> div` also
+matches the 38px border-box icon tile and would leave its glyph an 8px content box.
+
+Measured at 390×844 and 360×640: zero clipped boxes, all 21 card icons at full
+width.
+
+**`js/fit-audit.js` now scans the Command sheet.** It only ever looked at
+`.scr-body` and `.sheet-body`; the Command sheet is `#mega .mega-grid`, so the one
+screen with fourteen stacked cards on a phone was the one screen the clip auditor
+never inspected. That is where the sliced title lived, unflagged.
+
+### 🚫 The Dreadnaught Hunt pays no XP
+
+Same door as the Void tiles. The hunt deploys into a zone priced off its **tier**,
+not off the pilot — T20 is Level 505 content — and `killXpFor()` pays on the zone
+it is handed. Thirty escalating waves of hostiles carrying zone-505 XP was the
+fastest levelling in the game, available to anyone who could survive one deploy.
+Dread Cores, the raid-boss drop table, gold and loot are untouched: the hunt's
+reward is still the hunt's reward, it just is not levels.
+
+### ⛴ Two carrier apexes are earnable — King of the Hill crowns
+
+Both were `unreleased: true`: finished, flight-ready, and no route to them at all.
+They are now ordinary `build:` orders on the existing blueprint system.
+
+| hull | blueprint | build cost |
+|---|---|---|
+| **Titan Aquila** (Titan, 5 cannon · 7 bays) | 25 KOTH crowns | 25T fuel + 25T iron + 25T plasma + ◈ 1,000,000 |
+| **Celestial Corvus** (Celestial, 5 cannon · 11 bays) | 100 KOTH crowns | 100T fuel + 100T iron + 100T plasma + ◈ 10,000,000 |
+
+`state.kothCrowns` is a lifetime, monotonic count and it comes **from the server**,
+never from a client counting its own runs: `claim_koth_awards()` marks each row
+delivered inside the same statement that returns it, so a crown can be counted
+exactly once, and `koth_wins()` reconciles the total as a floor on every login.
+Reaching a threshold latches `state.blueprints[key]`, so it reads like every other
+recovered schematic — the ✔ BP chip, the merge union, the build sheet.
+
+It is in `mergeSaves()`' union with max-wins. A crown cannot be re-earned: the race
+it was won in is over. Per the standing rule, a system absent from that union is
+decided wholesale by the base pick.
+
+**Every comparison uses `Math.floor(Number(x) || 0)`.** These costs run to 100e12,
+forty-six thousand times past the int32 ceiling, so a single `| 0` anywhere in the
+affordability check would wrap the number negative and either lock the button
+forever or hand the hull over free. `credits` also joins the build cost ledger and
+the cost chips for the first time.
+
+`awardOnly()` now includes `build`. Every build hull carries `price: 0`, so
+`buyShip()` would have handed over the Oblivion Spears, the Planetbreaker and both
+new carriers for nothing the moment `shipUnlocked()` passed — exactly the failure
+that guard exists for.
 
 ---
 

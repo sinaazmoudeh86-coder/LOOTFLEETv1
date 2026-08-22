@@ -225,9 +225,27 @@
     const L = [['◎ SURVEY', t.w[0]], ['◈ RANGE', t.w[1]], ['⛨ RESOLVE', t.w[2]]];
     return L.map((x) => '<span class="ex-wc' + (x[1] >= 1.4 ? ' hi' : x[1] <= 0.7 ? ' lo' : '') + '">' + x[0] + ' <b>×' + x[1].toFixed(1) + '</b></span>').join('');
   }
+  // THE NEAREST SCROLLING ANCESTOR. Used to hold a sheet's scroll position across
+  // a partial redraw without coupling to a class name.
+  function scrollHost(el) {
+    for (let n = el && el.parentElement; n && n !== document.body; n = n.parentElement) {
+      if (n.scrollHeight - n.clientHeight > 4) {
+        const ov = getComputedStyle(n).overflowY;
+        if (ov === 'auto' || ov === 'scroll') return n;
+      }
+    }
+    return null;
+  }
   function redrawAssign(m) {
     const host = $('ex-assign-live'); if (!host) return;
+    // STAY WHERE THE PILOT WAS. This host holds the whole hull list, so replacing
+    // it emptied the sheet for an instant, the scroll height collapsed, and the
+    // browser clamped the offset to 0 — picking a hull from the bottom of a long
+    // hangar threw you back to the top, on every single pick. Nothing above the
+    // list changes height, so the old offset is still the right one.
+    const sc = scrollHost(host), top = sc ? sc.scrollTop : 0;
     host.innerHTML = assignLive(m);
+    if (sc && sc.scrollTop !== top) sc.scrollTop = top;
   }
   function assignLive(m) {
     const t = X().TYPE_BY_K[m.t];

@@ -29,16 +29,6 @@
     // Opens a feature that is SHIPPED BUT HIDDEN so admins can test it on
     // production. See `tourbeta` below.
     '7f96669af9a455f4146ef636eb98acc7ce439bb6d35496438a62c60a83c6920d': 'tourbeta',
-    // ---- TEMPLE BETA, Aug 2026 (build 704) --------------------------------
-    // Gate keys for testing the PvP zone on production with a closed circle.
-    // One per account, not repeatable; the grant is a one-way save flag, so a
-    // second code on the same account reports it is already open.
-    'f29c7a09fbc1536fb7169defae0ef97adcecf4da9b63ea74d04d23e96eea57d6': 'templebeta',   // TEMPLE-DRDS-PGXL
-    '4a1b8e266a51ed3b0e4e87853bdeab29882515a231c25eec5b836b9655915e2d': 'templebeta',   // TEMPLE-7LNJ-C5ZF
-    'ae5754e1e31d32d81be09c89df603fe2b78fe4d8af5a6e92a514288844cb6add': 'templebeta',   // TEMPLE-TGWF-6F7Z
-    '810c58b2e52bbbd8f2432e5ee12e61def71f41b534d94e0efb3ebd4985c2ba65': 'templebeta',   // TEMPLE-JM7N-DLGE
-    'a218226687bd81bb7a0662f51bb8ca2728af2b445dcca75c97922dec31e65f32': 'templebeta',   // TEMPLE-7XYZ-W37K
-    'fe3f039fc043b27f5d9f29bb361d2d8e7cb40eab24b46c039e31e7c928582d14': 'templebeta',   // TEMPLE-ZMSR-JA77
     // ---- VOIDMAW COMPENSATION, Aug 2026 (build 683) ----------------------
     // Ten single-use grants issued to players whose Voidmaw progress was lost.
     // Each is one-per-account like any non-repeatable code; hand ONE to each
@@ -124,17 +114,6 @@
     // flightWaiver: the Voidmaw carries no flyReq licence (only the Eternum
     // does), so setting the waiver would silently unlock every other hull's
     // licence too — a compensation grant must give back exactly what was lost.
-    // THE TEMPLE — closed beta gate. Sets the one-way save flag the Command
-    // card, the screen, the Ranks tab and enter() all key on. Deliberately NOT
-    // repeatable; reversible only by editing the save — a remotely togglable
-    // gate would need server plumbing a friends-test does not justify.
-    templebeta: { name: 'THE TEMPLE — beta access', apply(g) {
-      const st = g.state;
-      if (st.templeBeta) return 'The Temple is already open on this account';
-      st.templeBeta = 1;
-      try { if (window.TEMPLEUI && window.TEMPLEUI.revealCard) window.TEMPLEUI.revealCard(); } catch (e) {}
-      return 'The Temple is unlocked — Command \u25b8 The Temple (Lv 60+)';
-    } },
     voidmaw: { name: 'VOIDMAW — event carrier unlocked', apply(g) {
       const st = g.state; st.ownedShips = st.ownedShips || {};
       if (st.ownedShips.voidmaw) return 'Voidmaw is already in your hangar — nothing to grant';

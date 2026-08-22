@@ -198,7 +198,6 @@
     else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
     else if (name === 'expo') { if (window.EXPOUI) window.EXPOUI.render(); }
     else if (name === 'koth') { if (window.KOTHUI) window.KOTHUI.render(); }
-    else if (name === 'temple') { if (window.TEMPLEUI) window.TEMPLEUI.render(); }
     if (name === 'battle') {
       try {
         const rt = G.rt || {};
@@ -421,7 +420,7 @@
     b.title = pro ? 'LootFleet Pro — active · manage' : 'LootFleet Pro — ' + pk.speed + '× speed · ' + pk.xpMult + '× XP · ' + pk.gold + '× gold · +' + Math.round((pk.loot - 1) * 100) + '% loot';
   }
   function refreshAll() {
-    try { templeLock(); syncJoystickVisible(); } catch (e) {}
+    try { syncJoystickVisible(); } catch (e) {}
     if (!_inited) return;
     syncProCta();
     if (screen === 'hero') renderHero();
@@ -466,7 +465,6 @@
     syncSpeed();
   }
   function syncSpeed() {
-    if (templeLock()) return;   // the row is hidden; nothing else here matters
     const pills = el['speed-row'].querySelectorAll('.spd');
     visibleSpeedTiers().forEach((tier, i) => {
       if (!pills[i]) return;
@@ -741,33 +739,11 @@
     if (b.title !== tip) b.title = tip;
   }
 
-  // THE TEMPLE HIDES BOTH CONTROLS OUTRIGHT.
-  //
-  // game-v93 already refuses to change speed or arm autopilot while temrun is
-  // live, so the buttons were dead — but a dead control is worse than an absent
-  // one: it reads as a broken game, and it invites people to keep pressing it
-  // looking for the advantage they know exists elsewhere. In a PvP zone the
-  // absence is also the message.
-  function templeLock() {
-    let on = false;
-    try { on = !!(G.inTemple && G.inTemple()); } catch (e) {}
-    const sr = el['speed-row'];   if (sr) sr.style.display = on ? 'none' : '';
-    const ab = el['auto-btn'];    if (ab) ab.style.display = on ? 'none' : '';
-    const aw = $('auto-warn');    if (aw && on) aw.classList.remove('show');
-    return on;
-  }
   function syncAuto() {
-    // THE TEMPLE HIDES THE AUTO BUTTON, NOT THE REST OF THIS FUNCTION.
-    // Bailing out early here also skipped syncJoystickVisible(), which is the one
-    // thing that puts the stick on screen — so a manual-only zone shipped with no
-    // way to move. The lock belongs on the two controls it is about.
-    const lock = templeLock();
     const on = G.getAuto();
-    if (!lock) {
-      el['auto-btn'].classList.toggle('on', on);
-      el['auto-lbl'].textContent = on ? 'Auto' : 'Manual';
-      const w = $('auto-warn'); if (w) w.classList.toggle('show', on);
-    }
+    el['auto-btn'].classList.toggle('on', on);
+    el['auto-lbl'].textContent = on ? 'Auto' : 'Manual';
+    const w = $('auto-warn'); if (w) w.classList.toggle('show', on);
     syncJoystickVisible();
   }
   function syncJoystickVisible() {
@@ -2541,7 +2517,9 @@
       return `<span style="color:${r.color}">${r.glyph} ${G.formatNum(rp[k])}</span>`;
     }).join(' ');
   }
-  const BUILD_RES = [['gold','●','#f2b24b'],['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◈','#ff3a3a']];
+  // LootCoins join the build ledger — the two carrier apexes cost them alongside
+  // the three raw resources. Same glyph and colour the rest of the game uses.
+  const BUILD_RES = [['gold','●','#f2b24b'],['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◈','#ff3a3a'],['credits','◈','#ffd66a']];
   function buildCostChips(cost, have) {
     return BUILD_RES.filter(([k]) => cost[k]).map(([k, g, c]) => {
       const ok = (have[k] || 0) >= cost[k];
@@ -2665,7 +2643,9 @@
     if (ship.emberTech) return '✦ Choir';
     if (ship.missionShip) return '⌘ 1,000 Missions';
     if (ship.purchase) return `${window._lcIcon()}${(ship.purchase.lc || 0).toLocaleString()}`;
-    if (ship.build) return '⚒ Build';
+    // NAME THE ROUTE, not the verb. Two of the build hulls are gated on King of
+    // the Hill crowns, and "⚒ Build" told a player nothing about where to go.
+    if (ship.build) return ship.build.reqCrowns ? `👑 ${ship.build.reqCrowns} Crowns` : '⚒ Build';
     if (ship.megaCost) { const lv = G.state.level || 1; return lv >= (ship.reqLevel || 1) ? '◇ Acquire' : '🔒 Lv' + ship.reqLevel; }
     const st = G.shipBuyState ? G.shipBuyState(key) : {};
     if (st.unlocked) return ship.resPrice ? '✦ ' + G.formatNum(Object.values(ship.resPrice)[0] || 0) : '$ ' + G.formatNum(ship.price || 0);
@@ -2920,6 +2900,12 @@
       if (inf.status === 'needasc') {
         action = `<span class="ship-badge locked">🔒</span>`;
         lock = `<div class="ship-lock"><span class="lk-ic">✦</span><span>Requires <b>Ascension ★${inf.reqAsc}</b> — you are at <b>★${inf.ascHave | 0}</b>. No currency substitutes for prestige.</span><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
+      } else if (inf.status === 'needcrowns') {
+        // THE COUNT THE PLAYER CAN CHECK IS THE COUNT PRINTED HERE — lifetime
+        // crowns from the server ledger, against the hull's own threshold.
+        const pct = Math.min(100, (inf.crownsHave || 0) / (inf.reqCrowns || 1) * 100);
+        action = `<span class="ship-badge locked">👑</span>`;
+        lock = `<div class="ship-lock"><span class="lk-ic">👑</span><span>Win <b>King of the Hill</b> — <b>${inf.crownsHave | 0} / ${inf.reqCrowns | 0}</b> crowns taken. The blueprint is yours at ${inf.reqCrowns | 0}.</span><div class="lk-bar"><div class="lk-fill" style="width:${pct}%"></div></div><div class="bc-row">${buildCostChips(inf.cost, inf.have)}</div></div>`;
       } else if (inf.status === 'noblueprint') {
         const bd = ship.bpDrop || {}; const pctTxt = ((bd.chance || 0) * 100).toFixed((bd.chance || 0) < 0.01 ? 1 : 0);
         action = `<span class="ship-badge locked">🔒</span>`;
@@ -2971,7 +2957,7 @@
       : ship.alienTech ? `<span class="bp-chip have" style="border-color:#c26bff88;color:#e0b3ff">◈ KAEVITH</span>`
       : ship.emberTech ? `<span class="bp-chip have emb">✦ CHOIR</span>`
       : ship.alliance ? `<span class="bp-chip have" style="border-color:#2ee6c988;color:#8ff2e0">⬡ ALLIANCE</span>`
-      : ship.build ? (st.owned ? '' : ((G.state.blueprints && G.state.blueprints[key]) ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◈ CITADEL</span>`))
+      : ship.build ? (st.owned ? '' : ((G.state.blueprints && G.state.blueprints[key]) ? `<span class="bp-chip have">✔ BP</span>` : (ship.build.reqCrowns ? `<span class="bp-chip">👑 ${ship.build.reqCrowns}</span>` : `<span class="bp-chip">◈ CITADEL</span>`)))
       : ship.tier > 0 ? (st.hasBlueprint ? `<span class="bp-chip have">✔ BP</span>` : `<span class="bp-chip">◷ Z${ship.bpZone}</span>`) : '';
     // hull-upgrade row for any owned ship (same options as My Ship)
     let upg = '';
@@ -3542,10 +3528,10 @@
     const tab = data.tab;
     el['board-sub'].textContent = tab.sub;
 
-    // TEMPLE is in closed beta: its board exists but the tab only shows for
-    // accounts holding the beta latch, so the zone does not leak via Ranks.
-    const _tabs = RB.TABS.filter((t) => t.id !== 'temple' || (window.TEMPLE && TEMPLE.betaOn && TEMPLE.betaOn()));
-    if (_lbTab === 'temple' && !_tabs.some((t) => t.id === 'temple')) _lbTab = 'power';
+    // A tab the build no longer ships (or one gated off) must not leave the board
+    // pointed at nothing — fall back to POWER.
+    const _tabs = RB.TABS;
+    if (!_tabs.some((t) => t.id === _lbTab)) _lbTab = 'power';
     html += '<div class="lbx-tabs">' + _tabs.map((t) =>
       `<button class="lbx-tab${t.id === _lbTab ? ' on' : ''}" data-lbtab="${t.id}" style="--c:${t.col || '#5fd1ff'}"><i class="lbx-ic">${t.ic || ''}</i>${t.label}</button>`).join('') + '</div>';
     // SUB-VIEWS — only King of the Hill has them. Two boards answering the same

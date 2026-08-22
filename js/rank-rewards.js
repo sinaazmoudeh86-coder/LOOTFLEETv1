@@ -101,11 +101,6 @@
       what: 'Expeditions completed and debriefed — hours of hull time spent surveying the rim.',
       win: 'More of the rim has been charted by your fleet than by anyone else\u2019s.',
     },
-    temple: {
-      ic: '\u2694', name: 'The Temple', unit: 'altars', col: '#c98bff',
-      what: 'Altars lifted off the disk in the PvP zone, then kills in its defence.',
-      win: 'Nobody has taken more from the Temple \u2014 and everyone who tried to stop you is on the kill log.',
-    },
     koth: {
       ic: '\u{1F451}', name: 'King of the Hill', unit: 'kills', col: '#ffd24d',
       what: 'Kills logged in the 24-hour race, against enemies that get harder with every hundred you drop.',

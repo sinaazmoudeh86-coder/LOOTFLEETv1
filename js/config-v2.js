@@ -781,7 +781,12 @@
     { key:'titanaquila', name:'Titan Aquila', cls:'Carrier', price:0, reqKills:0,
       weapons:5, ammo:3, hull:3, drones:128, fighterCapacity:7,
       mods:{ hpPct:6336, dmgPct:3564, multiShot:950, critChance:96, critDamage:2772, moveSpeed:595, atkSpeedPct:1188, rangePct:4000, lifeSteal:35 },
-      tag:'TITAN CLASS · AQUILA', sinaTracers:true, dreadAura:true, reqLevel:200, unreleased:true,
+      tag:'TITAN CLASS · AQUILA', sinaTracers:true, dreadAura:true, reqLevel:200,
+      // EARNED ON THE KING OF THE HILL LADDER — 25 crowns unlock the blueprint,
+      // then the hull is BUILT. `unreleased:true` came off here: it means "no route
+      // exists" and drives copy that says so outright, which stopped being true the
+      // moment the crown count started handing the schematic out.
+      build:{ reqCrowns:25, cost:{ fuel:25e12, iron:25e12, plasma:25e12, credits:1000000 } },
       desc:'Titan-class, and the apex of the carrier line. FIVE cannon hardpoints fire full-spectrum tracers while SEVEN FIGHTER BAYS put seven autonomous Heavy Fighters on the field — each picking its own target and swarming it — over full Dread-class munitions, plating and utility fittings and 128 drone bays. Twenty-one fitted slots: nothing else in the galaxy carries more.' },
     // ---- CELESTIAL CORVUS · CELESTIAL-CLASS FIGHTER CARRIER -----------------
     // The end of the fighter line: ELEVEN fighter bays and no more guns than the
@@ -804,7 +809,11 @@
     { key:'corvus', name:'Celestial Corvus', cls:'Carrier', price:0, reqKills:0,
       weapons:5, ammo:3, hull:3, drones:192, fighterCapacity:11, speedMult:0.45,
       mods:{ hpPct:9500, dmgPct:5350, multiShot:1425, critChance:96, critDamage:4160, moveSpeed:300, atkSpeedPct:1780, rangePct:6000, lifeSteal:52 },
-      tag:'CELESTIAL CLASS · CORVUS', celestial:true, dreadAura:true, dpsAura:0.9, reqLevel:200, unreleased:true,
+      tag:'CELESTIAL CLASS · CORVUS', celestial:true, dreadAura:true, dpsAura:0.9, reqLevel:200,
+      // ONE HUNDRED CROWNS. Four times the Aquila's gate for four times its build
+      // cost — the last rung of the carrier line and the deepest single-ladder
+      // requirement in the game. Same route, same screen, four times the wait.
+      build:{ reqCrowns:100, cost:{ fuel:100e12, iron:100e12, plasma:100e12, credits:10000000 } },
       desc:'Celestial-class, and the last word in carrier design — a mobile airfield rather than a warship. ELEVEN FIGHTER BAYS put eleven autonomous Heavy Fighters in the air at once, each choosing its own target, over five cannon hardpoints, 192 drone bays and full Celestial plating. Twenty-five fitted slots. It is the largest vessel ever built and it moves at under half the speed of a normal hull: the wing is how it reaches anything.' },
     // ETERNUM — CELESTIAL CLASS. The hull that comes after Titan. Every line on
     // its sheet is 1.5× the Titan Sina, but the reason to fly it is the armament:

@@ -329,7 +329,26 @@
       integrity: 100, frag: cfg.frag * (1 - resist), resist,
       // the route: south edge → the Citadel at the north edge
       x0: rt.worldW / 2, y0: rt.worldH - 150, y1: 130,
-      cargo: { x: rt.worldW / 2, y: rt.worldH - 150, size: CARGO_SIZE[cfg.tier] || 56, dead: false, hitT: 0 },
+      // THE FREIGHTER IS A RAID TARGET, SO IT MUST ANSWER THE ENGINE'S DAMAGE
+      // CALL. entities.js retargets a raider onto `raidTarget` and then does the
+      // ordinary contact-damage thing: `archer.takeHit(this.damage, this)`. This
+      // object had no takeHit, so every raider that actually REACHED the cargo
+      // threw a TypeError inside the enemy update loop — mid-frame, before the
+      // remaining enemies had been stepped.
+      //
+      // And takeHit must NOT deal damage of its own. latched() already counts
+      // every hostile sitting on the hull and charges LATCH_DPS for it, capped at
+      // LATCH_MAX; letting the engine ALSO apply raw contact damage would charge
+      // twice for one boarder — at the deploy zone's inflated `damage` figure,
+      // uncapped, which is precisely the "something is hitting it hard outside of
+      // normal mobs" report. The cargo's damage has exactly one source: hurt(),
+      // called only from latched(). This hook exists to satisfy the engine and to
+      // flash the hull, nothing more.
+      cargo: { x: rt.worldW / 2, y: rt.worldH - 150, size: CARGO_SIZE[cfg.tier] || 56, dead: false, hitT: 0,
+        takeHit(dmg, src) { this.hitT = 0.35; return false; },
+        takeDamage(dmg) { this.hitT = 0.35; return false; },
+        get hp() { return run ? run.integrity : 100; },
+        get maxHp() { return 100; } },
       voids: [], refs: [], rings: [], sboss: null, ringT: 4, bossRingT: 0, spawnT: 3, uiT: 0, refsT: 0, bossUp: false, warned: {},
       trace: [], traceT: 0,
       wall0: perf(),

@@ -64,7 +64,18 @@
   ];
   const MIN_SPAWN = 900;      // no hostile ever appears closer than this to the cargo
   const LANE_W = 760;         // ...nor further from the lane than this — the fight stays on the road
-  const RING_CAP = 26;        // hard ceiling on live rings — fairness and frame time
+  // RINGS ARE WHAT KILL THE FREIGHTER, so this is the single most important
+  // number in the file. They burn the hull as readily as the pilot, they arrive
+  // on a 1.5s fuse by the Final Assault, and unlike hostiles they cannot be
+  // shot — only outrun. 26 live rings saturate a 760px lane completely: there is
+  // no clean floor left to fly the cargo through, so the damage stops being
+  // avoidable and becomes a tax on time.
+  //
+  // 26 was never actually played. The frame governor held it at 9 on every
+  // device slow enough to trip it, which — until the render loop was fixed in
+  // 713 — was every device. 12 is the number the mode has really been survived
+  // at, promoted from an accident of frame time to a deliberate ceiling.
+  const RING_CAP = 12;        // hard ceiling on live rings — SURVIVABILITY first
   // ---- THE FRAME GOVERNOR ---------------------------------------------------
   // A cargo run is the heaviest thing in the game: up to ~42 live hostiles held
   // on the field permanently, 26 collapsing rings, a dozen void anomalies and a
@@ -105,7 +116,26 @@
     if (ms > 30 && GOV.lvl > GOV.floor) GOV.lvl = Math.max(GOV.floor, GOV.lvl - 0.12);
     else if (ms < 20 && GOV.lvl < 1) GOV.lvl = Math.min(1, GOV.lvl + 0.06);
   }
-  const govCap = (n, min) => Math.max(min, Math.round(n * GOV.lvl));
+  const VOID_CAP = 6;         // live void anomalies — a fixed design number, see below
+  // GOV GOVERNS PAINT. IT MUST NEVER GOVERN DIFFICULTY.
+  //
+  // Until 714 this trimmed the HOSTILE, RING and VOID ceilings from measured
+  // frame time. That makes the fight itself a function of how fast your device
+  // is: a phone that trips the governor plays a third of the content, a desktop
+  // plays all of it, and the same run is two different games. It is exactly the
+  // rule js/perf-tier.js states out loud for the graphics tiers — every knob is
+  // paint only, because the moment performance buys difficulty, the mode lies.
+  //
+  // It also hid this file's real balance for as long as it has existed. Nobody
+  // had actually played the designed numbers, so when the render loop was fixed
+  // in 713 the "unchanged" cargo run became unwinnable overnight.
+  //
+  // The sim ceilings above are fixed design numbers now, identical on every
+  // device, so govCap has no call sites left and is gone. GOV itself stays: it
+  // still measures frame health and rides in the flight recorder, which is where
+  // a performance signal belongs — as an OBSERVATION, never as a lever on the
+  // fight. If a cosmetic population ever needs trimming, trim it from GOV.lvl
+  // directly and say so at the call site.
   // ---- THE RUN'S OWN FLIGHT RECORDER ----------------------------------------
   // "Cargo Defense is laggy" is not something you can act on, and this module has
   // already had several rounds of speculative optimisation (viewport culling,
@@ -265,8 +295,17 @@
     const diff = 1 + (L - 1) * 0.0035;              // Lv 100 → 1.35 · Lv 500 → 2.75
     const dens = DENS[cfg.tier] || 1;
     // Sustained live-hostile ceiling, expressed as a share of a beacon swarm.
-    // Omega V → 25 at Lv 1, rising to ~42 deep. Cargo I → 6.
-    const cap = Math.max(6, Math.round(BEACON_SWARM * 0.5 * (dens / DENS[5]) * Math.min(1.7, diff)));
+    //
+    // POPULATION IS A DESIGN NUMBER, NOT A LEVEL REWARD. The header of this file
+    // states the calibration out loud — Omega V sits at "roughly HALF A BEACON
+    // permanently: ~25 live hostiles at all times" — and then the level term
+    // multiplied it to 42, so the deepest accounts played a mode 70% past its own
+    // stated tuning. That is the reported "impossible for our best players".
+    //
+    // `diff` still scales what it should: enemy HP, spawn cadence, the hunter
+    // mix. It no longer decides how many things can exist at once. A deep pilot
+    // gets a HARDER version of the designed fight, not a different fight.
+    const cap = Math.max(6, Math.round(BEACON_SWARM * 0.5 * (dens / DENS[5]) * Math.min(1.15, diff)));
 
     run = {
       cfg, onEnd, zone: dep.zone, diff, L, dens, cap,
@@ -374,11 +413,14 @@
     const p = run.prog;
     const alive = run.refs.reduce((a, e) => a + ((e.dead || e.dying || e.hp <= 0) ? 0 : 1), 0);
     // GOVERNED CEILING — the tier's number is the maximum, not a promise. See GOV.
-    if (alive >= govCap(run.cap, 5)) { run.spawnT = 0.8; return; }
+    if (alive >= run.cap) { run.spawnT = 0.8; return; }
     run.wave++;
     // Denser shipments spawn faster AND in bigger groups — Omega V arrives as a
     // stream, not a wave. Level pressure shortens the gap further.
-    run.spawnT = Math.max(1.4, (7.6 - p * 4.2) / (run.diff * (0.7 + run.dens * 0.5)));
+    // FLOOR RAISED 1.4 → 2.0. At tier 5 a deep pilot divided straight through to
+    // the floor, so the stream never let up long enough to clear the lane ahead
+    // of the freighter — and clearing the lane is the whole skill of the mode.
+    run.spawnT = Math.max(2.0, (7.6 - p * 4.2) / (run.diff * (0.7 + run.dens * 0.5)));
 
     const mix = [];
     const add = (role, n) => { for (let i = 0; i < n; i++) mix.push(role); };
@@ -392,13 +434,17 @@
     // tier pressure: the richer the shipment, the busier the sky
     for (let i = 0, n = Math.round((run.cfg.tier - 1) * 0.6); i < n; i++) mix.push(Math.random() < 0.6 ? 'raider' : 'fighter');
     // LEVEL pressure: extra cargo-hunters on top, so a deep account never coasts
-    for (let i = 0, n = Math.round((run.diff - 1) * 2.4); i < n; i++) mix.push(Math.random() < 0.7 ? 'raider' : 'bomber');
+    // HALVED (714). `diff` was already multiplying the population ceiling, the
+    // spawn cadence AND every hostile's HP; adding four more cargo-hunters per
+    // wave on top made the level term compound four ways off one number. A deep
+    // pilot should feel pressure on each axis, not the product of all of them.
+    for (let i = 0, n = Math.round((run.diff - 1) * 1.2); i < n; i++) mix.push(Math.random() < 0.7 ? 'raider' : 'bomber');
     // DENSITY: the whole group is multiplied by the shipment's density, then
     // trimmed to whatever room is left under the ceiling. This is what turns
     // Omega V from a wave into a swarm.
     const extra = Math.max(0, Math.round(mix.length * (run.dens - 1)));
     for (let i = 0; i < extra; i++) mix.push(mix[(Math.random() * mix.length) | 0] || 'raider');
-    const room = Math.max(1, govCap(run.cap, 5) - alive);
+    const room = Math.max(1, run.cap - alive);
     if (mix.length > room) mix.length = room;
 
     let raiders = 0;
@@ -474,7 +520,7 @@
       e.cgT = (e.cgT == null ? rnd(2, 5) : e.cgT) - dt;
       if (e.cgT > 0) continue;
       e.cgT = rnd(6, 9);
-      run.voids.length < govCap(12, 4) && run.voids.push({ x: clamp(c.x + rnd(-260, 260), 60, rt.worldW - 60), y: clamp(c.y - rnd(0, rt.worldH * 0.22), 60, rt.worldH - 60), r: rnd(130, 190), tel: 3, on: 0 });
+      run.voids.length < VOID_CAP && run.voids.push({ x: clamp(c.x + rnd(-260, 260), 60, rt.worldW - 60), y: clamp(c.y - rnd(0, rt.worldH * 0.22), 60, rt.worldH - 60), r: rnd(130, 190), tel: 3, on: 0 });
       // ANNOUNCE THE HAZARD ONCE PER RUN. Every caster seeded a new anomaly every
       // 6–9 sim seconds and re-fired this, so the banner's 3.4s hide timer was
       // reset before it could ever fire — a 520px card parked over the middle of
@@ -593,7 +639,7 @@
   // happens to overlap it does nothing to it (see ringTick).
   function layRings(n, tel, r, rt) {
     const ar = rt.archer; if (!ar || ar.dead) return;
-    n = Math.min(n, govCap(RING_CAP, 6) - run.rings.length);
+    n = Math.min(n, RING_CAP - run.rings.length);
     for (let i = 0; i < n; i++) {
       const off = i === 0 ? rnd(0, 70) : rnd(95, 250);
       const ang = Math.random() * Math.PI * 2;
@@ -615,7 +661,7 @@
     run.ringT -= dt;
     if (run.ringT <= 0) {
       run.ringT = plan.gap;
-      if (run.rings.length < govCap(RING_CAP, 6)) layRings(plan.n, plan.tel, plan.r, rt);
+      if (run.rings.length < RING_CAP) layRings(plan.n, plan.tel, plan.r, rt);
     }
     // A LIVING LEADER STILL COSTS YOU. Its volley rides on top of the lane's own,
     // on the sector's tighter fuse — so clearing it visibly thins the sky.
@@ -624,7 +670,7 @@
       run.bossRingT = (run.bossRingT || 0) - dt;
       if (run.bossRingT <= 0) {
         run.bossRingT = cfg.gap * RING_GAP_MUL;
-        if (run.rings.length < govCap(RING_CAP, 6)) layRings(Math.max(1, Math.round(cfg.n * RING_COUNT_MUL)), cfg.tel, plan.r, rt);
+        if (run.rings.length < RING_CAP) layRings(Math.max(1, Math.round(cfg.n * RING_COUNT_MUL)), cfg.tel, plan.r, rt);
       }
     }
   }

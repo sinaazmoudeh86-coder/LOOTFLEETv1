@@ -203,6 +203,9 @@
       sql: 'pilot-ladder.sql',
       info: 'The hex talent tree, scored. Every unlocked node adds its own value — deeper and rarer nodes are worth more. Cores come from the weekly Dreadnaught Hunt, so this board moves on a calendar, not on a grind. Ties break on nodes unlocked.',
       unit: 'SCORE',
+      // REAL PILOTS ONLY — see the filter in board(). A fabricated tree score is
+      // meaningless on a ladder that measures weeks of raid attendance.
+      realOnly: true,
       metric: (p) => (Number(p.pilot_score) || 0) * 1e7 + Math.min(1e7 - 1, p.pilot_nodes | 0),
       fmt: (v, p) => fmt(Number(p.pilot_score) || 0),
       meta: (p) => {
@@ -210,7 +213,7 @@
         if (!n) return 'No nodes unlocked \u00b7 Lv ' + (p.level | 0);
         return n + ' node' + (n === 1 ? '' : 's') + ' \u00b7 ' + pilotRank(Number(p.pilot_score) || 0) + ' \u00b7 Lv ' + (p.level | 0);
       },
-      empty: 'No pilot has unlocked a node yet. Clear a Dreadnaught Hunt and spend one \u25c7 Dread Core to take this board outright.',
+      empty: 'No other pilot has published a tree yet. Rows appear as pilots log in — this board shows real trees only, never stand-ins.',
     },
     {
       // KING OF THE HILL — the only board with two views, because the event has
@@ -517,7 +520,18 @@
       else if (q._sim || q.is_simulated || q._filler) derive(q);
       else fill(q);
       return q;
-    });
+    })
+    // A SIMULATED PILOT HAS NO PILOT TREE. `realOnly` boards drop them entirely
+    // rather than deriving a number for them.
+    //
+    // The tree is bought with ◇ Dread Cores from a WEEKLY raid and rides through
+    // ascension — a deep score is months of real calendar time. There is no
+    // honest way to invent that, and inventing it does active harm: every real
+    // pilot whose row has not published a pilot_score yet reads 0 and sorts
+    // BELOW the fabricated ones, so the board showed a handful of AI names and
+    // hid the actual humans. Same rule the Voidmaw boards learned in 710 — real
+    // published rows only, and if a board is thin, let it be thin.
+    .filter((q) => !(tab.realOnly && !q.isMe && (q._sim || q.is_simulated || q._filler)));
     rows.sort((a, b) => tab.metric(b) - tab.metric(a));
     rows.forEach((p, i) => { p.rank = i + 1; });
     return { rows, real: data.real || 0, tab, pending: false };

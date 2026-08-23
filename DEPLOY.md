@@ -1,39 +1,112 @@
-# Loot Fleet — deploy v243 · build 713 · RENDER LOOP FIX
+# Loot Fleet — deploy v244 · build 714 · PILOT TREE BOARD + DISCORD HULL SPAM
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v242 (build 712). Service worker cache is `lootfleet-v713`.
-**Login screen reads `BUILD 713`.**
+Supersedes v243 (build 713). Service worker cache is `lootfleet-v714`.
+**Login screen reads `BUILD 714`.**
 
 ## ⚠ NO SQL THIS BUILD
 
 `koth-archive.sql` and `pilot-ladder.sql` were required at 712 and are unchanged.
-If both already ran, there is nothing to do on the database.
+
+## ⚠ EDGE FUNCTION DEPLOY REQUIRED
+
+`supabase functions deploy discord-feed` — all four files together, a partial
+upload does not boot. `FEED_VER` is **714**; verify with
+`select content from net._http_response order by created desc limit 3;`
 
 ## Order
 
-1. Push everything **except** `version.json`.
-2. Push `version.json` **last** — it is the eviction beacon. `js/update-gate.js`
-   polls it every 90s and force-reloads anyone on a lower build within ~90s.
-   Pushing it early evicts players onto code that is not live yet.
-3. Confirm the login screen reads `BUILD 713`.
+1. Deploy the edge function (it is independent of the site).
+2. Push everything **except** `version.json`.
+3. Push `version.json` **last** — it is the eviction beacon.
+4. Confirm the login screen reads `BUILD 714`.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 713 |
-| root `version.json` | 713 |
-| `deploy-v243/version.json` | 713 |
-| `deploy-v243/sw.js` `CACHE` | `lootfleet-v713` |
+| root `game.html` `window.LF_BUILD` | 714 |
+| root `version.json` | 714 |
+| `deploy-v244/version.json` | 714 |
+| `deploy-v244/sw.js` `CACHE` | `lootfleet-v714` |
+| `discord-feed` `FEED_VER` | 714 |
 
-**Every `js/` and `css/` reference carries `?v=713`** — a blanket bump, not just
-the changed files. Bumping only what changed is how a fix ships looking deployed
-and is not; one extra re-download removes the whole class of stale-copy bug.
+Every `js/`+`css/` reference carries `?v=714`. Folder rebuilt from the project
+root, never seeded from v243.
 
-Rebuilt from the project root: `js/`, `css/`, `guides/` and `supabase/` deleted
-from this folder and re-copied fresh, then the HTML, then the beacon — never
-seeded from the previous release.
+---
+
+## What changed in 714
+
+### ⬡ Pilot Tree ranks showed AI names instead of real pilots
+
+Real rows read `pilot_score = 0` until each pilot logs in on 713 and publishes,
+while **simulated** pilots got a *derived* score — so the invented names sorted
+above every real human and the board looked like a room of bots.
+
+The tree is bought with ◇ Dread Cores from a **weekly** raid and rides through
+ascension: a deep score is months of real calendar time. There is no honest way
+to fabricate that. The board is now `realOnly` — real published trees only. It
+will be short while pilots trickle back in, and it says so plainly rather than
+padding itself. Same rule the Voidmaw boards learned in 710: **fake rivals are
+not a fallback, and if a board can be empty, say it is empty.**
+
+### 🚚 Cargo Defense rebalanced — and why it spiked
+
+**No cargo balance changed in 713. The render loop fix un-masked it.**
+
+`cargo-run.js` has a frame governor that trims the run's population from measured
+frame time, floored at 0.35. At 132ms frames it pinned at that floor within ten
+seconds of every run, so the mode had been quietly playing at roughly a third
+density: ~15 hostiles instead of 43, 9 rings instead of 26, 4 anomalies instead
+of 12. Fixing the loop took frames to 5ms, GOV climbed to 1.0, and the untouched
+event became unwinnable overnight.
+
+Two things were wrong underneath that, and both are fixed:
+
+**1. A performance governor must never be a difficulty governor.** GOV was
+deciding how many hostiles, rings and anomalies exist — so the fight was a
+function of hardware. A phone that tripped the governor played a third of the
+content; a desktop played all of it. That is precisely the rule `perf-tier.js`
+states out loud for the graphics tiers: every performance knob is **paint only**.
+The sim ceilings are fixed design numbers now, identical on every device.
+`govCap` is gone; GOV stays only as an observation in the flight recorder.
+
+**2. The file exceeded its own stated design target.** Its header says Omega V is
+calibrated to "roughly HALF A BEACON permanently: ~25 live hostiles" — and the
+level term multiplied that to **43**. Worse, `diff` compounded on four axes at
+once (population, spawn cadence, extra hunters, and every hostile's HP), so a
+deep pilot faced the product rather than the sum. That is the "impossible for our
+best players" report.
+
+| | was | now |
+|---|---|---|
+| live hostiles (Omega V, Lv 300+) | 43 | **29** |
+| collapsing rings | 26 | **12** |
+| void anomalies | 12 | **6** |
+| extra cargo-hunters per wave | ×2.4 | **×1.2** |
+| spawn interval floor | 1.4s | **2.0s** |
+
+Rings got cut hardest on purpose: they burn the freighter as readily as the
+pilot, they cannot be shot — only outrun — and 26 live rings saturate a 760px
+lane completely, so the damage stops being avoidable and becomes a tax on time.
+12 is what the mode has actually been survived at, promoted from an accident of
+frame time to a deliberate ceiling.
+
+### 📣 Discord posted one card per hull
+
+The `hull_earned` loop posted a full headline embed for **every row**, so one
+pilot filling out a hangar produced twelve cards, twelve sprites and twelve
+quips inside a single tick, all naming the same person. That is not a volume
+problem to be capped — a pilot expanding their fleet is **one** piece of news.
+
+Collapsed by pilot: the newest hull gets the card and its art, the rest are named
+on one line beneath it. Four pilots max per tick; the rest still reach the
+situation report, which is also one line per pilot now rather than one per hull.
+
+The **"FIRST of this hull in the fleet"** badge now needs ten or more pilots. It
+was firing on eleven of twelve messages — true, and completely meaningless.
 
 ---
 

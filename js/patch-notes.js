@@ -31,7 +31,7 @@
 (function () {
   'use strict';
 
-  const BUILD = 713;
+  const BUILD = 714;
   const NOTES = {
     build: 713,
     title: 'BUILD 713',
@@ -43,6 +43,10 @@
         ['⛨', 'Failing an attack no longer shields the tile', 'Lose a Void spire or a galaxy tile and it stays open — for your retry, and for everyone else.'],
         ['⬡', 'Pilot Tree rank showed zero', 'Your own row now reads your live tree score.'],
         ['✦', 'Legendary filter in the Pilot Tree list', 'The Rare chip and searching “legendary” both find them now.'],
+      ] },
+      { k: 'ALSO', c: '#7ce0a0', rows: [
+        ['\u{1F69A}', 'Cargo Defense is survivable again', 'The frame fix accidentally tripled its difficulty. Rings, hostiles and anomalies are all back down — and no longer depend on how fast your device is.'],
+        ['\u2b21', 'Pilot Tree ranks show real pilots only', 'No stand-in names. The board fills in as pilots log in.'],
       ] },
       { k: 'KNOWN', c: '#ffcf7a', rows: [
         ['◈', 'Leaderboard levels look stale', 'Publishing was broken for twenty builds. Every pilot’s row corrects itself the next time they log in.'],

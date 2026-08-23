@@ -45,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 707;
+const FEED_VER = 714;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1487,27 +1487,68 @@ Deno.serve(async (req) => {
     // The Kaevith card below is the same idea at maximum volume; this is it for
     // the rest of the fleet. A pilot's second ship matters to them as much as a
     // Dread does to someone deep, and the art is the whole point of the card.
-    for (const w of newHullEvents) {
-      const m = w.meta || {};
-      const key = String(m.ship || '');
-      const art = shipArt(key);
-      if (!art) continue;
-      const who = String(w.actor_name || 'A pilot');
-      const nm = hullName(key);
-      const nth = Number(m.nth) || 0;
-      await post({
-        content: `### ⬡ ${who} took delivery of the ${nm}`,
-        embeds: [{
-          color: 0x7db8e8,
-          thumbnail: { url: art },
-          author: { name: '⬡  NEW HULL' },
-          title: `${up(who)} — ${nm.toUpperCase()} IN THE HANGAR`,
-          description:
-            quip('hull', 'wh:' + w.id, { a: '**' + who + '**' }) +
-            (nth === 1 ? '\n\n-# 🏆 The **FIRST** of this hull in the fleet.' : ''),
-        }],
-        allowed_mentions: { parse: [] },
-      });
+    {
+      // ONE PILOT, ONE CARD.
+      //
+      // This posted a full headline embed for EVERY hull_earned row, so a pilot
+      // filling out a hangar — or whose client backfilled hulls it had never
+      // reported — produced one message per hull inside a single tick. Twelve
+      // cards, twelve sprites, twelve quips, all naming the same person in the
+      // same minute. That is the reported flood, and it is NOT a volume problem
+      // to be capped: a pilot expanding their fleet is ONE piece of news,
+      // however many hulls it took.
+      //
+      // Collapsed by actor. The newest hull gets the card and its art; the rest
+      // are named on one line beneath it, so a batch reads as what it actually
+      // is — someone building out a hangar — rather than as twelve events.
+      const byPilot = new Map<string, any[]>();
+      for (const w of newHullEvents) {
+        const k = String((w as any).actor_id || w.actor_name || '?');
+        const list = byPilot.get(k);
+        if (list) list.push(w); else byPilot.set(k, [w]);
+      }
+      // Even collapsed, a drain touching many pilots at once must not own the
+      // channel. Anyone beyond the cap still appears in the situation report.
+      const HULL_PILOTS_MAX = 4;
+      let posted = 0;
+      for (const [, list] of byPilot) {
+        if (posted >= HULL_PILOTS_MAX) break;
+        list.sort((a: any, b: any) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        const named = list.filter((w: any) => shipArt(String((w.meta || {}).ship || '')));
+        if (!named.length) continue;
+        const lead = named[0];
+        const m = lead.meta || {};
+        const art = shipArt(String(m.ship || ''));
+        if (!art) continue;
+        const who = String(lead.actor_name || 'A pilot');
+        const nm = hullName(String(m.ship || ''));
+        const rest = named.slice(1).map((w: any) => hullName(String((w.meta || {}).ship || '')));
+        // "FIRST of this hull in the fleet" is only news when the fleet is big
+        // enough for it to have been a race. On a small roster nearly every hull
+        // is a first, so the badge fires on almost every card and stops meaning
+        // anything — which is worse than not having it at all.
+        const nth = Number(m.nth) || 0;
+        const firstWorthSaying = nth === 1 && !rest.length && pilots.length >= 10;
+        await post({
+          content: rest.length
+            ? `### ⬡ ${who} expanded the hangar — ${named.length} new hulls`
+            : `### ⬡ ${who} took delivery of the ${nm}`,
+          embeds: [{
+            color: 0x7db8e8,
+            thumbnail: { url: art },
+            author: { name: '⬡  NEW HULL' },
+            title: rest.length
+              ? `${up(who)} — ${named.length} HULLS IN THE HANGAR`
+              : `${up(who)} — ${nm.toUpperCase()} IN THE HANGAR`,
+            description:
+              quip('hull', 'wh:' + lead.id, { a: '**' + who + '**' }) +
+              (rest.length ? `\n\n-# Also docked: ${rest.join(' · ')}` : '') +
+              (firstWorthSaying ? '\n\n-# 🏆 The **FIRST** of this hull in the fleet.' : ''),
+          }],
+          allowed_mentions: { parse: [] },
+        });
+        posted++;
+      }
     }
 
     // ---- KAEVITH HULL EARNED -------------------------------------------------
@@ -1841,8 +1882,21 @@ Deno.serve(async (req) => {
       const h = XEN_HULLS[String((w.meta || {}).ship || '')];
       if (h) fresh.push(`◈ **${w.actor_name}** earned the **${h.name}**`);
     }
-    for (const w of newHullEvents) {
-      fresh.push(`⬡ **${w.actor_name}** earned the **${hullName(String((w.meta || {}).ship || ''))}**`);
+    // ONE LINE PER PILOT, not per hull — the report is a summary, and twelve
+    // consecutive lines naming the same person is the flood again in miniature.
+    {
+      const perPilot = new Map<string, string[]>();
+      for (const w of newHullEvents) {
+        const who = String(w.actor_name || 'A pilot');
+        const nm = hullName(String((w.meta || {}).ship || ''));
+        const list = perPilot.get(who);
+        if (list) list.push(nm); else perPilot.set(who, [nm]);
+      }
+      for (const [who, hulls] of perPilot) {
+        fresh.push(hulls.length === 1
+          ? `⬡ **${who}** earned the **${hulls[0]}**`
+          : `⬡ **${who}** added **${hulls.length} hulls** — ${hulls.slice(0, 4).join(', ')}${hulls.length > 4 ? '…' : ''}`);
+      }
     }
     // Finished cores post their own message, so they never reach `events` —
     // add them here or the 3-hour digest would omit the loudest thing in it.

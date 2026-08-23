@@ -100,6 +100,13 @@
     // an unlocked slot is five successful upgrades and costs real ingots.
     let nano = 0;
     try { const cs = (s.nano && s.nano.cores) || {}; for (const k in cs) { const c = cs[k] || {}; nano += 40 + (c.slots | 0) * 300 + (c.stage | 0) * 40; } } catch (e) {}
+    // MECH FOUNDRY — the deepest tier cleared is a real progression signal (T5 is
+    // Level 550 content) and the core wallet is a grind. Weighted like nanocores:
+    // enough that a Foundry-active save is not judged the lighter copy, nowhere
+    // near enough to outrank a star. A wallet cannot be unioned (see mergeSaves),
+    // so the base pick being right is the ONLY protection cores have.
+    let mech = 0;
+    try { mech = (Math.floor(Number(s.mechCores) || 0) > 0 ? 200 : 0) + ((s.mech && s.mech.best | 0) || 0) * 2500 + Math.min(4000, ((s.mech && s.mech.runs | 0) || 0) * 40); } catch (e) {}
     // RESET EPOCH OUTRANKS EVERYTHING, INCLUDING STARS (Aug 2026, the global
     // pilot-ascension reset). Every rule below and in mergeSaves() exists to stop
     // ascension progress from regressing, which is correct for a normal timeline
@@ -114,7 +121,7 @@
       + (s.playTime || 0) + (s.totalKills || 0) * 10 + (s.level || 1) * 3600
       + Math.log10(1 + Math.max(0, s.gold || 0)) * 7200
       + Math.max(s.highestDungeonReached | 0, s.highestUnlocked | 0) * 1800
-      + hull * 900 + asc * 60 + nano;
+      + hull * 900 + asc * 60 + nano + mech;
   }
   // BEST-EVER VAULT — every ~45s the heaviest save this account has ever had on
   // this device is copied to lf-best::<uid>. Max-only: weaker data never touches
@@ -938,6 +945,56 @@
     // race it was won in is over. Never spent, so max-wins is provably safe, and
     // the server ledger (koth_wins) raises it again on the next login anyway.
     base.kothCrowns = Math.max(Math.floor(Number(base.kothCrowns) || 0), Math.floor(Number(other.kothCrowns) || 0));
+    // ---- MECH FOUNDRY RECORD. Named here for the same standing reason as the
+    // crowns above: a system absent from this union is decided wholesale by the
+    // base pick, and every field of it is MONOTONIC — deepest tier cleared,
+    // lifetime runs, lifetime Mech kills. None is ever spent, so max-wins cannot
+    // mint anything.
+    //
+    // `mechCores` IS DELIBERATELY NOT HERE. It is a SPENDABLE WALLET, and maxing a
+    // wallet against a copy that has not spent yet is exactly the duplication bug
+    // the pasc.pts block exists to document: assemble a Mech Titan on one device,
+    // log in on another that still shows the pre-purchase balance, and the union
+    // hands the cores back while the hull rides along in `ownedShips`. It sits
+    // with gold, credits, resources and dreadCores — decided by the base pick,
+    // which is what the saveWeight term above protects. The HULLS need no code
+    // here at all: `blueprints` and `ownedShips` are already unioned entitlements.
+    if (other.mech) {
+      if (!base.mech) base.mech = other.mech;
+      else {
+        const bm = base.mech, om = other.mech;
+        bm.best = Math.max(bm.best | 0, om.best | 0);
+        bm.runs = Math.max(bm.runs | 0, om.runs | 0);
+        bm.kills = Math.max(bm.kills | 0, om.kills | 0);
+        // lifetime cores EARNED — monotonic, never spent, so max-wins is safe.
+        // (The `mechCores` WALLET is still deliberately absent from this union.)
+        bm.earned = Math.max(Math.floor(Number(bm.earned) || 0), Math.floor(Number(om.earned) || 0));
+      }
+    }
+    // ---- COMMANDERS. The ALBUM is a record: a card cannot be un-found and a pull
+    // cannot be un-made, so `own` unions per officer (best rarity ever seen, most
+    // duplicates ever counted) and `pulls` max-wins. Absent from this union, a
+    // stale copy would erase a chase card pulled at 1-in-24,000 on another device.
+    //
+    // `dust` IS DELIBERATELY NOT UNIONED. It is a spendable wallet and belongs
+    // with gold, credits, dreadCores and mechCores — maxing a wallet against a
+    // copy that has not spent yet is the pasc.pts duplication bug.
+    if (other.cmdr) {
+      if (!base.cmdr) base.cmdr = other.cmdr;
+      else {
+        const bc = base.cmdr, oc = other.cmdr;
+        bc.own = bc.own || {};
+        const oo = oc.own || {};
+        for (const id in oo) {
+          const a = bc.own[id], b = oo[id];
+          if (!b) continue;
+          if (!a) bc.own[id] = b;
+          else { a.r = Math.max(a.r | 0, b.r | 0); a.n = Math.max(a.n | 0, b.n | 0); }
+        }
+        bc.pulls = Math.max(bc.pulls | 0, oc.pulls | 0);
+        if (!bc.slot && oc.slot) bc.slot = oc.slot;
+      }
+    }
     // BLUEPRINTS — recovered schematics, never consumed on use. Epoch-guarded
     // only because the reset's clear list has changed before and a blueprint is
     // cheap to re-earn but expensive to wrongly restore across a wipe.

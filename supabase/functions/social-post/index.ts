@@ -108,16 +108,27 @@ Deno.serve(async (req) => {
   } catch (e) { /* metadata falls back to none; Buffer's error will say so */ }
   // enum literals (unquoted). Only networks that need/accept a type are named;
   // everything else posts with no metadata block, exactly as before.
-  const metaFor = (ch: string) => {
+  // A REEL IS NOT A PHOTO POST WITH A MOVING PICTURE IN IT. Facebook and
+  // Instagram both route video through a different post type, and sending
+  // `type: post` with a video asset is accepted and then published as the wrong
+  // surface — a feed video where a reel was intended, with none of the reach.
+  // So the type depends on the ROW, not just the channel.
+  const metaFor = (ch: string, isVideo: boolean) => {
     const s = svc[ch] || "";
-    if (s.startsWith("facebook")) return `metadata: { facebook: { type: post } }`;
-    if (s.startsWith("instagram")) return `metadata: { instagram: { type: post } }`;
+    if (s.startsWith("facebook")) return `metadata: { facebook: { type: ${isVideo ? "reel" : "post"} } }`;
+    if (s.startsWith("instagram")) return `metadata: { instagram: { type: ${isVideo ? "reel" : "post"} } }`;
     return "";
   };
+  // Buffer's asset union. A video asset carries its own poster frame: without
+  // one the network picks a frame itself, and on a cold open — which is the
+  // whole point of these cuts — the frame it picks is a dark starfield.
+  const assetFor = (row: any) => row.video_url
+    ? `assets: [{ video: { url: ${gq(row.video_url)}${row.thumb_url ? `, thumbnail: { url: ${gq(row.thumb_url)} }` : ""} } }]`
+    : `assets: [{ image: { url: ${gq(row.image_url)} } }]`;
 
   // ---- due rows, oldest first, small batch ----------------------------------
   const { data: rows, error } = await db.from("social_queue")
-    .select("id,slug,caption,image_url,buffer_ids")
+    .select("id,slug,caption,image_url,video_url,thumb_url,buffer_ids")
     .eq("status", "queued").lte("due_at", new Date().toISOString())
     .order("due_at", { ascending: true }).limit(4);
   if (error) return json({ error: error.message }, 500);
@@ -133,9 +144,14 @@ Deno.serve(async (req) => {
 
     const done: Record<string, string> = (row.buffer_ids as any) || {};
     const errs: string[] = [];
-    // Post ~3 minutes out: far enough for Buffer to fetch the image, near
-    // enough that the queue's minute is the visible posting minute.
-    const dueAt = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    // Post far enough out for Buffer to FETCH AND TRANSCODE the asset, near
+    // enough that the queue's minute is the visible posting minute. Three
+    // minutes is ample for a 200KB PNG and not remotely enough for a 15s 1080p
+    // video — Buffer downloads it, transcodes per network, and only then
+    // schedules. A video that is not ready at dueAt is silently dropped by the
+    // network, which looks exactly like a post that never existed.
+    const isVideo = !!row.video_url;
+    const dueAt = new Date(Date.now() + (isVideo ? 12 : 3) * 60 * 1000).toISOString();
     for (const ch of channels) {
       if (done[ch]) continue;                            // already posted on a prior attempt
       try {
@@ -146,8 +162,8 @@ Deno.serve(async (req) => {
             schedulingType: automatic
             mode: customScheduled
             dueAt: ${gq(dueAt)}
-            assets: [{ image: { url: ${gq(row.image_url)} } }]
-            ${metaFor(ch)}
+            ${assetFor(row)}
+            ${metaFor(ch, isVideo)}
           }) {
             ... on PostActionSuccess { post { id } }
             ... on MutationError { message }
@@ -166,7 +182,7 @@ Deno.serve(async (req) => {
       buffer_ids: done,
       error: ok ? null : errs.join(" | ").slice(0, 900),
     }).eq("id", row.id);
-    report.push({ slug: row.slug, ok, channels: Object.keys(done).length, errs });
+    report.push({ slug: row.slug, kind: isVideo ? "video" : "image", ok, channels: Object.keys(done).length, errs });
   }
 
   return json({ due: rows?.length ?? 0, report });

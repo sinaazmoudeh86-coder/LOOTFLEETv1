@@ -7,7 +7,7 @@
 
      power     fleet power                    leaderboard.power        (as before)
      tiles     hourly revenue from held space leaderboard.tile_rev
-     voidmaw   Season 1 Voidmaw stage         sdread_scores
+     voidmaw   Voidmaw world-boss stage       sdread_scores
      ships     hulls built                    leaderboard.ships
      missions  lifetime missions completed    leaderboard.missions
      badges    lifetime badge ranks claimed   leaderboard.badges
@@ -88,8 +88,8 @@
       empty: 'No systems claimed yet. Take one in My Galaxy and it starts paying immediately.',
     },
     {
-      id: 'voidmaw', ic: '\u2620', col: '#ff4d6d', label: 'VOIDMAW', sub: 'Season 1',
-      info: 'Season 1 Voidmaw. Ranked by deepest stage cleared, then by total damage.',
+      id: 'voidmaw', ic: '\u2620', col: '#ff4d6d', label: 'VOIDMAW', sub: 'World boss',
+      info: 'The Voidmaw world boss. Ranked by deepest stage cleared, then by total damage.',
       unit: 'STAGE',
       metric: (p) => (p.stage || 0) * 1e12 + Math.min(1e12, Math.log10(Math.max(1, p.total || 0)) * 1e10),
       fmt: (v, p) => String(p.stage | 0),
@@ -214,6 +214,33 @@
         return n + ' node' + (n === 1 ? '' : 's') + ' \u00b7 ' + pilotRank(Number(p.pilot_score) || 0) + ' \u00b7 Lv ' + (p.level | 0);
       },
       empty: 'No other pilot has published a tree yet. This board lists real published trees only — never stand-ins, and never a pilot we have not heard from. Rows appear as pilots log in.',
+    },
+    {
+      // THE MECH FOUNDRY. Measures lifetime Mech Cores EARNED, never the wallet:
+      // a wallet falls the moment a pilot assembles a hull, and a ladder whose
+      // rows drop when you play it punishes playing. `earned` only climbs, and
+      // lb_upsert writes it with greatest(), so a stale client cannot knock a row
+      // backwards either.
+      //
+      // Its worlds open for one hour in six on staggered windows, so this board
+      // moves on a schedule as much as on a grind — like the Pilot Tree, and
+      // unlike power.
+      id: 'mech', ic: '\u2699', col: '#ff4d5e', label: 'MECH FOUNDRY', sub: 'Cores earned',
+      sql: 'mech-ladder.sql',
+      info: 'Lifetime \u2699 Mech Cores earned in the Mech Foundry \u2014 what you have WON, not what you are holding, so assembling a hull never costs you a place. Five corrupted worlds, each assaultable one hour in six. Ties break on worlds cleared.',
+      unit: 'CORES',
+      // REAL PILOTS ONLY. A fabricated core total is meaningless on a ladder
+      // measuring an opt-in event, and inventing rows would rank stand-ins above
+      // the humans who have actually run it \u2014 the failure the Voidmaw boards had.
+      realOnly: true,
+      metric: (p) => Number(p.mech_cores) || 0,
+      fmt: (v, p) => fmt(Number(p.mech_cores) || 0),
+      meta: (p) => {
+        const c = Number(p.mech_cores) || 0;
+        if (!c) return 'No worlds cleared \u00b7 Lv ' + (p.level | 0);
+        return fmt(c) + ' \u2699 earned \u00b7 Lv ' + (p.level | 0);
+      },
+      empty: 'No other pilot has published a Foundry run yet. This board lists real published totals only \u2014 never stand-ins. Rows appear as pilots log in.',
     },
     {
       // KING OF THE HILL — the only board with two views, because the event has
@@ -436,6 +463,7 @@
     hcwave: ['hcwave'],
     expo: ['expo', 'expo_best'],
     pilot: ['pilot_score'],
+    mech: ['mech_cores'],
   };
   function migrated(rows, id) {
     // THE NEW LADDERS ASK THE SERVER, NOT THE ROWS.
@@ -451,14 +479,20 @@
     //
     // CLOUD.lbShape() reports which SELECT actually succeeded, which is a direct
     // statement about the schema and cannot be faked by a merged local row.
-    if (id === 'hcwave' || id === 'expo' || id === 'pilot') {
+    if (id === 'hcwave' || id === 'expo' || id === 'pilot' || id === 'mech') {
       try {
         const s = window.CLOUD && window.CLOUD.lbShape && window.CLOUD.lbShape();
         // The shapes are a LADDER, newest first: 'pilot' implies 'new'. So the
         // two older boards accept either, and only the Pilot Tree board needs
         // the newest one. Testing `s === 'new'` alone would have turned Home
         // Defense and Exploration off the moment pilot-ladder.sql landed.
-        if (s) return id === 'pilot' ? s === 'pilot' : (s === 'new' || s === 'pilot');
+        // THE SHAPES ARE A LADDER, newest first: 'mech' implies 'pilot' implies
+        // 'new'. Each board names the OLDEST shape that carries its column and
+        // accepts anything newer, so landing a migration can never switch an
+        // older board off.
+        const RANK = { legacy: 0, base: 1, ladder: 2, cargo: 3, nano: 4, new: 5, pilot: 6, mech: 7 };
+        const NEED = { hcwave: 5, expo: 5, pilot: 6, mech: 7 };
+        if (s) return (RANK[s] || 0) >= (NEED[id] || 0);
       } catch (e) {}
       // No board read has landed yet (offline, signed out, first paint). We do
       // not know, and the two wrong answers are both bad: claim the migration is
@@ -585,6 +619,10 @@
       q.pilot_score = Math.max(0, Math.floor(Number(D && D.pilotScore ? D.pilotScore() : 0) || 0));
       q.pilot_nodes = Math.max(0, Math.floor(Number(D && D.nodeCount ? D.nodeCount() : 0) || 0));
     } catch (e) {}
+    // Read through MECHF so the board and the Foundry can never disagree about
+    // what a pilot has earned. Never `| 0` — a career total is a published figure
+    // and the bitwise habit is what wraps them negative.
+    try { q.mech_cores = Math.max(0, Math.floor(Number(window.MECHF && MECHF.earned ? MECHF.earned() : 0) || 0)); } catch (e) {}
     // Nanocores read through the module so this row, the badge chains and the
     // Discord feed all quote one number.
     try {
@@ -651,6 +689,10 @@
         // can never disagree about what a pilot's score is.
         pilot_score: (() => { try { return Math.max(0, Math.floor(Number(window.DREAD && DREAD.pilotScore ? DREAD.pilotScore() : 0) || 0)); } catch (e) { return 0; } })(),
         pilot_nodes: (() => { try { return Math.max(0, Math.floor(Number(window.DREAD && DREAD.nodeCount ? DREAD.nodeCount() : 0) || 0)); } catch (e) { return 0; } })(),
+        // MECH FOUNDRY — lifetime cores EARNED, never the spendable wallet. A
+        // wallet falls when a hull is assembled, and a ladder whose rows drop when
+        // you play it punishes playing.
+        mech_cores: (() => { try { return Math.max(0, Math.floor(Number(window.MECHF && MECHF.earned ? MECHF.earned() : 0) || 0)); } catch (e) { return 0; } })(),
         expo: (s.expo && s.expo.log && s.expo.log.done) | 0,
         expo_best: (s.expo && s.expo.log && s.expo.log.best) | 0,
         cargo: (s.cargo && s.cargo.wins) | 0,

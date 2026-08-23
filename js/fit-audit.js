@@ -46,7 +46,11 @@
     // The Pilot Tree LIST is a scroll root of its own (build 712): it lives inside
     // a deliberate fill pane (.pl-treewrap), so its rows are not children of the
     // .scr-body the auditor walks from, and nothing inside it would be inspected.
-    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid, .screen.active .pl-lrows').forEach((root) => {
+    // The Commander picker and the Exchange lists are scroll roots of their own: the
+    // picker is a fixed-position sheet outside any .scr-body, and .cmx-list sits
+    // inside a flex card. Both overflowed their containers before min-height:0 was
+    // set on them, and neither was inside anything this auditor walked.
+    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid, .screen.active .pl-lrows, .cmp-list, .cmx-list').forEach((root) => {
       if (seen.has(root)) return; seen.add(root);
       const els = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
       for (const el of els) {

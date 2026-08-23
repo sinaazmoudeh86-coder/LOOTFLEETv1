@@ -413,6 +413,11 @@
         // fire already applied it — a fighter is the most literal craft-in-your-
         // wing in the game and was the one thing it skipped.
         if (window.PASCEND) dmg *= window.PASCEND.mult('fleet');
+        // A FIGHTER COMMANDER lands at the same seam as Wing Tactics — the one
+        // point the wing's damage is already multiplied by fleet-wide sources, so
+        // a fighter bonus behaves exactly like every other bonus the wing honours
+        // instead of becoming a second damage path.
+        if (window.COMMANDERS && window.COMMANDERS.fighterMult) dmg *= window.COMMANDERS.fighterMult();
         if (crit) dmg *= 1 + st.critDamage / 100;
         if (state.auto) dmg *= 0.8;
         dmg = dmg < 1 ? 1 : Math.round(dmg);

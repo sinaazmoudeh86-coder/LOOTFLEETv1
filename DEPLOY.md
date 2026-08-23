@@ -1,56 +1,156 @@
-# Loot Fleet — deploy v244 · build 714 · PILOT TREE BOARD + DISCORD HULL SPAM
+# Loot Fleet — deploy v246 · build 717 · MECH FOUNDRY + COMMANDERS
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v243 (build 713). Service worker cache is `lootfleet-v714`.
-**Login screen reads `BUILD 714`.**
+Supersedes v245 (build 715). Service worker cache is `lootfleet-v717`.
+**Login screen reads `BUILD 717`.**
 
-## ⚠ SQL — CHECK BOTH
+## ⚠ SQL — FOUR FILES, IN THIS ORDER
 
-**1. `supabase/temple-retire.sql` — run once.** The Temple left the client in 711
+`mech-ladder.sql` **must run last** — it supersedes `pilot-ladder.sql`.
+
+**1. `supabase/koth-archive.sql`** — outstanding since 712. Idempotent; if it was
+already run at 711, run it again (section 8 is newer). Run the whole file in one go.
+
+**2. `supabase/temple-retire.sql` — run once.** The Temple left the client in 711
 but its RPCs are still installed, and the server's `temple_claim()` is the
 pre-fix version that throws `42883 operator does not exist: record ->> unknown`
-on every call. Stale cached clients still poll it, which is what has been filling
-the Postgres log. This drops the temple FUNCTIONS by catalogue lookup and
-deliberately leaves the TABLES alone — nothing reads them, and they hold the
-record of what players actually did in that arena.
+on every call. Stale cached clients still poll it. Drops the temple FUNCTIONS by
+catalogue lookup and deliberately leaves the TABLES alone — nothing reads them,
+and they hold the record of what players actually did in that arena.
 
-**2. `supabase/pilot-ladder.sql` — verify it ran at 712.** If the Pilot Tree
-board shows every real pilot at 0, this is why. Check with:
+**3. `supabase/mech-feed.sql` — new.** Creates `log_mech()`, the RPC the Mech
+Foundry and Commanders post their announcements through. Whitelists five kinds
+(`mechWorld`, `mechDeep`, `mechCore`, `mechSov`, `mechCmdr`) and de-duplicates
+each so a replay cannot post the same card twice. No new table.
+
+**4. `supabase/mech-ladder.sql` — new, RUN LAST.** Adds `mech_cores bigint` to
+`leaderboard` and republishes `lb_upsert` carrying it. **This is now the
+canonical `lb_upsert`** — a strict superset of `pilot-ladder.sql` (24 params to
+its 23, same order, same types). It drops every existing overload by catalogue
+lookup and asserts exactly one survives, because `create or replace` cannot
+replace an overload whose argument types differ — it silently adds a second copy
+and PostgREST then picks the wrong candidate or refuses to pick (PGRST203).
+
+**Re-running `new-ladders.sql`, `pilot-ladder.sql`, `cargo-ladder.sql`,
+`nanocore-ladder.sql` or `discord-art-publish.sql` re-adds an older overload and
+requires re-running `mech-ladder.sql` afterwards.**
+
+Verify:
 
 ```sql
 select column_name from information_schema.columns
- where table_name = 'leaderboard' and column_name like 'pilot%';
+ where table_name = 'leaderboard' and column_name in ('pilot_score','mech_cores');
+select count(*) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+ where ns.nspname = 'public' and p.proname = 'lb_upsert';   -- must be exactly 1
 ```
 
-No rows = it never ran. Run it, then `notify pgrst, 'reload schema';`.
-`koth-archive.sql` is unchanged since 712.
+Then `notify pgrst, 'reload schema';`.
 
 ## ⚠ EDGE FUNCTION DEPLOY REQUIRED
 
 `supabase functions deploy discord-feed` — all four files together, a partial
-upload does not boot. `FEED_VER` is **714**; verify with
+upload does not boot. `FEED_VER` is **717**; verify with
 `select content from net._http_response order by created desc limit 3;`
 
 ## Order
 
-1. Deploy the edge function (it is independent of the site).
-2. Push everything **except** `version.json`.
-3. Push `version.json` **last** — it is the eviction beacon.
-4. Confirm the login screen reads `BUILD 714`.
+1. Run the SQL (mech-ladder last).
+2. Deploy the edge function (independent of the site).
+3. Push everything **except** `version.json`.
+4. Push `version.json` **last** — it is the eviction beacon. A higher build than
+   the running client force-reloads every session within ~90s, so pushing it ahead
+   of the files evicts players onto code that is not live yet.
+5. Confirm the login screen reads `BUILD 717`.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 714 |
-| root `version.json` | 714 |
-| `deploy-v244/version.json` | 714 |
-| `deploy-v244/sw.js` `CACHE` | `lootfleet-v714` |
-| `discord-feed` `FEED_VER` | 714 |
+| root `game.html` `window.LF_BUILD` | 717 |
+| root `version.json` | 717 |
+| `deploy-v246/version.json` | 717 |
+| `deploy-v246/sw.js` `CACHE` | `lootfleet-v717` |
+| `discord-feed` `FEED_VER` | 717 |
 
-Every `js/`+`css/` reference carries `?v=714`. Folder rebuilt from the project
-root, never seeded from v243.
+Every `js/`+`css/` reference carries `?v=717`. Folder rebuilt from the project
+root, never seeded from v245: v245 was copied first, then `js/`, `css/`,
+`guides/` and `supabase/` were DELETED and re-copied fresh. All 91 js/css files
+game.html references were diffed against the root copies — zero stale, zero
+missing. Root `sw.js` is deliberately unversioned (it is the kill-switch worker
+for the old poisoned origin) and was not touched.
+
+New asset directories in this release: `commanders/` (31 portraits), `ui/`
+(Commanders emblem), plus 11 Mech sprites in `ships/`.
+
+---
+
+## What changed in 717
+
+### ⚙ THE MECH FOUNDRY — a new event, Command ▸ Mech Foundry
+
+Five corrupted worlds, Verath through Malgrave, each a wave gauntlet onto a
+planet surface rather than a space battle. Gated by LEVEL and by **Pilot
+Ascension stars** (★0/5/10/15/20). Each world is assaultable **one hour in six**
+on staggered windows — a pure function of the UTC clock, so there is no new save
+key, nothing to migrate and nothing that has to be named in `ASC_KEEP`.
+
+Pays ⚙ Mech Cores, loot and gold — **never levels**. Its zones are priced off the
+tier, not the pilot, so it is in the XP carve-out beside Cargo Defense, the KOTH
+arena and the Dreadnaught Hunt. It is deliberately NOT in `lootBlocked()`: the
+hunt and the Foundry withhold levels and keep their loot. Two rules, two lists.
+
+### ⚙ ARMOR CORRUPTION — the Mech faction's signature mechanic
+
+Mech attacks strip the target's armor and the stacks build while they keep
+hitting. Applied in both directions from the two existing convergence points
+(`resolveHit` outbound, `takeHit` inbound), so bolts, fighters, drones, escorts
+and Prism splash all corrupt with one implementation.
+
+Six new Mech hulls feed **one shared pool** ceilinged at **−60%**, which is what
+keeps an all-Mech fleet a choice rather than a mandate. Stacks are rate-limited on
+the wall clock, so the ramp is a design number and not a function of fire rate or
+frame rate.
+
+### ✦ COMMANDERS — a collection, at ★5
+
+31 officers, one seatable per active hull. Generalists, class specialists (×2.2)
+and hull specialists (×3.6); an unmet seat pays nothing. Rolls on **its own fixed
+rarity table** — no loot luck, no rarity buffs — with resource crates capped at
+Mythic and the two LootCoin vaults the only uncapped route. Duplicates fuse
+(4 spares → +1 tier) or scrap to dust; dust promotes a card you already hold.
+
+`state.cmdr` is in `ASC_KEEP`, and `own`/`pulls` are unioned in `mergeSaves()`
+while `dust` deliberately is not — a spendable wallet max-unioned against a copy
+that has not spent yet is the `pasc.pts` duplication bug.
+
+### ⚙ Mech Foundry board in Ranks
+
+Ranked on cores **EARNED**, never the wallet: a wallet falls when you assemble a
+hull, and a ladder whose rows drop when you play it punishes playing.
+`lb_upsert` writes it with `greatest()`.
+
+### Fixed
+
+- **Autopilot froze in wave zones.** `rt.nodes` is empty in every wave-based zone,
+  so the drift step fell off the end of the function without calling any movement
+  function at all. There is always a movement call now.
+- **The Choir result popup stacked** and never dismissed itself. One veil at a
+  time, and it auto-closes with a visible countdown.
+- **Better Choir hulls were EASIER to recover** — the roll climbed with depth
+  while the tier did too. The chance is now a property of the tier and falls as
+  the tier rises (Vhorn 4.4% → 0.5%).
+- **Cargo Defense paid fittings from a loophole**, and the Voidmaw ship card
+  printed `/100` parts where the event requires 150.
+- Ship art draws ~1.5× larger in the arena, and hull class now counts on the
+  hangar deck (it was sized off visual tier alone, so every capital shared one
+  silhouette).
+
+### Removed
+
+- **"Season 1" is gone from the Voidmaw event** — it is a permanent fixture now,
+  with no end date and no countdown on any screen. `SEASON.num` stays `1`
+  forever: it is a WIRE KEY every published row carries, not a label.
 
 ---
 

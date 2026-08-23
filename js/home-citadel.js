@@ -1267,7 +1267,7 @@
           '<button class="hc-c-btn"' + (a.tot >= 1 ? '' : ' disabled') + '>COLLECT</button></div>') +
       '<button class="hc-fight" id="hc-fight" title="Deploys your fleet to the citadel grounds in a safe BUILD PHASE — place towers, upgrade structures, then launch the wave. Raider strength scales to YOUR fleet."' + (dmg ? ' disabled' : '') + '>⚔ DEPLOY — WAVE ' + ((s.wave | 0) + 1) +
         '<span>' + band((s.wave | 0) + 1).name + ' raiders · build phase first — fortify, then launch</span></button>' +
-      '<button class="hc-fight auto" id="hc-auto" title="Chains waves back-to-back until you fall. The fort repairs between waves — but dying carries NORMAL death penalties (gear drop, hull reset)."' + (dmg ? ' disabled' : '') + '>⚔∞ AUTO-DEFENSE<span>chain waves till you fall · normal death penalties apply</span></button>' +
+      '<button class="hc-fight auto" id="hc-auto" title="Chains waves back-to-back until you fall. The fort repairs between waves — but dying carries NORMAL death penalties (gear drop, hull reset)."' + (dmg ? ' disabled' : '') + '>⚔∞ AUTO-DEFENSE<span>chain waves till you fall · <b>dying drops gear and resets your hull</b></span></button>' +
       '<div class="hc-cit-card" title="Citadel Level ' + (s.cit | 0) + ' — each ASCEND permanently adds +10 max levels to EVERY structure and tower. Bought inside the defense (🔨 BUILD)."><div class="hc-cit-l"><b>🏰 CITADEL LEVEL ' + (s.cit | 0) + '</b><span>Each level unlocks <b>+10 levels on every structure & tower</b> — ascend from inside the defense.</span><span class="hc-cit-cost">' + costTxt(citCost(s)) + '</span></div></div>' +
       '<div class="hc-twsum">' + twSumTxt(s) + '</div>' +
       '<div class="hc-blds">' + bldHtml + '</div>' +

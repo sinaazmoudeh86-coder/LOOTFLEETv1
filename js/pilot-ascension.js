@@ -476,7 +476,7 @@
             '<li><b>Nanocores</b> — every core, slot and rolled buff</li>' +
             '<li><b>Tour of Duty</b> — season level, XP and anything you bought</li>' +
             '<li><b>Space Cargo Defense</b> — lifetime record and today’s runs</li>' +
-            '<li><b>Season 1: Voidmaw</b> — Event Coins, ❖ Voidmaw Parts, best stage and season rank</li>' +
+            '<li><b>Voidmaw</b> — Event Coins, ❖ Voidmaw Parts, best stage and board rank</li>' +
             '<li>Ascension Stars &amp; every perk you buy</li>' +
             '<li><b>A higher level ceiling</b> — +' + CAP_STEP + ' max pilot level, every time</li>' +
             '<li>Your <b>mission boards</b> — daily, weekly and monthly carry on mid-cycle</li>' +
@@ -768,7 +768,7 @@
       ['\u2691', tiles ? '<b>All ' + tiles + ' system' + (tiles === 1 ? '' : 's') + '</b> \u2014 citadels and Void spires stay yours' : 'Any territory you hold'],
       ['$', '<b>Your gold and every Galaxy Resource</b> \u2014 the wallet is untouched'],
       ['\u25d0', 'Moon Colony, Home Citadel and Prism \u2014 still producing'],
-      ['\u2756', 'Season 1: Voidmaw \u2014 Event Coins, parts and best stage'],
+      ['\u2756', 'Voidmaw \u2014 Event Coins, parts and best stage'],
       ['\u2b21', 'Badges, career totals and mission boards'],
       ['\u25c8', 'Everything you paid for'],
     ];

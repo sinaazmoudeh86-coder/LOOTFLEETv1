@@ -196,8 +196,144 @@
   // vignette) is rendered ONCE per zone/size into an offscreen canvas; only
   // stars (twinkle/parallax) and the major feature animate per frame.
   // =========================================================================
+  // =========================================================================
+  // CORRUPTED PLANET SURFACE — the Mech Foundry battlefield
+  // -------------------------------------------------------------------------
+  // A Foundry tier is a LANDING, not a space battle, so drawArena hands off here
+  // entirely rather than tinting the starfield. The palette is read off
+  // C.MECHS[].world, the same table the tier card paints its planet disc from —
+  // one statement of what colour a world is, so the card and the ground can never
+  // disagree.
+  //
+  // FRAME TIME IS THE CONSTRAINT, same as everywhere else. Terrain and corruption
+  // veins are baked ONCE per (world, size) into two offscreen canvases; a frame
+  // costs two blits plus a handful of ember rects. Nothing per-frame builds a
+  // gradient, and there is no shadowBlur anywhere in it.
+  // =========================================================================
+  let _mwKey = '', _mwGround = null, _mwVeins = null, _mwEmbers = null;
+  function mechWorld() {
+    try {
+      const s = window.GAME && window.GAME.state;
+      if (!s || !s.mechRun || !s.mechRun.active) return null;
+      const list = (window.CONFIG && window.CONFIG.MECHS) || [];
+      const tier = Math.max(1, Math.min(list.length, s.mechRun.tier | 0));
+      const m = list[tier - 1];
+      return (m && m.world) ? { w: m.world, tier } : null;
+    } catch (e) { return null; }
+  }
+  function bakeWorld(mw, w, h) {
+    const key = mw.tier + 'x' + (w | 0) + 'x' + (h | 0);
+    if (key === _mwKey && _mwGround && _mwVeins) return;
+    _mwKey = key;
+    const W = mw.w, r = rng((mw.tier * 2654435761) >>> 0);
+    const mk = () => { const c = document.createElement('canvas'); c.width = Math.max(1, w | 0); c.height = Math.max(1, h | 0); return c; };
+
+    // ---- GROUND -----------------------------------------------------------
+    _mwGround = mk();
+    const g = _mwGround.getContext('2d');
+    const base = g.createRadialGradient(w * 0.5, h * 0.42, 20, w * 0.5, h * 0.5, Math.max(w, h) * 0.8);
+    base.addColorStop(0, W.ground); base.addColorStop(1, W.sky);
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
+    // rock plates — ANGULAR, not soft discs. Round ellipses at low alpha read as
+    // bubbles floating over the ground rather than as terrain; irregular polygons
+    // with a lit top edge and a dark bottom edge read as broken plate rock.
+    for (let i = 0; i < 90; i++) {
+      const x = r() * w, y = r() * h, R = 18 + r() * 74, n = 5 + ((r() * 3) | 0);
+      g.beginPath();
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * 6.283 + r() * 0.5, rr2 = R * (0.62 + r() * 0.5);
+        const px = x + Math.cos(a) * rr2, py = y + Math.sin(a) * rr2 * 0.72;
+        k ? g.lineTo(px, py) : g.moveTo(px, py);
+      }
+      g.closePath();
+      // MUCH LIGHTER TOUCH ON A LIT GROUND. At the alphas this used while the
+      // worlds were near-black, the plates read as overlapping bubbles floating
+      // above Mars rather than as rock lying on it.
+      g.globalAlpha = 0.06 + r() * 0.07;
+      g.fillStyle = r() < 0.55 ? W.rock : W.ground;
+      g.fill();
+      g.globalAlpha = 0.03 + r() * 0.035;
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.stroke();
+    }
+    // craters — a dark bowl with a lit CRESCENT, not a full ring. A closed bright
+    // circle is the thing that made these read as drawn-on discs.
+    for (let i = 0; i < 11; i++) {
+      const x = r() * w, y = r() * h, R = 16 + r() * 44;
+      g.globalAlpha = 0.13;
+      g.fillStyle = W.rock;
+      g.beginPath(); g.ellipse(x, y, R, R * 0.78, 0, 0, 7); g.fill();
+      g.globalAlpha = 0.10;
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.ellipse(x - R * 0.14, y - R * 0.16, R * 0.6, R * 0.44, 0, 0, 7); g.fill();
+      g.globalAlpha = 0.16;
+      g.strokeStyle = '#ffe6cf'; g.lineWidth = 1.6;
+      g.beginPath(); g.ellipse(x, y, R, R * 0.78, 0, 3.7, 5.8); g.stroke();
+    }
+    // fine iron-oxide dust, so the surface has grain instead of flat panels
+    for (let i = 0; i < 900; i++) {
+      g.globalAlpha = 0.03 + r() * 0.05;
+      g.fillStyle = r() < 0.5 ? '#ffffff' : W.rock;
+      g.fillRect(r() * w, r() * h, 1.4, 1.4);
+    }
+    g.globalAlpha = 1;
+    const vig = g.createRadialGradient(w / 2, h / 2, h * 0.34, w / 2, h / 2, h * 0.95);
+    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.62)');
+    g.fillStyle = vig; g.fillRect(0, 0, w, h);
+
+    // ---- CORRUPTION VEINS -------------------------------------------------
+    // Drawn to their own canvas so the whole network can be pulsed with one
+    // globalAlpha rather than redrawn. Branching random walks: wide dim stroke
+    // for the glow, thin bright stroke for the core.
+    _mwVeins = mk();
+    const v = _mwVeins.getContext('2d');
+    v.lineCap = 'round'; v.lineJoin = 'round';
+    const walk = (x, y, ang, len, wide, depth) => {
+      const pts = [[x, y]];
+      for (let i = 0; i < len; i++) {
+        ang += (r() - 0.5) * 0.7;
+        x += Math.cos(ang) * 16; y += Math.sin(ang) * 16;
+        pts.push([x, y]);
+        if (depth < 2 && r() < 0.09) walk(x, y, ang + (r() < 0.5 ? 1 : -1) * 0.9, len * 0.5, wide * 0.6, depth + 1);
+      }
+      v.strokeStyle = W.vein; v.globalAlpha = 0.30; v.lineWidth = wide * 2.6;
+      v.beginPath(); pts.forEach((p, i) => (i ? v.lineTo(p[0], p[1]) : v.moveTo(p[0], p[1]))); v.stroke();
+      v.globalAlpha = 1; v.lineWidth = Math.max(1, wide);
+      v.beginPath(); pts.forEach((p, i) => (i ? v.lineTo(p[0], p[1]) : v.moveTo(p[0], p[1]))); v.stroke();
+    };
+    const seeds = 5 + mw.tier;
+    for (let i = 0; i < seeds; i++) walk(r() * w, r() * h, r() * 6.28, 22 + r() * 20, 1.6 + mw.tier * 0.22, 0);
+    v.globalAlpha = 1;
+
+    // ---- EMBERS -----------------------------------------------------------
+    _mwEmbers = [];
+    for (let i = 0; i < 46; i++) _mwEmbers.push({ x: r() * w, y: r() * h, s: 0.8 + r() * 1.8, sp: 6 + r() * 20, ph: r() * 6.28 });
+  }
+  function drawMechSurface(ctx, mw, w, h, t) {
+    bakeWorld(mw, w, h);
+    if (!_mwGround) return;
+    ctx.drawImage(_mwGround, 0, 0);
+    // the veins BREATHE — one alpha on a cached bitmap, not a redraw
+    const pulse = _LOD >= 2 ? 0.72 : 0.58 + 0.30 * Math.sin(t * 1.5);
+    ctx.globalAlpha = pulse;
+    ctx.drawImage(_mwVeins, 0, 0);
+    ctx.globalAlpha = 1;
+    if (_LOD >= 2 || !_mwEmbers) return;
+    // ash and embers rising off the corruption
+    ctx.fillStyle = mw.w.vein;
+    for (let i = 0; i < _mwEmbers.length; i++) {
+      const e = _mwEmbers[i];
+      const yy = (e.y - t * e.sp) % h, y2 = yy < 0 ? yy + h : yy;
+      ctx.globalAlpha = 0.20 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2 + e.ph));
+      ctx.fillRect(e.x + Math.sin(t * 0.7 + e.ph) * 6, y2, e.s, e.s);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   let _bgCacheKey = '', _bgCache = null;
   function drawArena(ctx, w, h, t, zone) {
+    // A Foundry run is fought on a planet, not in space.
+    const mw = mechWorld();
+    if (mw) return drawMechSurface(ctx, mw, w, h, t);
     zone = zone || 0;
     const gal = GALAXY[biomeOf(zone)];
     spaceFor(zone, w, h);
@@ -283,6 +419,19 @@
       ctx.globalAlpha = 1; ctx.restore();
     }
     ctx.translate(e.x + (e.dir < 0 ? -lunge : lunge), e.y);
+    // ARMOR CORRUPTION — the poisoned wash. Read once and used by both hull paths.
+    const _mct = (window.MECHCORR && !e.dying) ? window.MECHCORR.tintOf(e) : null;
+    if (_mct) {
+      // an outer bloom first, under the hull, so the whole silhouette sits in a
+      // deep red haze rather than only being surface-tinted
+      const R = e.size * 1.9;
+      const bl = ctx.createRadialGradient(0, 0, e.size * 0.45, 0, 0, R);
+      bl.addColorStop(0, _mct.col); bl.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = alpha * _mct.halo;
+      ctx.fillStyle = bl;
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+      ctx.globalAlpha = alpha;
+    }
     if (e.spriteImg && e.spriteImg.complete && e.spriteImg.naturalWidth) {
       // HERO SPRITE (Dreadnaught raid boss) — draw the art instead of the alien mesh.
       const img = e.spriteImg;
@@ -296,9 +445,30 @@
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = alpha;
       }
+      // CORRUPTED HULL. The tint is a CACHED SILHOUETTE of this sprite filled with
+      // the corruption colour — built once per (sprite, colour) on its own offscreen
+      // canvas, where source-atop is safe because nothing else is on it. Doing the
+      // composite straight onto the arena would tint the ground and every hull
+      // already drawn under this one, which is why the fighter rarity tint uses the
+      // same trick.
+      const _mask = _mct ? tintMask(img, _mct.col) : null;
+      if (_mask) {
+        ctx.globalAlpha = alpha * _mct.alpha;
+        ctx.drawImage(_mask, -dw / 2, -dh / 2, dw, dh);
+        ctx.globalAlpha = alpha;
+      }
     } else {
       ctx.scale(e.dir * scale, scale);
-      drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
+      // The procedural drawers colour everything off e.tint, so a corrupted hull
+      // is drawn by swapping that one value for the run — no compositing needed and
+      // nothing to cache. Restored immediately; e.tint is also read by the death
+      // burst and the ichor mist.
+      if (_mct) {
+        const _keep = e.tint;
+        e.tint = mix(_keep, _mct.col, Math.min(0.85, 0.35 + _mct.k * 0.5));
+        drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
+        e.tint = _keep;
+      } else drawAlien(ctx, e, e.hitFlash > 0 ? e.hitFlash : 0);
     }
     ctx.restore();
 
@@ -370,6 +540,23 @@
         ctx.strokeText('\u2620 ' + (e.name || 'BOSS'), e.x, by - 6); ctx.fillText('\u2620 ' + (e.name || 'BOSS'), e.x, by - 6);
       }
     }
+
+    // ARMOR CORRUPTION — the debuff readout, drawn last so it sits over the hull
+    // and its health bar. `topY` is computed HERE, where what is already stacked
+    // above this hostile is known: the module never guesses where it is safe to
+    // draw. A corrupted hostile can be at full health, so this cannot be folded
+    // into the health-bar block above.
+    if (window.MECHCORR) {
+      const cs = window.MECHCORR.stateOf(e);
+      if (cs) {
+        if (!e.dying) window.MECHCORR.cracks(ctx, e, cs.cap > 0 ? cs.pct / cs.cap : 0);
+        const hurt = e.hp < e.maxHp;
+        let ty = e.y - e.size - 16;
+        if (hurt) ty -= 11;                     // clear the health bar
+        if (hurt && e.isBoss) ty -= 14;         // and the boss name above it
+        window.MECHCORR.badge(ctx, e.x, e.size, ty, cs);
+      }
+    }
   }
 
   // ---- GRADIENT CACHE ------------------------------------------------------
@@ -377,6 +564,27 @@
   // flashing (a hit tints the skin continuously, which would thrash the cache
   // for the fraction of a second it lasts).
   const _gc = new Map();
+  // Silhouette of a sprite flooded with one colour, built once and reused. Bounded
+  // like the gradient cache below it — there are only a handful of sprites and two
+  // corruption colours, so it settles at a dozen entries and never grows.
+  const _tintCache = new Map();
+  function tintMask(img, col) {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return null;
+    const key = (img.src || '') + '|' + col;
+    let c = _tintCache.get(key);
+    if (c !== undefined) return c;
+    try {
+      c = document.createElement('canvas'); c.width = w; c.height = h;
+      const x = c.getContext('2d');
+      x.drawImage(img, 0, 0);
+      x.globalCompositeOperation = 'source-atop';   // safe: this canvas holds only the sprite
+      x.fillStyle = col; x.fillRect(0, 0, w, h);
+    } catch (e) { c = null; }
+    if (_tintCache.size > 40) _tintCache.clear();
+    _tintCache.set(key, c);
+    return c;
+  }
   let _bossAura = null;
   function hullGrad(ctx, key, x0, y0, x1, y1, c0, c1, c2) {
     let gr = _gc.get(key);
@@ -768,7 +976,7 @@
   function drawEscort(ctx, key, x, y, t, healPulse) {
     const tier = HULL_VIS[key] != null ? HULL_VIS[key] : 0;
     const im = shipImg(key);
-    const ds = (26 + tier * 2.4) * shipScaleOf(key);
+    const ds = (40 + tier * 3.6) * shipScaleOf(key);
     const bob = Math.sin(t * 2 + x * 0.07) * 1.6;
     ctx.save();
     ctx.translate(x, y + bob);
@@ -1032,6 +1240,7 @@
   // upgrades the ship), falling back to level for the starter frigate.
   const HULL_VIS = { frigate:0, interceptor:0, cruiser:1, heavycruiser:1, destroyer:2, battleship:2, dreadnought:3, carrier:4, aegis:4, supercarrier:4, titan:5, mothership:5, oblivionspear:5, oblivionspearalpha:5, oblivionfinal:5,
     dread1:5, dread2:5, dread3:5, dread4:5, dread5:5, dread6:5, titansina:5, aeternum:5, eternum:5, voidmaw:5, chromafang:1, chromaregent:5, frostyfrost:5, veridian:2,
+    mecharchon:4, mechtitan:5, mechspawn:0, mechgremlin:1, mechbeast:2, mechsovereign:5,
     xen1:0, xen2:1, xen3:2, xen4:4, xen5:5, vanguard:4, praetorian:5,
     // Ladders that were never added to either table and so drew at tier 0 — a
     // frigate silhouette for a Celestial carrier and for every alliance siege
@@ -1086,6 +1295,17 @@
     //     Eternum (5.2); the largest carrier hull in the game by bay count.
     emb1:0.85, emb2:1, emb3:1.3, emb4:1.7, emb5:2.6,
     monolith1:1.2, monolith2:1.6, monolith3:2.2, monolith4:3,
+    // ---- THE MECH LINE ------------------------------------------------------
+    // Every one of these was missing, so all six computed to shipScaleOf()'s
+    // default of 1 and the whole faction flew at frigate scale — the Sovereign,
+    // a Dread-class capstone costing 400k cores and ◈250k, drew the same size as
+    // the Mech Spawn and one fifth of the Corvus. Exactly the omission this
+    // table's own header documents.
+    //
+    // Laddered against the capitals above: the Sovereign sits between the
+    // Oblivion Final (4) and the Corvus (5), which is where its class and price
+    // put it; the four below it climb from frigate to carrier weight.
+    mechspawn:0.9, mechgremlin:1.2, mechbeast:1.7, mecharchon:2.4, mechtitan:3.4, mechsovereign:4.6,
     titanaquila:4.5, corvus:5 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
@@ -1401,7 +1621,7 @@
     ctx.translate(0, bob);
     const _im = shipImg(activeShipKey());
     if (_im) {
-      const ds = (42 + tier * 3) * shipScaleOf(activeShipKey());                 // sprite draw size (local units)
+      const ds = (64 + tier * 4.5) * shipScaleOf(activeShipKey());               // sprite draw size (local units)
       // (no under-ship shadow/glow blob — it read as a weird "reflection" next to the hull)
       // animated engine plume — flickering twin thruster flames behind the hull
       {
@@ -1748,10 +1968,17 @@
     for (const slot of slots) {
       const base = slot.active ? 1.0 : 0.66;
       const tier = slot.ship.tier;
-      const shipScale = (1.5 + tier * 0.25) * base * slot.sc;
+      // HULL CLASS COUNTS ON THE DECK TOO. This sized purely off visual tier, so
+      // every capital shared one silhouette and the Mech Sovereign parked the same
+      // size as the Frigate two pads over. shipScaleOf() is the table that knows
+      // the difference — but it is COMPRESSED here, not applied raw: the deck has
+      // fixed landing pads and a name label under each, and a raw ×5 Corvus would
+      // cover its neighbours. Half the excess, capped at 2.4×, keeps the ladder
+      // legible without breaking the layout.
+      const _cls = Math.min(2.4, 1 + Math.max(0, shipScaleOf(slot.ship.key) - 1) * 0.5);
+      const shipScale = (1.5 + tier * 0.25) * base * slot.sc * _cls;
       const bob = Math.sin(t * 1.6 + slot.x) * 3;
-      hits.push({ key: slot.ship.key, x: slot.x, y: slot.y, r: Math.max(30 * slot.sc * base, 24 * shipScale), active: slot.active });
-      // landing pad glow
+      hits.push({ key: slot.ship.key, x: slot.x, y: slot.y, r: Math.max(30 * slot.sc * base, 24 * shipScale), active: slot.active });      // landing pad glow
       const pc = slot.active ? '#e6b566' : '#3a7bd5';
       const padR = 30 * slot.sc * base;
       ctx.save();
@@ -1768,7 +1995,7 @@
       ctx.translate(slot.x, slot.y - 6 + bob);
       ctx.scale(shipScale, shipScale);
       const _hi = shipImg(slot.ship.key);
-      if (_hi) { const ds = 30 + tier * 3, k = fitK(_hi, ds), dw = srcW(_hi) * k, dh = srcH(_hi) * k; ctx.drawImage(_hi, -dw / 2, -dh / 2, dw, dh); }
+      if (_hi) { const ds = (34 + tier * 3.4), k = fitK(_hi, ds), dw = srcW(_hi) * k, dh = srcH(_hi) * k; ctx.drawImage(_hi, -dw / 2, -dh / 2, dw, dh); }
       else drawShip(ctx, tier, slot.ship.equipped || {}, t, 0);
       ctx.restore();
       // name plate

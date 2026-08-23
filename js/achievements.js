@@ -63,6 +63,11 @@
     { id: 'iron',   ic: '◆', name: 'Ironclad',           unit: 'iron scavenged',           n: 80,  t: genT(150, 1.42, 80),   v: () => life('iron') },
     { id: 'plasma', ic: '✦', name: 'Plasma Sovereign',   unit: 'plasma scavenged',         n: 80,  t: genT(100, 1.42, 80),   v: () => life('plasma') },
     { id: 'moon',   ic: '☾', name: 'Lunar Baron',        unit: 'colony resources shipped', n: 90,  t: genT(5e3, 1.5, 90),    v: moonLifetimeSum },
+    // ---- THE MECH FOUNDRY ----------------------------------------------------
+    // Cores read LIFETIME EARNED, never the wallet: a badge chain must not walk
+    // backwards because the pilot assembled a hull with what it measured.
+    { id: 'mechcore',  ic: '⚙', name: 'Corruption Engineer', unit: '⚙ Mech Cores earned',       n: 60, t: genT(200, 1.38, 60), v: () => { try { return window.MECHF ? window.MECHF.earned() : 0; } catch (e) { return 0; } } },
+    { id: 'mechworld', ic: '☄', name: 'Worldbreaker',        unit: 'corrupted worlds cleared',  n: 40, t: genT(1, 1.30, 40),   v: () => { try { return (S().mech && S().mech.runs) | 0; } catch (e) { return 0; } } },
     // LOOT IS A CAREER TOTAL, NOT THE SIZE OF THE HOLD. This read the hold's
     // length, so the chain stalled at the hangar's capacity, scored nothing for
     // drops sold on pickup, and walked BACKWARDS whenever the hold was sold off.

@@ -62,24 +62,24 @@ window.__lfErr=[];
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style-v2.css?v=715">
-<link rel="stylesheet" href="css/theme.css?v=715">
-<link rel="stylesheet" href="css/web-v89.css?v=715">
-<link rel="stylesheet" href="css/fx-cinematic.css?v=715">
-<link rel="stylesheet" href="css/fx-primordial.css?v=715">
-<link rel="stylesheet" href="css/moon-colony.css?v=715">
-<link rel="stylesheet" href="css/pilot-ascension.css?v=715">
-<link rel="stylesheet" href="css/season-pass.css?v=715">
-<link rel="stylesheet" href="css/fx-aaa.css?v=715">
-<link rel="stylesheet" href="css/readability.css?v=715">
-<link rel="stylesheet" href="css/kaevith.css?v=715">
-<link rel="stylesheet" href="css/ember-choir.css?v=715">
-<link rel="stylesheet" href="css/hangar-ships.css?v=715">
-<link rel="stylesheet" href="css/sheet-cta.css?v=715">
-<link rel="stylesheet" href="css/fit-guard.css?v=715">
-<link rel="stylesheet" href="css/patch-notes.css?v=715">
-<link rel="stylesheet" href="css/expedition.css?v=715">
-<link rel="stylesheet" href="css/koth.css?v=715">
+<link rel="stylesheet" href="css/style-v2.css?v=717">
+<link rel="stylesheet" href="css/theme.css?v=717">
+<link rel="stylesheet" href="css/web-v89.css?v=717">
+<link rel="stylesheet" href="css/fx-cinematic.css?v=717">
+<link rel="stylesheet" href="css/fx-primordial.css?v=717">
+<link rel="stylesheet" href="css/moon-colony.css?v=717">
+<link rel="stylesheet" href="css/pilot-ascension.css?v=717">
+<link rel="stylesheet" href="css/season-pass.css?v=717">
+<link rel="stylesheet" href="css/fx-aaa.css?v=717">
+<link rel="stylesheet" href="css/readability.css?v=717">
+<link rel="stylesheet" href="css/kaevith.css?v=717">
+<link rel="stylesheet" href="css/ember-choir.css?v=717">
+<link rel="stylesheet" href="css/hangar-ships.css?v=717">
+<link rel="stylesheet" href="css/sheet-cta.css?v=717">
+<link rel="stylesheet" href="css/fit-guard.css?v=717">
+<link rel="stylesheet" href="css/patch-notes.css?v=717">
+<link rel="stylesheet" href="css/expedition.css?v=717">
+<link rel="stylesheet" href="css/koth.css?v=717">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; align-items:flex-start; }
@@ -335,7 +335,7 @@ window.__lfErr=[];
 .mega-card .mc-n{font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .mega-card .mc-s{display:none !important;}
 .mega-card .mc-ic{flex:none;width:36px;height:36px;}
-/* featured first row: Season 1 + My Galaxy side by side, always */
+/* featured first row: Voidmaw + My Galaxy side by side, always */
 .mega-card.cmd-sdread,.mega-card.cmd-galaxy{grid-row:1;grid-column:auto !important;min-height:64px;}
 .mega-card.cmd-sdread .mc-s,.mega-card.cmd-galaxy .mc-s{display:block !important;font-size:10px !important;line-height:1.35 !important;overflow:hidden;text-overflow:ellipsis;display:-webkit-box !important;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .mega-card.cmd-sdread .mc-ic{width:44px;height:40px;}
@@ -729,6 +729,18 @@ window.__lfErr=[];
           <div class="scr-body" id="pilot-body"></div>
         </div>
 
+        <!-- COMMANDERS (Command) -->
+        <div class="screen overlay" id="screen-cmdr">
+          <div class="scr-head"><span class="scr-title">Commanders</span><span class="scr-sub" id="cmdr-sub"></span></div>
+          <div class="scr-body" id="cmdr-body"></div>
+        </div>
+
+        <!-- THE MECH FOUNDRY (Command) -->
+        <div class="screen overlay" id="screen-mech">
+          <div class="scr-head"><span class="scr-title">Mech Foundry</span><span class="scr-sub" id="mech-sub"></span></div>
+          <div class="scr-body" id="mech-body"></div>
+        </div>
+
         <!-- DREADNAUGHT HUNT (Command) -->
         <div class="screen overlay" id="screen-dread">
           <div class="scr-head"><span class="scr-title">Dreadnaught Hunt</span><span class="scr-sub" id="dread-sub"></span></div>
@@ -941,7 +953,7 @@ window.__lfErr=[];
             </div>
             <div class="mega-card cmd-sdread" data-go="sdread">
               <div class="mc-ic mc-vm"><img src="ships/ship-voidmaw.png" alt="Voidmaw"></div>
-              <div><div class="mc-n">Season 1: Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
+              <div><div class="mc-n">Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
               <span class="mc-lock"></span><span class="badge" id="cmd-sdread-badge" style="display:none">0</span>
             </div>
             <div class="mega-card cmd-cargo" data-go="cargo">
@@ -963,6 +975,16 @@ window.__lfErr=[];
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4-1.5 9L12 22 4.5 15 3 6z"/><path d="M12 7v6M9 10h6"/></svg></div>
               <div><div class="mc-n">Dreadnaught Hunt</div><div class="mc-s">Weekly raid · hunt for ◇ Dread Cores</div></div>
               <span class="mc-lock"></span><span class="badge" id="cmd-dread-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-cmdr" data-go="cmdr">
+              <div class="mc-ic mc-art"><img src="ui/cmdr-emblem.png" alt=""></div>
+              <div><div class="mc-n">Commanders</div><div class="mc-s">Collect officers · 12 rarities · one flies with your fleet</div></div>
+              <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-cmdr-badge" style="display:none">0</span>
+            </div>
+            <div class="mega-card cmd-mech" data-go="mech">
+              <div class="mc-ic mc-art"><img src="ships/mech-mtitan.png" alt=""></div>
+              <div><div class="mc-n">Mech Foundry</div><div class="mc-s">Five tiers · hunt for ⚙ Mech Cores &amp; hulls</div></div>
+              <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-pilot" data-go="pilot">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg></div>
@@ -1117,82 +1139,85 @@ window.__lfErr=[];
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=715"></script>
-<script src="js/items.js?v=715"></script>
-<script src="js/entities.js?v=715"></script>
-<script src="js/render.js?v=715"></script>
-<script src="js/galaxy.js?v=715"></script>
-<script src="js/leaderboard.js?v=715"></script>
+<script src="js/config-v2.js?v=717"></script>
+<script src="js/items.js?v=717"></script>
+<script src="js/entities.js?v=717"></script>
+<script src="js/render.js?v=717"></script>
+<script src="js/galaxy.js?v=717"></script>
+<script src="js/leaderboard.js?v=717"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.live.js?v=715"></script>
-<script src="js/servertime.js?v=715"></script>
-<script src="js/analytics.js?v=715"></script>
-<script src="js/cloud.js?v=715"></script>
-<script src="js/account.js?v=715"></script>
-<script src="js/session-lock.js?v=715"></script>
-<script src="js/vip.js?v=715"></script>
-<script src="js/territory.js?v=715"></script>
-<script src="js/payments-v91.js?v=715"></script>
-<script src="js/game-v93.js?v=715"></script>
-<script src="js/ui-v94.js?v=715"></script>
-<script src="js/fx-cinematic.js?v=715"></script>
-<script src="js/fx-primordial.js?v=715"></script>
-<script src="js/fx-aaa.js?v=715"></script>
-<script src="js/perf-tier.js?v=715"></script>
-<script src="js/fit-audit.js?v=715"></script>
-<script src="js/moon-scene.js?v=715"></script>
-<script src="js/moon-colony.js?v=715"></script>
-<script src="js/expedition.js?v=715"></script>
-<script src="js/expedition-ui.js?v=715"></script>
-<script src="js/koth.js?v=715"></script>
-<script src="js/koth-ui.js?v=715"></script>
-<script src="js/return-brief.js?v=715"></script>
-<script src="js/home-citadel.js?v=715"></script>
-<script src="js/missions.js?v=715"></script>
-<script src="js/achievements.js?v=715"></script>
-<script src="js/coach-v89.js?v=715"></script>
-<script src="js/prism-v5.js?v=715"></script>
-<script src="js/prism-fleet.js?v=715"></script>
-<script src="js/dreadnaught.js?v=715"></script>
-<script src="js/server-dreadnaught.js?v=715"></script>
-<script src="js/galaxy-box.js?v=715"></script>
-<script src="js/shipworks.js?v=715"></script>
-<script src="js/starforge.js?v=715"></script>
-<script src="js/pilot-ascension.js?v=715"></script>
-<script src="js/season-pass.js?v=715"></script>
-<script src="js/sim-pilots.js?v=715"></script>
-<script src="js/ranks-boards.js?v=715"></script>
-<script src="js/rank-rewards.js?v=715"></script>
-<script src="js/discord-reward.js?v=715"></script>
-<script src="js/onboard.js?v=715"></script>
-<script src="js/pro-offer.js?v=715"></script>
-<script src="js/ship-panels.js?v=715"></script>
-<script src="js/paragon-cannon.js?v=715"></script>
-<script src="js/social.js?v=715"></script>
-<script src="js/mail.js?v=715"></script>
-<script src="js/alliance.js?v=715"></script>
-<script src="js/alliance-boss.js?v=715"></script>
-<script src="js/void-zone.js?v=715"></script>
-<script src="js/cargo-run.js?v=715"></script>
-<script src="js/cargo-defense.js?v=715"></script>
-<script src="js/nanocores.js?v=715"></script>
-<script src="js/fighters.js?v=715"></script>
-<script src="js/aegis-auras.js?v=715"></script>
-<script src="js/nanocores-ui.js?v=715"></script>
-<script src="js/crates-hub.js?v=715"></script>
-<script src="js/ascension.js?v=715"></script>
-<script src="js/casino.js?v=715"></script>
-<script src="js/casino2.js?v=715"></script>
-<script src="js/casino-citadels.js?v=715"></script>
-<script src="js/redeem.js?v=715"></script>
-<script src="js/auth.js?v=715"></script>
-<script src="js/patch-notes.js?v=715"></script>
-<script src="js/update-gate.js?v=715"></script>
+<script src="js/config.live.js?v=717"></script>
+<script src="js/servertime.js?v=717"></script>
+<script src="js/analytics.js?v=717"></script>
+<script src="js/cloud.js?v=717"></script>
+<script src="js/account.js?v=717"></script>
+<script src="js/session-lock.js?v=717"></script>
+<script src="js/vip.js?v=717"></script>
+<script src="js/territory.js?v=717"></script>
+<script src="js/payments-v91.js?v=717"></script>
+<script src="js/game-v93.js?v=717"></script>
+<script src="js/ui-v94.js?v=717"></script>
+<script src="js/fx-cinematic.js?v=717"></script>
+<script src="js/fx-primordial.js?v=717"></script>
+<script src="js/fx-aaa.js?v=717"></script>
+<script src="js/perf-tier.js?v=717"></script>
+<script src="js/fit-audit.js?v=717"></script>
+<script src="js/moon-scene.js?v=717"></script>
+<script src="js/moon-colony.js?v=717"></script>
+<script src="js/expedition.js?v=717"></script>
+<script src="js/expedition-ui.js?v=717"></script>
+<script src="js/koth.js?v=717"></script>
+<script src="js/koth-ui.js?v=717"></script>
+<script src="js/return-brief.js?v=717"></script>
+<script src="js/home-citadel.js?v=717"></script>
+<script src="js/missions.js?v=717"></script>
+<script src="js/achievements.js?v=717"></script>
+<script src="js/coach-v89.js?v=717"></script>
+<script src="js/prism-v5.js?v=717"></script>
+<script src="js/prism-fleet.js?v=717"></script>
+<script src="js/dreadnaught.js?v=717"></script>
+<script src="js/server-dreadnaught.js?v=717"></script>
+<script src="js/galaxy-box.js?v=717"></script>
+<script src="js/shipworks.js?v=717"></script>
+<script src="js/starforge.js?v=717"></script>
+<script src="js/pilot-ascension.js?v=717"></script>
+<script src="js/season-pass.js?v=717"></script>
+<script src="js/sim-pilots.js?v=717"></script>
+<script src="js/ranks-boards.js?v=717"></script>
+<script src="js/rank-rewards.js?v=717"></script>
+<script src="js/discord-reward.js?v=717"></script>
+<script src="js/onboard.js?v=717"></script>
+<script src="js/pro-offer.js?v=717"></script>
+<script src="js/ship-panels.js?v=717"></script>
+<script src="js/paragon-cannon.js?v=717"></script>
+<script src="js/social.js?v=717"></script>
+<script src="js/mail.js?v=717"></script>
+<script src="js/alliance.js?v=717"></script>
+<script src="js/alliance-boss.js?v=717"></script>
+<script src="js/void-zone.js?v=717"></script>
+<script src="js/cargo-run.js?v=717"></script>
+<script src="js/cargo-defense.js?v=717"></script>
+<script src="js/nanocores.js?v=717"></script>
+<script src="js/fighters.js?v=717"></script>
+<script src="js/aegis-auras.js?v=717"></script>
+<script src="js/mech-corruption.js?v=717"></script>
+<script src="js/mech-foundry.js?v=717"></script>
+<script src="js/commanders.js?v=717"></script>
+<script src="js/nanocores-ui.js?v=717"></script>
+<script src="js/crates-hub.js?v=717"></script>
+<script src="js/ascension.js?v=717"></script>
+<script src="js/casino.js?v=717"></script>
+<script src="js/casino2.js?v=717"></script>
+<script src="js/casino-citadels.js?v=717"></script>
+<script src="js/redeem.js?v=717"></script>
+<script src="js/auth.js?v=717"></script>
+<script src="js/patch-notes.js?v=717"></script>
+<script src="js/update-gate.js?v=717"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 715;
+  window.LF_BUILD = 717;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){

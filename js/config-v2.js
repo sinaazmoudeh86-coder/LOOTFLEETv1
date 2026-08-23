@@ -158,6 +158,48 @@
   ];
 
   // ---------------------------------------------------------------------------
+  // THE MECH FACTION — deliberately NOT in ENEMIES.
+  //
+  // allowedEnemies() in game-v93 is `C.ENEMIES.filter(e => currentDungeon >= e.minDungeon)`,
+  // and the zone list in ui-v94 uses the SAME filter to decide which creature to
+  // print on every zone card. Putting Mechs in that array would have dropped a new
+  // enemy line into the normal rotation of every deep zone in the game and rewritten
+  // the zone board, on live accounts, as a side effect of shipping a faction that is
+  // supposed to be opt-in. A separate table cannot do that: nothing reads it except
+  // the Mech region's own spawner.
+  //
+  // `mech` is the key into MECHCORR.HOSTILE — the corruption class this unit applies.
+  // Ceilings there hold a 1:2:4:6:10 ratio, so the ladder reads as a real escalation
+  // rather than five units with the same debuff at different sizes.
+  //
+  // `world` is the CORRUPTED PLANET this class holds. The Foundry does not fight in
+  // space — each tier is a landing on a world the Mechs have taken, and `stage` is
+  // how far gone it is. One table so the tier card and the battlefield can never
+  // disagree about what colour a planet is: render.js paints the surface from these
+  // exact values and mech-foundry.js draws the card disc from them.
+  //
+  // THE PALETTE IS MARS, NOT VOID. Rusted iron-oxide ground with the corruption
+  // burning red through it — a lit world you have landed on, rather than a black
+  // plate. It also has to stay a MID tone: the arena draws white damage numbers
+  // and white health bars straight onto this ground, so a genuinely pale surface
+  // would wash the combat readout out. Each world darkens and reddens as its
+  // corruption stage advances, so the ladder is legible at a glance.
+  const MECHS = [
+    { key: 'mspawn',   name: 'Mech Spawn',   mech: 'mspawn',   hpMod: 1.1, dmgMod: 0.9, spd: 78, size: 15, tint: '#c2323f', xp: 1.2,
+      world: { name: 'Verath',   stage: 'SEEDED',      sky: '#6b4436', ground: '#c98a5e', rock: '#a86b45', vein: '#d4462f' } },
+    { key: 'mgremlin', name: 'Mech Gremlin', mech: 'mgremlin', hpMod: 1.7, dmgMod: 1.2, spd: 88, size: 18, tint: '#d13645', xp: 1.6,
+      world: { name: 'Korrus',   stage: 'OVERRUN',     sky: '#64382c', ground: '#c07a4c', rock: '#9c5c39', vein: '#e04a2d' } },
+    { key: 'mbeast',   name: 'Mech Beast',   mech: 'mbeast',   hpMod: 3.2, dmgMod: 1.8, spd: 62, size: 24, tint: '#e03a4c', xp: 2.4,
+      world: { name: 'Dravok',   stage: 'CONSUMED',    sky: '#5c3028', ground: '#b56a42', rock: '#8f4e30', vein: '#ef4a34' } },
+    { key: 'marchon',  name: 'Mech Archon',  mech: 'marchon',  hpMod: 6.0, dmgMod: 2.6, spd: 54, size: 30, tint: '#f04455', xp: 3.6,
+      world: { name: 'Sethyr',   stage: 'ENTHRONED',   sky: '#52281f', ground: '#a85c38', rock: '#82422a', vein: '#ff4a3a' } },
+    { key: 'mtitan',   name: 'Mech Titan',   mech: 'mtitan',   hpMod: 11.0, dmgMod: 3.4, spd: 40, size: 38, tint: '#ff4d5e', xp: 5.2,
+      world: { name: 'Malgrave', stage: 'FORGE WORLD', sky: '#4a2018', ground: '#9c5030', rock: '#763822', vein: '#ff5a3c' } },
+  ];
+  const MECH_BY_KEY = {};
+  MECHS.forEach((m) => { MECH_BY_KEY[m.key] = m; });
+
+  // ---------------------------------------------------------------------------
   // SCALING FORMULAS — the heart of infinite progression
   //
   // Difficulty grows GEOMETRICALLY per dungeon (~1.55x). Crucially, item power
@@ -596,12 +638,63 @@
     // hardpoints (7 total), increased natural weapon range, top-tier built-in
     // modifiers and superior base stats.
     { key:'mothership',  name:'Mothership',     cls:'Carrier',    price:0, resPrice:{ fuel:500000, iron:200000, plasma:120000 }, reqKills:90000, weapons:7, ammo:3, hull:3, drones:12, mods:{hpPct:140,dmgPct:80,multiShot:24,critChance:20,critDamage:60,moveSpeed:24,atkSpeedPct:24,rangePct:45,lifeSteal:0.8}, tag:'MOTHERSHIP', desc:'The ultimate faction vessel — 7 weapons, extended weapon range, 12 drone bays and superior base stats. Acquired exclusively with Galaxy Resources.' },
-    // VOIDMAW — the Season 1 Server Dreadnaught event exclusive, and the most
+    // VOIDMAW — the Server Dreadnaught event exclusive, and the most
     // expensive hull in the game. Above Mothership-grade, with the SINGULARITY
     // proc: 12% per bolt to stun a target and tear open a black hole beneath it.
     // NEVER purchasable: assembled from 150 Voidmaw Parts earned only in the
     // event (stage drops, leaderboard ranks, Voidmaw Store).
-    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:1}, tag:'SEASON 1 EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of Season 1. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Season 1: Voidmaw event. When the season ends, so does the chance.' },
+    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:1}, tag:'EVENT EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of the event. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Voidmaw world-boss event.' },
+    // ---- THE MECH LINE ------------------------------------------------------
+    // Five hulls, one per Mech class, each recovered from that class's own Foundry
+    // tier. All are AWARD-ONLY (`event`), which is what keeps a price:0 hull out of
+    // buyShip() — the same guard the Voidmaw, the Tour hulls and the build hulls
+    // sit behind.
+    //
+    // NONE of them is the best hull at its weight, on purpose. The Mech line's
+    // reason to fly is ARMOR CORRUPTION: it makes the other four ships in your
+    // fleet hit harder. Stats are deliberately a notch under the gold-bought hull
+    // a pilot could field at the same level, because the corruption is the payment.
+    // See mech-corruption.js — the perk copy below is the only player-facing
+    // statement of the numbers and it reads them off that table.
+    { key: 'mechspawn', name: 'Mech Spawn', cls: 'Frigate', price: 0, reqKills: 0, weapons: 1, ammo: 1, hull: 2, drones: 0,
+      mods: { hpPct: 22, dmgPct: 12, moveSpeed: 14, critChance: 5 },
+      tag: 'MECH LINE', event: 'mech',
+      perk: '⚙ MECH CORRUPTION — the entry-tier corruption field. Every hit from your fleet strips the target’s armor, to a small ceiling. Weak on its own, and the cheapest way to learn what the line does.',
+      desc: 'The smallest Mech hull, cut down from a captured Spawn. It barely fights — but it corrupts, and everything else you own fires into the hole it opens.' },
+    { key: 'mechgremlin', name: 'Mech Gremlin', cls: 'Cruiser', price: 0, reqKills: 0, weapons: 2, ammo: 1, hull: 2, drones: 1,
+      mods: { hpPct: 40, dmgPct: 22, moveSpeed: 10, critChance: 8, atkSpeedPct: 10 },
+      tag: 'MECH LINE', event: 'mech',
+      perk: '⚙ MECH CORRUPTION — a faster, deeper corruption field than the Spawn’s, on a hull that can hold a lane.',
+      desc: 'Gremlin plating on a cruiser frame. Quick to stack corruption and quick to reposition — the mid-game workhorse of the Mech line.' },
+    { key: 'mechbeast', name: 'Mech Beast', cls: 'Battleship', price: 0, reqKills: 0, weapons: 3, ammo: 2, hull: 3, drones: 2,
+      mods: { hpPct: 62, dmgPct: 32, critChance: 10, critDamage: 25, rangePct: 18 },
+      tag: 'MECH LINE', event: 'mech',
+      perk: '⚙ MECH CORRUPTION — heavy plating and a corruption field deep enough to matter against a boss.',
+      desc: 'The first Mech hull that can take a hit as well as give one. Where the line stops being a curiosity and starts being a fleet decision.' },
+    { key: 'mecharchon', name: 'Mech Archon', cls: 'Battleship', price: 0, reqKills: 0, weapons: 4, ammo: 3, hull: 3, drones: 4,
+      mods: { hpPct: 95, dmgPct: 45, critChance: 14, critDamage: 40, atkSpeedPct: 18, rangePct: 30 },
+      tag: 'MECH LINE', event: 'mech',
+      perk: '⚙ MECH CORRUPTION — every hit from your fleet strips the target’s armor: −1% damage resistance a stack, to a maximum of −20%, lasting 5s. The target takes that much more damage from EVERY ship you own, not just this one.',
+      desc: 'Captured Archon plating, refit and turned outward. The Archon is not your heaviest gun — it is the reason your heaviest gun lands harder. Its corruption field eats through hostile armor and every hull in your fleet fires into the hole.' },
+    { key: 'mechtitan', name: 'Mech Titan', cls: 'Carrier', price: 0, reqKills: 0, weapons: 6, ammo: 3, hull: 3, drones: 10, speedMult: 0.7,
+      mods: { hpPct: 155, dmgPct: 70, multiShot: 20, critChance: 18, critDamage: 60, rangePct: 40, lifeSteal: 0.6 },
+      tag: 'MECH APEX', event: 'mech',
+      perk: '⚙ TITAN CORRUPTION — −2% damage resistance a stack to a maximum of −40%, lasting 7s. The Titan builds its stacks slowly, so it is at its best against targets that live a long time: bosses, Dreadnaughts, alliance bosses and deep-wave hostiles. Flown alongside a Mech Archon both feed ONE corruption pool, to −60%.',
+      desc: 'The apex of the Mech line and the heaviest amplifier in the game. Slow to move, slow to corrupt, and devastating against anything that survives long enough to be fully stripped. A fleet built around a Titan does not out-damage other fleets — it makes the target softer for all of them.' },
+    // MECH SOVEREIGN — the Mech line's CAPSTONE, and the only Dread-class hull in
+    // it. Not a sixth world: it is assembled once you own all five Mech hulls, so
+    // it caps the ladder instead of extending it. Two cannons and SIX fighter bays
+    // — the line's identity taken to its end, where the Sovereign itself barely
+    // shoots and the wing plus the corruption field do the work.
+    //
+    // `tag` opens with DREAD-CLASS because the Hangar's class grouping picks on
+    // exactly that prefix; without it this lands in the plain Carrier bucket.
+    { key: 'mechsovereign', name: 'Mech Sovereign', cls: 'Carrier', price: 0, reqKills: 0,
+      weapons: 2, ammo: 3, hull: 3, drones: 12, fighterCapacity: 6, speedMult: 0.6,
+      mods: { hpPct: 210, dmgPct: 95, multiShot: 26, critChance: 22, critDamage: 85, rangePct: 50, lifeSteal: 1.2 },
+      tag: 'DREAD-CLASS MECH', event: 'mech',
+      perk: '⚙ SOVEREIGN CORRUPTION — the deepest corruption field in the game, and it feeds the same single pool every other Mech hull does. Two cannons only: the Sovereign is a CARRIER, and its six fighter bays plus the stripped armour of everything it looks at are the damage.',
+      desc: 'The Mech line ends here. Six fighter bays launch a full wing while the Sovereign itself carries barely any guns — it does not need them. Everything it corrupts is softer for every ship you own, and the wing is what collects. Assembled only after all five Mech hulls are in your hangar.' },
     // CHROMA REGENT — LootCoin mothership at Titan Carrier performance, firing
     // the same full-spectrum rainbow cannons as the Chroma Fang.
     { key:'chromaregent', name:'Chroma Regent', cls:'Carrier', price:0, reqKills:0, weapons:4, ammo:3, hull:3, drones:8, mods:{hpPct:70,dmgPct:40,multiShot:14,critChance:12}, tag:'SPECTRUM MOTHERSHIP', purchase:{ lc:75000 },
@@ -1127,7 +1220,7 @@
     RARITY, RARITY_BY_KEY, STATS, STAT_KEYS, SLOTS, SLOT_KEYS, ENEMIES,
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE, liveRarityMax,
-    SHIPS, SHIP_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
+    SHIPS, SHIP_BY_KEY, MECHS, MECH_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
     levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,

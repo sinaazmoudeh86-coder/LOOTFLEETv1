@@ -1,7 +1,7 @@
 /* =============================================================================
    server-dreadnaught.js — LOOTFLEET · SERVER DREADNAUGHT (seasonal world boss)
    ---------------------------------------------------------------------------
-   Command ▸ "Season 1: Voidmaw" — a GLOBAL server event, unlocked at Level 50.
+   Command ▸ "Voidmaw" — a GLOBAL server event, unlocked at Level 50. PERMANENT:
    Every commander fights the exact same boss independently. The boss never
    dies: players push through endless stages by dealing CUMULATIVE damage
    across the whole season. Separate from the weekly Dreadnaught Hunt.
@@ -16,7 +16,8 @@
        every 10 stages — everyone eventually falls; better fleets fall later.
      • DAILY leaderboard (best single run → ❖ Voidmaw Parts) · SEASON
        leaderboard (total damage → ★ Titan Sina Parts at season end).
-     • Season 1 ends on the last day of August (countdown everywhere).
+     • No end date. It was a limited season once; it is a fixture now, so no
+       screen prints a deadline. `SEASON.num` survives only as a wire key.
 
    Wiring: #screen-sdread / #sdread-body (game.html) · showScreen('sdread')
    routes here (ui-v94.js) · command card .cmd-sdread + LOCKS sdread:50.
@@ -27,7 +28,16 @@
   const $ = (id) => document.getElementById(id);
 
   // ---- SEASON CONFIG --------------------------------------------------------
-  const SEASON = { num: 1, boss: 'VOIDMAW', label: 'Season 1: Voidmaw', endsTxt: 'Aug 31', end: Date.UTC(2026, 8, 1) }; // ends last day of August
+  // PERMANENT EVENT. The Voidmaw is not a limited season any more, so there is no
+  // end date and no countdown to one — a deadline printed on screen is a promise,
+  // and the one thing worse than removing an event is telling players it is going
+  // away and then keeping it.
+  //
+  // `num` STAYS 1 FOREVER. It is not a label, it is a WIRE KEY: every row already
+  // written to the boards carries season=1, and sdUpsert/sdDaily/sdSeason all
+  // query on it. Renaming it to read better would orphan every score on the
+  // server. A stored identifier is a receipt.
+  const SEASON = { num: 1, boss: 'VOIDMAW', label: 'Voidmaw', end: Infinity };
   const UNLOCK = 50;                 // minimum level to join
   const BASE_ATTEMPTS = 2;           // daily attempts
   const PRO_ATTEMPTS = 1;            // +1 for LootFleet Pro
@@ -42,7 +52,7 @@
   function toast(m) { try { if (window.UI && window.UI.unlockToast) window.UI.unlockToast(m); } catch (e) {} }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function dayIdx() { return Math.floor(Date.now() / 864e5); }
-  function ended() { return Date.now() >= SEASON.end; }
+  function ended() { return false; }   // permanent event — nothing closes it
   function fmtDur(ms) {
     const s = Math.max(0, Math.floor(ms / 1000));
     const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
@@ -119,7 +129,7 @@
   function bossEra(stage) { return Math.floor((stage - 1) / 10); }           // visual evolution step
   function bossSprite() { return 'ships/ship-voidmaw.png'; }                 // the Voidmaw itself
 
-  // ---- THE VOIDMAW — Season 1 grand-prize hull ----------------------------
+  // ---- THE VOIDMAW — the event's grand-prize hull -------------------------
   const VM_KEY = 'voidmaw', VM_NEED = 150;   // Jul 2026: 100 → 150 — the Voidmaw is the apex hull now (Singularity proc), so the season grind matches
   function vmParts() { try { return (G().state.shipParts && G().state.shipParts[VM_KEY]) | 0; } catch (e) { return 0; } }
   // PERMANENT GRANT GUARD — the flag lives on the season record, not on hangar
@@ -133,14 +143,14 @@
     g.state.shipParts[VM_KEY] -= VM_NEED;
     try { sd().vmGranted = true; } catch (e) {}
     if (!g.grantShip || !g.grantShip(VM_KEY)) { g.state.ownedShips[VM_KEY] = true; }
-    sd().hist.unshift({ d: Date.now(), s: -1, txt: '❖ VOIDMAW ASSEMBLED — the Season 1 hull is yours. Switch to it in the Hangar.' });
+    sd().hist.unshift({ d: Date.now(), s: -1, txt: '❖ VOIDMAW ASSEMBLED — the apex hull is yours. Switch to it in the Hangar.' });
     try { g.save(); } catch (e) {}
     if (window.UI) window.UI.refreshAll();
     sheet(
-      '<div class="sdm-kicker">SEASON 1 GRAND PRIZE</div>' +
+      '<div class="sdm-kicker">VOIDMAW · GRAND PRIZE</div>' +
       '<div class="sdm-title">VOIDMAW ASSEMBLED</div>' +
       '<div class="sdm-art"><img src="ships/ship-voidmaw.png" alt=""></div>' +
-      '<div class="sdm-cd">' + VM_NEED + ' parts forged into the apex hull of Season 1.<br>Its cannons open <b>singularities</b> — switch to it in the <b>Hangar ▸ Ships</b>.</div>' +
+      '<div class="sdm-cd">' + VM_NEED + ' parts forged into the apex hull.<br>Its cannons open <b>singularities</b> — switch to it in the <b>Hangar ▸ Ships</b>.</div>' +
       '<button class="sdm-ok" id="sdm-ok">Magnificent</button>'
     );
     _modal.querySelector('#sdm-ok').addEventListener('click', () => { closeModal(); render(); });
@@ -251,12 +261,12 @@
     if (!s.claims) s.claims = [];
     s.claims.push({ t: 's', rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
     s.pendingToast = rank
-      ? '🏆 Season ' + SEASON.num + ' final standings — you placed #' + rank + '. Collect your rewards in the event.'
-      : '🏆 Season ' + SEASON.num + ' is over — your season prize is waiting in the event.';
+      ? '🏆 ' + SEASON.boss + ' final standings — you placed #' + rank + '. Collect your rewards in the event.'
+      : '🏆 ' + SEASON.boss + ' standings settled — your prize is waiting in the event.';
     try {
       const st2 = SEASON_TIERS[idx < 0 ? 3 : idx];
-      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: rank ? 'Season ' + SEASON.num + ' final standings — #' + rank : 'Season ' + SEASON.num + ' final standings',
-        body: 'The <b>' + SEASON.label + '</b> season has ended. '
+      if (window.MAIL) window.MAIL.push({ ic: '🏆', title: rank ? SEASON.boss + ' final standings — #' + rank : SEASON.boss + ' final standings',
+        body: 'The <b>' + SEASON.label + '</b> standings are settled. '
           + (rank ? 'Your total damage placed you <b>#' + rank + '</b> (' + st2.name + ')' : 'Your final placing never reached this device, so you are paid as <b>' + st2.name + '</b>')
           + ' — your prize is waiting: <b>' + tierTxt(st2) + '</b>.',
         meta: { kind: 'prize', cta: { label: '🏆 Collect season prize', screen: 'sdread' } } });
@@ -266,7 +276,6 @@
   // called on day rollover, BEFORE resetting bestDay — stages yesterday's placement as a CLAIM
   function settleLeaderboard(s) {
     if (!s.bestDay || s.day >= dayIdx()) { return; }
-    if (Date.UTC(1970, 0, 1) + s.day * 864e5 >= SEASON.end) return;          // season was over
     const rank = knownDailyRank(s), t = rank ? tierFor(rank) : LB_TIERS[LB_TIERS.length - 1];
     // WINNINGS GO TO MAIL (Jul 2026): the settlement letter carries the prize —
     // you claim it right in the inbox. Falls back to the in-event claim stage
@@ -311,8 +320,8 @@
         s.coins = coinsOf(s) + t.coins;
         g.state.credits = (g.state.credits || 0) + t.lc;
         const vps = c.rank === 1 ? 500 : c.rank === 2 ? 250 : c.rank === 3 ? 125 : 50;
-        try { if (window.VIP) window.VIP.grant(vps, c.rank ? 'Season rank #' + c.rank : 'Season placement'); } catch (e) {}
-        txt = '🏆 SEASON ' + SEASON.num + ' FINAL — ' + (c.rank ? 'rank #' + c.rank + ' (' + t.name + ')' : t.name) + ': ⚜' + vps + ' · ' + tierTxt(t);
+        try { if (window.VIP) window.VIP.grant(vps, c.rank ? SEASON.boss + ' rank #' + c.rank : SEASON.boss + ' placement'); } catch (e) {}
+        txt = '🏆 ' + SEASON.boss + ' FINAL — ' + (c.rank ? 'rank #' + c.rank + ' (' + t.name + ')' : t.name) + ': ⚜' + vps + ' · ' + tierTxt(t);
       }
       s.hist.unshift({ d: Date.now(), s: 0, txt }); lines.push(txt);
     });
@@ -372,7 +381,7 @@
     const s = sd();
     const items = storeItems().filter((it) => !(it.hide && it.hide()));
     sheet(
-      '<div class="sdm-kicker">SEASON ' + SEASON.num + ' · EVENT STORE</div>' +
+      '<div class="sdm-kicker">' + SEASON.boss + ' · EVENT STORE</div>' +
       '<div class="sdm-title small">' + COIN + ' EVENT STORE</div>' +
       '<div class="sdm-cd">Balance <b>' + COIN + ' ' + coinsOf(s).toLocaleString() + '</b> Event Coins · earned from daily + season ranks</div>' +
       '<div class="sds-list">' + items.map((it) =>
@@ -413,7 +422,7 @@
   function attCost() { const s = sd(); return 100 * Math.pow(3, (s && s.buys) | 0); }
   function buyAttempt() {
     const s = sd(); if (!s) return;
-    if (ended()) { toast('Season ' + SEASON.num + ' has ended'); return; }
+    if (ended()) { return; }
     if (lvl() < UNLOCK) { toast('Server Dreadnaught unlocks at Level ' + UNLOCK); return; }
     const cost = attCost(), g = G();
     if ((g.state.credits || 0) < cost) { toast('Need ◈ ' + fmt(cost) + ' LootCoins for an extra attempt'); return; }
@@ -428,7 +437,7 @@
 
   function startRun() {
     const s = sd(); if (!s) return;
-    if (ended()) { toast('Season ' + SEASON.num + ' has ended'); return; }
+    if (ended()) { return; }
     if (lvl() < UNLOCK) { toast('Server Dreadnaught unlocks at Level ' + UNLOCK); return; }
     if (attemptsLeft() <= 0) { toast('No attempts left — resets in ' + fmtDur(msToDailyReset())); return; }
     if (run) return;
@@ -446,7 +455,7 @@
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     ensureWarbar();
-    bbanner('SEASON ' + SEASON.num + ' · VOIDMAW ENGAGED', 'MANUAL FLIGHT — auto-pilot disabled · survive 2:30 · every stage pays out instantly');
+    bbanner('VOIDMAW ENGAGED', 'MANUAL FLIGHT — auto-pilot disabled · survive 2:30 · every stage pays out instantly');
     updateHud();
   }
   // driven by the engine's update() every frame while rt.sdrun is active
@@ -655,7 +664,7 @@
     removeWarbar();
     const host = $('top-stack'); if (!host) return;
     const w = document.createElement('div'); w.id = 'sd-warbar';
-    w.innerHTML = '<span class="swb-tag">S' + SEASON.num + '</span>' +
+    w.innerHTML = '<span class="swb-tag">❖</span>' +
       '<span class="swb-timer" id="swb-timer">2:30</span>' +
       '<span class="swb-dmg">RUN <b id="swb-dmg">0</b></span>' +
       '<span class="swb-stage" id="swb-stage">STAGE 1</span>' +
@@ -720,9 +729,9 @@
   }
 
   function seasonBar() {
-    return '<div class="sd-season"><span class="sd-season-tag">SEASON ' + SEASON.num + '</span>' +
+    return '<div class="sd-season"><span class="sd-season-tag">WORLD BOSS</span>' +
       '<span class="sd-season-boss">' + SEASON.boss + '</span>' +
-      '<span class="sd-season-cd">' + (ended() ? 'SEASON ENDED' : 'Ends ' + SEASON.endsTxt + ' · <b data-sdcd>' + fmtDur(SEASON.end - Date.now()) + '</b> left') + '</span></div>';
+      '<span class="sd-season-cd">Daily board resets in <b data-sdreset>' + fmtDur(msToDailyReset()) + '</b></span></div>';
   }
   function arenaBlock(idle) {
     const s = sd();
@@ -854,7 +863,7 @@
     const m = sheet(
       '<div class="sdm-kicker">SERVER DREADNAUGHT · LIVE EVENT</div>' +
       '<div class="sdm-title">' + SEASON.label.toUpperCase() + '</div>' +
-      '<div class="sdm-cd">Ends ' + SEASON.endsTxt + ' · <b>' + fmtDur(SEASON.end - Date.now()) + '</b> left</div>' +
+      '<div class="sdm-cd">One world boss for the whole server · daily board resets in <b>' + fmtDur(msToDailyReset()) + '</b></div>' +
       '<div class="sdm-art small"><img src="' + bossSprite(1) + '" alt=""></div>' +
       '<div class="sdm-intro">One server-wide boss with unlimited HP. Everyone falls eventually — better fleets fall later.</div>' +
       '<div class="sdm-rules">' +
@@ -1144,13 +1153,13 @@
     sheet(
       '<div class="sdm-kicker">LEADERBOARDS</div>' +
       '<div class="sdm-title small">' + SEASON.boss + ' — STANDINGS</div>' +
-      '<div class="sdm-cd">Daily resets in <b data-sdreset>' + fmtDur(msToDailyReset()) + '</b> · season ends in <b>' + (ended() ? 'ended' : fmtDur(SEASON.end - Date.now())) + '</b> · prizes are collected on the event screen</div>' +
+      '<div class="sdm-cd">Daily resets in <b data-sdreset>' + fmtDur(msToDailyReset()) + '</b> · prizes are collected on the event screen</div>' +
       '<div id="sdl-body">' + lbSheetBody() + '</div>' +
       '<div class="sdl-tierwrap">' +
         '<div class="sdl-tcol"><div class="sdl-tcol-h">DAILY REWARDS · ✦ EVENT COINS</div>' +
           LB_TIERS.map((t) => lbTier(t.name, tierTxt(t))).join('') +
         '</div>' +
-        '<div class="sdl-tcol"><div class="sdl-tcol-h">SEASON FINALS · ' + SEASON.endsTxt + '</div>' +
+        '<div class="sdl-tcol"><div class="sdl-tcol-h">OVERALL STANDINGS</div>' +
           SEASON_TIERS.map((t) => lbTier(t.name, tierTxt(t))).join('') +
         '</div>' +
       '</div>' +
@@ -1218,11 +1227,11 @@
     }
     // command-card countdown
     const cd = $('cmd-sdread-cd');
-    if (cd) cd.textContent = ended() ? 'ended' : fmtDur(SEASON.end - Date.now()) + ' left';
+    if (cd) cd.textContent = fmtDur(msToDailyReset()) + ' to reset';
     // on-screen countdowns
     const scr = $('screen-sdread');
     if (scr && scr.classList.contains('active')) {
-      document.querySelectorAll('[data-sdcd]').forEach((e) => { e.textContent = fmtDur(SEASON.end - Date.now()); });
+      document.querySelectorAll('[data-sdcd]').forEach((e) => { e.textContent = fmtDur(msToDailyReset()); });
       document.querySelectorAll('[data-sdreset]').forEach((e) => { e.textContent = fmtDur(msToDailyReset()); });
     }
   }
@@ -1276,7 +1285,9 @@
     if (p.plasma) bits.push('✦ ' + p.plasma.toLocaleString() + ' Plasma');
     return bits.join(' · ') || 'collected';
   }
-  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
+  // partsNeed is exported so the SHIP CARD can print the real requirement instead
+  // of a hardcoded copy of it — that card said 100 while this said 150.
+  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, partsNeed: VM_NEED, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
 
   // =========================================================================
   // CSS

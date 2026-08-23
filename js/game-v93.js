@@ -231,6 +231,19 @@
     // above was protected for exactly this reason; the hunt was simply missed.
     // The pilot's RUN resets. The calendar does not.
     'dreadLock', 'dreadProFree', 'dreadRespawn',
+    // THE MECH FOUNDRY SURVIVES ASCENSION. `mechCores` is a spendable wallet and
+    // `mech` is the lifetime record (runs, deepest tier, kills). Both ride across
+    // for the same reason `cargo` and the hunt's clocks do: the Foundry is endgame
+    // content gated at Level 120+, so wiping it on the one action that resets you
+    // to Level 1 would delete a grind the pilot can no longer even reach, and hand
+    // back the blueprint chase they had already finished. The hulls themselves are
+    // safe already — `blueprints` and `ownedShips` are entitlements and are kept.
+    'mechCores', 'mech',
+    // COMMANDERS SURVIVE ASCENSION. The collection is not the pilot's run — a card
+    // pulled at 1-in-24,000 cannot be re-earned on demand, and the chase is gated
+    // at ★5 so it only exists for pilots who ascend. The fleet resets; the album
+    // does not.
+    'cmdr',
     // NANOCORES — cores, unlocked slots and rolled buffs all survive, exactly
     // like the Prism Ingots they were bought with.
     'nano',
@@ -551,6 +564,10 @@
     // without a second code path. refreshStats() is also where the aura set is
     // re-read, which is what keeps the field in step with the fitted hardpoint.
     try { if (window.AEGIS) { window.AEGIS.refresh(); const am2 = window.AEGIS.mods(); if (am2.fleetDmgPct) m.dmgPct += am2.fleetDmgPct; } } catch (e) {}
+    // COMMANDER — the officer in the fleet slot. One stat, folded in with every
+    // other source, so score(), theoryDps and the clone matchup all see it by the
+    // same arithmetic as gear.
+    try { if (window.COMMANDERS) { const cm = window.COMMANDERS.mods(); for (const k in cm) m[k] = (m[k] || 0) + cm[k]; } } catch (e) {}
     ['dmgPct','atkSpeedPct','critChance','critDamage','hpPct','moveSpeed','lifeSteal','multiShot'].forEach((k) => { if (pm[k]) m[k] += pm[k]; });
     // ship passive modifiers
     const ship = C.SHIP_BY_KEY[state.ship] || C.SHIPS[0];
@@ -1654,6 +1671,18 @@
     // honour it without a second implementation. vulnOf() is a flag read with an
     // expiry — no distance is measured on this path.
     if (window.AEGIS) { const _v = window.AEGIS.vulnOf(e); if (_v) _dmg *= 1 + _v / 100; }
+    // ARMOR CORRUPTION — a Mech Archon or Mech Titan in the fleet strips the
+    // target's armor as your fleet fires into it. Read and stamped at this same
+    // convergence point, so a fighter's hit, a drone's hit, an escort's hit and a
+    // Prism splash all corrupt exactly as the flagship's bolt does — the Mech line
+    // is a FLEET amplifier and there is no second implementation of it anywhere.
+    // The read runs BEFORE the stamp: a hit is never amplified by its own stack.
+    // Accrual is rate-limited on the wall clock inside the module, so fire rate
+    // cannot buy a faster ramp.
+    if (window.MECHCORR && window.MECHCORR.aboard()) {
+      const _c = window.MECHCORR.vulnOf(e); if (_c) _dmg *= 1 + _c / 100;
+      window.MECHCORR.onFleetHit(e);
+    }
     const killed = e.takeDamage(_dmg);
     // FROSTYFROST — cryo tech is FLEET tech: if a FrostyFrost is anywhere in
     // your fleet (flagship OR escort), every player bolt chills the target and
@@ -1829,7 +1858,19 @@
     // The hunt's reward is the hunt's reward: Dread Cores, the raid-boss drop
     // table, gold and loot, all untouched below. It is not a levelling route.
     const _dreadRun = !!(state.dreadRun && state.dreadRun.active);
-    if (!_cargoRun && !_homeRun && !_voidRun && !_kothRun && !_dreadRun) {
+    // THE MECH FOUNDRY pays cores, loot and gold — never levels. Same shape as
+    // every other entry on this list: the run deploys into a zone priced off its
+    // TIER (T5 is Zone 560 content) rather than off the pilot, and killXpFor()
+    // pays on the zone it is handed — so without this the fastest levelling in
+    // the game would sit behind one Deploy button.
+    const _mechRun = !!(state.mechRun && state.mechRun.active);
+    if (_mechRun && e && e.mechKey && window.MECHF) {
+      try { window.MECHF.onMechKill(); } catch (x) {}
+      // ROLL 1 — a Commander drop. Foundry ground only, which is the whole point:
+      // the chase has exactly one hunting ground.
+      try { if (window.COMMANDERS) window.COMMANDERS.onFoundryKill(e, !!e.isBoss); } catch (x) {}
+    }
+    if (!_cargoRun && !_homeRun && !_voidRun && !_kothRun && !_dreadRun && !_mechRun) {
       // BOSSES PAY NO XP BONUS. The 12× multiplier made boss dungeons the
       // fastest XP in the game by a wide margin — a repeatable boss is one kill
       // worth twelve, on a fight you can queue back to back, which is a farm
@@ -2404,7 +2445,26 @@
     // 4) nothing around → drift toward the nearest pending spawn node
     let node = null, bd = Infinity;
     for (const n of rt.nodes) { const d = (n.x-a.x)**2+(n.y-a.y)**2; if (d < bd) { bd = d; node = n; } }
-    if (node) moveToward(node.x, node.y, dt, sp, 40);
+    if (node) { moveToward(node.x, node.y, dt, sp, 40); return; }
+    // AND HAVING NO NODES IS THE NORMAL CASE IN HALF THE GAME. Every wave-based
+    // zone — wave zones, sieges, citadel sieges, the Dreadnaught Hunt and the Mech
+    // Foundry — sets `rt.nodes = []` in resetZone(), because their spawns are driven
+    // by updateWaveZone instead of by fixed nodes. buildNodes() runs only in the
+    // plain grind branch. So the drift above, which exists precisely so the operator
+    // KEEPS FLYING, had nothing to drift toward and this function fell off the end
+    // WITHOUT CALLING A MOVEMENT FUNCTION AT ALL — the ship stopped dead in the gap
+    // between waves and stayed frozen until the next one spawned.
+    //
+    // That is the intermittent autopilot lock-up, and it explains why it only ever
+    // showed up "in areas where auto movement is used": wave content is exactly
+    // where the node list is empty. Every earlier fix in this function targeted the
+    // unreachable-TARGET case; this is the no-target case, and it had no floor.
+    //
+    // There is always a movement call now. Hold the line already being flown if
+    // there is one, otherwise ease to the middle of the arena — the best place to
+    // meet a wave that can arrive from any bearing.
+    if (Math.abs(a.vx || 0) + Math.abs(a.vy || 0) > 30) { steerArcher(a.vx, a.vy, dt); return; }
+    moveToward(rt.worldW / 2, rt.worldH / 2, dt, sp * 0.5, 90);
   }
   function manualMove(dt) {
     const sp = rt.stats.moveSpeedPx;
@@ -3256,6 +3316,12 @@
     // SPACE CARGO DEFENSE — the cargo hull, its lane, the citadel ahead and every
     // live void anomaly, drawn in world space.
     if (rt.cgrun && rt.cgrun.active && window.CARGO && window.CARGO.engineRender) { try { window.CARGO.engineRender(ctx, rt.time, rt); } catch (e) {} }
+    // ARMOR CORRUPTION — the player's own debuff readout. Drawn here, in world
+    // space with the camera still applied, so it tracks the ship. The swarm
+    // dynamic is unreadable if the only place corruption shows is on hostiles:
+    // a pilot who cannot see the stacks climbing just experiences the Mechs
+    // getting stronger for no stated reason, which reads as a bug.
+    if (window.MECHCORR) { try { window.MECHCORR.drawPlayer(ctx, rt); } catch (e) {} }
     // HUD DOM writes are throttled — canvas runs at 60fps, text at ~8Hz
     if (window.UI && (!rt._hudT || rt.time - rt._hudT > 0.12)) { rt._hudT = rt.time; window.UI.syncHUD(); }
   }
@@ -4425,6 +4491,7 @@
     state.currentDungeon = d;
     state.currentSystem = null;   // classic free-play deploy (not a galaxy tile)
     state.dreadRun = null;        // a normal deploy ends any Dreadnaught Hunt
+    state.mechRun = null;         // …and any Mech Foundry run
     rt.sdrun = null;              // …and any Server Dreadnaught event run
     rt.siege = null;
     rt.waves = null; rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
@@ -4457,7 +4524,41 @@
     state.currentSystem = null;
     reachZone(zone);
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.mechRun = null;                     // one event at a time
     state.dreadRun = { active: true, tier: tier, started: Date.now() };
+    resetZone();
+    rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
+    rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 4;
+    if (window.UI) window.UI.refreshAll(); save();
+    return true;
+  }
+  // MECH FOUNDRY deploy — the hunt's shape, and for the hunt's reason: a Foundry
+  // tier is gated by its own LEVEL requirement, not by how deep the pilot has
+  // pushed the zone board.
+  //
+  // THIS IS WHY IT CANNOT GO THROUGH selectDungeon(). That function opens with
+  // `if (d > state.highestUnlocked) return;` — correct for free play, fatal here:
+  // the Spawn Nest is Zone 150 and opens at Level 120, and no Level 120 pilot has
+  // unlocked Zone 150. So the call returned silently, the screen never changed,
+  // and DEPLOY did nothing at all while `mechRun` sat armed.
+  //
+  // It also deliberately does NOT call reachZone(). That would push
+  // `highestDungeonReached` to 560 for a pilot who has never fought their way
+  // anywhere near it — a career record, a saveWeight term, and the input to the
+  // next selectDungeon's unlock ceiling. The Foundry HANDS you a deep zone; it
+  // does not mean you reached it. refreshStats() is called directly instead,
+  // which is the only thing reachZone was needed for here (Ship Score reads the
+  // live zone).
+  function startMechRun(tier) {
+    const x = (window.MECHF && window.MECHF.tierOf) ? window.MECHF.tierOf(tier) : null;
+    if (!x) return false;
+    const zone = Math.max(1, Math.min(C.zoneCap ? C.zoneCap(9999) : 999, x.zone));
+    state.currentDungeon = zone;
+    state.currentSystem = null;
+    rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
+    state.dreadRun = null; rt.sdrun = null; rt.siege = null;   // one event at a time
+    state.mechRun = { active: true, tier: x.t, zone: zone, waves: x.waves, started: Date.now() };
+    try { refreshStats(); } catch (e) {}
     resetZone();
     rt.awaitingRespawn = false; rt.archer.dead = false; rt.archer.killer = null;
     rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 4;
@@ -4475,6 +4576,7 @@
     reachZone(zone);
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; rt.siege = null; rt.waves = null;
+    state.mechRun = null;                     // one event at a time
     resetZone();
     // strip any siege/wave state resetZone re-armed — boss-only arena
     rt.siege = null; rt.waves = null;
@@ -4795,6 +4897,13 @@
       rt.nodes = [];
       rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
       rt.waves = { active: true, total: 30, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, dread: true, tier: state.dreadRun.tier };
+    } else if (state.mechRun && state.mechRun.active) {
+      // THE MECH FOUNDRY — a wave gauntlet of Mech hostiles into that tier's boss.
+      // Structurally identical to the hunt above; `mech` routes the spawner and the
+      // boss branch in updateWaveZone.
+      rt.nodes = [];
+      rt.bossAlive = false; rt.boss = null; rt.bossInit = rt.bossTimer = 1e9; rt.lastBoss = rt.time;
+      rt.waves = { active: true, total: state.mechRun.waves || 12, wave: 1, bossSpawned: false, pendingBoss: false, spawnT: 1.4, super: false, mech: true, tier: state.mechRun.tier };
     } else if (rt.waves && rt.waves.active) {
       // pre-configured gauntlet (owned Boss Tile) — keep its config, (re)start it
       rt.nodes = [];
@@ -4989,6 +5098,56 @@
     if (rt.kothrun && rt.kothrun.active) return true;
     return false;
   }
+  // ---- THE MECH FACTION -----------------------------------------------------
+  // Mech hostiles are drawn from C.MECHS, which is deliberately NOT C.ENEMIES:
+  // allowedEnemies() filters that array by minDungeon and the zone board prints
+  // from the same filter, so a Mech in there would join the normal rotation of
+  // every deep zone and rewrite the zone list as a side effect. Nothing reads
+  // C.MECHS except this spawner.
+  //
+  // NOTE the Foundry is in the XP carve-out but NOT in lootBlocked() above. That
+  // is the same split the Dreadnaught Hunt sits on and it is deliberate: the hunt
+  // and the Foundry withhold LEVELS and keep their loot. Two rules, two lists.
+  const _mechImgs = {};
+  function mechSkin(e) {
+    const k = e.type && e.type.key; if (!k) return;
+    e.mechKey = e.type.mech || k;               // the corruption class it applies
+    let im = _mechImgs[k];
+    if (!im) { im = new Image(); im.src = 'ships/mech-' + k + '.png'; _mechImgs[k] = im; }
+    e.spriteImg = im;                            // hero-sprite path in drawEnemy
+  }
+  // A tier is mostly its OWN class with lighter Mechs filling in beneath it, so a
+  // Titan Forge reads as a Titan encounter rather than an even spread of five.
+  function pickMechType(tier) {
+    const list = C.MECHS || [];
+    const n = Math.max(1, Math.min(list.length, tier | 0));
+    const i = Math.min(n - 1, Math.floor(Math.pow(Math.random(), 2) * n));
+    return list[n - 1 - i];
+  }
+  // The tier boss — that class at fortress scale. HP is clamped against the
+  // pilot's own DPS exactly the way spawnCitadel does it, so a deep fleet does
+  // not face a ten-minute wall, and never below the zone curve so a thin fleet
+  // cannot trivialise it.
+  function spawnMechBoss(tier) {
+    const list = C.MECHS || [];
+    const type = list[Math.min(list.length, Math.max(1, tier | 0)) - 1] || list[0];
+    if (!type) return null;
+    const b = new E.Enemy(type, state.currentDungeon, rt.worldW / 2, rt.worldH * 0.22);
+    b.isBoss = true;
+    b.name = String(type.name || 'MECH').toUpperCase();
+    mechSkin(b);
+    b.maxHp *= 40 + tier * 12; b.hp = b.maxHp;
+    {
+      const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);
+      const curve = C.enemyHp(state.currentDungeon) * type.hpMod * (40 + tier * 12);
+      b.maxHp = b.hp = Math.round(Math.max(curve, Math.min(b.maxHp, dps * 50)));
+    }
+    b.size *= 2.1; b.damage *= 1.45;
+    b.ranged = true; b.range = 360; b.fireCd = 2.2; b.fireT = 1.2;
+    pushEnemy(b);
+    burst(b.x, b.y, '#ff4d5e', 54, { speed: 300, life: 1.0, glow: true });
+    return b;
+  }
   // NAME → TILE ID. War reports written before tile ids were recorded only carry
   // the system NAME, and the ◎ jump-to-map button needs an id. Names are
   // generated deterministically from each coordinate, so the whole galaxy can be
@@ -5145,12 +5304,21 @@
     const t = d >= 400 ? 5 : d >= 250 ? 4 : d >= 120 ? 3 : d >= 50 ? 2 : 1;
     return Math.max(1, Math.min(5, t));
   }
-  // Chance to recover the hull on killing the zone's Choir boss. Deliberately
-  // rarer than Kaevith's tile roll: this is one encounter per zone visit, not a
-  // per-tile clear, and the beacon bonuses compound with everything.
+  // Chance to recover the hull on killing the zone's Choir boss.
+  //
+  // THE BETTER THE HULL, THE RARER THE ROLL. This used to be a function of raw
+  // DEPTH — 0.9% climbing to a 5% cap — while emberTierFor() also climbs with
+  // depth, so the deepest zones handed out the best hull at the best odds and the
+  // Choirmaster was the EASIEST of the five to recover. Exactly backwards: the
+  // ladder's reward went up and its cost went down at the same time.
+  //
+  // The roll is now a property of the TIER, and it falls as the tier rises. A
+  // Mote at 5% is common enough to teach what the beacon bonuses do; Vhorn at
+  // 0.5% is a genuine chase. Depth still decides WHICH hull you can find — it no
+  // longer also decides how generously.
+  const EMB_TIER_CHANCE = [0.050, 0.030, 0.018, 0.010, 0.005];
   function emberChance(z) {
-    const d = z | 0;
-    return Math.min(0.05, 0.008 + d * 0.00009);          // 0.9% → 5% cap
+    return EMB_TIER_CHANCE[emberTierFor(z) - 1] || 0.005;
   }
   function isEmberBossPending() {
     if (state.currentSystem) return false;                 // Zone Grind only
@@ -5839,9 +6007,10 @@
       const p = worldSpawn(base * 0.28, 30);
       x = p.x; y = p.y;
     }
-    const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
-    voidSkin(e);
-    xenSkin(e);
+    const _mechWave = !!(rt.waves && rt.waves.active && rt.waves.mech);
+    const e = new E.Enemy(_mechWave ? pickMechType(rt.waves.tier) : pickType(), state.currentDungeon, x, y);
+    if (_mechWave) mechSkin(e);
+    else { voidSkin(e); xenSkin(e); }
     if (cit) {
       // garrison hulks: walls, not bombs — brutal HP, feeble guns
       e.maxHp *= 4.5; e.hp = e.maxHp;
@@ -5980,8 +6149,8 @@
     if (s.spawnT > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
-        if (s.pendingBoss) { if (s.clone) spawnCloneBoss(s.cloneScore, s.cloneDef, s.maxRatio); else if (s.citadel) spawnCitadel(s); else if (s.dread) spawnDreadnaught(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
-        else spawnWave(s.wave, s.dread ? (1.3 + Math.min(1.3, s.wave * 0.045)) : 1.8); // dread density ramps each wave
+        if (s.pendingBoss) { if (s.clone) spawnCloneBoss(s.cloneScore, s.cloneDef, s.maxRatio); else if (s.citadel) spawnCitadel(s); else if (s.dread) spawnDreadnaught(s.tier); else if (s.mech) spawnMechBoss(s.tier); else spawnBoss({ super: s.super }); s.bossSpawned = true; s.pendingBoss = false; }
+        else spawnWave(s.wave, s.dread ? (1.3 + Math.min(1.3, s.wave * 0.045)) : s.mech ? (1.25 + Math.min(1.2, s.wave * 0.04)) : 1.8); // dread + mech density ramp each wave
       }
       return;
     }
@@ -5992,6 +6161,17 @@
         s.active = false; rt.waves = null;
         if (window.DREAD && window.DREAD.onHuntCleared) { try { window.DREAD.onHuntCleared(s.tier); } catch (x) {} }
         state.dreadRun = null;
+        respawnAt(0);
+        return;
+      }
+      if (s.mech) {
+        // MECH TIER BOSS DOWN — settle before the tow home. The payout is written
+        // synchronously inside onRunCleared, so an awarded core total never depends
+        // on the player happening to reload.
+        const _t = s.tier;
+        s.active = false; rt.waves = null;
+        state.mechRun = null;
+        if (window.MECHF && window.MECHF.onRunCleared) { try { window.MECHF.onRunCleared(_t); } catch (x) {} }
         respawnAt(0);
         return;
       }
@@ -7497,6 +7677,36 @@
     if (!state.dreadLock) state.dreadLock = {};                  // weekly lockout: { tier: ISO-week completed }
     state.dreadRun = null;                                       // a hunt never resumes across a reload
     if (state.kothCrowns == null) state.kothCrowns = 0;          // lifetime KOTH #1 finishes
+    // THE MECH FOUNDRY. `mechCores` is a wallet — floored, never negative, and
+    // never `| 0` (a career total passes the signed-32-bit ceiling and would wrap
+    // negative). `mech` is the lifetime record. `mechRun` is LIVE-RUN ONLY: a run
+    // interrupted by a reload is simply over, and clearing it here is safe because
+    // nothing is banked until the tier boss dies — there is no pending payout to
+    // strand, and leaving it armed would deploy the wave engine into whatever zone
+    // the pilot loaded into.
+    state.mechCores = Math.max(0, Math.floor(Number(state.mechCores) || 0));
+    if (!state.mech || typeof state.mech !== 'object') state.mech = { best: 0, runs: 0, kills: 0, earned: 0 };
+    if (state.mech.earned == null) state.mech.earned = 0;
+    // BACKFILL, DON'T DEFAULT. `earned` (lifetime cores won) was added after the
+    // Foundry shipped, so every save that had already run tiers carried real
+    // progress with a zero next to it — and the two systems built on it, the Core
+    // Harvest mission and the Corruption Engineer badge chain, both read that zero
+    // for exactly the pilots who had played the event.
+    //
+    // The WALLET is a provable floor on lifetime earned: cores are only ever
+    // created by clearing a tier, so a pilot holding 320 has earned at least 320.
+    // Seeding from it recovers the understated part of a real career total instead
+    // of starting it from nothing. Max, never assign — a pilot who has already
+    // spent more than they hold must not have their total dragged down to it.
+    if (!state.cmdr || typeof state.cmdr !== 'object') state.cmdr = { own: {}, slot: null, dust: 0, pulls: 0 };
+    if (!state.cmdr.own || typeof state.cmdr.own !== 'object') state.cmdr.own = {};
+    state.cmdr.dust = Math.max(0, Math.floor(Number(state.cmdr.dust) || 0));
+    state.cmdr.pulls = Math.max(0, Math.floor(Number(state.cmdr.pulls) || 0));
+    state.mech.earned = Math.max(
+      Math.floor(Number(state.mech.earned) || 0),
+      Math.floor(Number(state.mechCores) || 0)
+    );
+    state.mechRun = null;
     try { syncCrownBlueprints(); } catch (e) {}
     if (!state.fleet) state.fleet = [];
     if (!state.citadelCd) state.citadelCd = {};
@@ -8117,7 +8327,7 @@
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
     buyCosmetic, setCosmetic, addCredits,
     getCredits: () => state.credits || 0, getCosmetics: () => state.cosmetics,
-    startDreadHunt, dreadLevelFor, startServerDread, startAllianceRaid, goSafeHangar,
+    startDreadHunt, dreadLevelFor, startMechRun, startServerDread, startAllianceRaid, goSafeHangar,
     setLevel,
     getDreadCores: () => state.dreadCores || 0,
     // same int32 wrap as addCredits above — see the note there

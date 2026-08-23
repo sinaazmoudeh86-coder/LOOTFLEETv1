@@ -63,6 +63,7 @@ export interface EventDef {
 export const COLOR = {
   open: 0x00d18f, repel: 0x4db4ff, void: 0x9b4dff, crown: 0xffd24d,
   steal: 0xff5a4d, citadel: 0xffcf4d, claim: 0x8fb7d9, lost: 0x5a6472,
+  mech: 0xff4d5e,
   throne: 0xb57bff, ascend: 0xf5c542, armada: 0xff8a3d, dread: 0xff4d6d,
   zone: 0x5bc8ff, level: 0x4da3ff, top10: 0x3dd68c, alliance: 0x3dd68c,
   pilot: 0x6e7a8a, xen: 0xc26bff, sitrep: 0x6f7dff, bigbet: 0xffd66a,
@@ -144,6 +145,26 @@ export const CATALOG: Record<string, EventDef> = {
   kothWarn: { feature: 'koth',     tier: 'notable',  color: COLOR.koth,     icon: '⏳', label: 'FINAL HOUR' , selfPost: true },
   kothCrown:{ feature: 'koth',     tier: 'headline', color: COLOR.koth,     icon: '👑', label: 'THE HILL HAS A KING', gif: 'victory' , selfPost: true },
   kothDyn:  { feature: 'koth',     tier: 'headline', color: COLOR.koth,     icon: '👑', label: 'A DYNASTY IS FORMING', gif: 'maxed' },
+
+  // THE MECH FOUNDRY. Its worlds open for one hour in six on staggered windows,
+  // which is twenty openings a day — far too many to announce, so an OPENING is
+  // deliberately not an event here. What gets announced is what a pilot DID:
+  // taking a world, and crossing a core milestone.
+  //
+  // `mechWorld` is notable and `mechDeep` is the headline, because the top two
+  // worlds are star-gated (★15 / ★20) and a Malgrave clear is genuinely rare.
+  // Both are selfPost: the client detects them at the moment the tier boss dies,
+  // and a card posted two minutes late reads as someone else's news.
+  mechWorld:{ feature: 'mech',     tier: 'notable',  color: COLOR.mech,     icon: '⚙', label: 'WORLD TAKEN', gif: 'owned', selfPost: true },
+  mechDeep: { feature: 'mech',     tier: 'headline', color: COLOR.mech,     icon: '⚙', label: 'A CORRUPTED WORLD HAS FALLEN', gif: 'victory', selfPost: true },
+  mechCore: { feature: 'mech',     tier: 'ambient',  color: COLOR.mech,     icon: '◉', label: 'MECH CORES', selfPost: true },
+  // The Sovereign is the end of the line and needs every other Mech hull first,
+  // so it is the rarest acquisition in the game. Ordinary Mech hulls announce
+  // through the normal `hull` card; only this one earns its own headline.
+  mechSov:  { feature: 'mech',     tier: 'headline', color: COLOR.mech,     icon: '⚙', label: 'A MECH SOVEREIGN HAS BEEN ASSEMBLED', gif: 'maxed', selfPost: true },
+  // Commanders. Only Ancient and above reach the channel — the client gates it, and
+  // log_mech() de-duplicates per officer per tier. A Common pull is not news.
+  mechCmdr: { feature: 'mech',     tier: 'notable',  color: COLOR.mech,     icon: '✦', label: 'A COMMANDER HAS BEEN RECOVERED', gif: 'owned', selfPost: true },
 };
 
 export const TIER_OF = (kind: string): Tier => (CATALOG[kind]?.tier ?? 'notable');
@@ -155,7 +176,9 @@ export const DEF = (kind: string): EventDef =>
 export const PRIORITY = [
   'kothCrown', 'kothDyn', 'templeClaimTop', 'throne', 'void', 'armada', 'nanomax', 'expoElite', 'hcEra',
   'ascend', 'dread', 'repel', 'steal', 'citadel', 'nano', 'hull', 'cargo',
+  'mechSov', 'mechDeep', 'mechCmdr', 'mechWorld',
   'kothLead', 'kothWarn', 'kothOpen', 'templeClaim', 'expo', 'hcwave', 'bigbet',
+  'mechCore',
   'top10', 'zone', 'claim', 'alliance', 'level', 'lost', 'pilot',
 ];
 

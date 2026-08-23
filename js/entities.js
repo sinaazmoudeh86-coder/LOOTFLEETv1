@@ -336,7 +336,20 @@
       // 22%. Reducing the CLAMPED figure means DR always removes its full share of
       // what you actually take. Ceiling 20% (DR_CAP_PCT in game-v93.js).
       if (this.dmgReduce > 0) dmg *= 1 - Math.min(0.20, this.dmgReduce / 100);
+      // ARMOR CORRUPTION — Mech hits strip your effective armor, and the debuff is
+      // applied AFTER the one-shot clamp on purpose. Before it, endgame hits land
+      // far above 22% of max hull, the clamp would throw the corrupted figure away
+      // and re-impose the same 22%, and the whole mechanic would be decorative in
+      // exactly the fights it is meant to decide — the identical trap the damage
+      // reduction line above was moved to fix. After it, a fully-corrupted Mech
+      // Titan swarm moves the per-hit ceiling from 22% of max hull to 27.5%: four
+      // hits from full instead of five. Multiplicative, so its order against
+      // dmgReduce does not matter.
+      if (window.MECHCORR) { const _mc = window.MECHCORR.playerPct(this); if (_mc) dmg *= 1 + _mc / 100; }
       this.hp = Math.max(0, this.hp - dmg);
+      // Stamp AFTER the damage lands, so this hit is priced at the corruption that
+      // was already on you rather than at the stack it just added.
+      if (window.MECHCORR) window.MECHCORR.onMechHit(this, src);
       { const _gs2 = (window.GAME && window.GAME.state && window.GAME.state.gameSpeed) || 1;
         this.hurtFlash = (_gs2 > 2 && this.hurtFlash > 0.15) ? Math.max(this.hurtFlash, 0.5) : 1; }
       if (this.hp <= 0) { this.dead = true; this.justDied = true; this.killer = src || null; }

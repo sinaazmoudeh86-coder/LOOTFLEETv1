@@ -185,6 +185,8 @@
     else if (name === 'mail') { if (window.MAIL) window.MAIL.render(); }
     else if (name === 'voidzone') { if (window.VOIDZ) window.VOIDZ.render(); }
     else if (name === 'cargo') { if (window.CARGO) window.CARGO.render(); }
+    else if (name === 'mech') { if (window.MECHF) window.MECHF.render(); }
+    else if (name === 'cmdr') { if (window.COMMANDERS) window.COMMANDERS.render(); }
     else if (name === 'tour') { if (window.TOUR) window.TOUR.render(); }
     else if (name === 'forge') { if (window.STARFORGE) window.STARFORGE.render(); }
     else if (name === 'pasc') { if (window.PASCEND) window.PASCEND.render(); }
@@ -357,7 +359,7 @@
     // grind; Home Citadel / Voidmaw runs own the arena and show their own HUD.
     const evRun = G.rt && (G.rt.hcrun || G.rt.sdrun);
     el['zb-name'].textContent = evRun ? (G.rt.hcrun ? '🏰 Home Zone' : '❖ Voidmaw') : (safe ? '⌂ Hangar' : sysName);
-    el['zb-sub'].textContent = evRun ? (G.rt.hcrun ? 'Citadel defense' : 'Season 1 · world boss') : (safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : '')));
+    el['zb-sub'].textContent = evRun ? (G.rt.hcrun ? 'Citadel defense' : 'World boss') : (safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : '')));
     const adv = G.zoneAdvice();
     // advice shows only when it adds info: deploy prompt in safe zone, or a
     // push-up / back-off recommendation. Hidden when the current zone is fine.
@@ -1247,8 +1249,9 @@
       }
     });
     const n = G.fleetShips().length;
-    panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">${n + 1}/${1 + slots} flying · ${n > 0 ? 'Fleet Score active' : 'deploy escorts to boost your score'}</span></div><div class="fp-slots">${cells}</div>${fleetLoadoutsHTML()}`;
+    panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">${n + 1}/${1 + slots} flying · ${n > 0 ? 'Fleet Score active' : 'deploy escorts to boost your score'}</span></div><div class="fp-slots">${cells}</div>${window.COMMANDERS ? window.COMMANDERS.fleetRowHTML() : ''}${fleetLoadoutsHTML()}`;
     panel.querySelectorAll('[data-fp]').forEach((d) => d.addEventListener('click', () => openFleetPicker(+d.dataset.fp)));
+    try { if (window.COMMANDERS) window.COMMANDERS.bindFleetRow(panel); } catch (e) {}
     const fb = panel.querySelector('[data-fpflag]'); if (fb) fb.addEventListener('click', openFlagshipPicker);
     // loadout chips open the item card
     panel.querySelectorAll('[data-fli]').forEach((d) => d.addEventListener('click', () => {
@@ -2930,7 +2933,8 @@
     // route flag) because a Tour hull can also be Dread- or Titan-class and would
     // otherwise be described by whichever generic flag came first.
     if (ship.tour) return '✦ Tour of Duty';
-    if (ship.event) return '❖ Season 1';
+    if (ship.event === 'mech') return '⚙ Mech Foundry';
+    if (ship.event) return '❖ Voidmaw';
     if (ship.celestial) return '✦ Cargo Defense';
     if (ship.alienTech) return '◈ Kaevith';
     if (ship.emberTech) return '✦ Choir';
@@ -3126,6 +3130,7 @@
     sheet.querySelectorAll('[data-mega-buy]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.megaBuy; closeSheet(); openMegaBuy(k); }));
     sheet.querySelectorAll('[data-bp-hunt]').forEach((b) => b.addEventListener('click', () => { G.selectDungeon(+b.dataset.bpHunt); closeSheet(); showScreen('battle'); }));
     sheet.querySelectorAll('[data-go-sdread]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('sdread'); }));
+    sheet.querySelectorAll('[data-go-mech]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('mech'); }));
     sheet.querySelectorAll('[data-go-galaxy]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('galaxy'); }));
     sheet.querySelectorAll('[data-go-zones]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('zones'); }));
     sheet.querySelectorAll('[data-go-tour]').forEach((b) => b.addEventListener('click', () => { closeSheet(); showScreen('tour'); }));
@@ -3135,7 +3140,7 @@
   // ONE unified detail-sheet card for EVERY hull (Jul 2026): identical frame —
   // icon · name+chip · class line · layout chips · desc · mod chips · ONE status
   // strip · action. Only the status strip varies by acquisition (gold / LootCoin
-  // / Dread-class / construction / Season 1 event / mission reward).
+  // / Dread-class / construction / event hull / mission reward).
   function shipCard(key) {
     const ship = C.SHIP_BY_KEY[key];
     const st = G.shipBuyState(key);
@@ -3170,12 +3175,45 @@
       action = `<span class="ship-badge locked">◈</span>`;
       lock = `<div class="ship-lock"><span class="lk-ic">◈</span><span><b>Not yet available.</b> This hull is finished and flight-ready — how you earn it is still being decided. It cannot be bought, built or earned at any price yet.</span></div>`;
     }
-    else if (ship.event) {
-      // SEASON 1 — assembled from event parts, never sold
-      const need = 100, have = Math.min(need, (G.state.shipParts && G.state.shipParts[key]) | 0);
+    else if (ship.event === 'mech') {
+      // THE MECH LINE — assembled in the Foundry from ⚙ Mech Cores + Galaxy
+      // Resources, gated by a blueprint recovered on that hull's own tier.
+      const M = window.MECHF;
+      const src = (M && M.tiers) ? M.tiers().find((t) => t.bp === key) : null;
+      const b = (M && M.BUILD) ? M.BUILD[key] : null;
+      const bpHave = !!(G.state.blueprints && G.state.blueprints[key]);
+      const haveC = Math.floor(Number(G.state.mechCores) || 0);
+      const res = G.state.resources || {};
+      const chips = b ? '<div class="bc-row">'
+        + `<span class="bc-chip ${haveC >= b.cores ? 'ok' : ''}">⚙ ${G.formatNum(b.cores)}</span>`
+        + Object.keys(b.res).map((r) => `<span class="bc-chip ${Math.floor(Number(res[r]) || 0) >= b.res[r] ? 'ok' : ''}">${G.formatNum(b.res[r])} ${r}</span>`).join('')
+        + (b.lc ? `<span class="bc-chip ${Math.floor(Number(G.state.credits) || 0) >= b.lc ? 'ok' : ''}">◈ ${G.formatNum(b.lc)} LootCoins</span>` : '')
+        + '</div>' : '';
+      action = `<button class="ship-btn buy" data-go-mech="1">⚙ Foundry</button>`;
+      lock = `<div class="ship-lock ${bpHave ? 'ready' : ''}"><span class="lk-ic">⚙</span><span>${bpHave
+        ? 'Blueprint recovered — assemble it in the <b>Mech Foundry</b>.'
+        : `Mech Foundry — the blueprint is yours on your <b>first clear</b> of the <b>${src ? src.name : 'top tier'}</b>${src ? ` (T${src.t}, Level ${src.lv})` : ''}.`}</span>${chips}</div>`;
+    }
+    else if (ship.event === 'sdread') {
+      // THE VOIDMAW — assembled from event parts, never sold. The part count is
+      // READ OFF THE EVENT, never restated: this card printed a hardcoded 100
+      // while server-dreadnaught.js has required 150 since July, so a player could
+      // fill the bar and still not own the hull.
+      const need = (window.SDREAD && window.SDREAD.partsNeed) || 150;
+      const have = Math.min(need, (G.state.shipParts && G.state.shipParts[key]) | 0);
       action = `<button class="ship-btn buy" data-go-sdread="1">❖ Earn</button>`;
-      lock = `<div class="ship-lock ready"><span class="lk-ic">❖</span><span>Season 1 exclusive — <b>${have} / ${need}</b> Voidmaw Parts · gone after Aug 31</span>
+      lock = `<div class="ship-lock ready"><span class="lk-ic">❖</span><span>Event exclusive — <b>${have} / ${need}</b> Voidmaw Parts, earned in the <b>Voidmaw</b> world-boss event</span>
         <div class="lk-bar"><div class="lk-fill" style="width:${have / need * 100}%"></div></div></div>`;
+    }
+    else if (ship.event) {
+      // AN EVENT HULL WITH NO CARD OF ITS OWN YET. This branch used to be the
+      // BARE `ship.event` test that owned the Season 1 copy above, so every hull
+      // carrying any `event` value advertised Voidmaw Parts, an Aug 31 deadline
+      // and a button to the Server Dreadnaught screen — four wrong statements and
+      // a wrong destination the moment a second event shipped. Name the route or
+      // say nothing; never inherit another event's facts.
+      action = `<span class="ship-badge locked">❖</span>`;
+      lock = `<div class="ship-lock"><span class="lk-ic">❖</span><span>Event exclusive — earned only while its event is running.</span></div>`;
     } else if (ship.missionShip) {
       const need = ship.missionShip, have = Math.min(need, G.state.lifetimeMissions | 0);
       action = `<button class="ship-btn buy" data-go-missions="1">⌘ Missions</button>`;
@@ -3243,7 +3281,8 @@
       }
     }
     const bpChip = st.active ? ''
-      : ship.event ? `<span class="bp-chip have" style="border-color:#b04dff88;color:#d9a0ff">❖ SEASON 1</span>`
+      : ship.event === 'mech' ? `<span class="bp-chip have" style="border-color:#ff4d5e88;color:#ffb0ba">⚙ FOUNDRY</span>`
+      : ship.event ? `<span class="bp-chip have" style="border-color:#b04dff88;color:#d9a0ff">❖ VOIDMAW</span>`
       : ship.missionShip ? `<span class="bp-chip have" style="border-color:#59d98c88;color:#a5f2c4">⌘ MISSIONS</span>`
       : ship.purchase ? `<span class="bp-chip have" style="border-color:#f2a93c88;color:#ffd9a0">◈ LOOTCOIN</span>`
       : ship.megaCost ? `<span class="bp-chip have" style="border-color:#ff5a6888;color:#ff9aa6">◇ DREAD</span>`
@@ -4847,6 +4886,16 @@
   // never silent (the same contract as the Kaevith result popup).
   function emberTechResult(r) {
     if (!_inited || !r) return;
+    // ONE VEIL, EVER. This appended straight to <body> with no check for one
+    // already up, so clearing several Choir zones in a row stacked popups on top
+    // of each other and the player had to dismiss them one at a time — with the
+    // oldest, least relevant result on top of the pile. A newer result supersedes
+    // an older one instead. (Same guard covers the Kaevith veil, which is built
+    // to the same contract and stacked the same way.)
+    document.querySelectorAll('.emb-veil, .xen-veil').forEach((n) => {
+      if (n._cdT) clearTimeout(n._cdT);
+      n.remove();
+    });
     const o = document.createElement('div');
     o.className = 'emb-veil';
     const b = r.won && r.ship ? (r.ship.beacon || {}) : {};
@@ -4875,16 +4924,42 @@
         <button class="embres-x" data-x>Continue</button>
       </div>`;
     document.body.appendChild(o);
-    const close = () => o.remove();
+    // AND IT CLOSES ITSELF. A result card the player has read is an obstacle; one
+    // they walked away from mid-fight is a blocked screen. The win card holds
+    // longer because it has a stat block worth reading — the miss card says one
+    // thing. Tapping Continue or the backdrop still closes it immediately.
+    const LIFE = r.won ? 14000 : 7000;
+    const close = () => { if (o._cdT) { clearTimeout(o._cdT); o._cdT = null; } o.remove(); };
+    o._cdT = setTimeout(close, LIFE);
+    {
+      const card = o.querySelector('.embres');
+      if (card) {
+        card.style.position = card.style.position || 'relative';
+        card.style.overflow = 'hidden';
+        const bar = document.createElement('i');
+        bar.style.cssText = 'position:absolute;left:0;bottom:0;height:3px;width:100%;transform-origin:left center;'
+          + 'background:' + (r.won ? '#ffb347' : '#6d7b90') + ';opacity:.65;'
+          + 'animation:embcd ' + LIFE + 'ms linear forwards';
+        card.appendChild(bar);
+      }
+    }
     o.querySelector('[data-x]').addEventListener('click', close);
     o.addEventListener('click', (e) => { if (e.target === o) close(); });
     if (r.won) { try { if (window.FX && FX.flash) FX.flash('#ffb347'); } catch (e) {} }
   }
+  // the countdown bar's one keyframe, injected once
+  (function embCd() {
+    if (document.getElementById('emb-cd-css')) return;
+    const s = document.createElement('style');
+    s.id = 'emb-cd-css';
+    s.textContent = '@keyframes embcd{from{transform:scaleX(1)}to{transform:scaleX(0)}}';
+    document.head.appendChild(s);
+  })();
   function ord(n) {
     const v = n | 0; if (!v) return '1st';
     const s = ['th', 'st', 'nd', 'rd'][(v % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][v % 100] || 'th';
     return v + s;
   }
 
-  window.UI = { syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet };
+  window.UI = { syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
 })();

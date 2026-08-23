@@ -31,25 +31,22 @@
 (function () {
   'use strict';
 
-  const BUILD = 715;
+  const BUILD = 717;
   const NOTES = {
-    build: 713,
-    title: 'BUILD 713',
-    sub: 'The stutter is fixed — and it was never your device.',
+    build: 717,
+    title: 'BUILD 717',
+    sub: 'The Mech faction is here — and it fights differently.',
     groups: [
-      { k: 'FIXED', c: '#8fc4ff', rows: [
-        ['⚡', 'The game was running at 7fps', 'A dead render loop, not your hardware. Combat should feel instant again.'],
-        ['❖', 'Fighters lost their colours', 'Same cause — the game had stripped its own visuals trying to cope. Your wing wears its bay rarity again.'],
-        ['⛨', 'Failing an attack no longer shields the tile', 'Lose a Void spire or a galaxy tile and it stays open — for your retry, and for everyone else.'],
-        ['⬡', 'Pilot Tree rank showed zero', 'Your own row now reads your live tree score.'],
-        ['✦', 'Legendary filter in the Pilot Tree list', 'The Rare chip and searching “legendary” both find them now.'],
+      { k: 'NEW', c: '#ff8a9a', rows: [
+        ['\u2699', 'The Mech Foundry', 'Five tiers in Command, from the Spawn Nest at Level 120 to the Titan Forge at 550. Clear one for \u2699 Mech Cores.'],
+        ['\u26a0', 'Mech attacks strip your armor', 'Every Mech hit stacks ARMOR CORRUPTION and you take more damage while it holds. The class sets the ceiling, the swarm sets how fast they get there \u2014 a Spawn is nothing, a Titan is +25%. It shows over your ship, and it fades in 5s once they stop hitting you.'],
+        ['\u2699', 'Mech Archon &amp; Mech Titan', 'Two new hulls, earned only in the Foundry \u2014 first clear of the top two tiers hands over the blueprint. Neither is your biggest gun: they CORRUPT the target so every other ship in your fleet hits it harder.'],
       ] },
       { k: 'ALSO', c: '#7ce0a0', rows: [
-        ['\u{1F69A}', 'Cargo Defense is survivable again', 'Fewer rings and raiders, tougher freighters — and the hull now REPAIRS itself whenever you clear the boarders off it.'],
-        ['\u2b21', 'Pilot Tree ranks show real pilots only', 'No stand-in names. The board fills in as pilots log in.'],
-      ] },
-      { k: 'KNOWN', c: '#ffcf7a', rows: [
-        ['◈', 'Leaderboard levels look stale', 'Publishing was broken for twenty builds. Every pilot’s row corrects itself the next time they log in.'],
+        ['\u2699', 'Mech Foundry board in Ranks', 'Ranked on \u2699 cores EARNED, not what you are holding \u2014 assembling a hull never costs you a place.'],
+        ['\u2726', 'Commanders', 'Collect officers at \u26055. One per active hull, and the one you seat lends its bonus to the whole fleet.'],
+        ['\u2699', 'Corrupted targets are marked', 'A meter and a stack count over anything your fleet has stripped \u2014 and over you, when they are doing it to you.'],
+        ['\u2726', 'The Foundry pays cores and loot, not levels', 'Its zones are priced off the tier, not off you, so it is not a levelling shortcut. Cores, gold, drops and blueprints are all yours.'],
       ] },
     ],
   };

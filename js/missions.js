@@ -57,6 +57,13 @@
     { id: 'nano1',   ic: '◈', name: 'Core Requisition',   blurb: 'Open {N} Nanocore Crate(s)',                   m: 'nanoOpen', n: () => 1,   rw: (l, z) => ({ gold: Math.round(5000 * dayScale(z)), lc: 13 }), gate: () => nanoOpen() },
     { id: 'nano2',   ic: '⬢', name: 'Bench Time',         blurb: 'Land {N} successful core upgrade(s)',          m: 'nanoUp',   n: () => 2,   rw: (l, z) => ({ plasma: Math.round(150 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
     { id: 'nano3',   ic: '✧', name: 'Spin the Lattice',   blurb: 'Reroll extra buffs {N} time(s)',               m: 'nanoRoll', n: () => 2,   rw: (l, z) => ({ iron: Math.round(180 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
+    // ---- THE MECH FOUNDRY — gated on the event, not a level. Its worlds open for
+    // one hour in six, so run targets are counted in WORLDS CLEARED and capped
+    // against how many windows a dedicated pilot can actually reach in a period.
+    { id: 'mech1',   ic: '⚙', name: 'Planetfall',        blurb: 'Clear {N} corrupted world(s)',                 m: 'mechRun',  n: () => 1,                                  rw: (l, z) => ({ gold: Math.round(6000 * dayScale(z)), lc: 18 }), gate: () => mechOpen() },
+    { id: 'mech2',   ic: '◉', name: 'Core Harvest',      blurb: 'Earn {N} \u2699 Mech Cores',                     m: 'mechCore', n: (l, z) => Math.round(40 * dayScale(z)),   rw: (l, z) => ({ plasma: Math.round(220 * dayScale(z)), lc: 15 }), gate: () => mechOpen() },
+    { id: 'mech3',   ic: '⌖', name: 'Scrap the Line',    blurb: 'Destroy {N} Mech hostiles',                    m: 'mechKill', n: (l, z) => Math.round(120 * dayScale(z)),  rw: (l, z) => ({ iron: Math.round(200 * dayScale(z)), lc: 12 }), gate: () => mechOpen() },
+    { id: 'mech4',   ic: '✦', name: 'Deep Assault',      blurb: 'Clear {N} corrupted world(s)',                 m: 'mechRun',  n: () => 3,                                  rw: (l, z) => ({ fuel: Math.round(320 * dayScale(z)), lc: 26 }), gate: () => mechOpen() },
     { id: 'cargo2',  ic: '✦', name: 'Pristine Manifest',  blurb: 'Deliver {N} shipment(s) at 90%+ integrity',    m: 'cargoClean', n: () => 1,        rw: (l, z) => ({ plasma: Math.round(200 * dayScale(z)), lc: 23 }), gate: () => cargoOpen() },
   ];
   // the event unlocks at Pilot Ascension ★3 — no level ever opens it
@@ -64,6 +71,9 @@
   // Nanocores opens at Level 50 — asked through the module so the gate lives in
   // exactly one place (NANO.CFG.gate).
   function nanoOpen() { try { return !!(window.NANO && window.NANO.unlocked()); } catch (e) { return false; } }
+  // The Foundry opens at Level 120 — asked through the module so the gate lives
+  // in one place rather than being restated as a number here.
+  function mechOpen() { try { return !!(window.MECHF && window.MECHF.unlocked()); } catch (e) { return false; } }
 
   // ---- PHYSICAL CEILINGS ----------------------------------------------------
   // Some metrics are gated by REAL TIME or by a currency, not by the pilot's
@@ -86,6 +96,12 @@
     nanoRoll:  { d: 2,  w: 6,   m: 15  },   // rerolls double in price per lock
     cargo:     { d: 2,  w: 10,  m: 40  },   // 2 runs/day base ration
     cargoClean:{ d: 1,  w: 6,   m: 24  },
+    // A world is assaultable 1 hour in 6 and there are five of them on staggered
+    // windows, so the ceiling is WINDOWS REACHABLE, not power. Set from the
+    // schedule itself: about four sittings a day for someone actually chasing it.
+    mechRun:   { d: 4,  w: 18,  m: 60 },
+    mechCore:  { d: 900, w: 4200, m: 15000 },
+    mechKill:  { d: 700, w: 3200, m: 11000 },
   };
 
   // ---- BOARDS ---------------------------------------------------------------
@@ -139,7 +155,7 @@
     for (let i = a.length - 1; i > 0; i--) { s = (s * 1664525 + 1013904223) >>> 0; const j = s % (i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
   }
-  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0, cargo: 0, cargoClean: 0, nanoOpen: 0, nanoUp: 0, nanoRoll: 0 });
+  const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0, cargo: 0, cargoClean: 0, mechRun: 0, mechCore: 0, mechKill: 0, nanoOpen: 0, nanoUp: 0, nanoRoll: 0 });
   function buildList(cfg, tier) {
     const s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
     const eligible = POOL.filter((p) => (!p.req || lvl >= p.req) && (!p.gate || p.gate()));
@@ -230,7 +246,8 @@
              level: s.level || 1, play: s.playTime || 0, items: Math.max(s.lifetimeLooted || 0, (s.inventory || []).length), boss: bossCount(),
              hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum(),
              cargo: (s.cargo && s.cargo.wins) | 0, cargoClean: (s.cargo && s.cargo.clean) | 0,
-             nanoOpen: lifeStat('nanoOpened'), nanoUp: lifeStat('nanoUps'), nanoRoll: lifeStat('nanoRolls') };
+             nanoOpen: lifeStat('nanoOpened'), nanoUp: lifeStat('nanoUps'), nanoRoll: lifeStat('nanoRolls'),
+             mechRun: (s.mech && s.mech.runs) | 0, mechCore: Math.floor(Number(s.mech && s.mech.earned) || 0), mechKill: (s.mech && s.mech.kills) | 0 };
   }
   function hullLevelSum() { const sl = G.state.shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return t; }
   // Nanocore progress is already counted for life once, in nanocores.js — the
@@ -286,7 +303,8 @@
                 bosses: pos(now.boss - o.boss), loot: pos(now.items - o.items), hulls: pos(now.hulls - (o.hulls || 0)),
                 tiles: pos(now.tiles - (o.tiles || 0)), moon: pos(now.moon - (o.moon || 0)), colony: pos(now.colony - (o.colony || 0)),
                 cargo: pos(now.cargo - (o.cargo || 0)), cargoClean: pos(now.cargoClean - (o.cargoClean || 0)),
-                nanoOpen: pos(now.nanoOpen - (o.nanoOpen || 0)), nanoUp: pos(now.nanoUp - (o.nanoUp || 0)), nanoRoll: pos(now.nanoRoll - (o.nanoRoll || 0)) };
+                nanoOpen: pos(now.nanoOpen - (o.nanoOpen || 0)), nanoUp: pos(now.nanoUp - (o.nanoUp || 0)), nanoRoll: pos(now.nanoRoll - (o.nanoRoll || 0)),
+                mechRun: pos(now.mechRun - (o.mechRun || 0)), mechCore: pos(now.mechCore - (o.mechCore || 0)), mechKill: pos(now.mechKill - (o.mechKill || 0)) };
     s.msnBase = now;
     // lifetime accumulators for non-monotonic metrics (achievements)
     const L = s.lifeStats;

@@ -31,10 +31,10 @@
 (function () {
   'use strict';
 
-  const BUILD = 717;
+  const BUILD = 718;
   const NOTES = {
-    build: 717,
-    title: 'BUILD 717',
+    build: 718,
+    title: 'BUILD 718',
     sub: 'The Mech faction is here — and it fights differently.',
     groups: [
       { k: 'NEW', c: '#ff8a9a', rows: [
@@ -43,6 +43,7 @@
         ['\u2699', 'Mech Archon &amp; Mech Titan', 'Two new hulls, earned only in the Foundry \u2014 first clear of the top two tiers hands over the blueprint. Neither is your biggest gun: they CORRUPT the target so every other ship in your fleet hits it harder.'],
       ] },
       { k: 'ALSO', c: '#7ce0a0', rows: [
+        ['\u2726', 'You ascend in the Frigate now', 'Every hull stays in your hangar at full strength \u2014 switch back the moment you meet its licence again. Commanders tied to a class or hull go quiet until you do, and tell you why.'],
         ['\u2699', 'Mech Foundry board in Ranks', 'Ranked on \u2699 cores EARNED, not what you are holding \u2014 assembling a hull never costs you a place.'],
         ['\u2726', 'Commanders', 'Collect officers at \u26055. One per active hull, and the one you seat lends its bonus to the whole fleet.'],
         ['\u2699', 'Corrupted targets are marked', 'A meter and a stack count over anything your fleet has stripped \u2014 and over you, when they are doing it to you.'],

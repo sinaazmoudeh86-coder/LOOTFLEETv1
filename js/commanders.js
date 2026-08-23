@@ -435,6 +435,38 @@
     if (spare(id) < PROMO_COST) return { ok: false, why: 'short', need: (PROMO_COST - spare(id)) + ' more spare' };
     return { ok: true };
   }
+  // What a bulk fuse would actually do, computed before anything is spent so the
+  // button can state it rather than surprise with it.
+  function promoteAllPlan() {
+    const own = rec().own;
+    const ids = Object.keys(own).filter((id) => BY_ID[id] && canPromote(id).ok);
+    // deepest-first, so the tier that matters most lands even if something below
+    // it turns out to be ineligible
+    ids.sort((a, b) => (own[b].r | 0) - (own[a].r | 0));
+    return { ids, spares: ids.length * PROMO_COST };
+  }
+  function promoteAll() {
+    if (_ex) return 0;
+    _ex = true;
+    try {
+      const { ids } = promoteAllPlan();
+      if (!ids.length) { toast('Nothing can fuse \u2014 each needs ' + PROMO_COST + ' spare copies'); return 0; }
+      let n = 0; const named = [];
+      for (const id of ids) {
+        // RE-CHECKED PER CARD AT ITS OWN WRITE, not once for the batch.
+        if (!canPromote(id).ok) continue;
+        const o = rec().own[id];
+        o.n = num(o.n) - PROMO_COST;
+        o.r = Math.min(CMDR_W.length - 1, (o.r | 0) + 1);
+        named.push(BY_ID[id].name + ' \u2192 ' + rarityOf(o.r).name);
+        n++;
+      }
+      if (!n) return 0;
+      persist();
+      toast('\u2726 ' + n + ' PROMOTED \u2014 ' + named.slice(0, 3).join(', ') + (n > 3 ? ' +' + (n - 3) + ' more' : ''));
+      return n;
+    } finally { _ex = false; }
+  }
   let _ex = false;
   function promote(id) {
     if (_ex) return false;
@@ -529,6 +561,46 @@
     } finally { _ex = false; }
   }
 
+  // ---- WHY THAT SEAT IS EMPTY ----------------------------------------------
+  // A sheet, not a toast. The rule has three moving parts (which officer, which
+  // hull, what you are flying now) and a two-second toast cannot carry them — the
+  // same reason a rule never belongs in a title attribute. It names what is
+  // required, what is flying, and the one action that fixes it.
+  function seatBlocked(id) {
+    const w = BY_ID[id]; if (!w) return;
+    const flying = (CFG().SHIP_BY_KEY || {})[st().ship || ''] || null;
+    const flyName = flying ? flying.name : (st().ship || 'your current hull');
+    const flyCls = flying ? (flying.cls || '') : '';
+    const owned = !!(st().ownedShips || {})[w.ship];
+    const o2 = rec().own[id] || {};
+    const R = rarityOf(o2.r | 0);
+    const b = bonusFor(o2.r | 0, w.t, w);
+    const hullNm = esc(((CFG().SHIP_BY_KEY || {})[w.ship] || {}).name || w.ship || '');
+    // The fix line is the point of the sheet: a player who reads this should know
+    // their next tap, not merely what went wrong.
+    const fix = w.ship
+      ? (owned ? 'Switch your flagship to the <b>' + hullNm + '</b> in <b>My Fleet</b>.'
+               : 'You do not own the <b>' + hullNm + '</b> yet. This card waits on the bench until you do.')
+      : 'Fly any <b>' + esc(w.cls) + '</b>-class hull as your flagship. Escorts do not count — the seat reads your <b>flagship</b>.';
+    document.querySelectorAll('.cm-blockveil').forEach((n) => n.remove());
+    const o = document.createElement('div');
+    o.className = 'cm-veil cm-blockveil';
+    o.innerHTML = '<div class="cm-bk">'
+      + '<div class="cm-bk-k">○ SEAT REQUIREMENT NOT MET</div>'
+      + '<div class="cm-bk-t">' + esc(w.name) + ' <em style="color:' + R.color + '">' + esc(R.name) + '</em></div>'
+      + '<div class="cm-bk-req"><span>REQUIRES</span><b>' + esc(specLabel(w)) + '</b></div>'
+      + '<div class="cm-bk-now"><span>YOU ARE FLYING</span><b>' + esc(flyName) + (flyCls ? ' · ' + esc(flyCls) : '') + '</b></div>'
+      + '<div class="cm-bk-b">' + fix + '</div>'
+      + '<div class="cm-bk-n">In the right hull this card pays <b>+' + b + (w.t === 'multiShot' ? '×' : '%') + ' '
+      + esc(STAT_LABEL[w.t] || w.t) + '</b> to your whole fleet. In the wrong one it pays <b>nothing</b> — which is why it cannot be benched.</div>'
+      + '<div class="cm-bk-n dim">An ascension resets your flagship to the <b>Frigate</b>, so class and hull specialists go quiet until you switch back. Nothing was lost.</div>'
+      + '<button class="cm-rv-x" data-x>GOT IT</button></div>';
+    document.body.appendChild(o);
+    const close = () => o.remove();
+    o.querySelector('[data-x]').addEventListener('click', close);
+    o.addEventListener('click', (e) => { if (e.target === o) close(); });
+  }
+
   // ---- THE FLEET SLOT -------------------------------------------------------
   // A TOGGLE, not an assignment. Tapping an equipped officer stands them down;
   // tapping a new one seats them if there is room and refuses if there is not —
@@ -541,8 +613,11 @@
     else {
       if (!(BY_ID[id] && c.own[id])) return false;
       const i = c.slots.indexOf(id);
-      if (i !== -1) c.slots.splice(i, 1);
+      if (i !== -1) c.slots.splice(i, 1);       // standing down is always allowed
       else {
+        // THE SEAT IS CHECKED BEFORE THE BENCH IS. A card that would pay nothing is
+        // refused with the requirement stated, not seated into silence.
+        if (!specOk(BY_ID[id])) { seatBlocked(id); return false; }
         if (slots().length >= capacity()) { toast('Bench full \u2014 ' + capacity() + ' ship' + (capacity() === 1 ? '' : 's') + ', ' + capacity() + ' commander' + (capacity() === 1 ? '' : 's')); return false; }
         c.slots.push(id);
       }
@@ -773,6 +848,13 @@
       + '<div class="cmx-note"><b>' + PROMO_COST + ' spare copies</b> of one officer raise that card <b>one tier</b>. The only route up that is not a roll.</div>'
       + (dupes.length ? '<div class="cmx-list">' + dupes.map(row).join('') + '</div>'
          : '<div class="cmx-empty">No duplicates yet. Pull the same officer twice and the spare shows up here.</div>')
+      + (() => {
+          const pl = promoteAllPlan();
+          if (!pl.ids.length) return '';
+          return '<div class="cmx-bulk"><span>All at once:</span>'
+            + '<button class="cm-ex-btn go wide" data-cm-promoall>FUSE ALL \u00b7 ' + pl.ids.length + ' card' + (pl.ids.length === 1 ? '' : 's')
+            + '<i>' + pl.spares + ' spares \u00b7 one tier each</i></button></div>';
+        })()
       + (totalSp > 1 ? '<div class="cmx-bulk"><span>Clear out the low end:</span>'
           + '<button class="cm-ex-btn" data-cm-bulk="2">SCRAP ALL \u2264 RARE</button>'
           + '<button class="cm-ex-btn" data-cm-bulk="4">SCRAP ALL \u2264 LEGENDARY</button></div>' : '')
@@ -968,6 +1050,7 @@
     ['data-cm-scrapall', 'cmScrapall', (v) => { if (scrap(v, true)) render(); }],
     ['data-cm-dpromo',   'cmDpromo',   (v) => { if (dustPromote(v)) render(); }],
     ['data-cm-bulk',     'cmBulk',     (v) => { if (scrapUpTo(+v)) render(); }],
+    ['data-cm-promoall',  null,         () => { if (promoteAll()) render(); }],
     ['data-cm-dust',     null,         () => { const r = dustPull(); if (r) { reveal(r, { name: 'DUST EXCHANGE' }); render(); } }],
   ];
   function bind(root) {
@@ -1170,6 +1253,19 @@
       '.cm-hero-q{font:700 21px/1.3 Rajdhani,sans-serif;color:#fff;text-wrap:pretty}',
       '.cm-hero-b{font-size:15px;line-height:1.55;color:#c4cfe0;text-wrap:pretty}',
       '.cm-hero-b b{color:#e0b3ff}',
+      '.cm-bk{display:flex;flex-direction:column;gap:10px;max-width:440px;width:100%;background:#121821;border:1px solid #2a3546;border-left:4px solid #ffb0ba;border-radius:14px;padding:20px}',
+      '.cm-bk-k{font:800 12px/1 Rajdhani,sans-serif;letter-spacing:.16em;color:#ffb0ba}',
+      '.cm-bk-t{font:800 24px/1.15 Rajdhani,sans-serif;color:#fff}',
+      '.cm-bk-t em{font:800 13px/1 Rajdhani,sans-serif;letter-spacing:.1em;font-style:normal;margin-left:6px}',
+      '.cm-bk-req,.cm-bk-now{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;background:#0f141c;border:1px solid #2a3546;border-radius:8px;padding:10px 12px}',
+      '.cm-bk-req span,.cm-bk-now span{font:800 11px/1 Rajdhani,sans-serif;letter-spacing:.12em;color:#7d8ba0;flex:0 0 auto}',
+      '.cm-bk-req b{font:800 16px/1.15 Rajdhani,sans-serif;color:#ffd24d}',
+      '.cm-bk-now b{font:800 16px/1.15 Rajdhani,sans-serif;color:#e6edf7}',
+      '.cm-bk-b{font:700 15px/1.5 Rajdhani,sans-serif;color:#e6edf7}',
+      '.cm-bk-b b{color:#8fe0ac}',
+      '.cm-bk-n{font:700 13px/1.5 Rajdhani,sans-serif;color:#9fb0c4}',
+      '.cm-bk-n b{color:#e6edf7}',
+      '.cm-bk-n.dim{color:#7d8ba0;border-top:1px solid #1f2836;padding-top:9px}',
       // ---- the My Fleet row ---------------------------------------------------
       '.cmr{margin-top:12px;background:#121821;border:1px solid #2a3546;border-left:3px solid #c07bff;border-radius:11px;padding:11px 12px}',
       '.cmr-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:9px}',
@@ -1179,9 +1275,13 @@
       // cards and rendered 46px circles with 11px labels — the same decision
       // (which unit goes in this slot) presented two completely different ways on
       // one screen. Same footprint, same proportions, same reading order.
-      '.cmr-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:9px}',
-      '.cmr-c{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 6px;min-height:104px;border:1px solid var(--cc,#2a3546);border-radius:9px;background:linear-gradient(180deg,color-mix(in srgb,var(--cc,#2a3546) 20%,#0f141c),#0f141c);cursor:pointer}',
+      '.cmr-slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}',
+      '@media (max-width:420px){.cmr-slots{gap:6px}}',
+      '.cmr-c{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 6px;min-height:104px;border:1px solid var(--cc,#2a3546);border-radius:9px;background:linear-gradient(180deg,color-mix(in srgb,var(--cc,#2a3546) 20%,#0f141c),#0f141c);cursor:pointer}',
       '.cmr-c.empty{border-style:dashed;border-color:#2a3546;background:#0f141c}',
+      '.cmr-c.empty.locked{border-style:solid;opacity:.62;cursor:default}',
+      '.cmr-c.empty.locked .cmr-p{font-size:19px;opacity:.75}',
+      '.cmr-sub{font:800 9.5px/1 Rajdhani,sans-serif;letter-spacing:.14em;color:#5d6b84;margin-top:2px}',
       '.cmr-img{display:block;width:46px;height:46px;border-radius:50%;object-fit:cover;object-position:50% 16%;border:1px solid var(--cc,#2a3546)}',
       '.cmr-p{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 17px/1 Rajdhani,sans-serif;color:var(--cc,#7d8ba0);background:#0b0f16;border:1px solid var(--cc,#2a3546)}',
       '.cmr-c.empty .cmr-p{color:#5d6b84;border-color:#2a3546;font-size:22px}',
@@ -1229,13 +1329,15 @@
       '.cmx-bulk{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:auto;padding-top:4px}',
       '.cmx-bulk span{font:700 12px/1 Rajdhani,sans-serif;color:#7d8ba0;flex:0 0 auto}',
       '.cmx-bulk .cm-ex-btn{flex:1 1 128px}',
+      '.cm-ex-btn.wide{flex:1 1 100%}',
       '.cm-ex-btn{min-height:46px;border:1px solid #2a3546;border-radius:7px;background:#141a24;color:#9fb0c4;font:800 12px/1.2 Rajdhani,sans-serif;letter-spacing:.05em;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 9px}',
       '.cm-ex-btn i{font:700 11px/1 Rajdhani,sans-serif;color:#7d8ba0;font-style:normal}',
       '.cm-ex-btn.go{border-color:#c07bff;color:#fff;background:#1d1430}',
       '.cm-ex-btn.go i{color:#c9a2ff}',
       '.cm-ex-btn:disabled{opacity:.45;cursor:not-allowed}',
       '.cmr-c.tall .cmr-dup{top:6px;right:6px}',
-      '.cmr-slots.album{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}',
+      '.cmr-slots.album{grid-template-columns:repeat(auto-fill,minmax(132px,176px))}',
+      '.cmr-slots.album{gap:11px}',
       '.cmr-big{font:800 26px/1 Rajdhani,sans-serif;color:#8fe0ac;letter-spacing:-.01em;margin-top:1px}',
       '.cmr-big.off{color:#5d6b84}',
       '.cmr-stat{font:700 11px/1.15 Rajdhani,sans-serif;letter-spacing:.06em;color:#9fb0c4;text-align:center;text-transform:uppercase}',
@@ -1362,18 +1464,33 @@
     // real art appeared only after visiting the Commanders screen and coming back.
     // Path-dependent rendering of the same card in two places.
     probeAll();
-    if (!unlocked()) {
-      const g = gate();
-      return '<div class="cmr"><div class="cmr-h"><span class="cmr-t">✦ Commanders</span>'
-        + '<span class="cmr-s">Unlocks at Ascension ★' + g.stars + ' · you are ★' + g.have + '</span></div></div>';
-    }
-    const cap = capacity(), seated = slots(), own = rec().own;
+    const g = gate(), open = unlocked();
+    const cap = capacity(), seated = open ? slots() : [], own = rec().own;
+    // FIVE ALWAYS. `capacity()` is how many you may SEAT; the row is how many you
+    // will EVER have, so the shape of the system is legible before you own any of it.
+    const MAX = 5;
     let cells = '';
-    for (let i = 0; i < cap; i++) {
+    for (let i = 0; i < MAX; i++) {
       const id = seated[i];
       if (!id) {
-        cells += '<button class="cmr-c empty" data-cmr="">' + '<span class="cmr-p">+</span>'
-          + '<span class="cmr-n">Empty</span></button>';
+        // Three different kinds of empty, each saying what it is waiting on rather
+        // than all reading "Empty":
+        //   locked   — the whole system is not open yet (★5)
+        //   pending  — open, but this seat needs another active hull
+        //   free     — open and unlocked, tap to seat someone
+        if (!open) {
+          cells += '<div class="cmr-c empty locked"><span class="cmr-p">🔒</span>'
+            + '<span class="cmr-n">★' + g.stars + '</span>'
+            + '<span class="cmr-sub">ASCEND</span></div>';
+        } else if (i >= cap) {
+          cells += '<div class="cmr-c empty locked"><span class="cmr-p">🔒</span>'
+            + '<span class="cmr-n">Ship ' + (i + 1) + '</span>'
+            + '<span class="cmr-sub">LOCKED</span></div>';
+        } else {
+          cells += '<button class="cmr-c empty" data-cmr=""><span class="cmr-p">+</span>'
+            + '<span class="cmr-n">Empty</span>'
+            + '<span class="cmr-sub">TAP TO SEAT</span></button>';
+        }
         continue;
       }
       const o = own[id], who = BY_ID[id], R = rarityOf(o.r), ok = specOk(who);
@@ -1391,8 +1508,13 @@
               : '<span class="cmr-unmet">\u25cb ' + esc(specLabel(who)) + '</span>')
         + '</span></button>';
     }
+    const sub = !open
+      ? 'Officers who buff your whole fleet · unlocks at Ascension ★' + g.stars + ' (you are ★' + g.have + ')'
+      : cap < MAX
+        ? seated.length + '/' + cap + ' seated · one per active hull — grow your fleet to open the rest'
+        : seated.length + '/' + cap + ' seated · one per active hull';
     return '<div class="cmr"><div class="cmr-h"><span class="cmr-t">✦ Commanders</span>'
-      + '<span class="cmr-s">' + seated.length + '/' + cap + ' seated · one per active hull</span></div>'
+      + '<span class="cmr-s">' + sub + '</span></div>'
       + '<div class="cmr-slots">' + cells + '</div></div>';
   }
   function bindFleetRow(root) {
@@ -1480,7 +1602,7 @@
     unlocked, gate, rec, owned, dust, equipped, equip, mods,
     onFoundryKill, open, canOpen, rollRarity, rarityOf, bonusFor, BY_ID,
     CMDR_W, oddsOf, promote, scrap, canPromote, spare, dustPull, PROMO_COST, DUST_PULL,
-    dustPromote, canDustPromote, dustPromo, scrapUpTo, exchangeHTML,
+    dustPromote, canDustPromote, dustPromo, scrapUpTo, exchangeHTML, promoteAll, promoteAllPlan,
     fighterMult, capacity, slots, isEquipped, specOk, specLabel, specShort,
     vaultHTML, albumHTML, bind, fleetRowHTML, bindFleetRow, openPicker,
   };

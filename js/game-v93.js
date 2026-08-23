@@ -398,7 +398,17 @@
     // picked; the rest wait in the hangar at full strength.
     state.ownedShips = {};
     hangar.forEach((k) => { state.ownedShips[k] = true; });
-    state.ship = legacy.key;
+    // YOU FLY OUT IN THE FRIGATE. This used to be `legacy.key` — the hull chosen as
+    // the legacy pick — which left the pilot at Level 1 in a Titan or a Kaevith,
+    // and put `state.ship` out of step with `state.equipped`: step 2 restores
+    // DEFAULTS, so `equipped` is frigate-shaped, and step 4 then named a hull with a
+    // completely different hardpoint set.
+    //
+    // Nothing is taken away by this. Every hull is still in `ownedShips` above with
+    // its upgrade levels and Ship Ascension intact, and the pilot can switch back
+    // the moment they meet that hull's licence again — an ascension resets the RUN,
+    // and starting a run means starting in the starter hull.
+    state.ship = 'frigate';
     state.shipLevels = keepLevels;         // hull upgrades KEPT — every level you bought stands
     state.fittings = {};                   // no saved loadouts (there is no gear to load)
     state.fleet = null; state.drones = 0; state.droneBays = {};   // wing disbanded — re-form it as slots unlock
@@ -475,7 +485,7 @@
     try { goSafeHangar(); } catch (e) {}
     save();
     if (window.UI) window.UI.refreshAll();
-    return { stars: state.pasc.stars, pts: state.pasc.pts, ship: legacy.key };
+    return { stars: state.pasc.stars, pts: state.pasc.pts, ship: state.ship, legacy: legacy.key };
   }
   function ascStars() { return (state.pasc && state.pasc.stars) | 0; }
   // LIFETIME COUNTER BUMP — the single write path for the badge metrics no other

@@ -1,87 +1,131 @@
-# Loot Fleet — deploy v246 · build 717 · MECH FOUNDRY + COMMANDERS
+# Loot Fleet — deploy v247 · build 718 · FRIGATE DEFAULT + COMMANDER BENCH
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v245 (build 715). Service worker cache is `lootfleet-v717`.
-**Login screen reads `BUILD 717`.**
+Supersedes v246 (build 717). Service worker cache is `lootfleet-v718`.
+**Login screen reads `BUILD 718`.**
 
-## ⚠ SQL — FOUR FILES, IN THIS ORDER
+## ✅ NO SQL TO RUN
 
-`mech-ladder.sql` **must run last** — it supersedes `pilot-ladder.sql`.
+**Nothing to run if you already ran the four files from v246** — this build is
+client-only. No new column, no RPC change, no `lb_upsert` republish.
 
-**1. `supabase/koth-archive.sql`** — outstanding since 712. Idempotent; if it was
-already run at 711, run it again (section 8 is newer). Run the whole file in one go.
-
-**2. `supabase/temple-retire.sql` — run once.** The Temple left the client in 711
-but its RPCs are still installed, and the server's `temple_claim()` is the
-pre-fix version that throws `42883 operator does not exist: record ->> unknown`
-on every call. Stale cached clients still poll it. Drops the temple FUNCTIONS by
-catalogue lookup and deliberately leaves the TABLES alone — nothing reads them,
-and they hold the record of what players actually did in that arena.
-
-**3. `supabase/mech-feed.sql` — new.** Creates `log_mech()`, the RPC the Mech
-Foundry and Commanders post their announcements through. Whitelists five kinds
-(`mechWorld`, `mechDeep`, `mechCore`, `mechSov`, `mechCmdr`) and de-duplicates
-each so a replay cannot post the same card twice. No new table.
-
-**4. `supabase/mech-ladder.sql` — new, RUN LAST.** Adds `mech_cores bigint` to
-`leaderboard` and republishes `lb_upsert` carrying it. **This is now the
-canonical `lb_upsert`** — a strict superset of `pilot-ladder.sql` (24 params to
-its 23, same order, same types). It drops every existing overload by catalogue
-lookup and asserts exactly one survives, because `create or replace` cannot
-replace an overload whose argument types differ — it silently adds a second copy
-and PostgREST then picks the wrong candidate or refuses to pick (PGRST203).
-
-**Re-running `new-ladders.sql`, `pilot-ladder.sql`, `cargo-ladder.sql`,
-`nanocore-ladder.sql` or `discord-art-publish.sql` re-adds an older overload and
-requires re-running `mech-ladder.sql` afterwards.**
-
-Verify:
+Confirm the v246 SQL landed (both queries should be as noted):
 
 ```sql
+-- expect BOTH rows: pilot_score, mech_cores
 select column_name from information_schema.columns
  where table_name = 'leaderboard' and column_name in ('pilot_score','mech_cores');
+
+-- expect exactly 1
 select count(*) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.proname = 'lb_upsert';   -- must be exactly 1
+ where ns.nspname = 'public' and p.proname = 'lb_upsert';
 ```
 
-Then `notify pgrst, 'reload schema';`.
+If `mech_cores` is missing, run `supabase/mech-ladder.sql` (it is idempotent).
+If `lb_upsert` returns anything other than 1, run `mech-ladder.sql` again — it
+drops every overload by catalogue lookup and asserts one survives.
 
-## ⚠ EDGE FUNCTION DEPLOY REQUIRED
+**Standing rule, unchanged:** re-running `new-ladders.sql`,
+`pilot-ladder.sql`, `cargo-ladder.sql`, `nanocore-ladder.sql` or
+`discord-art-publish.sql` re-adds an older overload and requires re-running
+`mech-ladder.sql` afterwards.
 
-`supabase functions deploy discord-feed` — all four files together, a partial
-upload does not boot. `FEED_VER` is **717**; verify with
-`select content from net._http_response order by created desc limit 3;`
+## ✅ NO EDGE FUNCTION DEPLOY
+
+`discord-feed` is unchanged from v246. `FEED_VER` stays **717** — it tracks the
+build that last changed the function, not the client. If you did not deploy it at
+v246, do it now: `supabase functions deploy discord-feed` (all four files
+together; a partial upload does not boot).
 
 ## Order
 
-1. Run the SQL (mech-ladder last).
-2. Deploy the edge function (independent of the site).
-3. Push everything **except** `version.json`.
-4. Push `version.json` **last** — it is the eviction beacon. A higher build than
+1. Push everything **except** `version.json`.
+2. Push `version.json` **last** — it is the eviction beacon. A higher build than
    the running client force-reloads every session within ~90s, so pushing it ahead
    of the files evicts players onto code that is not live yet.
-5. Confirm the login screen reads `BUILD 717`.
+3. Confirm the login screen reads `BUILD 718`.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 717 |
-| root `version.json` | 717 |
-| `deploy-v246/version.json` | 717 |
-| `deploy-v246/sw.js` `CACHE` | `lootfleet-v717` |
-| `discord-feed` `FEED_VER` | 717 |
+| root `game.html` `window.LF_BUILD` | 718 |
+| root `version.json` | 718 |
+| `deploy-v247/version.json` | 718 |
+| `deploy-v247/sw.js` `CACHE` | `lootfleet-v718` |
+| `discord-feed` `FEED_VER` | 717 (unchanged — function not modified) |
 
-Every `js/`+`css/` reference carries `?v=717`. Folder rebuilt from the project
-root, never seeded from v245: v245 was copied first, then `js/`, `css/`,
-`guides/` and `supabase/` were DELETED and re-copied fresh. All 91 js/css files
-game.html references were diffed against the root copies — zero stale, zero
-missing. Root `sw.js` is deliberately unversioned (it is the kill-switch worker
-for the old poisoned origin) and was not touched.
+Every `js/`+`css/` reference carries `?v=718`. Folder rebuilt from the project
+root, never seeded from a previous release: v246 was copied first, then `js/`,
+`css/`, `guides/` and `supabase/` were DELETED and re-copied fresh as separate
+calls. All 73 js and 18 css files game.html references were diffed against the
+root copies — zero stale, zero missing. Root `sw.js` is deliberately unversioned
+(kill-switch worker for the old poisoned origin) and was not touched.
 
-New asset directories in this release: `commanders/` (31 portraits), `ui/`
-(Commanders emblem), plus 11 Mech sprites in `ships/`.
+---
+
+## What changed in 718
+
+### ✦ You ascend in the Frigate
+
+`pilotAscend()` was setting the flagship to `legacy.key` — the legacy pick — so a
+Level 1 pilot came out of an ascension flying a Titan or a Kaevith. It also left
+`state.ship` out of step with `state.equipped`: step 2 restores DEFAULTS, so
+`equipped` comes back frigate-shaped, and step 4 then named a hull with a
+completely different hardpoint set. That mismatch is the likely source of the
+reported post-ascension ship-menu weirdness.
+
+**Nothing is taken away.** Every hull stays in `ownedShips` with its upgrade
+levels and Ship Ascension intact, `pasc.legacy` still records the legacy pick for
+the history row, and the pilot can switch back the moment they meet that hull's
+licence again. The function's return value now reports the real flagship rather
+than the legacy pick — it would have announced a Titan while the pilot sat in a
+frigate.
+
+### ✦ Commanders: the bench is always five, in one row
+
+The bench rendered `capacity()` cells, so a Level 1 pilot saw ONE slot with no
+way to know the row grows to five. It now shows five from the first minute,
+matching the ship row directly above it, with three distinct kinds of empty —
+`★5 ASCEND` (system locked), `Ship N LOCKED` (needs another active hull), and
+`TAP TO SEAT` (open). Locked cells are `<div>`s, not buttons, so nothing pretends
+to be tappable.
+
+It is also one row now. `auto-fit` sized tracks from available width and wrapped
+3+2 while the ship row fit 5 across at the identical width — two rows for one
+decision on one screen. The track is an explicit `repeat(5, minmax(0,1fr))`, so it
+cannot disagree with the row above it.
+
+### ✦ Seating a Commander you no longer qualify for explains itself
+
+A specialist whose seat is unmet pays **nothing** — `specOk()` gates `mods()` — so
+a player could bench an officer, see zero effect, and have nothing on screen
+saying why. Worst immediately after an ascension, which now resets the flagship to
+the Frigate and quiets every class and hull specialist at once.
+
+`equip()` refuses an unmet seat and opens a sheet (not a toast — the rule has
+three moving parts and a two-second toast cannot carry them). It names the
+requirement, what you are actually flying, your next tap, what the card would pay
+in the right hull, and that the Frigate reset is why it went quiet. Standing an
+officer down is never blocked.
+
+### ✦ FUSE ALL
+
+Promoting eight officers one row at a time is the kind of chore that makes a
+player stop using a system. One tap fuses every eligible card, stating the count
+and the spares it will spend before it spends them. **One tier per card per
+press** — a card with 12 spares could otherwise chain three tiers in a single tap,
+and a promotion is irreversible. Each card re-checks its own spares at the moment
+of its own write, so a partial run cannot consume spares without delivering the
+tier they paid for.
+
+### Fixed
+
+- **A single Commander card filled the whole row.** One card in an `auto-fit`
+  `1fr` track takes the full width, and the cell is `aspect-ratio:1/1.12` — so one
+  officer in an 880px container rendered a ~985px tall portrait. Both the bench and
+  album tracks are now bounded.
 
 ---
 

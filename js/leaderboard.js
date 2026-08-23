@@ -23,10 +23,24 @@
   // Cargo and nanocore columns join the same whitelist for the same reason: they
   // are published on every heartbeat, and dropping them here pinned Haulage to a
   // board of zeroes and left Nanocore with nothing to rank at all.
-  function mapReal(r){ return { name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1, power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0, _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true,
-    tiles: r.tiles, citadels: r.citadels, tile_rev: r.tile_rev, ships: r.ships, missions: r.missions, badges: r.badges,
-    cargo: r.cargo, cargo_best: r.cargo_best,
-    nano_legend: r.nano_legend, nano_slots: r.nano_slots, nano_god: r.nano_god }; }
+  // ---- A WHITELIST IS A LIST YOU MUST REMEMBER TO UPDATE ---------------------
+  // Three ladders have now shipped a column that was published on every
+  // heartbeat, reached the table correctly, and then vanished HERE — cargo and
+  // nanocore first, and the Pilot Tree in 715. The symptom is identical every
+  // time and misleading in the same way: the board shows YOU and nobody else,
+  // because your own row is filled in live from the save by mineInto() while
+  // every other pilot arrives through this function with the field missing, so
+  // metric() reads 0 and the row is dropped as "unpublished".
+  //
+  // Passthrough instead of a whitelist. The named fields below are the ones with
+  // a DEFAULT or a rename; everything else on the server row is copied verbatim,
+  // so a new ladder column works the day the migration lands. `isReal` and the
+  // underscore-prefixed keys are set after the spread so a server column can
+  // never overwrite them.
+  function mapReal(r){ return Object.assign({}, r, {
+    name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1,
+    power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0,
+    _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true }); }
   function ensureReal(cb){
     if (!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.lbTop)) return;
     if (_realInflight || Date.now() - _realT < 8000) return;

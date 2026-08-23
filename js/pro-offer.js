@@ -31,7 +31,7 @@
 
   // ---- the triggers ---------------------------------------------------------
   // headline: what the player just hit. lead: the Pro answer to exactly that.
-  // NOTE there is deliberately no 'speed' trigger: tapping the locked 5× tier in
+  // NOTE there is deliberately no 'speed' trigger: tapping the locked Pro tier in
   // the HUD already opens the Pro sheet directly, which is a better response than
   // a pop-up — the player asked, so answer, don't interrupt.
   const TRIGGERS = {
@@ -111,7 +111,7 @@
     s.seen[key] = 1; s.last = Date.now();
     try { G().save(); } catch (e) {}
 
-    const k = (() => { try { return G().proMods().perks; } catch (e) { return { xpMult: 5, speed: 5, gold: 2, loot: 1.5, tiles: 10 }; } })();
+    const k = (() => { try { return G().proMods().perks; } catch (e) { return { xpMult: 5, speed: 3, gold: 2, loot: 1.5, tiles: 10 }; } })();
     boot();
     const old = document.getElementById('pro-offer-veil'); if (old) old.remove();
     const v = document.createElement('div');

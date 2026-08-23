@@ -108,7 +108,20 @@
     // across the wing and writes the final `dmg`; specOf only records the weight.
     return { w: s.dmgMul, dmg: baseDmgFrac(F) * s.dmgMul, rate: F.attackRate * s.rateMul,
              range: F.range * s.rangeMul, speed: F.speed * s.speedMul,
-             orbit: F.orbitRadius * (s.orbitMul || 1) };
+             orbit: F.orbitRadius * (s.orbitMul || 1),
+             // THE CRAFT WEARS ITS BAY'S RARITY. A wing is the carrier's whole
+             // armament and the bays are upgraded one at a time, so "which of my
+             // four is the good one" is a question the arena should answer without
+             // opening a menu. Resolved through CONFIG.RARITY so the colour is the
+             // same one the loot screen, the chip and the drop burst all use.
+             rarity: (item && item.rarity != null) ? (item.rarity | 0) : 0,
+             col: rarityCol(h, item) };
+  }
+  // The bay's rarity colour, or the neutral hull grey for an unfitted bay.
+  function rarityCol(h, item) {
+    if (!item || item.rarity == null) return '#c9d2e0';
+    try { const r = h.C.RARITY[item.rarity | 0]; if (r && r.color) return r.color; } catch (e) {}
+    return '#c9d2e0';
   }
 
   // ONE BAY, ONE CRAFT. Bay n flies fighter n, and that craft's damage, cadence,
@@ -395,6 +408,11 @@
         // × the wing's share: 1 for the hull being flown, C.FLEET.statShare for an
         // escort carrier, whose gear is already priced into rt.stats at that rate.
         let dmg = st.attackDamage * sp.dmg * spdMul * shr * (0.9 + Math.random() * 0.2) * (crowd ? 2 : 1);
+        // WING TACTICS reaches the wing (build 712). The ascension perk reads
+        // "Escort hulls and drones in your wing deal more damage" and escort
+        // fire already applied it — a fighter is the most literal craft-in-your-
+        // wing in the game and was the one thing it skipped.
+        if (window.PASCEND) dmg *= window.PASCEND.mult('fleet');
         if (crit) dmg *= 1 + st.critDamage / 100;
         if (state.auto) dmg *= 0.8;
         dmg = dmg < 1 ? 1 : Math.round(dmg);
@@ -431,21 +449,59 @@
     }
   }
 
+  // One offscreen bitmap per rarity colour, built on first use and kept for the
+  // session. The sprite is the only thing on that surface, so `source-atop`
+  // finally means what it says: paint the colour ONLY where the hull is, leaving
+  // its shading readable underneath rather than flattening it to a silhouette.
+  const _tintCache = {};
+  function tintedSprite(col) {
+    if (_tintCache[col] !== undefined) return _tintCache[col];
+    if (!(IMG.complete && IMG.naturalWidth)) return null;   // not cached — retry next frame
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = IMG.naturalWidth; cv.height = IMG.naturalHeight;
+      const c = cv.getContext('2d');
+      c.drawImage(IMG, 0, 0);
+      c.globalCompositeOperation = 'source-atop';
+      c.globalAlpha = 0.62;
+      c.fillStyle = col;
+      c.fillRect(0, 0, cv.width, cv.height);
+      return (_tintCache[col] = cv);
+    } catch (e) { return (_tintCache[col] = null); }
+  }
+
   function draw(ctx) {
     const h = host(); if (!h) return;
     const list = h.rt.fighters; if (!list || !list.length) return;
     const ready = IMG.complete && IMG.naturalWidth;
     const w = h.C.FIGHTER.drawSize;
     const hh = ready ? w * (IMG.naturalHeight / IMG.naturalWidth) : w;
+    // RARITY TINT — PRE-RENDERED, NOT COMPOSITED IN PLACE.
+    //
+    // The first attempt drew the sprite and then filled a rect over it with
+    // `source-atop`. That is wrong on a shared canvas: source-atop keeps the new
+    // paint wherever the DESTINATION is opaque, and the destination here is the
+    // whole arena — background included — so it painted a solid coloured SQUARE
+    // over each craft instead of colouring the hull.
+    //
+    // The composite has to happen somewhere the sprite is the ONLY thing on the
+    // surface. Each colour therefore gets its own offscreen canvas, tinted once
+    // and cached; the arena just blits the right bitmap. Correct, and cheaper
+    // than the per-craft composite it replaces.
+    const tint = (h.rt.lod | 0) < 2;
     for (let i = 0; i < list.length; i++) {
       const f = list[i];
       if (f.st === DOCKED) continue;
+      const col = (f.sp && f.sp.col) || '#c9d2e0';
       ctx.save();
       ctx.translate(f.x, f.y);
       ctx.rotate(f.face + Math.PI / 2);            // art is drawn nose-up (-y)
-      if (ready) ctx.drawImage(IMG, -w / 2, -hh / 2, w, hh);
+      if (ready) {
+        const art = (tint && col !== '#c9d2e0') ? tintedSprite(col) : null;
+        ctx.drawImage(art || IMG, -w / 2, -hh / 2, w, hh);
+      }
       else {
-        ctx.fillStyle = '#c9d2e0';
+        ctx.fillStyle = col;
         ctx.beginPath(); ctx.moveTo(0, -hh * 0.4); ctx.lineTo(w * 0.3, hh * 0.3); ctx.lineTo(0, hh * 0.15); ctx.lineTo(-w * 0.3, hh * 0.3); ctx.closePath(); ctx.fill();
       }
       // muzzle glow as an ADDITIVE DOT. ctx.shadowBlur here cost more than every
@@ -453,7 +509,9 @@
       if (f.flash > 0) {
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = f.flash * 0.75;
-        ctx.fillStyle = '#ffd9a0';
+        // The muzzle flash carries the rarity colour too, so a wing reads at a
+        // glance even mid-volley when the hulls are behind their own fire.
+        ctx.fillStyle = col === '#c9d2e0' ? '#ffd9a0' : col;
         ctx.beginPath(); ctx.arc(0, -hh * 0.42, w * 0.16, 0, 7); ctx.fill();
       }
       ctx.restore();

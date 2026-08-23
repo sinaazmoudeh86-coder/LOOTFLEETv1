@@ -193,6 +193,26 @@
       empty: 'No expeditions flown yet. Launch one from Command ▸ Fleet Exploration.',
     },
     {
+      // PILOT TREE — the one progression no amount of grinding shortens. Nodes
+      // are bought with ◇ Dread Cores from a WEEKLY raid (one attempt per tier
+      // per week) and the whole tree rides through ascension, so a deep score is
+      // months of real calendar time and nothing else. Fleet power can be
+      // rebuilt in a weekend; this cannot, which is why it deserves its own
+      // board rather than being folded into power.
+      id: 'pilot', ic: '\u2b21', col: '#ff5a68', label: 'PILOT TREE', sub: 'Pilot Score',
+      sql: 'pilot-ladder.sql',
+      info: 'The hex talent tree, scored. Every unlocked node adds its own value — deeper and rarer nodes are worth more. Cores come from the weekly Dreadnaught Hunt, so this board moves on a calendar, not on a grind. Ties break on nodes unlocked.',
+      unit: 'SCORE',
+      metric: (p) => (Number(p.pilot_score) || 0) * 1e7 + Math.min(1e7 - 1, p.pilot_nodes | 0),
+      fmt: (v, p) => fmt(Number(p.pilot_score) || 0),
+      meta: (p) => {
+        const n = p.pilot_nodes | 0;
+        if (!n) return 'No nodes unlocked \u00b7 Lv ' + (p.level | 0);
+        return n + ' node' + (n === 1 ? '' : 's') + ' \u00b7 ' + pilotRank(Number(p.pilot_score) || 0) + ' \u00b7 Lv ' + (p.level | 0);
+      },
+      empty: 'No pilot has unlocked a node yet. Clear a Dreadnaught Hunt and spend one \u25c7 Dread Core to take this board outright.',
+    },
+    {
       // KING OF THE HILL — the only board with two views, because the event has
       // two honest answers to "who is winning". TODAY is the live race from
       // koth_top(); CROWNS is the career record from koth_hall. Neither is
@@ -228,6 +248,14 @@
   // board printed lowercase internals — 'dread6' for the Dread Omega, 'titansina'
   // for the Titan Sina. Resolve through CONFIG; if a key ever outlives its ship
   // entry, title-case it rather than leaking the identifier.
+  // THE PILOT RANK LADDER LIVES IN dreadnaught.js. Read it, never restate it —
+  // the Pilot screen prints the same word from the same table, and a second copy
+  // here is how the board and the screen start disagreeing about what a score
+  // means. The fallback is only for a load order where DREAD is not up yet.
+  function pilotRank(score) {
+    try { if (window.DREAD && DREAD.rankFor) return DREAD.rankFor(score); } catch (e) {}
+    return 'Pilot';
+  }
   function hullName(k) {
     const key = String(k || '');
     try { const s = (window.CONFIG && window.CONFIG.SHIP_BY_KEY) ? window.CONFIG.SHIP_BY_KEY[key] : null; if (s && s.name) return s.name; } catch (e) {}
@@ -318,6 +346,24 @@
     p.expo = Math.max(0, Math.floor(Math.pow(career, 0.62) * (0.35 + r() * 0.9)));
     p.expo_best = p.expo ? Math.min(420, 40 + Math.floor(Math.pow(career, 0.55) * (1.2 + r() * 2.4))) : 0;
 
+    // PILOT TREE — the hardest thing on this list to fake, because the real one
+    // is bought with a WEEKLY raid currency. A node costs 1–3 cores and a tier
+    // pays one hunt a week, so a sim's node count is bounded by how many weeks
+    // the account has plausibly existed, NOT by how strong it is. Career is the
+    // only proxy we have for age, taken to a hard root so a Lv 1000 ★5 pilot
+    // lands in the low hundreds of nodes rather than thousands. Gated at the
+    // tree's own unlock level so nobody below it ranks at all.
+    const treeGate = (() => { try { return (window.DREAD && DREAD.unlockLevel) | 0 || 30; } catch (e) { return 30; } })();
+    p.pilot_nodes = (lv >= treeGate || st > 0)
+      ? Math.max(0, Math.floor(Math.pow(career, 0.58) * (0.4 + r() * 0.85)))
+      : 0;
+    // Score per node rises with depth (deeper rings roll stronger, legendaries
+    // are worth ~60+), so the average climbs as the tree grows instead of being
+    // a flat multiplier.
+    p.pilot_score = p.pilot_nodes
+      ? Math.floor(p.pilot_nodes * (11 + Math.pow(p.pilot_nodes, 0.42) * (1.1 + r() * 1.3)))
+      : 0;
+
     p._derived = true;
     return p;
   }
@@ -375,7 +421,7 @@
   // quietly credit simulated pilots with records no human could be shown to
   // beat. Detected by absence of the property (not a zero value), and those
   // boards refuse to render until the columns exist.
-  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, hcwave: 1, expo: 1 };
+  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, hcwave: 1, expo: 1, pilot: 1 };
   // Which property proves the migration for THIS board ran. Haulage and Nanocore
   // ship in their OWN migrations (cargo-ladder.sql, nanocore-ladder.sql), so the
   // shared lb-onefunction probe would pass on a server that had run neither and
@@ -386,6 +432,7 @@
     nano: ['nano_legend', 'nano_slots'],
     hcwave: ['hcwave'],
     expo: ['expo', 'expo_best'],
+    pilot: ['pilot_score'],
   };
   function migrated(rows, id) {
     // THE NEW LADDERS ASK THE SERVER, NOT THE ROWS.
@@ -401,10 +448,14 @@
     //
     // CLOUD.lbShape() reports which SELECT actually succeeded, which is a direct
     // statement about the schema and cannot be faked by a merged local row.
-    if (id === 'hcwave' || id === 'expo') {
+    if (id === 'hcwave' || id === 'expo' || id === 'pilot') {
       try {
         const s = window.CLOUD && window.CLOUD.lbShape && window.CLOUD.lbShape();
-        if (s) return s === 'new';
+        // The shapes are a LADDER, newest first: 'pilot' implies 'new'. So the
+        // two older boards accept either, and only the Pilot Tree board needs
+        // the newest one. Testing `s === 'new'` alone would have turned Home
+        // Defense and Exploration off the moment pilot-ladder.sql landed.
+        if (s) return id === 'pilot' ? s === 'pilot' : (s === 'new' || s === 'pilot');
       } catch (e) {}
       // No board read has landed yet (offline, signed out, first paint). We do
       // not know, and the two wrong answers are both bad: claim the migration is
@@ -555,6 +606,10 @@
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,
         hcwave: (s.homecit && s.homecit.wave) | 0,
+        // PILOT TREE. Read through the module so the board and the tree screen
+        // can never disagree about what a pilot's score is.
+        pilot_score: (() => { try { return Math.max(0, Math.floor(Number(window.DREAD && DREAD.pilotScore ? DREAD.pilotScore() : 0) || 0)); } catch (e) { return 0; } })(),
+        pilot_nodes: (() => { try { return Math.max(0, Math.floor(Number(window.DREAD && DREAD.nodeCount ? DREAD.nodeCount() : 0) || 0)); } catch (e) { return 0; } })(),
         expo: (s.expo && s.expo.log && s.expo.log.done) | 0,
         expo_best: (s.expo && s.expo.log && s.expo.log.best) | 0,
         cargo: (s.cargo && s.cargo.wins) | 0,

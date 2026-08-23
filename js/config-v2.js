@@ -39,6 +39,23 @@
     { key: 'ascendant', name: 'Ascendant', color: '#5cffbe', glow: 'rgba(92,255,190,1)',    minStats: 6, maxStats: 6, mult: 68.0,  weight: 8e-7,  particles: 34, ascReq: 1 },
     { key: 'celestial', name: 'Celestial', color: '#5b7cff', glow: 'rgba(91,124,255,1)',    minStats: 6, maxStats: 6, mult: 92.0,  weight: 1.2e-7, particles: 38, ascReq: 12 },
     { key: 'paragon',   name: 'Paragon',   color: '#ffffff', glow: 'rgba(255,255,255,1)',   minStats: 6, maxStats: 6, mult: 125.0, weight: 2e-8, particles: 44, ascReq: 25, prismatic: true },
+    // ---- TIER 17 · DORMANT — DEFINED, NOT LIVE -----------------------------
+    // Reserved for a later release. It exists so the ladder has somewhere to go
+    // and so save data written against it later lines up with what ships today.
+    //
+    // WHY APPENDING IS SAFE AND INSERTING WOULD NOT BE: an item's `rarity` is
+    // stored in the save as an INDEX into this array. Adding to the END renumbers
+    // nothing, so every fitting already in every hold keeps meaning exactly what
+    // it meant. Inserting anywhere above would silently re-grade the entire
+    // economy — never do that.
+    //
+    // IT CANNOT DROP. Three independent locks, any one of which is sufficient:
+    //   · `dormant: true`  — rollRarity() and both caps refuse it outright
+    //   · `weight: 0`      — zero share of the weighted roll even if reached
+    //   · `ascReq: 9999`   — an ascension ceiling no live account can meet
+    // Deleting any ONE of them must still leave it unobtainable. When it goes
+    // live, remove `dormant`, give it a real weight and set a reachable ascReq.
+    { key: 'eclipse',   name: 'Eclipse',   color: '#ff9d00', glow: 'rgba(255,157,0,1)',     minStats: 6, maxStats: 6, mult: 170.0, weight: 0, particles: 50, ascReq: 9999, prismatic: true, dormant: true },
   ];
   // Post-mythic tiers (Ancient and beyond) are ~10× rarer across the board.
   // NOTE: weights above are PRE-multiplier — the ×0.1 below is applied to tier 6+.
@@ -53,8 +70,21 @@
   function ascRarityCap(stars) {
     const s = stars == null ? ascStars() : stars | 0;
     let cap = 13;   // Artifact — the ceiling for an un-ascended pilot
-    for (let i = 14; i < RARITY.length; i++) if (s >= RARITY[i].ascReq) cap = i;
+    // A DORMANT TIER IS NEVER A CAP. Stopping at the first one keeps the ceiling
+    // at the last LIVE tier however many reserved entries sit above it.
+    for (let i = 14; i < RARITY.length; i++) {
+      if (RARITY[i].dormant) break;
+      if (s >= RARITY[i].ascReq) cap = i;
+    }
     return cap;
+  }
+  // The highest tier that is actually obtainable — the array length minus any
+  // reserved entries parked on the end. Anything that wants "the top of the
+  // ladder" asks this rather than RARITY.length - 1.
+  function liveRarityMax() {
+    let i = RARITY.length - 1;
+    while (i > 0 && RARITY[i].dormant) i--;
+    return i;
   }
   // Each ascension also sharpens the TOP of the table — a flat, legible bonus to
   // the drop weight of Primordial and above (tier 11+). +25% per star, capped at
@@ -477,14 +507,21 @@
   // ---------------------------------------------------------------------------
   // STORE — speed + offline play are FREE (no real-money purchases in this game)
   // ---------------------------------------------------------------------------
+  // THREE TIERS (build 712). 4× and 5× are GONE — the ladder was six rungs deep
+  // with three of them free, which made the paid one a small step and the whole
+  // row a wall of pills. It is now one clear line: 1× is the game, 2× is bought
+  // once with LootCoins, 3× is what Pro gives you.
+  //
+  // The LootCoin tier keeps the sku 'speed4lc'. It reads wrong and it is
+  // deliberate: that string is written into every existing save that bought the
+  // old 4×, and renaming it would revoke a paid unlock from everyone who owns
+  // it. The sku is a receipt, not a label.
   const SPEED_TIERS = [
-    { mult: 1, label: '1×', price: 0, priceLabel: 'Free', sku: null },
-    { mult: 2, label: '2×', price: 0, priceLabel: 'Free', sku: 'speed2' },
-    { mult: 3, label: '3×', price: 0, priceLabel: 'Free', sku: 'speed3' },
+    { mult: 1, label: '1×', price: 0, priceLabel: 'Default', sku: null },
     // PREMIUM — unlocked ONLY by spending 500 LootCoins (see ui.js + game.js)
-    { mult: 4, label: '4×', price: 0, priceLabel: '500 LootCoins', sku: 'speed4lc', lootcoins: 500 },
+    { mult: 2, label: '2×', price: 0, priceLabel: '500 LootCoins', sku: 'speed4lc', lootcoins: 500 },
     // PRO — exclusive to the LootFleet Pro subscription ($20/mo)
-    { mult: 5, label: '5×', price: 0, priceLabel: 'PRO', sku: 'pro5', pro: true },
+    { mult: 3, label: '3×', price: 0, priceLabel: 'PRO', sku: 'pro3', pro: true },
     // SECRET — never shown or settable until the Mothership easter egg fires
     { mult: 10, label: '10×', price: 0, priceLabel: 'Secret', sku: null, secret: true },
   ];
@@ -905,7 +942,13 @@
     // changing attackRate or the player's base fire rate cannot silently rebalance the
     // whole class. Bigger carriers still hit harder — more bays is the progression — the
     // ratio pins the ENTRY hull.
-    dpsVsCannon: 1.10, // the Vanguard's 4-bay wing = 110% of a cannon hull's base DPS
+    // BUILD 712 — 1.10 → 1.32, a flat +20% to the whole class. Carriers were
+    // paying a real cost for their shape (the wing has travel time, it can be
+    // out of position, and a half-fitted carrier flies a half-strength wing)
+    // without being paid for it — a 4-bay wing at 110% of a cannon was parity on
+    // paper and behind it in the arena. This is the ONE number that moves the
+    // class: dmgFrac is derived from it, and the Ship Score ratio reduces to it.
+    dpsVsCannon: 1.32, // the Vanguard's 4-bay wing = 132% of a cannon hull's base DPS
     refBays: 4,        // the hull that ratio is measured against (the Vanguard)
     attackRate: 2.6,   // attacks/sec, per craft — feel, not power; dmgFrac absorbs it
     range: 620,         // OPERATIONAL ENVELOPE, measured from the carrier, not the craft
@@ -1083,7 +1126,7 @@
   window.CONFIG = {
     RARITY, RARITY_BY_KEY, STATS, STAT_KEYS, SLOTS, SLOT_KEYS, ENEMIES,
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
-    SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE,
+    SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE, liveRarityMax,
     SHIPS, SHIP_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,

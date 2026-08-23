@@ -213,6 +213,29 @@
   const PERK_BY_K = {}; PERKS.forEach((p) => PERK_BY_K[p.k] = p);
   const rank = (k) => { const p = st(); return p ? (p.perks[k] | 0) : 0; };
   const rankCost = (r) => r + 1;                       // next rank costs (current+1)
+  // ---- RESPEC ----------------------------------------------------------------
+  // WHAT A RANK ACTUALLY COST, derived from the rank itself: ranks are bought at
+  // 1, 2, 3 … n, so a perk sitting at rank n consumed n(n+1)/2 points.
+  //
+  // THE REFUND IS COMPUTED FROM THE PERKS, NEVER FROM `p.spent`. `spent` is a
+  // running tally that a save merge, an old build or a hand-edited save can put
+  // out of step with the ranks actually held — and paying a refund off a number
+  // that disagrees with the board either robs the player or mints points from
+  // nothing. The ranks ARE the receipt.
+  //
+  // Every rank is clamped to MAX_RANK before it is priced, so a corrupted rank of
+  // 9,999 refunds what rank 25 is worth and not 50 million points.
+  const triangle = (n) => (n * (n + 1)) / 2;
+  function spentFromRanks() {
+    const p = st(); if (!p || !p.perks) return 0;
+    let total = 0;
+    for (const k in p.perks) {
+      const r = Math.max(0, Math.min(MAX_RANK, Math.floor(Number(p.perks[k]) || 0)));
+      total += triangle(r);
+    }
+    return total;
+  }
+  const RESPEC_LC = 10000;
   const perkPct = (k) => { const d = PERK_BY_K[k]; return d ? Math.round(rank(k) * d.per * 10) / 10 : 0; };
   // the one function the rest of the game calls
   function mult(k) { return 1 + perkPct(k) / 100; }
@@ -275,7 +298,12 @@
   }
 
   // ---- RARITY UNLOCKS --------------------------------------------------------
-  function ascTiers() { return (C().RARITY || []).filter((r) => r.ascReq > 0); }
+  // DORMANT TIERS ARE NOT ADVERTISED. A reserved entry carries ascReq: 9999 to
+  // keep it out of the roll, which also made it satisfy `ascReq > 0` — so it
+  // rendered as a real row on Loot Tiers AND became "the next tier" for every
+  // ascended pilot, printing "unlocks at ★9999 — 9968 more after this one".
+  // A tier the player cannot reach must not appear on a screen that promises it.
+  function ascTiers() { return (C().RARITY || []).filter((r) => r.ascReq > 0 && !r.dormant); }
   function nextTierAt(s) { const n = s == null ? stars() : s; return ascTiers().find((r) => r.ascReq > n) || null; }
 
   // ===========================================================================
@@ -501,9 +529,9 @@
               (can ? 'BUY RANK ' + (r + 1) + ' · ' + cost + ' pt' + (cost === 1 ? '' : 's') : 'NEEDS ' + cost + ' pt' + (cost === 1 ? '' : 's')) + '</button>') +
       '</div>';
     }).join('');
-    return '<div class="pa-bank"><span>UNSPENT</span><b>' + fmt(avail) + '</b><em>ascension point' + (avail === 1 ? '' : 's') + ' · ' + fmt(p.spent | 0) + ' invested</em></div>' +
+    return '<div class="pa-bank"><span>UNSPENT</span><b>' + fmt(avail) + '</b><em>ascension point' + (avail === 1 ? '' : 's') + ' · ' + fmt(spentFromRanks()) + ' invested</em></div>' +
       '<p class="pa-note">Perks are <b>permanent</b>. They survive every future ascension and apply to every run from here on. Rank <i>n</i> costs <i>n</i> points.</p>' +
-      '<div class="pa-perks">' + cards + '</div>';
+      '<div class="pa-perks">' + cards + '</div>' + respecCardHTML();
   }
 
   // ---- TAB 3 · LOOT TIERS ----------------------------------------------------
@@ -568,8 +596,103 @@
     if (body.querySelector('#pa-sc-clock')) startCountdown();
     body.querySelectorAll('[data-patab]').forEach((b) => b.onclick = () => { tab = b.dataset.patab; render(); });
     body.querySelectorAll('[data-perk]').forEach((b) => b.onclick = () => buyPerk(b.dataset.perk));
+    const rs = $('pa-respec'); if (rs) rs.onclick = respecFlow;
     const go = $('pa-begin'); if (go) go.onclick = ascendFlow;
     const go2 = $('pa-begin2'); if (go2) go2.onclick = ascendFlow;
+  }
+
+  // ---- PERK RESPEC — 10,000 LootCoins ----------------------------------------
+  // Refunds every point invested in perks so it can be spent again. Deliberately
+  // heavy: perks are permanent and ride every future ascension, so re-picking
+  // them is a real decision and the price says so.
+  //
+  // BUG-PROOFING, in the order the failures would actually happen:
+  //   · ONE AT A TIME. `_respecBusy` stops a double-tap (or a second tab) from
+  //     charging twice — the confirm sheet is async, so the window is real.
+  //   · NOTHING TO REFUND, NOTHING TO CHARGE. A player with no ranks cannot be
+  //     sold a reset that does nothing.
+  //   · CHARGE ONLY AFTER THE BALANCE IS RE-CHECKED. The sheet can sit open while
+  //     LootCoins are spent elsewhere, so affordability is tested again at the
+  //     moment of the write, not when the button was drawn.
+  //   · Math.floor(Number(x) || 0) on the balance, never `| 0` — a wallet past
+  //     2.1 billion wraps NEGATIVE through a bitwise coercion and the check would
+  //     pass for someone who is rich rather than poor.
+  //   · THE WRITE IS ORDERED: take payment, zero the perks, then bank the refund.
+  //     If anything threw between steps the player would be left with fewer perks
+  //     and no points, so the whole mutation is synchronous with no awaits in it.
+  //   · `spent` is reset to 0 because the ranks it described are gone — leaving a
+  //     stale figure there is what would make a SECOND respec refund phantom
+  //     points.
+  let _respecBusy = false;
+  function respecCost() { return RESPEC_LC; }
+  function canRespec() {
+    const p = st(); if (!p) return { ok: false, why: 'none' };
+    if (spentFromRanks() <= 0) return { ok: false, why: 'nothing' };
+    const bal = Math.floor(Number(G().state.credits) || 0);
+    if (bal < RESPEC_LC) return { ok: false, why: 'credits', short: RESPEC_LC - bal };
+    return { ok: true };
+  }
+  function doRespec() {
+    if (_respecBusy) return false;
+    const p = st(); if (!p) return false;
+    const refund = spentFromRanks();
+    if (refund <= 0) { toast('No perk points to reset'); return false; }
+    const g = G();
+    const bal = Math.floor(Number(g.state.credits) || 0);
+    if (bal < RESPEC_LC) { toast('Need ◈ ' + lc(RESPEC_LC - bal) + ' more LootCoins'); return false; }
+    _respecBusy = true;
+    try {
+      g.state.credits = bal - RESPEC_LC;      // paid
+      p.perks = {};                            // ranks cleared
+      p.pts = Math.max(0, Math.floor(Number(p.pts) || 0)) + refund;   // banked
+      p.spent = 0;                             // the tally the ranks described is gone
+      try { g.refreshStats(); } catch (e) {}
+      try { g.save(); } catch (e) {}
+      try { if (window.ACCOUNT && window.ACCOUNT.flushNow) window.ACCOUNT.flushNow(); } catch (e) {}
+      if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+      render();
+      toast('✦ ' + fmt(refund) + ' ascension point' + (refund === 1 ? '' : 's') + ' returned — respend them freely');
+      return true;
+    } finally { _respecBusy = false; }
+  }
+  function respecFlow() {
+    const c = canRespec();
+    if (!c.ok) {
+      if (c.why === 'nothing') toast('You have no perk ranks to reset');
+      else if (c.why === 'credits') toast('Need ◈ ' + lc(c.short) + ' more LootCoins');
+      return;
+    }
+    const refund = spentFromRanks();
+    const ranks = (() => { const p = st(); let n = 0; for (const k in p.perks) n += Math.max(0, Math.floor(Number(p.perks[k]) || 0)); return n; })();
+    const body = 'Every perk drops to <b>rank 0</b> and <b>' + fmt(refund) + '</b> ascension point'
+      + (refund === 1 ? '' : 's') + ' return to your bank, ready to spend again.'
+      + '<br><br>You are clearing <b>' + fmt(ranks) + '</b> rank' + (ranks === 1 ? '' : 's')
+      + ' across your perks. Your <b>stars, loot tiers and Pilot Tree are untouched</b> — this resets perks only.'
+      + '<br><br>Cost: <b style="color:#ffd66a">◈ ' + lc(RESPEC_LC) + ' LootCoins</b>. Not refundable.';
+    if (window.SOCIAL && window.SOCIAL.confirmSheet) window.SOCIAL.confirmSheet('Reset every perk?', body, doRespec);
+    else if (window.confirm('Reset every perk for ' + RESPEC_LC + ' LootCoins? ' + refund + ' points are returned.')) doRespec();
+  }
+
+  // The respec offer sits at the FOOT of the perks tab, not the top: it is the
+  // thing you want after you have read your build, not before.
+  // MONEY IS PRINTED EXACTLY, NEVER ABBREVIATED. fmt() is formatNum(), which
+  // renders 9,999 · 10,000 · 10,001 all as "10K" — so a player one coin short read
+  // "you hold 10K — 10K · 1 short" on the same card, and someone who COULD afford
+  // it could not tell from the button. Every other purchase surface in the game
+  // prints the true figure; this one now does too.
+  const lc = (n) => Math.floor(Number(n) || 0).toLocaleString();
+  function respecCardHTML() {
+    const refund = spentFromRanks();
+    if (refund <= 0) return '';
+    const bal = Math.floor(Number(G().state.credits) || 0);
+    const afford = bal >= RESPEC_LC;
+    return '<div class="pa-respec">' +
+      '<div class="pa-rs-h">⟳ RESET PERKS</div>' +
+      '<p class="pa-rs-s">Return all <b>' + fmt(refund) + '</b> invested point' + (refund === 1 ? '' : 's') +
+        ' to your bank and pick a different build. Stars, loot tiers and the Pilot Tree are untouched.</p>' +
+      '<button class="pa-rs-go' + (afford ? '' : ' cant') + '" id="pa-respec">◈ ' + lc(RESPEC_LC) + ' LootCoins</button>' +
+      (afford ? '' : '<div class="pa-rs-need">You hold ◈ ' + lc(bal) + ' — ' + lc(RESPEC_LC - bal) + ' short</div>') +
+    '</div>';
   }
 
   function buyPerk(k) {

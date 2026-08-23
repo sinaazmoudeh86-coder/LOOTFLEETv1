@@ -343,7 +343,41 @@ end $$;
 revoke all on function public.koth_crown_override(int, uuid, bigint, text) from public;
 
 -- ---------------------------------------------------------------------------
--- 8 · VERIFY — exactly one koth_bump, and it must be the numeric/bigint one
+-- 8 · THE CROWN LOG — koth_hall_days()
+-- ---------------------------------------------------------------------------
+-- WHY THIS EXISTS. koth.sql shipped koth_hall_top() as ONE ROW PER CROWNED DAY
+-- (day, name, kills, ship, closed_at) and the Hall of Kings screen was built to
+-- render exactly that. new-ladders.sql (build 688) then DROPPED it and created a
+-- different function under the same name — one row per PLAYER, lifetime crowns
+-- (rank, user_id, name, wins, kills, last_day). The migration ran; the client
+-- was never told.
+--
+-- So every Hall row has been reading `r.day` and `r.ship` off an object that has
+-- neither. `undefined | 0` is 0, and `new Date(0)` west of UTC is 31 Dec 1969 —
+-- which is why the board showed a plausible-looking "Dec 31" against every crown
+-- instead of an obviously missing value. The kills column was quietly wrong too:
+-- it was printing each pilot's LIFETIME total across every crown they hold, on a
+-- screen captioned as the record of individual days.
+--
+-- Both boards are worth having, so this adds the day log back under its own name
+-- rather than fighting over koth_hall_top(). koth_hall_top() keeps the lifetime
+-- standings new-ladders.sql defined; koth_hall_days() is the per-day record the
+-- Hall of Kings actually wants. A NEW NAME, not an overload — see the koth_bump
+-- and lb_upsert notes: `create or replace` cannot replace a function whose
+-- argument types differ, it just adds a second copy.
+drop function if exists public.koth_hall_days(int);
+create or replace function public.koth_hall_days(p_n int default 14)
+returns table (day int, name text, kills bigint, ship text, entrants int, closed_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select h.day, h.name, h.kills::bigint, h.ship, h.entrants, h.closed_at
+    from public.koth_hall h
+   order by h.day desc
+   limit greatest(1, least(coalesce(p_n, 14), 60))
+$$;
+grant execute on function public.koth_hall_days(int) to authenticated, anon;
+
+-- ---------------------------------------------------------------------------
+-- 9 · VERIFY — exactly one koth_bump, and it must be the numeric/bigint one
 -- ---------------------------------------------------------------------------
 do $$
 declare n int;

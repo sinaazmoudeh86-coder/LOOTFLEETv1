@@ -106,6 +106,37 @@
     else if (ms < 20 && GOV.lvl < 1) GOV.lvl = Math.min(1, GOV.lvl + 0.06);
   }
   const govCap = (n, min) => Math.max(min, Math.round(n * GOV.lvl));
+  // ---- THE RUN'S OWN FLIGHT RECORDER ----------------------------------------
+  // "Cargo Defense is laggy" is not something you can act on, and this module has
+  // already had several rounds of speculative optimisation (viewport culling,
+  // cached gradients, pre-rendered ring/void sprites, no shadowBlur, a frame
+  // governor). Another guess is not worth a release. So the run records itself:
+  // one row every two seconds with the frame time, what the governor did about
+  // it, and the population of every array that could be the cause.
+  //
+  // It costs one push per two seconds and nothing per frame. Read it after a run
+  // with CARGORUN.trace() in the console — or CARGORUN.worst() for the ten
+  // slowest samples, which is the actual question.
+  const TRACE_EVERY = 2, TRACE_MAX = 400;
+  function traceTick(dt, rt) {
+    run.traceT -= dt;
+    if (run.traceT > 0) return;
+    run.traceT = TRACE_EVERY;
+    if (run.trace.length >= TRACE_MAX) run.trace.shift();
+    run.trace.push({
+      t: Math.round(run.t),
+      ms: Math.round((rt._fdt || 0) * 10000) / 10,   // smoothed frame time, ms
+      gov: Math.round(GOV.lvl * 100) / 100,
+      hostiles: run.refs.length,
+      rings: run.rings.length,
+      voids: run.voids.length,
+      proj: (rt.projectiles || []).length,
+      parts: (rt.particles || []).length,
+      floats: (rt.floats || []).length,
+      ground: (rt.ground || []).length,
+      speed: (G().state.gameSpeed || 1),
+    });
+  }
   const RING_BURN = 1.0;      // seconds the collapse burns after the fuse runs out
   // THE RINGS ARE THE PILOT'S PROBLEM, NOT THE FREIGHTER'S. They never target the
   // cargo and never damage it: the freighter cannot dodge, so a ring that could
@@ -135,6 +166,8 @@
   const settling = () => !!(run && perf() - run.wall0 < SETTLE_MS);
 
   let run = null;
+  // The flight recorder outlives the run — you read it AFTER the freighter lands.
+  let _lastTrace = null;
 
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const perf = () => (window.performance && performance.now ? performance.now() : Date.now());
@@ -243,6 +276,7 @@
       x0: rt.worldW / 2, y0: rt.worldH - 150, y1: 130,
       cargo: { x: rt.worldW / 2, y: rt.worldH - 150, size: CARGO_SIZE[cfg.tier] || 56, dead: false, hitT: 0 },
       voids: [], refs: [], rings: [], sboss: null, ringT: 4, bossRingT: 0, spawnT: 3, uiT: 0, refsT: 0, bossUp: false, warned: {},
+      trace: [], traceT: 0,
       wall0: perf(),
       prevSpeed: (g.state.gameSpeed || 1),
       prevAuto: (g.getAuto ? g.getAuto() : null),
@@ -274,6 +308,7 @@
     if (run.zone !== (G().state.currentDungeon | 0)) return settle(false, 'left');
 
     govTick(dt, rt._fdt);
+    traceTick(dt, rt);
     run.t += dt;
     run.prog = clamp(run.t / RUN_S, 0, 1);
 
@@ -1041,6 +1076,7 @@
     };
     removeWarbar();
     unlockControls(r.prevAuto);
+    _lastTrace = r.trace || null;
     run = null;
     const g = G();
     try { if (r.prevSpeed && r.prevSpeed !== 1) g.setGameSpeed(r.prevSpeed); } catch (e) {}
@@ -1075,6 +1111,10 @@
   }
 
   window.CARGORUN = { startRun, engineTick, engineRender, onDeath, warm, RUN_S, active: () => !!run,
+    // Diagnostics for the frame-time review. trace() is the whole run; worst() is
+    // the ten slowest frames, which is where the answer lives.
+    trace: () => (run ? run.trace.slice() : (_lastTrace || [])),
+    worst: (n) => (run ? run.trace : (_lastTrace || [])).slice().sort((a, b) => b.ms - a.ms).slice(0, n || 10),
     sample: () => (run ? { r: run.rings.length, v: run.voids.length, e: run.refs.length } : 0) };
 
   const CSS = `

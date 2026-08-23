@@ -31,7 +31,11 @@
     // FORTUNE LATTICE perk: lifts every above-common weight
     const perk = (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('rare') : 1;
     return C.RARITY.map((r) =>
-      r.tier > cap ? 0
+      // A DORMANT TIER NEVER ENTERS THE ROLL. Reserved entries are defined so the
+      // ladder has somewhere to grow and so a save written against one later
+      // still lines up — they are not obtainable until they are switched on.
+      r.dormant ? 0
+        : r.tier > cap ? 0
         : r.tier === 0 ? r.weight
         : r.weight * Math.pow(luck, r.tier) / Math.pow(TIER_DAMPEN, r.tier) * perk * (r.tier >= TT ? top : 1)
     );
@@ -118,6 +122,24 @@
     { key: 'support', name: 'Warden Array',     glyph: '✚', color: '#7ce0a0',
       bonus: 'Fleet Heal & Buffs',
       blurb: 'Support emitter array. Projects a fleet-wide aura: extra Multi-Shot, hull recovery, damage reduction and weapon range. Mounts ONLY on the Aegis support hull.' },
+    // ---- AEGIS FIELD PROJECTORS ------------------------------------------
+    // Large-radius battlefield auras. Like the Warden Array these mount ONLY on
+    // the Aegis (canMountWeapon refuses them anywhere else) — the support hull's
+    // whole identity is that it changes the space around the fleet rather than
+    // out-shooting anything. Behaviour and magnitudes live in js/aegis-auras.js;
+    // this table is only what the loot system needs to roll and name one.
+    { key: 'venom', name: 'Venom Lattice', glyph: '☣', color: '#b45cff', aura: 1,
+      bonus: 'Hostiles Take +Damage',
+      blurb: 'Projects a hanging violet haze. Everything hostile inside it takes more damage from every source — yours, your wing\'s, anyone\'s. Mounts ONLY on the Aegis.' },
+    { key: 'cryo', name: 'Cryo Field', glyph: '❄', color: '#5fd1ff', aura: 1,
+      bonus: 'Hostiles Slowed',
+      blurb: 'A lattice of supercooled particles. Hostile drives seize inside the field and everything crawls. Mounts ONLY on the Aegis.' },
+    { key: 'banner', name: 'Banner Array', glyph: '➤', color: '#ffb03a', aura: 1,
+      bonus: '+Fleet Damage',
+      blurb: 'A command resonance your wing fights inside. Every hull you own hits harder, and the bonus counts toward your Fleet Score. Mounts ONLY on the Aegis.' },
+    { key: 'plague', name: 'Plague Emitter', glyph: '☠', color: '#7ce06a', aura: 1,
+      bonus: 'Hostiles Slowed & Rotting',
+      blurb: 'A creeping bio-corrosive bloom. Hostiles inside slow down and take damage every second they stay. Mounts ONLY on the Aegis.' },
     // FIGHTER BAY — a launch rack, not a gun. It is registered here beside the
     // cannons on purpose: a squadron is an ordinary Cannon-slot item and rides the
     // whole existing pipeline (drops, rarity, rerolls, salvage, auto-equip, saves).
@@ -298,7 +320,7 @@
   // a legacy cannon onto it would make gear the player is already flying
   // unmountable and project a fleet aura nobody rolled. New drops still roll it
   // — they carry an explicit `wclass`, which is read above.
-  const HASH_CLASSES = WEAPON_CLASSES.filter((w) => w.key !== 'fighter' && w.key !== 'support');
+  const HASH_CLASSES = WEAPON_CLASSES.filter((w) => w.key !== 'fighter' && w.key !== 'support' && !w.aura);
   function weaponClassOf(item) {
     const wc = item && item.wclass;
     const bay = !!(item && item.slot === 'fighter');
@@ -334,7 +356,13 @@
   // `fighter` is deliberately absent: it is not a cannon class a bow can roll,
   // it is the class every FIGHTER-slot item has. Bays reach the loot table
   // through SLOT_KEYS instead, like any other fitting.
-  const WCLASS_WEIGHTS = { laser: 1, gatling: 1, missile: 1, rail: 1, plasma: 0.75, support: 1 };
+  // AEGIS classes roll at half weight: they are hull-locked, so a pilot not flying
+// an Aegis cannot use one, and flooding the table with them would thin every
+// cannon roll for everybody. HASH_CLASSES below already excludes them the same
+// way it excludes 'support' — a legacy item must never hash onto a hull-locked
+// class and become unmountable.
+const WCLASS_WEIGHTS = { laser: 1, gatling: 1, missile: 1, rail: 1, plasma: 0.75, support: 1,
+  venom: 0.5, cryo: 0.5, banner: 0.5, plague: 0.5 };
   function pickWeaponClass() {
     const total = WEAPON_CLASSES.reduce((a, w) => a + (WCLASS_WEIGHTS[w.key] || 1), 0);
     let roll = Math.random() * total;
@@ -361,7 +389,20 @@
   // callers handing out a KNOWN fitting — a Fighter Carrier is delivered with its
   // bays already filled, and it cannot roll for them.
   function generate(dungeon, forceRarity, forceSlot) {
-    const rarityIdx = forceRarity != null ? forceRarity : rollRarity(dungeon);
+    // A FORCED RARITY IS CLAMPED TO THE LIVE CEILING. rollRarity() already
+    // refuses a dormant tier, but every OTHER caller passes forceRarity — boss
+    // showers, crates, the market, admin grants — and the common idiom for "top
+    // of the table" is `RARITY.length - 1`, which now points at a reserved entry.
+    // Clamping here means no path can mint one, and the next reserved tier
+    // appended to the array is protected without touching a single call site.
+    //
+    // This is a DATA guard, not a cosmetic one: an item minted at a dormant tier
+    // persists in the save with that index, and its meaning would change the day
+    // the tier is switched on with a real weight and ascReq.
+    const liveMax = C.liveRarityMax ? C.liveRarityMax() : (C.RARITY.length - 1);
+    const rarityIdx = forceRarity != null
+      ? Math.max(0, Math.min(liveMax, Math.floor(Number(forceRarity) || 0)))
+      : rollRarity(dungeon);
     const rar = C.RARITY[rarityIdx];
     const slotKey = (forceSlot && C.SLOTS[forceSlot]) ? forceSlot : C.SLOT_KEYS[(Math.random() * C.SLOT_KEYS.length) | 0];
     const slot = C.SLOTS[slotKey];

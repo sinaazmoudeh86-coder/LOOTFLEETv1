@@ -436,6 +436,29 @@
   // (rendered into #pilot-body / #dread-body — see ui.js wiring)
   let _filter = null;                       // category highlight filter
   let _selected = null;                     // selected node key on the tree
+  // ---- MAP OR LIST ---------------------------------------------------------
+  // The tree is an INFINITE procedural hex grid with fog: visibleSet() shows the
+  // unlocked nodes plus one ring out, and everything else is a `?` on a dark
+  // field. That makes the canvas a genuinely poor way to SPEND CORES — to find
+  // the node you want you drag an unbounded plane around a small viewport,
+  // squinting at hexes, with no search, no sort by cost, and no way to see what
+  // you already own. It is worse with a mouse than with a thumb.
+  //
+  // So the canvas is no longer the only way in. The same node set is available as
+  // a LIST: searchable, filterable, affordable-first, with the unlock button on
+  // the row. The map stays — it is how the shape of the tree reads, and it is the
+  // better view for planning a route — but nobody has to navigate a plane to
+  // spend a currency. The choice is remembered, because it is a preference about
+  // how someone reads, not a mode they are toggling per visit.
+  let _view = 'map';                        // 'map' | 'list'
+  let _listTab = 'avail';                   // 'avail' | 'owned'
+  let _q = '';                              // list search text
+  try { const v = localStorage.getItem('lf_pltree_view'); if (v === 'list' || v === 'map') _view = v; } catch (e) {}
+  function setView(v) {
+    _view = v;
+    try { localStorage.setItem('lf_pltree_view', v); } catch (e) {}
+    renderPilot();
+  }
   let pan = { x: 0, y: 0 };                  // tree pan offset (px)
   let zoom = 1;                              // tree zoom (0.35–1.8)
   const HEX = 26;                            // hex radius (px) in tree space (zoomed out a touch)
@@ -469,32 +492,47 @@
         '<button class="pl-hunt-mini" id="pl-hunt-btn">☄ Hunt</button>' +
       '</div>' +
       bonusStrip() +
-      '<div class="pl-treewrap">' +
+      '<div class="pl-treewrap' + (_view === 'list' ? ' listing' : '') + '">' +
         '<div class="pl-treebar">' +
           '<span class="pl-treetitle">⬡ Pilot Tree</span>' +
           '<div class="pl-filters">' + ['offense', 'defense', 'utility', 'rare'].map((c) =>
             '<button class="pl-fchip ' + c + (_filter === c ? ' on' : '') + '" data-filter="' + c + '"><i style="background:' + CAT_COL[c] + '"></i>' + c[0].toUpperCase() + c.slice(1) + '</button>').join('') +
           '</div>' +
-          '<button class="pl-recenter" id="pl-zout" title="Zoom out">−</button>' +
-          '<button class="pl-recenter" id="pl-zin" title="Zoom in">+</button>' +
-          '<button class="pl-recenter" id="pl-recenter" title="Recenter">⊙</button>' +
+          '<div class="pl-viewtog" role="group" aria-label="Tree view">' +
+            '<button class="pl-vt' + (_view === 'map' ? ' on' : '') + '" data-view="map" title="Map view">⬡ Map</button>' +
+            '<button class="pl-vt' + (_view === 'list' ? ' on' : '') + '" data-view="list" title="List view">☰ List</button>' +
+          '</div>' +
+          (_view === 'map'
+            ? '<button class="pl-recenter" id="pl-zout" title="Zoom out">−</button>' +
+              '<button class="pl-recenter" id="pl-zin" title="Zoom in">+</button>' +
+              '<button class="pl-recenter" id="pl-recenter" title="Recenter">⊙</button>'
+            : '') +
         '</div>' +
-        '<canvas id="pl-tree" class="pl-tree"></canvas>' +
-        '<div class="pl-hint">Drag to explore · pinch or scroll to zoom · tap a node to inspect</div>' +
+        (_view === 'map'
+          ? '<canvas id="pl-tree" class="pl-tree"></canvas>' +
+            '<div class="pl-hint">Drag to explore · pinch or scroll to zoom · tap a node to inspect</div>'
+          : listHTML()) +
       '</div>' +
-      '<div class="pl-detail" id="pl-detail"></div>' +
+      // NO DETAIL CARD IN LIST VIEW. Every row already carries the node's name,
+      // its effects, ring depth, Pilot Score and its own working unlock button —
+      // the card would repeat all of it. It also cost the list the vertical space
+      // it exists to use: .scr-body on this screen does not scroll, so a pinned
+      // card below a fill pane pushes itself off the bottom of the clip box.
+      (_view === 'map' ? '<div class="pl-detail" id="pl-detail"></div>' : '') +
       coachBlock();
 
     // wire
     $('pl-hunt-btn').addEventListener('click', openHuntScreen);
-    $('pl-recenter').addEventListener('click', () => { pan = { x: 0, y: 0 }; zoom = 1; fitTree(); drawTree(); });
-    const zBtn = (f) => { const nz = Math.max(0.35, Math.min(1.8, zoom * f)); pan.x *= nz / zoom; pan.y *= nz / zoom; zoom = nz; drawTree(); };
-    $('pl-zout').addEventListener('click', () => zBtn(1 / 1.3));
-    $('pl-zin').addEventListener('click', () => zBtn(1.3));
+    body.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+    if (_view === 'map') {
+      $('pl-recenter').addEventListener('click', () => { pan = { x: 0, y: 0 }; zoom = 1; fitTree(); drawTree(); });
+      const zBtn = (f) => { const nz = Math.max(0.35, Math.min(1.8, zoom * f)); pan.x *= nz / zoom; pan.y *= nz / zoom; zoom = nz; drawTree(); };
+      $('pl-zout').addEventListener('click', () => zBtn(1 / 1.3));
+      $('pl-zin').addEventListener('click', () => zBtn(1.3));
+    }
     body.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { _filter = _filter === b.dataset.filter ? null : b.dataset.filter; renderPilot(); }));
     body.querySelectorAll('[data-coach]').forEach((b) => b.addEventListener('click', () => { _coachOpen = !_coachOpen; renderPilot(); }));
-    setupTree();
-    renderDetail();
+    if (_view === 'map') { setupTree(); renderDetail(); } else wireList();
   }
 
   function bonusStrip() {
@@ -502,6 +540,125 @@
     if (!chips.length) return '<div class="pl-bonuses empty">No bonuses yet — unlock your first node below.</div>';
     return '<div class="pl-bonuses">' + chips.map((c) =>
       '<span class="pl-bchip"><b>+' + (Math.round(c.value * 10) / 10) + c.unit + '</b> ' + c.label + '</span>').join('') + '</div>';
+  }
+
+  // ---- LIST VIEW -----------------------------------------------------------
+  // The same nodes the canvas draws, as rows you can search and sort. Two tabs,
+  // because they answer two different questions: AVAILABLE is "what can I buy"
+  // (the only actionable set, affordable ones first), OWNED is "what am I already
+  // running". Undiscovered nodes are deliberately absent — the fog is a real rule
+  // of the tree, and a list that showed `?` rows would just be the canvas again
+  // with worse spatial information.
+  const escA = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  function listNodes() {
+    const vis = visibleSet(), avail = [], owned = [];
+    Object.keys(vis).forEach((k) => {
+      const [q, r] = parseKey(k);
+      const d = nodeDef(q, r);
+      d.key = k;
+      if (isUnlocked(k)) { if (!d.core) owned.push(d); }
+      else if (isUnlockable(q, r)) avail.push(d);
+    });
+    const afford = (d) => cores() >= d.cost;
+    avail.sort((a, b) => (afford(b) - afford(a)) || (a.cost - b.cost) || (b.score - a.score));
+    owned.sort((a, b) => ((a.ring | 0) - (b.ring | 0)) || a.label.localeCompare(b.label));
+    return { avail, owned };
+  }
+  function effSummary(d) {
+    const parts = [];
+    if (d.bonus) for (const k in d.bonus) parts.push('+' + (Math.round(d.bonus[k] * 10) / 10) + (k === 'regen' ? '%/s' : '%') + ' ' + effLabel(k));
+    if (d.special === 'coreLuck') parts.push('✦ bonus Dread Core chance');
+    return parts.join(' · ') || '—';
+  }
+  function matches(d) {
+    if (_filter && d.cat !== _filter) return false;
+    if (!_q) return true;
+    const hay = (d.label + ' ' + d.cat + ' ' + effSummary(d)).toLowerCase();
+    return hay.indexOf(_q.toLowerCase()) !== -1;
+  }
+  const LIST_CAP = 80;
+  function listRowsHTML() {
+    const sets = listNodes();
+    const all = _listTab === 'owned' ? sets.owned : sets.avail;
+    const rows = all.filter(matches);
+    if (!rows.length) {
+      const why = _q ? 'Nothing matches “' + escA(_q) + '”.'
+        : _filter ? 'No ' + _filter + ' nodes in this list.'
+        : _listTab === 'owned' ? 'No nodes unlocked yet — your first one is waiting on the Available tab.'
+        : 'Nothing available. Unlock an adjacent node to open the next ring.';
+      return '<div class="pl-lempty">' + why + '</div>';
+    }
+    const shown = rows.slice(0, LIST_CAP);
+    let out = shown.map((d) => {
+      const col = CAT_COL[d.cat] || '#8aa';
+      const own = _listTab === 'owned';
+      const can = !own && cores() >= d.cost;
+      const act = own
+        ? '<span class="pl-ldone">✓</span>'
+        : '<button class="pl-lgo' + (can ? '' : ' cant') + '" data-unlock="' + d.key + '">◇ ' + d.cost + '</button>';
+      return '<div class="pl-lrow' + (_selected === d.key ? ' on' : '') + (own ? ' own' : '') + '" data-node="' + d.key + '" tabindex="0" role="button" style="--c:' + col + '">' +
+        '<span class="pl-lic">' + catGlyph(d) + '</span>' +
+        '<span class="pl-lmain">' +
+          '<span class="pl-ln">' + escA(d.label) + (d.rare ? ' <em>LEGENDARY</em>' : '') + '</span>' +
+          '<span class="pl-lb">' + escA(effSummary(d)) + '</span>' +
+        '</span>' +
+        '<span class="pl-lmeta"><i>RING ' + (d.ring | 0) + '</i><b>+' + (d.score | 0) + '</b></span>' +
+        act +
+      '</div>';
+    }).join('');
+    if (rows.length > shown.length) out += '<div class="pl-lmore">Showing ' + shown.length + ' of ' + rows.length + ' — search or filter to narrow.</div>';
+    return out;
+  }
+  function listHTML() {
+    const sets = listNodes();
+    const nAv = sets.avail.filter(matches).length, nOw = sets.owned.length;
+    const affordable = sets.avail.filter((d) => cores() >= d.cost).length;
+    return '<div class="pl-list">' +
+      '<div class="pl-lbar">' +
+        '<input id="pl-search" class="pl-search" type="search" autocomplete="off" placeholder="Search nodes, stats…" value="' + escA(_q) + '">' +
+        '<div class="pl-ltabs">' +
+          '<button class="pl-lt' + (_listTab === 'avail' ? ' on' : '') + '" data-ltab="avail">Available · ' + nAv + '</button>' +
+          '<button class="pl-lt' + (_listTab === 'owned' ? ' on' : '') + '" data-ltab="owned">Owned · ' + nOw + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pl-lnote">◇ <b>' + fmt(cores()) + '</b> Dread Cores · ' + (affordable
+          ? '<b>' + affordable + '</b> node' + (affordable === 1 ? '' : 's') + ' you can afford right now'
+          : 'not enough for anything on the frontier — clear a Dreadnaught') + '</div>' +
+      '<div class="pl-lrows" id="pl-lrows">' + listRowsHTML() + '</div>' +
+    '</div>';
+  }
+  function repaintRows() { const h = $('pl-lrows'); if (h) h.innerHTML = listRowsHTML(); wireRows(); }
+  function wireRows() {
+    const h = $('pl-lrows'); if (!h) return;
+    h.querySelectorAll('[data-unlock]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const [q, r] = parseKey(b.dataset.unlock);
+      const d = nodeDef(q, r);
+      if (unlock(q, r)) { _aggDirty = true; _selected = b.dataset.unlock; banner('NODE UNLOCKED', d.label, CAT_COL[d.cat]); renderPilot(); }
+      else toast('Need ◇ ' + (d.cost - cores()) + ' more Dread Cores');
+    }));
+    const sel = (el) => { _selected = el.dataset.node; repaintRows(); };
+    h.querySelectorAll('[data-node]').forEach((el) => {
+      el.addEventListener('click', () => sel(el));
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sel(el); } });
+    });
+  }
+  function wireList() {
+    // The search repaints ONLY the rows. Re-rendering the whole screen on every
+    // keystroke would rebuild the input and throw away focus and caret position.
+    const s = $('pl-search');
+    if (s) s.addEventListener('input', () => {
+      _q = s.value || '';
+      repaintRows();
+      const t = document.querySelector('[data-ltab="avail"]');
+      if (t) t.textContent = 'Available · ' + listNodes().avail.filter(matches).length;
+    });
+    document.querySelectorAll('[data-ltab]').forEach((b) => b.addEventListener('click', () => {
+      _listTab = b.dataset.ltab;
+      document.querySelectorAll('[data-ltab]').forEach((x) => x.classList.toggle('on', x === b));
+      repaintRows();
+    }));
+    wireRows();
   }
 
   // ---- tree canvas ----
@@ -876,7 +1033,7 @@
     // bonus readout — shared by the Pilot screen strip and the Pilot Skills page
     bonuses: ensureAgg, bonusList, nodeCount, unlockLevel: UNLOCK_LEVEL,
     // helpers / debug
-    pilotScore, canHunt, levelForTier, _dbg: { nodeDef, ensureAgg, unlock },
+    pilotScore, rankFor, canHunt, levelForTier, _dbg: { nodeDef, ensureAgg, unlock },
   };
 
   // ---- CSS string ----------------------------------------------------------
@@ -915,7 +1072,17 @@
   #dread-banner .db-s{ font-family:'Rajdhani',sans-serif; font-weight:600; font-size:12.5px; letter-spacing:.05em; color:var(--dbc); margin-top:4px; text-shadow:0 1px 6px #000; }
 
   /* ===== PILOT SCREEN ===== */
-  #pilot-body{ padding:10px 12px; display:flex; flex-direction:column; gap:9px; height:100%; min-height:0; overflow:hidden; }
+  /* THIS BODY SCROLLS. It used to declare height:100% + overflow:hidden, which
+     overrode the base .scr-body overflow-y:auto every other screen uses — so on
+     a short window (a ~450px-tall landscape browser, a split-screen tablet) the
+     fill pane below took the remaining height and pushed .pl-detail and
+     .pl-coach past the clip edge with NO WAY TO SCROLL TO THEM. .pl-detail
+     carries the Unlock button, so tapping a node on the canvas produced an
+     action the player could not reach. That is exactly what the fit contract in
+     CLAUDE.md forbids: a short viewport must SCROLL, never crush.
+     min-height:0 stays — it is what lets this flex child shrink so the scroll
+     actually engages. */
+  #pilot-body{ padding:10px 12px; display:flex; flex-direction:column; gap:9px; min-height:0; overflow-y:auto; overflow-x:hidden; }
   #dread-body{ padding:12px; }
   /* thin pilot bar */
   .pl-hero{ display:flex; align-items:center; gap:10px; flex:none; background:linear-gradient(90deg,#1a1016,#140b12);
@@ -950,6 +1117,52 @@
   .pl-tree{ display:block; width:100%; flex:1 1 auto; min-height:0; touch-action:none; cursor:grab; }
   .pl-tree:active{ cursor:grabbing; }
   .pl-hint{ font-size:10.5px; color:#7e8aa0; text-align:center; padding:7px 8px; border-top:1px solid #1c2530; }
+
+  /* ---- MAP / LIST toggle + the list itself -------------------------------- */
+  .pl-viewtog{ display:inline-flex; flex:none; border:1px solid #25303f; border-radius:9px; overflow:hidden; background:#0d141e; }
+  .pl-vt{ font:800 10px/1 'Rajdhani',sans-serif; letter-spacing:.08em; color:#8b9bb0; background:none; border:none; padding:6px 9px; cursor:pointer; min-height:30px; }
+  .pl-vt.on{ color:#0b0f18; background:#ffd0d4; }
+  /* NO min-height OVERRIDE HERE. .scr-body on the Pilot screen does not scroll,
+     so this pane must shrink to whatever room is left exactly like the canvas
+     does — pinning it taller pushes it and every sibling past the clip edge.
+     The list gets its room from the detail card not being rendered in this view. */
+  .pl-list{ display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+  .pl-lbar{ display:flex; align-items:center; gap:7px; padding:8px 9px; border-bottom:1px solid #1c2530; flex-wrap:wrap; }
+  .pl-search{ flex:1 1 130px; min-width:0; background:#0d141e; border:1px solid #25303f; border-radius:9px; color:#e7f0fa;
+    font:600 12px/1 'Rajdhani',sans-serif; padding:8px 10px; min-height:34px; }
+  .pl-search:focus{ outline:none; border-color:#4a5a70; box-shadow:0 0 0 1px rgba(255,255,255,.08) inset; }
+  .pl-search::placeholder{ color:#6d7d92; }
+  .pl-ltabs{ display:inline-flex; flex:none; border:1px solid #25303f; border-radius:9px; overflow:hidden; }
+  .pl-lt{ font:800 10px/1 'Rajdhani',sans-serif; letter-spacing:.06em; color:#8b9bb0; background:#0d141e; border:none; padding:8px 10px; cursor:pointer; min-height:34px; }
+  .pl-lt.on{ color:#0b0f18; background:#9fb3c9; }
+  .pl-lnote{ font-size:11px; color:#8ba0b5; padding:7px 10px; border-bottom:1px solid #1c2530; background:#0d131c; }
+  .pl-lnote b{ color:#ffd24d; }
+  .pl-lrows{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:1px; padding:1px; }
+  .pl-lrow{ display:grid; grid-template-columns:34px minmax(0,1fr) auto auto; align-items:center; gap:10px;
+    padding:9px 10px; min-height:52px; background:#0d141e; border-left:3px solid var(--c); cursor:pointer; text-align:left; }
+  .pl-lrow:hover{ background:#111a26; }
+  .pl-lrow.on{ background:#152030; box-shadow:0 0 0 1px rgba(255,255,255,.12) inset; }
+  .pl-lrow.own{ opacity:.72; }
+  .pl-lrow:focus-visible{ outline:2px solid #7fb2ff; outline-offset:-2px; }
+  .pl-lic{ width:34px; height:34px; display:grid; place-items:center; border-radius:9px; font-family:'Orbitron',sans-serif; font-size:14px; font-weight:800;
+    color:var(--c); background:color-mix(in srgb,var(--c) 16%,#0b0f18); border:1px solid color-mix(in srgb,var(--c) 55%,#0b0f18); }
+  .pl-lmain{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .pl-ln{ font-family:'Orbitron',sans-serif; font-size:12.5px; font-weight:800; color:#e7f0fa; line-height:1.2; }
+  .pl-ln em{ font-style:normal; font-family:'Rajdhani',sans-serif; font-size:8.5px; font-weight:800; letter-spacing:.14em; color:#0b0f18; background:#ffcf4d; border-radius:4px; padding:2px 4px; vertical-align:middle; }
+  .pl-lb{ font-size:11px; color:#9fb0c4; line-height:1.35; text-wrap:pretty; }
+  .pl-lmeta{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex:none; }
+  .pl-lmeta i{ font-style:normal; font:800 8.5px/1 'Rajdhani',sans-serif; letter-spacing:.12em; color:#6d7f95; }
+  .pl-lmeta b{ font-family:'Orbitron',sans-serif; font-size:11px; font-weight:800; color:#8ba0b5; }
+  .pl-lgo{ flex:none; min-height:44px; min-width:56px; font:800 11.5px/1 'Orbitron',sans-serif; color:#0b0f18; background:#ffd24d;
+    border:none; border-radius:9px; padding:9px 10px; cursor:pointer; }
+  .pl-lgo.cant{ color:#8ba0b5; background:#141c28; border:1px solid #2a3648; }
+  .pl-ldone{ flex:none; width:56px; text-align:center; color:#7ce0a0; font-weight:800; font-size:14px; }
+  .pl-lempty,.pl-lmore{ padding:16px 12px; text-align:center; font-size:11.5px; color:#8ba0b5; line-height:1.5; text-wrap:pretty; }
+  @media (max-width:400px){
+    .pl-lrow{ grid-template-columns:30px minmax(0,1fr) auto; gap:8px; padding:8px; }
+    .pl-lmeta{ display:none; }
+    .pl-lic{ width:30px; height:30px; font-size:12.5px; }
+  }
 
   .pl-detail{ margin-top:0; flex:none; }
   .pl-detail-empty{ font-size:12px; color:#8a93a6; text-align:center; padding:14px; background:#101725; border:1px dashed #26303f; border-radius:12px; }

@@ -43,7 +43,10 @@
     // .sheet-body — it is #mega .mega-grid — so the one screen with fourteen
     // stacked cards on a phone was the one screen this auditor never looked at.
     // That is where the clipped Pilot Ascension title lived, unflagged.
-    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid').forEach((root) => {
+    // The Pilot Tree LIST is a scroll root of its own (build 712): it lives inside
+    // a deliberate fill pane (.pl-treewrap), so its rows are not children of the
+    // .scr-body the auditor walks from, and nothing inside it would be inspected.
+    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid, .screen.active .pl-lrows').forEach((root) => {
       if (seen.has(root)) return; seen.add(root);
       const els = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
       for (const el of els) {

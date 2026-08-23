@@ -432,6 +432,18 @@ html, body{ height:100%; height:100dvh; background:#05070d; overscroll-behavior:
 /* ===== COSMETICS market ===== */
 .wci{ font-size:21px; line-height:1; font-weight:400; }
 .sci{ display:inline-flex; align-items:center; justify-content:center; line-height:0; }
+/* EVERY ICON SVG IN THE GAME IS AUTHORED WITH A viewBox AND NO width/height.
+   An inline <svg> with no intrinsic size and no CSS size falls back to the
+   replaced-element default of 300x150 — so anywhere a container did not happen
+   to size it itself, the icon silently claimed the whole row. That is what hid
+   the item NAME on every weapon and fighter chip in the fleet Loadouts list:
+   the chip is a flex row, the 300px-wide svg took all of it, and .flc-n was
+   squeezed to zero width by its own overflow:hidden.
+   Sizing it HERE fixes it once, at the single wrapper all of them pass through.
+   1em rather than a fixed px so the icon tracks its context's font-size exactly
+   as the .wci glyph fallback it replaced did; containers that want a specific
+   size (.jkr-ic, .wcx) still override on source order. */
+.sci svg{ width:1em; height:1em; flex:none; }
 .cred-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 8px;
   background:linear-gradient(180deg,#161f2d,#10172333); border:1px solid var(--line-2); border-radius:11px; padding:9px 12px; }
 .cred-have{ font-size:12.5px; color:#c8b4ff; font-weight:700; }
@@ -695,7 +707,99 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 .lo-ship .lo-sn{ font-size:8.5px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 .lo-ship .lo-st{ font-size:7.5px; font-weight:800; letter-spacing:.05em; color:var(--muted-2); }
 .lo-ship.flag .lo-st{ color:var(--gold); }
+/* GRAPHICS QUALITY — a three-way segmented control in ⚙ Account. Sized as a
+   real touch target: this is the control a player reaches for when the game is
+   already stuttering, so it must not need a precise tap. */
+.gfx-seg{ display:grid; grid-template-columns:repeat(3,1fr); gap:0; border:1px solid #25303f; border-radius:11px; overflow:hidden; background:#0d141e; }
+.gfx-opt{ font-family:var(--font-display); font-size:11.5px; font-weight:800; letter-spacing:.06em; color:#8b9bb0;
+  background:none; border:none; border-right:1px solid #25303f; padding:11px 8px; min-height:44px; cursor:pointer; }
+.gfx-opt:last-child{ border-right:none; }
+.gfx-opt.on{ color:#0b0f18; background:#8fc4ff; }
+.gfx-note{ text-wrap:pretty; }
+
+/* Pure-CSS decoration the tier sheds without a branch in the render path. */
+body.gfx-low #arena-wrap::after{ display:none !important; }
+body.gfx-low .ship-aura,body.gfx-low .cosmetic-aura{ display:none !important; }
+body.gfx-low #game-canvas{ filter:none !important; }
+body.gfx-med #game-canvas{ filter:none !important; }
+
 .lo-sect{ font-family:var(--font-display); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+
+/* PRO — the member banner on the subscription sheet. A paying member taps the
+   pill to be reminded what they bought, so the sheet leads with the fact that it
+   is on, not with a price they have already paid. */
+.pro-active{ display:flex; flex-direction:column; gap:3px; padding:11px 13px; border-radius:12px; margin-bottom:10px;
+  border:1px solid rgba(124,224,160,.45); background:linear-gradient(180deg,rgba(124,224,160,.14),rgba(124,224,160,.05)); }
+.pro-active b{ font-family:var(--font-display); font-size:12px; font-weight:800; letter-spacing:.14em; color:#7ce0a0; }
+.pro-active span{ font-size:11.5px; line-height:1.45; color:var(--muted); text-wrap:pretty; }
+
+/* ===== MY GALAXY — LIST VIEW =====
+   The map answers "where"; the list answers "which". 1,950 tiles across 25
+   rings is not something anyone should have to drag a canvas to search, so the
+   list is sortable, filterable and paginated — and every row opens the SAME
+   tile sheet the map opens, so neither view can grow its own rules. */
+.gx-viewtog{ display:inline-flex; margin:0 0 9px; border:1px solid var(--line-2); border-radius:10px; overflow:hidden; background:#0d141e; }
+.gx-vt{ font-family:var(--font-display); font-size:10.5px; font-weight:800; letter-spacing:.07em; color:#8b9bb0;
+  background:none; border:none; padding:9px 13px; min-height:38px; cursor:pointer; }
+.gx-vt.on{ color:#0b0f18; background:#8fc4ff; }
+
+.gxlist{ display:flex; flex-direction:column; gap:8px; }
+.gxl-bar{ display:flex; gap:7px; flex-wrap:wrap; align-items:stretch; }
+.gxl-q{ flex:1 1 150px; min-width:0; box-sizing:border-box; background:#0d141e; border:1px solid var(--line-2); border-radius:9px; color:var(--text);
+  font:600 12.5px/1.2 var(--font-body,'Rajdhani',sans-serif); padding:10px 11px; min-height:42px; }
+.gxl-q:focus{ outline:none; border-color:#4a5a70; }
+.gxl-q::placeholder{ color:#6d7d92; }
+/* THE SELECT HAS TO BE BOX-SIZED AND FULLY STYLED. Left native it inherits the
+   platform control's own box, which does not match the search field beside it —
+   the two sat at different heights and the arrow overhung the rounded corner. */
+.gxl-sort{ flex:1 1 170px; min-width:0; box-sizing:border-box; background:#0d141e; border:1px solid var(--line-2); border-radius:9px; color:var(--text);
+  font:700 11.5px/1.2 var(--font-body,'Rajdhani',sans-serif); padding:10px 30px 10px 11px; min-height:42px;
+  -webkit-appearance:none; appearance:none; cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,#8ba0b5 50%),linear-gradient(135deg,#8ba0b5 50%,transparent 50%);
+  background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
+.gxl-sort:focus{ outline:none; border-color:#4a5a70; }
+.gxl-sort option{ background:#0d141e; color:var(--text); }
+.gxl-chips{ display:flex; flex-wrap:wrap; gap:5px; }
+.gxlf{ font-size:11px; font-weight:800; letter-spacing:.03em; color:#9fb0c4; background:#121a26;
+  border:1px solid var(--line-2); border-radius:20px; padding:7px 11px; min-height:34px; cursor:pointer; }
+.gxlf.on{ color:#0b0f18; background:#9fccff; border-color:#9fccff; }
+.gxl-count{ font-size:10.5px; color:var(--muted-2); letter-spacing:.04em; }
+
+.gxl-rows{ display:flex; flex-direction:column; gap:4px; }
+.gxr{ display:grid; grid-template-columns:38px minmax(0,1fr) auto auto; align-items:center; gap:9px; width:100%;
+  text-align:left; border:1px solid var(--line-2); border-radius:10px; padding:9px 10px; min-height:52px;
+  background:linear-gradient(180deg,#141c28,#0f1520); cursor:pointer; }
+.gxr:hover{ border-color:#3a4a63; }
+.gxr.mine{ border-left:3px solid #2d78eb; }
+.gxr.target{ border-left:3px solid #ffbe6e; }
+.gxr-ring{ font-family:var(--font-display); font-size:11px; font-weight:800; color:#7d8fa5; text-align:center; }
+.gxr-main{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.gxr-n{ font-size:12.5px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gxr-m{ font-style:normal; margin-left:5px; font-size:11px; }
+.gxr-m.cit{ color:#ffbe6e; } .gxr-m.boss{ color:#ff8a96; } .gxr-m.xen{ color:#c26bff; } .gxr-m.deep{ color:#5fd1ff; }
+.gxr-sub{ font-size:10px; color:var(--muted-2); text-transform:capitalize; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gxr-rate{ font-family:var(--font-display); font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.gxr-rate i{ font-style:normal; font-size:9px; opacity:.6; }
+.gxr-s{ font-style:normal; font-size:9px; font-weight:800; letter-spacing:.08em; border-radius:5px; padding:4px 6px; white-space:nowrap; }
+.gxr-s.mine{ color:#9fccff; background:rgba(45,120,235,.2); }
+.gxr-s.ally{ color:#7ce0a0; background:rgba(70,210,122,.16); }
+.gxr-s.rival{ color:#ff8a96; background:rgba(210,59,78,.18); }
+.gxr-s.open{ color:#cfe0f5; background:rgba(255,255,255,.07); }
+.gxr-s.lock{ color:#7d8fa5; background:rgba(255,255,255,.05); }
+.gxr-s.cd{ color:#ffcf7a; background:rgba(255,190,110,.14); }
+.gxl-empty{ padding:22px 14px; text-align:center; font-size:12px; color:var(--muted); line-height:1.6; text-wrap:pretty; }
+.gxl-empty b{ color:var(--text); }
+.gxl-hint{ display:inline-block; margin-top:6px; font-size:11px; color:var(--muted-2); }
+.gxl-page{ display:flex; align-items:center; justify-content:space-between; gap:9px; padding-top:2px; }
+.gxl-pg{ font-size:11.5px; font-weight:800; color:#cfe0f5; background:#121a26; border:1px solid var(--line-2);
+  border-radius:9px; padding:10px 15px; min-height:40px; cursor:pointer; }
+.gxl-pg:disabled{ opacity:.35; cursor:default; }
+.gxl-pgn{ font-size:11px; font-weight:700; color:var(--muted-2); font-variant-numeric:tabular-nums; }
+@media (max-width:420px){
+  .gxr{ grid-template-columns:30px minmax(0,1fr) auto; gap:7px; padding:8px; }
+  .gxr-rate{ display:none; }
+}
 
 /* per-ship loadout cards — which ship is running which items */
 .fl-title{ font-family:var(--font-display); font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:12px 0 6px; }
@@ -713,7 +817,12 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
   background:#0f1623; }
 .flc:active{ transform:translateY(1px); }
 .flc-ic{ font-size:10px; opacity:.8; flex:none; }
-.flc-n{ font-size:9.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:118px; }
+/* THE NAME TAKES WHAT IS LEFT, and truncates rather than vanishing. It used to
+   be `max-width:118px` with no flex, so anything that over-claimed width beside
+   it (see the unsized-svg note on .sci) collapsed the label to nothing instead
+   of trimming it. min-width:0 is what lets a flex child shrink below its
+   content and actually reach the ellipsis. */
+.flc-n{ font-size:9.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1 1 auto; min-width:0; max-width:118px; }
 .flc.empty{ border-style:dashed; cursor:default; opacity:.55; }
 .flc.empty .flc-n{ color:var(--muted-2); font-weight:600; }
 .fl-hint{ margin-top:6px; font-size:9.5px; color:var(--muted-2); }

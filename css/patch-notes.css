@@ -1,0 +1,22 @@
+/* patch-notes.css — the one-time "what's new" card.
+   Sized so the whole thing reads without scrolling on a desktop, and scrolls
+   cleanly on a phone — the body is the only scroll region, so the heading and
+   the dismiss button are always reachable. Per the fit contract: a short
+   viewport scrolls, it never crushes. */
+#pn-wrap{position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,7,12,.82);backdrop-filter:blur(3px);animation:pnIn .18s ease-out}
+@keyframes pnIn{from{opacity:0}to{opacity:1}}
+.pn-card{display:flex;flex-direction:column;width:100%;max-width:440px;max-height:calc(100vh - 36px);min-height:0;border:1px solid #2b3a52;border-radius:16px;background:linear-gradient(180deg,#141c28,#0d131c);box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden}
+.pn-head{display:flex;align-items:baseline;gap:9px;padding:15px 17px 0}
+.pn-b{font-family:'Orbitron',sans-serif;font-size:16px;font-weight:800;letter-spacing:.04em;color:#fff}
+.pn-t{font-family:'Rajdhani',sans-serif;font-size:9.5px;font-weight:800;letter-spacing:.16em;color:#7d8fa5}
+.pn-sub{padding:5px 17px 0;font-family:'Rajdhani',sans-serif;font-size:12.5px;line-height:1.45;color:#9fb0c4;text-wrap:pretty}
+.pn-body{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:13px 17px 4px;display:flex;flex-direction:column;gap:13px}
+.pn-g{display:flex;flex-direction:column;gap:7px}
+.pn-k{font-family:'Rajdhani',sans-serif;font-size:9.5px;font-weight:800;letter-spacing:.16em;color:var(--c)}
+.pn-r{display:grid;grid-template-columns:20px minmax(0,1fr);gap:9px;align-items:start}
+.pn-r i{font-style:normal;font-size:12px;line-height:1.5;color:var(--c);text-align:center}
+.pn-r span{font-family:'Rajdhani',sans-serif;font-size:12px;line-height:1.45;color:#8fa2b8;text-wrap:pretty}
+.pn-r b{display:block;font-size:12.5px;font-weight:700;color:#e7f0fa}
+.pn-ok{flex:none;margin:13px 17px 15px;padding:13px;min-height:46px;border:none;border-radius:11px;cursor:pointer;font-family:'Orbitron',sans-serif;font-size:12px;font-weight:800;letter-spacing:.1em;color:#0b0f18;background:#8fc4ff}
+.pn-ok:hover{background:#a9d2ff}
+@media (max-width:420px){.pn-card{max-width:none}.pn-head{padding:13px 14px 0}.pn-sub,.pn-body{padding-left:14px;padding-right:14px}.pn-ok{margin:11px 14px 13px}}

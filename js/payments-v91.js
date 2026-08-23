@@ -1,7 +1,7 @@
 /* =============================================================================
    payments.js — Star Collector LOOTCOINS (premium micro-transaction currency)
    ---------------------------------------------------------------------------
-   LootCoins buy hulls, Black Market gear, the 4× speed tier and cosmetics —
+   LootCoins buy hulls, Black Market gear, the premium speed tier and cosmetics —
    they ARE partly power, and the store copy says so plainly (the old "cosmetics
    only, never power" line was simply false). This module defines the packs
    and the checkout hand-off. SAFE BY DEFAULT: until real payment links are
@@ -251,7 +251,8 @@
       _result(false, p ? { credits: p.credits } : {});
     }
   }
-  // LOOTFLEET PRO — $19.99/mo subscription (5× speed + 2× XP). Uses a recurring
+  // LOOTFLEET PRO — $19.99/mo subscription. Every benefit is read from PRO_PERKS
+  // (see _proLabel), never restated here. Uses a recurring
   // Stripe Payment Link under the 'pro_monthly' sku.
   const PRO = { sku: 'pro_monthly', usd: '19.99' };
   function subscribe() { return buy(PRO.sku); }

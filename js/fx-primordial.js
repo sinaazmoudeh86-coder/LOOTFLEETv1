@@ -21,30 +21,46 @@
 (function () {
   'use strict';
 
+  // THE LIGHTNING NOW BELONGS TO THE ASCENSION TIERS (build 712).
+  // It used to crackle on Primordial / Relic / Artifact, which are the top of the
+  // ORDINARY ladder — reachable by anyone deep enough. The three tiers ABOVE them
+  // are ascension-exclusive and cannot drop for an un-ascended pilot at any zone,
+  // from any boss, out of any crate; they were the rarest things in the game and
+  // wore the quieter treatment. The loudest effect goes to the rarest tier.
+  // Primordial/Relic/Artifact inherit the sonar ping the ascension tiers had.
   var SELECTOR = [
     '.flc.flc-arc',
-    '.slot-icon.r-primordial', '.slot-icon.r-relic', '.slot-icon.r-artifact',
-    '.ic-icon.r-primordial', '.ic-icon.r-relic', '.ic-icon.r-artifact',
-    '.sc-ico.r-primordial', '.sc-ico.r-relic', '.sc-ico.r-artifact',
-    '.legend-chip.r-primordial .legend-dot',
-    '.legend-chip.r-relic .legend-dot',
-    '.legend-chip.r-artifact .legend-dot'
+    '.slot-icon.r-ascendant', '.slot-icon.r-celestial', '.slot-icon.r-paragon',
+    '.ic-icon.r-ascendant', '.ic-icon.r-celestial', '.ic-icon.r-paragon',
+    '.sc-ico.r-ascendant', '.sc-ico.r-celestial', '.sc-ico.r-paragon',
+    '.legend-chip.r-ascendant .legend-dot',
+    '.legend-chip.r-celestial .legend-dot',
+    '.legend-chip.r-paragon .legend-dot'
   ].join(', ');
   // per-tier colour identity: primordial = gold/electric, relic = violet,
   // artifact = red. bolts[] cycle per bolt; glowMid/glowOuter feed the core
   // radial; ring is the discharge colour.
   var PALETTES = {
-    primordial: { bolts: ['#ffffff', '#ffe9b0', '#ff9ad8', '#9ad2ff'], glowMid: '255,230,168', glowOuter: '255,154,216', ring: '#ffe6a8' },
-    relic:      { bolts: ['#ffffff', '#e3b9ff', '#c061ff', '#8a4dff'], glowMid: '200,135,255', glowOuter: '138,77,255',  ring: '#c061ff' },
-    artifact:   { bolts: ['#ffffff', '#ffc2b0', '#ff5a4d', '#ff1f2e'], glowMid: '255,120,96',  glowOuter: '255,31,46',   ring: '#ff2d2d' },
+    // Renamed in spirit only — the KEYS stay so paletteFor()'s callers keep working.
+    // Build 712 moved the lightning up to the ascension tiers, so each palette is
+    // repainted to the colour of the tier that now wears it:
+    //   primordial slot → ASCENDANT  #5cffbe   celestial green
+    //   relic slot      → CELESTIAL  #5b7cff   deep blue
+    //   artifact slot   → PARAGON    #ffffff   white, the ceiling tier
+    primordial: { bolts: ['#ffffff', '#b6ffe4', '#5cffbe', '#2fd39a'], glowMid: '92,255,190',  glowOuter: '47,211,154', ring: '#5cffbe' },
+    relic:      { bolts: ['#ffffff', '#c3d0ff', '#7d97ff', '#5b7cff'], glowMid: '125,151,255', glowOuter: '91,124,255', ring: '#7d97ff' },
+    artifact:   { bolts: ['#ffffff', '#eaf4ff', '#bedcff', '#8fb8ff'], glowMid: '255,255,255', glowOuter: '190,220,255', ring: '#ffffff' },
   };
   function paletteFor(el) {
     var p = el;
-    if (!(el.classList.contains('r-primordial') || el.classList.contains('r-relic') || el.classList.contains('r-artifact'))) {
-      p = (el.closest && el.closest('.r-artifact, .r-relic, .r-primordial')) || el;
+    if (!(el.classList.contains('r-ascendant') || el.classList.contains('r-celestial') || el.classList.contains('r-paragon'))) {
+      p = (el.closest && el.closest('.r-paragon, .r-celestial, .r-ascendant')) || el;
     }
-    if (p.classList && p.classList.contains('r-artifact')) return PALETTES.artifact;
-    if (p.classList && p.classList.contains('r-relic')) return PALETTES.relic;
+    // Palettes keep their old internal names; only which TIER maps to which look
+    // changed. Paragon takes the fiercest (was artifact), Celestial the violet,
+    // Ascendant the gold/electric.
+    if (p.classList && p.classList.contains('r-paragon')) return PALETTES.artifact;
+    if (p.classList && p.classList.contains('r-celestial')) return PALETTES.relic;
     return PALETTES.primordial;
   }
   var attached = []; // {host, canvas, ctx, seed}

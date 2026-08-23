@@ -492,7 +492,16 @@
   // The run itself is NOT ended — that would be a nasty surprise on a phone that
   // dimmed for a moment. Kills simply stop counting, the pill says so, and the
   // moment the pilot touches the screen they resume with everything they had.
-  const IDLE_MS = 4 * 60 * 1000;
+  //
+  // FOUR MINUTES WAS TOO SHORT (build 712). The window has to be long enough that
+  // a pilot WATCHING a fight is never mistaken for an absent one — hostiles deal
+  // no damage here, so watching your fleet work is a legitimate way to play the
+  // arena, and on a desktop browser that produces no input events at all. Ten
+  // minutes ends the overnight tab just as dead (that absence is measured in
+  // hours) while giving a present pilot room to sit back, take a call, read the
+  // board. The rule is also now STATED on the arena screen before entry, which is
+  // the actual fix: a rule nobody is told about reads as a bug when it fires.
+  const IDLE_MS = 10 * 60 * 1000;
   let _lastInput = Date.now();
   let _wasAway = false;
   function noteInput() { _lastInput = Date.now(); }
@@ -507,9 +516,15 @@
   // Why a kill is or is not being counted right now. The UI shows this verbatim,
   // because "my kills stopped" with no explanation is worse than the exploit.
   function presence() {
-    try { if (document.hidden) return { on: false, why: 'tab in the background' }; } catch (e) {}
+    try { if (document.hidden) return { on: false, why: 'this tab is in the background' }; } catch (e) {}
     if (Date.now() - _lastInput > IDLE_MS) return { on: false, why: 'no input for ' + Math.round(IDLE_MS / 60000) + ' minutes' };
     return { on: true, why: '' };
+  }
+  // How long until an untouched session stops scoring. The screen counts this
+  // down so the rule is visible BEFORE it fires rather than only after.
+  function idleLeftMs() {
+    try { if (document.hidden) return 0; } catch (e) {}
+    return Math.max(0, IDLE_MS - (Date.now() - _lastInput));
   }
 
   // Called by game-v93 onKill() for every hostile that dies inside the instance.
@@ -619,7 +634,7 @@
     }
     clockAlerts();
     // the day rolled over under a live run — settle and reset in place
-    if (ks().day !== dayIdx()) { flush(true); ks(); banner('👑 NEW RACE', '24 hours. One king. Counters reset.'); }
+    if (ks().day !== dayIdx()) { flush(true); ks(); banner('👑 NEW RACE', '24 hours. One king. Counters reset.'); onDayRollover(); }
   }
   function engineRender(ctx, time, rt) {
     if (!rt || !rt.kothrun) return;
@@ -638,14 +653,23 @@
   // PRIZE — drain the server ledger into mail (see rank-rewards.js)
   // ===========================================================================
   async function claimPrize() {
-    const c = cl(); if (!c || !window.MAIL || !G() || !G().state) return;
+    if (!window.MAIL || !G() || !G().state) return 'wait';
+    const c = cl(); if (!c) return 'wait';
+    if (!signedIn()) return 'wait';
     let rows;
     try {
       const r = await c.rpc('claim_koth_awards');
-      if (r.error) return;              // koth.sql not run yet — stay quiet
+      if (r.error) {
+        // NOT SILENT ANY MORE. A bare `return` here is what left a delivered
+        // crown sitting in koth_awards with delivered=false and the winner
+        // holding nothing: the caller could not tell "nothing owed" from "the
+        // read failed", so it never tried again.
+        _claimWarn(r.error);
+        return 'err';
+      }
       rows = r.data || [];
-    } catch (e) { return; }
-    if (!rows.length) { reconcileCrowns(); return; }
+    } catch (e) { _claimWarn(e); return 'err'; }
+    if (!rows.length) { reconcileCrowns(); return 'ok'; }
     let crowned = 0;
     for (const a of rows) {
       const lc = a.lc | 0; if (!lc) continue;
@@ -666,7 +690,48 @@
     if (crowned) { try { G().addKothCrowns(crowned); } catch (e) {} }
     reconcileCrowns();
     save();
+    return 'ok';
   }
+  let _claimWarned = false;
+  function _claimWarn(err) {
+    if (_claimWarned) return; _claimWarned = true;
+    try { console.warn('[koth] prize claim failed — an awarded crown stays undelivered until this succeeds. Retrying.', err); } catch (e) {}
+  }
+  // ---- THE CLAIM HAS TO KEEP TRYING ------------------------------------------
+  // It used to be ONE attempt, 9.5 seconds after boot, that returned silently on
+  // any of three ordinary conditions: not signed in yet, no cloud client yet, or
+  // an RPC that failed once. Miss that window and the award simply stayed in
+  // koth_awards with delivered=false — the player had won, the server had paid,
+  // and the mail never came. There was no second attempt for the rest of the
+  // session.
+  //
+  // Worse for the case it actually hit: koth_close() writes the award at 00:01
+  // UTC. A pilot who leaves the tab open across midnight — which is exactly what
+  // someone racing for the crown does — never reloads, so the one attempt had
+  // already happened hours before the prize existed.
+  //
+  // So: retry until it lands, and re-arm on the two events that create new
+  // awards — the day rolling over, and the tab coming back to the foreground.
+  let _claimT = 0, _claimTries = 0, _claimDone = false;
+  function scheduleClaim(delay) {
+    if (_claimT) clearTimeout(_claimT);
+    _claimT = setTimeout(runClaim, Math.max(0, delay | 0));
+  }
+  async function runClaim() {
+    _claimT = 0;
+    let r = 'err';
+    try { r = await claimPrize(); } catch (e) {}
+    if (r === 'ok') { _claimDone = true; _claimTries = 0; return; }
+    // 'wait' is not a failure — the player may simply not have signed in yet, so
+    // it keeps a slow poll alive for the whole session rather than giving up.
+    // 'err' backs off: 20s, 40s, 80s… to a 5-minute ceiling.
+    _claimTries++;
+    const delay = r === 'wait' ? 15000 : Math.min(300000, 20000 * Math.pow(2, Math.min(4, _claimTries - 1)));
+    scheduleClaim(delay);
+  }
+  // A NEW DAY MEANS A NEW AWARD MIGHT EXIST. koth_close() runs at 00:01, so ask
+  // a little after that rather than the instant the client rolls over.
+  function onDayRollover() { _claimDone = false; _claimTries = 0; scheduleClaim(95000); }
   // THE CROWN TOTAL COMES FROM THE SERVER, NOT FROM COUNTING OUR OWN MAIL.
   // koth_wins() counts koth_hall rows for this account, the only authoritative
   // statement of how many races this pilot has won: an undelivered award, a save
@@ -706,16 +771,27 @@
 
   function boot() {
     // after the cloud save has landed, same reasoning as rank-rewards.js
-    setTimeout(() => { claimPrize().catch(() => {}); }, 9500);
+    scheduleClaim(9500);
+    // COMING BACK TO THE TAB is the other moment a new award can be waiting: a
+    // phone that slept through midnight has a crown to collect and no reload.
+    try {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        if (_claimDone && ks().day === _claimDay) return;   // nothing new since we last drained
+        _claimDay = ks().day;
+        scheduleClaim(1500);
+      });
+    } catch (e) {}
     setTimeout(() => { try { if (signedIn()) pollBoard(); } catch (e) {} }, 4000);
   }
+  let _claimDay = -1;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
   window.KOTH = {
     GATE_LV, KOTH_ZONE, PRIZE_LC, TIERS, SIZE_CAP, BAND, HP_SOFT, HP_POW, HP_GROWTH, CAP_PILOT_LV, hpCeil, capZone,
     tierFor, hpMultFor, lvlFor, dmgMultFor, dayIdx, dayEnds, msLeft, scaleEnemy,
-    ks, kills, myKills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, HP_CAP, IDLE_MS,
+    ks, kills, myKills, rank, unlocked, lvl, fmt, active, signedIn, scoring, presence, idleLeftMs, HP_CAP, IDLE_MS,
     enter, leave, onKill, engineTick, engineRender,
     flush, pollBoard, pollHall, setOpen, claimPrize, banner,
     board: () => _board, boardAt: () => _boardAt, entrants: () => _entrants,

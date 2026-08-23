@@ -1,18 +1,28 @@
-# Loot Fleet — deploy v242 · build 711 · TEMPLE REMOVED · KOTH CROWN HULLS · MOBILE + PERF
+# Loot Fleet — deploy v242 · build 712 · CARGO LOOT LEAK · HALL OF KINGS · PILOT TREE LIST
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v241 (build 707). Service worker cache is `lootfleet-v711`.
-**Login screen reads `BUILD 711`.**
+Supersedes v241 (build 707). Service worker cache is `lootfleet-v712`.
+**Login screen reads `BUILD 712`.**
 
-**This folder carries builds 708–711.** 708, 709 and 710 were staged here and
+**This folder carries builds 708–712.** 708 through 711 were staged here and
 never pushed, so everything below ships in one go.
 
-**⚠ ONE SQL FILE TO RUN: `supabase/koth-archive.sql`.** Required — without it
-King of the Hill keeps crowning the wrong pilot (see below), and the two new
-carrier blueprints read a crown count that stays at zero. It drops and recreates
-`koth_bump` by catalogue lookup and asserts exactly one copy survives, so run the
-whole file in one go, not in pieces. No Edge Function deploy; `discord-feed`
-stays at `FEED_VER 694`.
+**⚠ TWO SQL FILES TO RUN: `supabase/koth-archive.sql`, then `supabase/pilot-ladder.sql`.**
+
+`pilot-ladder.sql` adds the Pilot Tree ladder (`pilot_score`, `pilot_nodes`) and
+is **the new canonical `lb_upsert`** — a strict superset of `new-ladders.sql`. It
+drops every existing overload by catalogue lookup and asserts exactly one
+survives, so run the whole file in one go. After both files:
+`notify pgrst, 'reload schema';`
+
+`koth-archive.sql` is required, and it grew a
+section in 712. Without it: King of the Hill keeps crowning the wrong pilot, the
+two new carrier blueprints read a crown count that stays at zero, and the Hall of
+Kings cannot show which day a crown was won. It drops and recreates `koth_bump`
+by catalogue lookup and asserts exactly one copy survives, so run the whole file
+in one go, not in pieces. **If you already ran this file at 711, run it again** —
+it is idempotent, and section 8 (`koth_hall_days`) is new. No Edge Function
+deploy; `discord-feed` stays at `FEED_VER 694`.
 
 **`supabase/temple.sql` IS GONE and must NOT be run.** The Temple was removed in
 711; the file no longer exists in this folder. Earlier notes below still describe
@@ -25,9 +35,9 @@ The Postgres tables it created are harmless if left in place; nothing reads them
 
 | mechanism | how it forces the reload |
 |---|---|
-| `version.json` = **711** vs clients running `LF_BUILD` 707 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
-| `sw.js` `CACHE` = **lootfleet-v711** | the cache name changed, so the old bundle is evicted rather than served from disk |
-| every changed `js/`+`css/` ref carries `?v=711` | no browser can serve a stale copy of a changed file |
+| `version.json` = **712** vs clients running `LF_BUILD` 707 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
+| `sw.js` `CACHE` = **lootfleet-v712** | the cache name changed, so the old bundle is evicted rather than served from disk |
+| every changed `js/`+`css/` ref carries `?v=712` | no browser can serve a stale copy of a changed file |
 
 **Push the site FIRST, then `version.json` last** if your host publishes
 incrementally — bumping the beacon ahead of the files evicts players onto code
@@ -39,16 +49,17 @@ that is not live yet. A single upload of the whole folder is fine.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 711 |
-| root `version.json` | 711 |
-| `deploy-v242/version.json` | 711 |
-| `deploy-v242/sw.js` `CACHE` | `lootfleet-v711` |
+| root `game.html` `window.LF_BUILD` | 712 |
+| root `version.json` | 712 |
+| `deploy-v242/version.json` | 712 |
+| `deploy-v242/sw.js` `CACHE` | `lootfleet-v712` |
 
 Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
 origin and is never versioned.
 
-Audited: all **84** referenced files byte-identical to the project root, zero
-stale, zero missing, every one cache-busted. `game.html` in this folder is
+Rebuilt from the project root at 712: `js/`, `css/`, `guides/` and `supabase/`
+were deleted from this folder and re-copied fresh, then the HTML files, then the
+beacon — never seeded from the previous release. `game.html` in this folder is
 identical to the project root copy. No `temple` reference survives anywhere in
 the shipped HTML.
 
@@ -64,8 +75,8 @@ the shipped HTML.
    If your host publishes incrementally, push everything EXCEPT `version.json`
    first, then `version.json`.
 3. **Watch the eviction.** Within ~90 seconds every live client blocks and reloads
-   onto 711.
-4. **Confirm the login screen reads `BUILD 711`.**
+   onto 712.
+4. **Confirm the login screen reads `BUILD 712`.**
 5. **Smoke test, in this order:**
    - **Command sheet on a phone (360px and 390px wide)** — no card title sliced
      along its top edge, no subtitle running under a count badge, and every card
@@ -92,13 +103,390 @@ the shipped HTML.
      `👑 n / 25` or `👑 n / 100` crowns with a progress bar and its full build
      cost, instead of "Not yet available".
    - **Command** — no Temple card, and `#screen-temple` is gone from the DOM.
+   - **Cargo Defense ▸ any run** — kill things all the way to the Citadel and
+     confirm **nothing drops on the ground**: no fittings from ordinary kills, and
+     none from the five sector bosses (that was the leak). Gold, salvage, LootCoins
+     and Dread Cores still pay on delivery.
+   - **Cargo Defense as a Pro subscriber** — buy extra runs until the button is
+     replaced by "All 3 extra runs bought today". The counter resets at midnight.
+   - **Ascend, then open Dreadnaught Hunt** — every tier you already used this week
+     is **still locked**, with the weekly countdown intact.
+   - **KOTH ▸ Hall of Kings** — each row reads a real date (**Aug 22**, not
+     Dec 31) with the winner's hull. Check it from a US timezone too: a crown won
+     on the 22nd must not read the 21st.
+   - **King of the Hill ▸ the screen, before entering** — a WHEN KILLS COUNT card
+     states the presence rule. In the arena, leave it alone for 10 minutes: the
+     pill goes grey, says PAUSED **and prints the reason on a second line**.
+   - **Ranks ▸ PILOT TREE** — the new board ranks by Pilot Score with node count
+     and pilot rank underneath. Before `pilot-ladder.sql` runs it must show a
+     LOADING state, never "waiting on a migration" and never a board of zeroes.
+   - **Ranks ▸ HOME DEFENSE and EXPLORATION** — still live after the new
+     migration (the shape ladder moved from `new` to `pilot`).
+   - **The Pro pill in the top bar, as an ACTIVE member** — it opens the Pro
+     sheet with an ACTIVE MEMBER banner, the full benefit list and a Manage /
+     cancel button. It used to open the Account sheet, which listed none of them.
+   - **⚙ Account ▸ Graphics** — Low / Medium / High. Switch to Low on the battle
+     screen and confirm: tracers go single-stroke, bloom and ambient drift stop,
+     the colour grade drops, and the fleet keeps fighting at exactly the same
+     rate. On a high-DPR phone the canvas should visibly soften on Low.
+   - **Battle speed row** — three pills only: 1× / 2× / 3×. 2× is locked behind
+     the 500-LootCoin buy, 3× behind Pro. Log in on an account that was sitting
+     on 4× or 5× and confirm it lands on 2× / 3× (not 1×) if it owns the
+     entitlement.
+   - **A carrier hull** — the wing hits ~20% harder, and an ascended pilot with
+     Wing Tactics ranks should see fighters AND drones scale with it now.
+   - **Command ▸ Pilot Tree** — the ⬡ Map / ☰ List toggle. List view searches,
+     filters by category, sorts affordable-first and unlocks from the row. The
+     choice survives a reload. Run `?fitaudit` on it at 360×640.
 
 ### Rollback
 
-Push `deploy-v241` (build 707) and set `version.json` back to 707. 711 writes one
-new save field (`kothCrowns`, a monotonic count) which 707 ignores, so a rollback
-costs nothing. `koth-archive.sql` is additive — the archive table and the frozen
-close are safe to leave in place under 707.
+Push `deploy-v241` (build 707) and set `version.json` back to 707. 712 writes one
+new save field (`kothCrowns`, a monotonic count) and one localStorage preference
+(`lf_pltree_view`), both of which 707 ignores, so a rollback costs nothing.
+`koth-archive.sql` is additive — the archive table, the frozen close and
+`koth_hall_days()` are all safe to leave in place under 707.
+
+---
+
+## What changed in 712
+
+### 📰 A "what's new" card on first login
+
+New players and returning ones are different audiences, and only one of them
+needs a patch note. `js/patch-notes.js` shows a single card the first time a
+player loads a build they have not seen, keyed on `LF_BUILD` in **localStorage,
+not the save** — a device fact, so it never rides a cloud save onto another
+device and never re-shows there.
+
+**A brand new account is silently marked as seen and shown nothing.** "Battle
+speed is now three tiers" is meaningless to someone for whom it is simply how the
+game works.
+
+The card is dismissed by the button or the backdrop, and either way it is marked
+read — re-showing something a player deliberately closed is nagging. The update
+gate outranks it: if a newer build is being force-loaded, that message wins.
+
+**What goes on it is an editorial decision, not a dump of the diff.** The test
+for each line is *would a player notice if we never told them?* So the card
+carries the retired speed tiers, the cargo loot change, the frozen leaderboards
+and the KOTH crown — and carries nothing about SQL migrations, the loot-blocking
+refactor, the publish ReferenceError's root cause, the clip auditor, the flight
+recorder, or the reserved rarity tier (which is not live — announcing it would
+promise something absent). 14 lines, three groups, fifteen seconds to read.
+
+QA: `PATCHNOTES.show()` forces it, `PATCHNOTES._reset()` re-arms it without
+touching anything else in storage.
+
+---
+
+### ◧ Graphics quality — Low / Medium / High
+
+For players whose device cannot hold a frame rate on the full render. In
+**⚙ Account ▸ Graphics**.
+
+| tier | what it does |
+|---|---|
+| **High** | Everything on. Full trails, bloom, colour grade, ambient drift. |
+| **Medium** | Drops the screen-wide colour grade, the cinematic pass and half the debris. Keeps bloom and ship auras. |
+| **Low** | Single-stroke tracers, no bloom, no ambient drift, minimal debris, lower-resolution canvas. |
+
+**It is a floor on the governor that already existed, not a second system.** The
+engine has run an automatic LOD governor for a long time — but it only reacts
+*after* the frames have already gone bad, which is no use to someone whose phone
+is never going to be fast: they spend the first ten seconds of every session in
+the mud before it notices. A tier pins the starting point, and the governor keeps
+working above it. It can still shed further under load; it can never climb back
+above what the player chose.
+
+The biggest single lever is the **canvas backing store**. A 3× DPR handset fills
+nine times the pixels of a 1× one for an identical scene, so the tier caps DPR
+(2 / 1.25 / 1) before anything else is considered. After that: particle and
+debris ceilings, the full-canvas cinematic composite, and the ambient dust layer
+— which is a second full-size canvas over the arena, and the cheapest whole layer
+to give up.
+
+**Every knob is paint only, and the settings screen says so in green.** Nothing
+here touches the simulation — the sim keeps real wall-clock time by design, so
+event clocks, offline progress, boss timers and kill rates read identically on
+every setting. That guarantee is on the screen deliberately: a player who
+suspects Low might cost them progress will sit and suffer at High instead.
+
+First run guesses a tier from device memory, core count and DPR, so a weak phone
+starts on Low rather than discovering the setting after a bad session. That is a
+starting point only — the moment a player picks by hand, their choice persists,
+in **localStorage rather than the save**, so a phone's setting never rides a
+cloud save onto their desktop.
+
+---
+
+### 🩹 The leaderboard row has not been publishing since ~688
+
+`CLOUD.lbState()` reported a perfectly healthy ladder — every rung `off: false` —
+while nobody's row moved. Both were true, and that combination is the tell: a
+rung that is genuinely refused marks itself off, so a clean ladder next to a
+frozen row means **no rung ran at all**.
+
+`lbPublish` declared `const art` BELOW the hcwave/expo rung that tests `art` in
+its condition. `const` is in the temporal dead zone until its declaration runs,
+so the test threw `ReferenceError: Cannot access 'art' before initialization` on
+every single publish — and the whole function is wrapped in
+`catch (e) { lbFail('throw', e) }`, which turned a coding error into a silent,
+permanent publish failure.
+
+This is the second instance of the same shape in this one file. The first was
+`_lbShape = shape` in the three Voidmaw reads, which made every SUCCESSFUL read
+throw and return null. A bare catch around a whole function body hides a typo
+exactly as well as it hides a dropped connection.
+
+The declaration moved above every rung that reads it, and the catch now says
+plainly that a throw here is a bug rather than a connection problem.
+
+**Expect leaderboard rows to start moving again the moment this ships**, on every
+board, for every player.
+
+### 👑 An awarded prize waited on the player reloading
+
+FrostSkull won the 22 Aug race and got no LootCoins. The server was fine —
+`koth_awards` held day 20687, 261,547 kills, `lc 10000`, created 00:01:00,
+`delivered = false`. The client simply never drained it.
+
+Both prize drains — KOTH crowns and daily rank awards — were **one attempt about
+nine seconds after page load**, returning silently if the player was not signed
+in yet, if the cloud client had not come up, or if the RPC failed once. There was
+no second attempt for the rest of the session.
+
+And the timing was against them: `koth_close()` writes at 00:01 UTC,
+`daily_ranks_award()` at 00:05. A pilot racing for the crown leaves the tab
+**open** across midnight, so the single attempt had already run hours before the
+award existed. Winning the way you are supposed to win was the way to miss it.
+
+Now both retry until they land — 15s while merely waiting on sign-in, 20s
+doubling to a 5-minute ceiling on a real error — and re-arm on the two events
+that create new awards: the KOTH day rolling over (asked 95s later, after close
+has run) and the tab returning to the foreground on a new UTC day. A genuinely
+missing RPC still stops asking; everything else is retried and logged.
+
+**FrostSkull's crown is still sitting in the ledger and will be delivered on his
+next load, with or without this build.**
+
+---
+
+### ⚡ Battle speed is three tiers now
+
+4× and 5× are **gone**. The ladder was six rungs deep with three of them free,
+which made the paid one a small step and the whole row a wall of pills.
+
+| tier | how you get it |
+|---|---|
+| **1×** | the game |
+| **2×** | bought once — 500 LootCoins |
+| **3×** | LootFleet Pro, while it is active |
+
+(10× is still the Mothership easter egg and is still never shown until it fires.)
+
+**2× and 3× used to be free.** They are not any more, which is the one thing in
+this release that takes something away, so the migration is deliberately
+generous in the other direction: a save sitting on **5× lands on 3×** if Pro is
+active, and one sitting on **4× lands on 2×** if it owns the LootCoin unlock.
+Neither is dropped to 1×. A release must not read as having stolen someone's
+speed.
+
+The LootCoin tier **keeps the sku `speed4lc`**. It reads wrong on purpose: that
+string is written into every save that bought the old 4×, and renaming it would
+revoke a paid unlock from everyone who owns one. A sku is a receipt, not a label.
+
+Every surface that quoted a speed now reads `PRO_PERKS` instead of restating it
+— the HUD pill, the Pro sheet, the contextual offer card, the Pro stat pill in
+the ship panel, the purchase receipt label and the Cargo Defense manual. The
+ship panel's Pro tooltip had all seven Pro figures typed out by hand.
+
+### ➤ Fighters hit 20% harder, and finally get the wing perk
+
+`CONFIG.FIGHTER.dpsVsCannon` 1.10 → **1.32**. That is the only balance number
+for the class — `dmgFrac` is derived from it and the Ship Score ratio reduces to
+it — so the buff carries to every carrier, every marque and the published score
+without a second edit. A 4-bay wing at 110% of a cannon was parity on paper and
+behind it in the arena, because the wing has travel time and can be out of
+position.
+
+On the "make sure everything applies" question: almost all of it already did.
+Fighters resolve through the same `resolveHit()` a bolt does, with **no `drone`
+flag**, so crit, life steal, boss and elite multipliers, Pilot Tree `dmgVs()`,
+Siege Protocols, cryo, Starforge freeze, the Voidmaw singularity and the **Prism
+Aura's 10% AOE splash** all fire from fighter hits. Their damage reads
+`rt.stats.attackDamage`, which already folds in the Pilot Tree, the skill tree,
+gear, hull mods and the Warden support aura, and attack speed folds into damage
+rather than rate so the wing carries fire-rate bonuses too.
+
+**One thing genuinely was missing:** the **Wing Tactics** ascension perk. Its own
+description reads "Escort hulls and drones in your wing deal more damage" —
+escort fire applied it, but fighters never did **and neither did drones**. All
+three apply it now, so the perk finally does what it says.
+
+---
+
+### ⬡ PILOT TREE — a new Ranks board
+
+Ranked by **Pilot Score**: the sum of every unlocked node on the hex tree, the
+same figure the Pilot screen prints. Ties break on nodes unlocked.
+
+It earns its own board because it is the one progression nothing shortens. Nodes
+are bought with ◇ Dread Cores from a **weekly** raid — one attempt per tier per
+week — and the whole tree rides through ascension. Fleet power can be rebuilt in
+a weekend; a deep tree is months of calendar time and nothing else.
+
+Two figures are published, `pilot_score` and `pilot_nodes`, both only ever
+climbing (`greatest()`), matching what the save does. Simulated pilots derive a
+node count bounded by how many WEEKS the account has plausibly existed rather
+than by how strong it is, and nobody below the tree's own unlock level ranks.
+
+`supabase/pilot-ladder.sql` is now the canonical `lb_upsert`. **Re-running
+`new-ladders.sql`, `cargo-ladder.sql`, `nanocore-ladder.sql` or
+`discord-art-publish.sql` re-adds an older overload and requires re-running it.**
+
+One thing to know about the shape ladder: `CLOUD.lbShape()` now reports `pilot`
+as the newest shape, and the shapes are a LADDER — `pilot` implies `new`. Home
+Defense and Exploration were testing `s === 'new'` exactly, so they now accept
+either; without that they would have switched themselves off the moment this
+migration landed.
+
+### ★ The Pro pill showed members nothing
+
+Tapping the LOOTFLEET PRO pill opened the **Pro sheet** for non-members and the
+**Account sheet** for members — which carries a status line and a cancel button
+and says nothing about what the subscription does. The one surface a paying
+subscriber taps was the only one that never listed what they were paying for.
+
+The pill now always opens the Pro sheet. For a member it leads with an ACTIVE
+MEMBER banner and the renewal date, retitles the list "Your unlocked benefits",
+and offers Manage / cancel in place of the buy button.
+
+Every figure on that sheet is now read from `PRO_PERKS` rather than hardcoded.
+The sell copy had "5× XP · 2× gold · +50% loot · 25% beacon · +10 tiles · +1
+hunt" written out by hand — six numbers that go stale the day the table is
+retuned, on the one screen in the game where being wrong costs money.
+
+---
+
+### 💧 The cargo loot leak — reported as "I found a loot loophole"
+
+A cargo run deploys **deeper than the pilot's own frontier**: `deployZone` is
+`depthBase × (1 + 0.10 × tier) + tier × 6`, so Omega V lands roughly 50% past
+wherever you have actually reached. Fittings generate at `state.currentDungeon`,
+which inside a run **is that inflated zone**. Buying runs therefore bought gear
+priced off ground the pilot never took — and that gear pushes the frontier, which
+deploys deeper, which drops better gear.
+
+The block that was supposed to prevent this existed, but only in one of four
+places. It had been hand-copied and had drifted:
+
+| drop path | guarded by |
+|---|---|
+| ordinary kill drop | cargo ✓ void ✓ KOTH ✓ |
+| Fracture Zone extra drop (Aeternum) | void ✓ KOTH ✓ — **cargo ✗** |
+| `bossLoot()` — 5–12 fittings | **void only** |
+| `citadelDown()` — 8 fittings | **void only** |
+
+A cargo run spawns a sector boss five times, each flagged `isBoss`. So every run
+was quietly paying up to five full boss showers, rolled two rarity tiers up, on
+the inflated zone. That is the Lv 1000 gear.
+
+Now there is **one** predicate — `lootBlocked()` — naming the three instances
+that deploy above the pilot (cargo run, Void tile, KOTH arena), and all four drop
+paths ask it. Gold, salvage, Dread Cores and event currency are untouched
+everywhere; this is fittings only. It is deliberately **not** the XP carve-out
+list: the Dreadnaught Hunt and Home Citadel defence withhold levels and keep
+their loot, as before. Two rules, two lists.
+
+The manifest's dead `item` branch went with it, so the event cannot pay a fitting
+from either end.
+
+### 🚚 Bought cargo runs capped at 3 a day
+
+The Pro purchase was uncapped, which made the advertised "2 runs a day" really
+"as many as you hold LootCoins for". Three is the ceiling; the button is replaced
+by a spent-out line once you hit it, and the count resets with the day.
+
+### ☄ Ascending no longer refreshes the Dreadnaught Hunt
+
+`pilotAscend()` wipes every state key that is not in `ASC_KEEP`. `dreadLock`
+(the one-hunt-per-tier-per-week record), `dreadProFree` and `dreadRespawn` were
+not on the list, so ascending unlocked the entire tier ladder again: max the
+level, run the hunts, ascend, run them again. `cargo` was already protected for
+exactly this reason — the hunt was simply missed. All three now carry across.
+
+A lockout is a **clock**, not something the pilot's run earned.
+
+### 👑 Hall of Kings showed "Dec 31" against every crown
+
+Not a date-formatting bug. `koth.sql` shipped `koth_hall_top()` as one row per
+crowned **day** — `(day, name, kills, ship, closed_at)` — and the Hall screen was
+built to render that. `new-ladders.sql` (build 688) then **dropped it and created
+a different function under the same name**: one row per **player**, lifetime
+crowns, `(rank, user_id, name, wins, kills, last_day)`. The migration ran. The
+client was never told.
+
+So every row read `r.day` off an object that has no `day`. `undefined | 0` is
+`0`, and `new Date(0)` west of UTC is 31 Dec 1969 — which is why it printed a
+plausible-looking date instead of an obviously missing one. `r.ship` was gone
+too, and the kills column was showing each pilot's **lifetime** total on a screen
+captioned as a record of single days.
+
+Both boards are worth having, so `koth-archive.sql` §8 adds **`koth_hall_days()`**
+— the per-day crown log, under its own name. `koth_hall_top()` keeps the lifetime
+standings the Ranks board reads. A new name, never an overload: `create or
+replace` cannot replace a function whose argument types differ, it just adds a
+second copy.
+
+Three further fixes on that screen: dates now format in **UTC** (the day index is
+a UTC day number, so local formatting shifted every crown back a day for anyone
+west of Greenwich), a missing day renders as `—` rather than a 1970 date, and
+**loading, empty and failed are three different messages** instead of all three
+reading "No races have closed yet".
+
+### ⏸ King of the Hill: why it pauses
+
+The presence rule was real and correct — kills only count while the tab is in
+front and you have touched the controls recently — but it lived in exactly two
+places: a one-time banner when it first tripped, and the pill's `title` tooltip,
+which never reaches a touch device and barely reaches a desktop one. The first a
+pilot knew of it was the word PAUSED with no reason attached.
+
+- The arena screen now carries a **WHEN KILLS COUNT** card, stating the rule
+  before entry, next to NO XP and NO LOOT.
+- The pill **prints the reason** on a second line instead of hiding it in a
+  tooltip.
+- Tapping the pill shows the paused state in full, with how to resume.
+- The idle window is **4 → 10 minutes**. Hostiles here deal no damage, so
+  watching your fleet work is a legitimate way to play the arena — and on a
+  desktop browser that produces no input events at all. Ten minutes still ends
+  the overnight tab dead; that absence is measured in hours.
+
+### ⬡ The Pilot Tree has a list view
+
+The tree is an infinite procedural hex grid with fog: you see your unlocked nodes
+plus one ring, and everything else is a `?` on a dark field. That is a fine way
+to read the SHAPE of a build and a poor way to **spend cores** — to find a node
+you drag an unbounded plane around a small viewport with no search, no sort by
+cost, and no list of what you already own. It is worse with a mouse than a thumb.
+
+The same nodes are now available as a list: **⬡ Map / ☰ List** in the tree bar.
+
+- **Available** and **Owned** tabs — available is the only actionable set, so it
+  leads, sorted **affordable first**, then by cost, then by strength.
+- Free-text search across node names, categories and their stat lines; the
+  existing category chips filter it.
+- Each row carries its effects, ring depth, Pilot Score and an **unlock button on
+  the row** — no selecting, scrolling and hunting for a separate action.
+- A header line states what you can afford right now.
+- The view choice is remembered. The map is unchanged and still there.
+
+Undiscovered nodes are deliberately absent: the fog is a real rule of the tree,
+and a list of `?` rows would be the canvas again with worse spatial information.
+
+The clip auditor learned about it too — `.pl-lrows` is a scroll root inside a
+fill pane, so nothing in it was being inspected.
 
 ---
 

@@ -33,12 +33,12 @@
   // ===========================================================================
   // SCREEN
   // ===========================================================================
-  let _tick = null, _hall = null, _hallAt = 0;
+  let _tick = null, _hall = null, _hallAt = 0, _hallErr = null;
   function render() {
     const body = $('koth-body'); if (!body || !K()) return;
     K().setOpen(true);
     if (!K().unlocked()) { body.innerHTML = locked(); stopTick(); return; }
-    body.innerHTML = hero() + ladder() + boardSection() + hallSection();
+    body.innerHTML = hero() + presenceSection() + ladder() + boardSection() + hallSection();
     head();
     loadHall();
     startTick();
@@ -116,6 +116,25 @@
       + K().CAP_PILOT_LV + '</b> pilot fights on-level. Enemy level keeps climbing past it.</div></div>';
   }
 
+  // THE PRESENCE RULE, STATED BEFORE IT FIRES.
+  // It used to live in exactly two places — a one-time banner the first time it
+  // tripped, and the pill's `title` attribute, which is invisible on touch and
+  // needs a deliberate hover on desktop. So the first a pilot knew of it was the
+  // word PAUSED with no reason attached, which reads as a broken feature. A rule
+  // that decides whether your kills count belongs on the screen you read before
+  // you enter, next to NO XP and NO LOOT.
+  function presenceSection() {
+    const mins = Math.round(K().IDLE_MS / 60000);
+    return '<div class="koth-sec"><div class="koth-sec-h"><span class="koth-sec-t">⏸ WHEN KILLS COUNT</span>'
+      + '<span class="koth-sec-n">the arena cannot be farmed by an open tab</span></div>'
+      + '<div class="koth-pres">'
+        + '<div class="koth-pres-r"><i>✓</i><span>Kills count while <b>this tab is in front</b> and you have touched the controls in the last <b>' + mins + ' minutes</b>.</span></div>'
+        + '<div class="koth-pres-r"><i>⏸</i><span>Outside that, scoring <b>pauses</b> — the pill says so and gives the reason. <b>Your run is not ended and your kills are not lost.</b></span></div>'
+        + '<div class="koth-pres-r"><i>▶</i><span>Any tap, key or scroll resumes it instantly, exactly where you left off.</span></div>'
+      + '</div>'
+      + '<div class="koth-sec-f">Hostiles here deal no damage, so a tab left open would otherwise score all night. This is the only thing keeping the race about how hard you played.</div></div>';
+  }
+
   function boardSection() {
     return '<div class="koth-sec"><div class="koth-sec-h"><span class="koth-sec-t">🏆 LEADERBOARD</span>'
       + '<span class="koth-sec-n" id="koth-board-n">' + num(K().entrants()) + ' racing · updates every 9s</span></div>'
@@ -145,7 +164,14 @@
       + '<div class="koth-hall" id="koth-hall-list">' + hallRows() + '</div></div>';
   }
   function hallRows() {
-    const h = _hall || [];
+    // LOADING, EMPTY AND BROKEN ARE THREE DIFFERENT ANSWERS. This used to print
+    // "No races have closed yet" for all three, so a failed read looked exactly
+    // like a fresh season.
+    if (_hallErr) return '<div class="koth-none">' + (_hallErr === 'pending'
+      ? 'The crown log isn’t live on this server yet. Today’s race still counts — it will appear here once it closes.'
+      : 'Couldn’t reach the crown log just now. It will retry on its own.') + '</div>';
+    if (!_hall) return '<div class="koth-none">Loading past crowns…</div>';
+    const h = _hall.filter((r) => isFinite(Number(r && r.day)));
     return h.length
       ? h.map((r) => '<div class="koth-hrow">'
           + '<span class="kh-d">' + esc(dayLabel(r.day)) + '</span>'
@@ -154,20 +180,44 @@
           + '<span class="kh-k">' + num(r.kills) + '</span></div>').join('')
       : '<div class="koth-none">No races have closed yet. Today could be the first entry.</div>';
   }
+  // THE DAY INDEX IS A UTC DAY NUMBER (koth.js: Math.floor(now() / DAY_MS)), so
+  // it has to be FORMATTED in UTC. Rendered through local time it lands at
+  // midnight UTC and reads as the PREVIOUS day for every pilot west of Greenwich
+  // — a crown won on the 22nd printing as the 21st for most of the player base.
+  // Number()/isFinite rather than `| 0`: a missing or non-numeric day must show
+  // as unknown, not silently become 0 and print a real-looking date from 1970.
   function dayLabel(d) {
-    try { return new Date((d | 0) * 86400000).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
+    const n = Number(d);
+    if (!isFinite(n)) return '—';
+    try { return new Date(n * 86400000).toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' }); }
     catch (e) { return String(d); }
   }
   async function loadHall() {
     if (_hall && Date.now() - _hallAt < 120000) return;
     try {
       const c = window.CLOUD && window.CLOUD.client; if (!c) return;
-      const r = await c.rpc('koth_hall_top', { p_n: 14 });
-      if (r.error) return;
+      // koth_hall_days, NOT koth_hall_top. koth_hall_top was redefined by
+      // new-ladders.sql as a LIFETIME standings board (one row per player, no
+      // `day`, no `ship`), while this screen is the per-day crown record.
+      const r = await c.rpc('koth_hall_days', { p_n: 14 });
+      if (r.error) {
+        // PGRST202 — the function is not on this server yet. That is a deploy
+        // fact, not a player fact: the screen says the log isn't live, and the
+        // filename goes to the console where the operator will see it.
+        _hallErr = (r.error.code === 'PGRST202' || /not find the function/i.test(r.error.message || '')) ? 'pending' : 'error';
+        try { console.warn('[koth] hall log unavailable — run supabase/koth-archive.sql (section 8)', r.error); } catch (e) {}
+        const host0 = $('koth-hall-list'); if (host0) host0.innerHTML = hallRows();
+        return;
+      }
+      _hallErr = null;
       _hall = r.data || []; _hallAt = Date.now();
       const host = $('koth-hall-list');
       if (host) host.innerHTML = hallRows();
-    } catch (e) {}
+    } catch (e) {
+      _hallErr = 'error';
+      try { console.warn('[koth] hall log read threw', e); } catch (x) {}
+      const host = $('koth-hall-list'); if (host) host.innerHTML = hallRows();
+    }
   }
 
   function startTick() {
@@ -220,10 +270,13 @@
     p.className = away ? 'paused' : (r === 1 ? 'king' : '');
     if (away) p.title = 'Scoring paused — ' + away.why + '. Touch the screen to resume.';
     else p.removeAttribute('title');
+    // THE REASON IS PRINTED, NOT HOVERED. `title` never reaches a touch device and
+    // barely reaches a desktop one; the pill carries the sentence itself instead.
     p.innerHTML = '<span class="kp-c">' + (away ? '⏸' : '👑') + '</span><span class="kp-t">' + (away ? 'PAUSED' : 'KOTH') + '</span>'
       + '<span class="kp-r">' + (r ? '#' + r : '—') + '</span>'
       + '<span class="kp-k">' + num(k) + '</span>'
-      + '<span class="kp-x">' + hms(K().msLeft()) + '</span>';
+      + '<span class="kp-x">' + hms(K().msLeft()) + '</span>'
+      + (away ? '<span class="kp-why">' + esc(away.why) + ' · tap to resume</span>' : '');
   }
   let _ovT = null, _polled = false;
   // OPEN AND CLOSE ARE DECIDED BY THE DOM, NOT BY A CACHED VARIABLE. The old
@@ -264,9 +317,12 @@
     const b = (K().board() || []).slice(0, 5);
     const me = K().rank(), mine = K().myKills(), next = K().nextRankAt();
     const gap = (next != null && next > mine) ? (next - mine) : 0;
+    let away = null;
+    try { const pr = K().presence && K().presence(); if (pr && !pr.on) away = pr; } catch (e) {}
     ov.innerHTML = '<div class="kov-card">'
       + '<button class="kov-x" data-close type="button">✕</button>'
       + '<div class="kov-h">👑 KING OF THE HILL</div>'
+      + (away ? '<div class="kov-paused">⏸ <b>SCORING PAUSED</b><span>' + esc(away.why) + ' — kills are still happening, they are not reaching the ladder. Tap anywhere in the arena to resume.</span></div>' : '')
       + '<div class="kov-clock">' + hms(K().msLeft()) + ' REMAINING</div>'
       + '<div class="kov-list">' + (b.length
         ? b.map((r) => '<div class="kov-r' + (r.rank === me ? ' me' : '') + '">'

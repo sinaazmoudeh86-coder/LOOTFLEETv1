@@ -159,7 +159,16 @@
 
     if (safe(() => (G().isPro && G().isPro()), false)) out.push({
       ic: '⚡', n: 'Pro', v: 'Active', c: '#5fd1ff',
-      tip: 'LootFleet Pro — 5× XP base rate · exclusive 5× battle speed · 2× gold per kill · +50% loot drop chance · beacon recharges 25% faster · +10 galaxy tiles · +1 Dreadnaught hunt per tier each week.',
+      tip: (() => {
+        // READ THE TABLE, NEVER RESTATE IT. This line hardcoded every Pro figure
+        // and went stale the moment PRO_PERKS was retuned.
+        const k = safe(() => G().proMods().perks, null) || {};
+        return 'LootFleet Pro — ' + (k.xpMult || 5) + '× XP base rate · exclusive ' + (k.speed || 3)
+          + '× battle speed · ' + (k.gold || 2) + '× gold per kill · +' + Math.round(((k.loot || 1.5) - 1) * 100)
+          + '% loot drop chance · beacon recharges ' + Math.round((k.beaconCdCut || 0.25) * 100)
+          + '% faster · +' + (k.tiles || 10) + ' galaxy tiles · +' + (k.dreadAttempts || 1)
+          + ' Dreadnaught hunt per tier each week.';
+      })(),
     });
 
     const badges = (s.badgeRanks | 0) || (s.achClaimed | 0) || 0;

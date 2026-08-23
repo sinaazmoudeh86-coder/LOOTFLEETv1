@@ -18,6 +18,9 @@
 (function () {
   'use strict';
   var reduceMotion = false;
+  // Switched by the graphics tier (js/perf-tier.js). Module-scope so the loop can
+  // read it without a lookup per frame.
+  var _off = false;
   try { reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
 
   function $(id) { return document.getElementById(id); }
@@ -103,6 +106,11 @@
     function tick(now) {
       requestAnimationFrame(tick);
       if (!dust) return;
+      // GRAPHICS TIER — Low switches the ambient layer off outright. This is a
+      // SECOND full-size canvas composited over the arena every frame purely for
+      // drift and warp streaks; on a weak phone it is the cheapest whole layer to
+      // give up, and the arena loses nothing that tells you what is happening.
+      if (_off) { if (last) { dctx.clearRect(0, 0, W, H); last = 0; } return; }
       if (overlayUp()) { if (last) { dctx.clearRect(0, 0, W, H); last = 0; } return; }
       if (!last) { last = now; return; }
       var dt = Math.min(0.05, (now - last) / 1000);
@@ -182,6 +190,13 @@
       }
     }, 300);
   }
+
+  // Read by js/perf-tier.js. The ambient layer is whole-canvas decoration, so
+  // the tier can drop it outright rather than thinning it.
+  window.FXAAA = {
+    setEnabled: function (v) { _off = !v; },
+    isEnabled: function () { return !_off; },
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(boot, 300); });
   else setTimeout(boot, 300);

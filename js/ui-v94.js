@@ -127,7 +127,12 @@
       const lcb = document.getElementById('hud-lcbuy');
       if (lcb) lcb.addEventListener('click', openCredits);
       const prb = document.getElementById('hud-probuy');
-      if (prb) prb.addEventListener('click', () => { if (G.isPro && G.isPro()) openAccountSheet(); else openProSheet(); });
+      // THE PILL ALWAYS OPENS THE PRO SHEET. It used to route members to the
+      // Account sheet, which lists a status line and a cancel button and says
+      // nothing about what the subscription actually does — so the one surface a
+      // paying member taps was the only one that never showed them what they are
+      // paying for. The sheet carries the benefits AND the manage link now.
+      if (prb) prb.addEventListener('click', openProSheet);
       syncProCta();
       const fnb = document.getElementById('fly-now');
       if (fnb) fnb.addEventListener('click', () => {
@@ -415,7 +420,7 @@
     // Read the multipliers from the ENGINE, never a retyped literal — build 488
     // raised XP to 5× and these two strings kept selling 2× on the HUD while the
     // purchase sheet three taps away sold 5×.
-    const pk = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, speed: 5 };
+    const pk = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, speed: 3 };
     if (sub) sub.textContent = pro ? 'ACTIVE · MEMBER' : pk.speed + '× SPEED · ' + pk.xpMult + '× XP';
     b.title = pro ? 'LootFleet Pro — active · manage' : 'LootFleet Pro — ' + pk.speed + '× speed · ' + pk.xpMult + '× XP · ' + pk.gold + '× gold · +' + Math.round((pk.loot - 1) * 100) + '% loot';
   }
@@ -479,6 +484,37 @@
   // ACCOUNT SHEET — opened from the top-bar name chip: profile, Pro manage,
   // password reset, text-alert signup, sign out.
   // ==========================================================================
+  // ---- GRAPHICS QUALITY -----------------------------------------------------
+  // Three tiers for players whose device cannot hold a frame rate on the full
+  // render. The copy for each is read from PERF.TIERS so the settings screen and
+  // the engine can never describe different things.
+  //
+  // The last line is the important one and it is not filler: every knob behind
+  // this control is PAINT ONLY. If a player thinks Low might slow their fleet
+  // down or cost them progress, they will suffer at High instead — so the
+  // guarantee has to be on the screen where they choose.
+  function gfxSectionHTML() {
+    const P = window.PERF;
+    if (!P) return '<p class="acct-hint">Graphics settings are unavailable.</p>';
+    const cur = P.tier();
+    const opts = P.ORDER.map((k) => {
+      const t = P.TIERS[k];
+      return '<button class="gfx-opt' + (k === cur ? ' on' : '') + '" data-gfx="' + k + '" type="button">' + t.label + '</button>';
+    }).join('');
+    return '<div class="gfx-seg" role="group" aria-label="Graphics quality">' + opts + '</div>' +
+      '<p class="acct-hint gfx-note" id="ac-gfx-note" style="margin:7px 0 0">' + P.def().note + '</p>' +
+      '<p class="acct-hint" style="margin:7px 0 0;color:#7ce0a0">Visual only — your fleet fights, earns and levels exactly the same on every setting.</p>';
+  }
+  function wireGfx(root) {
+    const P = window.PERF; if (!P || !root) return;
+    root.querySelectorAll('[data-gfx]').forEach((b) => b.addEventListener('click', () => {
+      if (!P.setTier(b.dataset.gfx)) return;
+      root.querySelectorAll('[data-gfx]').forEach((x) => x.classList.toggle('on', x === b));
+      const n = root.querySelector('#ac-gfx-note'); if (n) n.textContent = P.def().note;
+      toast('◧ Graphics: ' + P.label(), '#8fc4ff');
+    }));
+  }
+
   function openAccountSheet() {
     // ⚙ THE COG PING STANDS DOWN ON FIRST OPEN. The dot was drawn unconditionally,
     // so it hailed every player from install and never cleared no matter how often
@@ -497,6 +533,8 @@
       <div class="lo-sect" style="margin-top:11px">★ LootFleet Pro</div>
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v" style="color:${pro ? '#7ce0a0' : 'var(--muted)'}">${pro ? 'ACTIVE · renews ' + new Date(G.state.proUntil).toLocaleDateString() : 'Not subscribed'}</span></div>
       <div class="acct-row">${pro ? '<button class="btn" id="ac-manage">Manage / cancel subscription</button>' : '<button class="btn gold" id="ac-gopro">★ Go Pro — $19.99/mo</button>'}</div>
+      <div class="lo-sect" style="margin-top:11px">◧ Graphics</div>
+      ${gfxSectionHTML()}
       <div class="lo-sect" style="margin-top:11px">🎟 Coupon code</div>
       <div class="acct-row"><input id="ac-code" class="acct-in" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="LF-XXXX-XXXX-XXXX"><button class="btn gold" id="ac-redeem">Redeem</button></div>
       <p class="acct-hint" id="ac-code-msg" style="margin:4px 0 0;display:none"></p>
@@ -526,6 +564,7 @@
       <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Close</button><button class="btn" id="ac-signout" style="border-color:rgba(255,73,95,.5);color:#ff8a96">⏻ Sign out</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
     const $s = (id) => sheet.querySelector('#' + id);
+    wireGfx(sheet);
     const rn = $s('ac-rename');
     if (rn) rn.addEventListener('click', () => {
       const v = ($s('ac-name').value || '').trim();
@@ -639,28 +678,42 @@
   function openProSheet() {
     const pro = G.isPro && G.isPro();
     const conf = window.PAYMENTS && window.PAYMENTS.linkFor && !!window.PAYMENTS.linkFor('pro_monthly');
+    // EVERY FIGURE HERE IS READ OFF PRO_PERKS, never restated. The table in
+    // game-v93 is the single statement of what the subscription does; a hardcoded
+    // "5× XP" in the sell copy is a number that goes stale the day the table is
+    // retuned, on the one screen where being wrong costs money.
+    const k = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, gold: 2, loot: 1.5, beaconCdCut: 0.25, tiles: 10, dreadAttempts: 1, speed: 5 };
+    const benefits = [
+      ['✨ Experience', k.xpMult + '× XP on every kill, account-wide'],
+      ['⚡ Battle speed', 'Exclusive ' + k.speed + '× tier — Pro only'],
+      ['$ Gold', k.gold + '× gold from every kill'],
+      ['❖ Loot', '+' + Math.round((k.loot - 1) * 100) + '% drop chance on every wreck'],
+      ['◉ Beacon', 'Recharges ' + Math.round(k.beaconCdCut * 100) + '% faster'],
+      ['⬡ Empire', '+' + k.tiles + ' galaxy tiles you can hold'],
+      ['☠ Dreadnaught hunt', '+' + k.dreadAttempts + ' hunt per tier, every week'],
+    ].map(([n, v]) => '<div class="ip-stat"><span class="ip-sname">' + n + '</span><span class="v">' + v + '</span></div>').join('');
     // Apple Guideline 3.1.2 — the purchase sheet must state the subscription
     // title, duration, price, what the user gets, and link Privacy + Terms.
     const sheet = showSheet(`<div class="sheet-head">★ LootFleet Pro</div><div class="sheet-body">
+      ${pro ? `<div class="pro-active"><b>✓ ACTIVE MEMBER</b><span>Renews ${new Date(G.state.proUntil).toLocaleDateString()} · everything below is switched on right now.</span></div>` : `
       <div class="ip-stat"><span class="ip-sname">Subscription</span><span class="v">LootFleet Pro</span></div>
       <div class="ip-stat"><span class="ip-sname">Duration</span><span class="v">Monthly · auto-renews</span></div>
-      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">$19.99 / month</span></div>
-      <div class="lo-sect" style="margin-top:10px">What you get</div>
-      <div class="ip-stat"><span class="ip-sname">✨ Experience</span><span class="v">5× XP on every kill, account-wide</span></div>
-      <div class="ip-stat"><span class="ip-sname">⚡ Battle speed</span><span class="v">Exclusive 5× tier — Pro only</span></div>
-      <div class="ip-stat"><span class="ip-sname">$ Gold</span><span class="v">2× gold from every kill</span></div>
-      <div class="ip-stat"><span class="ip-sname">❖ Loot</span><span class="v">+50% drop chance on every wreck</span></div>
-      <div class="ip-stat"><span class="ip-sname">◉ Beacon</span><span class="v">Recharges 25% faster</span></div>
-      <div class="ip-stat"><span class="ip-sname">⬡ Empire</span><span class="v">+10 galaxy tiles you can hold</span></div>
-      <div class="ip-stat"><span class="ip-sname">☠ Dreadnaught hunt</span><span class="v">+1 hunt per tier, every week</span></div>
+      <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">$19.99 / month</span></div>`}
+      <div class="lo-sect" style="margin-top:10px">${pro ? 'Your unlocked benefits' : 'What you get'}</div>
+      ${benefits}
       <p style="font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:8px">Every XP bonus you already own — VIP, Pilot Tree, Neural Uplink, Kaevith hulls — is a percentage of your base rate, so Pro multiplies all of them at once.</p>
       <p style="font-size:10.5px;line-height:1.55;color:var(--muted);margin-top:10px">Payment is charged to your account at confirmation of purchase. The subscription renews automatically each month at $19.99 unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your account settings.</p>
       <p style="font-size:11px;margin-top:8px"><a href="privacy.html" target="_blank" rel="noopener" style="color:#5fa8ff">Privacy Policy</a> · <a href="terms.html" target="_blank" rel="noopener" style="color:#5fa8ff">Terms of Use</a></p>
-      ${pro ? `<p style="font-size:11px;color:#7ce0a0;margin-top:8px">✓ Active — renews ${new Date(G.state.proUntil).toLocaleDateString()}</p>` : ''}
       ${conf ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:8px">⚒ Subscriptions are not live yet — payments are being wired up.</p>'}
       <div class="sheet-actions"><button class="btn" data-x>Close</button>
-        ${pro ? '' : '<button class="btn gold" data-ok>★ Buy Subscription — $19.99/mo</button>'}</div></div>`);
+        ${pro ? '<button class="btn" data-manage>Manage / cancel</button>' : '<button class="btn gold" data-ok>★ Buy Subscription — $19.99/mo</button>'}</div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const mg = sheet.querySelector('[data-manage]');
+    if (mg) mg.addEventListener('click', () => {
+      const portal = (window.LOOTFLEET && window.LOOTFLEET.stripePortal) || null;
+      if (portal) window.open(portal, '_blank', 'noopener');
+      else toast('Manage your subscription from your account settings', '#ffcf7a');
+    });
     const ok = sheet.querySelector('[data-ok]');
     if (ok) ok.addEventListener('click', () => {
       const r = window.PAYMENTS && window.PAYMENTS.subscribe ? window.PAYMENTS.subscribe() : { ok: false };
@@ -692,7 +745,7 @@
     const have = G.getCredits ? G.getCredits() : 0;
     const afford = have >= tier.lootcoins;
     const sheet = showSheet(`<div class="sheet-head">${window._lcIcon()} Unlock ${tier.label} Speed</div><div class="sheet-body">
-      <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">Permanent ${tier.label} battle speed — the fastest tier LootCoins can buy. One-time unlock.</p>
+      <p style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:9px">Permanent ${tier.label} battle speed, on every fight from here on. One purchase, never again. ${(G.proMods ? G.proMods().perks.speed : 3)}× is higher still and comes with LootFleet Pro.</p>
       <div class="ip-stat"><span class="ip-sname">Price</span><span class="v">${window._lcIcon()} ${tier.lootcoins} LootCoins</span></div>
       <div class="ip-stat"><span class="ip-sname">Your balance</span><span class="v" style="color:${afford ? '#7ce0a0' : 'var(--bad)'}">${window._lcIcon()} ${(G.formatNumRaw || G.formatNum)(have)}</span></div>
       ${afford ? '' : '<p style="font-size:10.5px;color:#ffcf7a;margin-top:6px">Not enough LootCoins — grab a pack and come back.</p>'}
@@ -702,7 +755,7 @@
     sheet.querySelector('[data-ok]').addEventListener('click', () => {
       if (!afford) { closeSheet(); openCredits(); return; }
       const r = G.buySpeed4();
-      if (r.ok) { closeSheet(); G.setGameSpeed(4); buildSpeedRow(); toast('⚡ 4× speed unlocked — permanently!', '#ffd24d'); }
+      if (r.ok) { closeSheet(); G.setGameSpeed(tier.mult); buildSpeedRow(); toast('⚡ ' + tier.label + ' speed unlocked — permanently!', '#ffd24d'); }
       else { closeSheet(); toast('Cannot unlock', '#e23b4e'); }
     });
   }
@@ -1029,7 +1082,7 @@
       const pb = $('pro-banner');
       if (pb) {
         const pro = G.isPro && G.isPro();
-        const ppk = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, speed: 5, gold: 2 };
+        const ppk = (G.proMods ? G.proMods().perks : null) || { xpMult: 5, speed: 3, gold: 2 };
         pb.innerHTML = pro
           ? ''
           : `<div class="pro-offer" id="pro-offer-cta"><div class="po-tag">PRO</div><div class="po-main"><div class="po-name">LootFleet Pro</div><div class="po-desc">✨ ${ppk.xpMult}× XP · ⚡ exclusive ${ppk.speed}× speed · $ ${ppk.gold}× gold · +5 more</div><button class="po-buy">$19.99 / month — Go Pro</button></div></div>`;
@@ -1221,7 +1274,10 @@
         if (it) {
           fitted++;
           const col = C.RARITY[it.rarity].color;
-          const pc = it.rarity >= 11 ? ' flc-arc ' + rc(it.rarity) : '';
+          // THE CHIP'S LIGHTNING FOLLOWS THE ICONS (build 712): >= 14, the three
+          // ascension-exclusive tiers, not >= 11. rc() still tags the tier class
+          // so the effect and the border colour come from the same source.
+          const pc = it.rarity >= 14 ? ' flc-arc ' + rc(it.rarity) : '';
           chips += `<div class="flc${pc}" data-fli="${key}:${sk}" style="border-color:${col}55"><span class="flc-ic">${itemIcon(it)}</span><span class="flc-n" style="color:${col}">${it.name}</span></div>`;
         } else {
           chips += `<div class="flc empty"><span class="flc-ic">${slotDef.icon}</span><span class="flc-n">empty</span></div>`;
@@ -1565,6 +1621,21 @@
       feed.slice(0, 3).forEach((f) => { html += `<div class="gxf-row ${f.mine ? 'mine' : ''}">${f.msg}</div>`; });
       html += '</div>';
     }
+    html += `<div class="gx-viewtog" role="group" aria-label="Galaxy view">`
+      + `<button class="gx-vt${_gxView === 'map' ? ' on' : ''}" data-gxv="map">⬡ Map</button>`
+      + `<button class="gx-vt${_gxView === 'list' ? ' on' : ''}" data-gxv="list">☰ List</button>`
+      + `</div>`;
+    if (_gxView === 'list') {
+      html += gxListHTML();
+      el['galaxy-body'].innerHTML = html;
+      const xb0 = document.getElementById('xen-open');
+      if (xb0) xb0.addEventListener('click', () => openXenBriefing());
+      el['galaxy-body'].querySelectorAll('[data-gxv]').forEach((b) => b.addEventListener('click', () => setGxView(b.dataset.gxv)));
+      wireGxList();
+      clearInterval(_galaxyTimer);
+      maybeAnnounceXen();
+      return;
+    }
     html += `<div class="gx-map-wrap">
       <canvas id="gx-canvas"></canvas>
       <div class="gx-ctl">
@@ -1576,6 +1647,7 @@
     </div>`;
     html += `<div class="gx-legend"><button class="gxl gxl-cit gxl-btn ${(G.atTileCap && G.atTileCap()) ? 'gxl-full' : ''}" id="gx-mysys" style="font-weight:800"><span class="gxl-glow"></span>◈ <b>${(G.tileCount ? G.tileCount() : 0)}</b>/${(G.tileCap ? G.tileCap() : 50)} Systems${(G.atTileCap && G.atTileCap()) ? '<em class="gxl-warn">FULL</em>' : ''}<em class="gxl-cta">MANAGE <i>›</i></em></button><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl"><i style="background:#7a2ac4"></i>◈ Kaevith</span><span class="gxl"><i style="background:#ffbe6e"></i>⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
+    el['galaxy-body'].querySelectorAll('[data-gxv]').forEach((b) => b.addEventListener('click', () => setGxView(b.dataset.gxv)));
     const xb = document.getElementById('xen-open');
     if (xb) xb.addEventListener('click', () => openXenBriefing());
     const msb = document.getElementById('gx-mysys');
@@ -1586,6 +1658,227 @@
     _galaxyTimer = setInterval(() => { if (screen === 'galaxy') drawGalaxyMap(); else clearInterval(_galaxyTimer); }, 1000);
     maybeAnnounceXen();
   }
+  // ==========================================================================
+  // MY GALAXY — LIST VIEW
+  // --------------------------------------------------------------------------
+  // The map is the right way to read the SHAPE of the galaxy — who is next to
+  // whom, where a front line runs — and the wrong way to answer "which citadel
+  // should I hit" or "where is my best plasma". There are 1,950 tiles across 25
+  // rings; finding the good ones by dragging a hex canvas is not a search, it is
+  // a scavenger hunt.
+  //
+  // So the same tiles are available as a sortable, filterable, PAGINATED list.
+  // It deliberately does NOT reimplement any tile action: a row opens the exact
+  // same openTileAction() sheet the map opens, so there is one place that owns
+  // what you can do with a tile and the two views can never disagree.
+  //
+  // PAGINATION IS NOT OPTIONAL HERE. 1,950 rows is a browser-killer on a phone
+  // and unreadable anywhere; the list renders one page of GX_PAGE rows and the
+  // filter/sort pass runs over cached tiles (GALAXYMAP.tileAt memoises), so
+  // paging is cheap.
+  // ==========================================================================
+  const GX_PAGE = 24;
+  let _gxView = 'map', _gxFilter = 'all', _gxSort = 'value', _gxPage = 0, _gxQ = '';
+  try { const v = localStorage.getItem('lf_gx_view'); if (v === 'list' || v === 'map') _gxView = v; } catch (e) {}
+  const GX_FILTERS = [
+    { id: 'all',    label: 'All' },
+    { id: 'mine',   label: '◈ Mine' },
+    { id: 'free',   label: 'Available' },
+    { id: 'cit',    label: '⛓ Citadels' },
+    { id: 'rival',  label: 'Rival' },
+    { id: 'alien',  label: '◈ Kaevith' },
+    { id: 'boss',   label: '☠ Boss' },
+  ];
+  const GX_SORTS = [
+    { id: 'value',  label: 'Value — highest first' },
+    { id: 'near',   label: 'Closest ring first' },
+    { id: 'deep',   label: 'Deepest ring first' },
+    { id: 'level',  label: 'Lowest level first' },
+    { id: 'res',    label: 'Resource type' },
+    { id: 'name',   label: 'Name (A–Z)' },
+  ];
+  // One tile, classified once. Every filter, sort and row reads this shape so a
+  // rule cannot drift between the three.
+  function gxRow(id) {
+    const t = GM.tileAt(id); if (!t || t.home) return null;
+    const lvl = G.state.level | 0;
+    const owned = !!G.isOwned(id);
+    const rivalName = !owned ? G.rivalOf(id) : null;
+    const rival = !!rivalName;
+    const ally  = !owned && !!(G.isAllyTile && G.isAllyTile(id));
+    const locked = !owned && t.level > lvl + 10;
+    // SECONDS, not milliseconds — tileCooldownLeft() returns seconds. Getting
+    // this wrong printed a 24-hour shield as "86s".
+    const cd = G.tileCooldownLeft ? G.tileCooldownLeft(id) : 0;
+    const citLv = (G.state.rivalCitadels && G.state.rivalCitadels[id]) || 0;
+    const myCit = owned && G.state.citadels && G.state.citadels[id];
+    const attackCit = !owned && (t.citadel || citLv > 0);
+    return { t, id, owned, rival, rivalName, ally, locked, cd, citLv, myCit, attackCit,
+             rate: t.rate | 0, res: t.resource || '', ring: t.ring | 0, level: t.level | 0 };
+  }
+  function gxCandidates() {
+    const out = [];
+    for (let ring = 1; ring <= GM.RINGS; ring++) {
+      const cs = GM.ringCoords(ring);
+      for (let i = 0; i < cs.length; i++) {
+        const r = gxRow(GM.tileId(cs[i].q, cs[i].r));
+        if (r) out.push(r);
+      }
+    }
+    return out;
+  }
+  function gxFilterFn(r) {
+    switch (_gxFilter) {
+      case 'mine':  return r.owned;
+      // AVAILABLE means genuinely takeable right now: nobody holds it, it is not
+      // above your level band, and it is not inside a contest lockout. A list
+      // that shows a tile you cannot act on is the map's problem repeated.
+      case 'free':  return !r.owned && !r.rival && !r.ally && !r.locked && r.cd <= 0;
+      case 'cit':   return r.attackCit || !!r.myCit;
+      case 'rival': return r.rival;
+      case 'alien': return !!r.t.alien;
+      case 'boss':  return !!r.t.boss;
+      default:      return true;
+    }
+  }
+  function gxSortFn(a, b) {
+    switch (_gxSort) {
+      case 'near':  return (a.ring - b.ring) || (b.rate - a.rate);
+      case 'deep':  return (b.ring - a.ring) || (b.rate - a.rate);
+      case 'level': return (a.level - b.level) || (b.rate - a.rate);
+      case 'res':   return a.res.localeCompare(b.res) || (b.rate - a.rate);
+      case 'name':  return String(a.t.name).localeCompare(String(b.t.name));
+      default:      return (b.rate - a.rate) || (a.ring - b.ring);
+    }
+  }
+  function gxListHTML() {
+    const all = gxCandidates().filter(gxFilterFn)
+      .filter((r) => !_gxQ || String(r.t.name).toLowerCase().indexOf(_gxQ.toLowerCase()) !== -1)
+      .sort(gxSortFn);
+    const pages = Math.max(1, Math.ceil(all.length / GX_PAGE));
+    if (_gxPage >= pages) _gxPage = pages - 1;
+    if (_gxPage < 0) _gxPage = 0;
+    const page = all.slice(_gxPage * GX_PAGE, _gxPage * GX_PAGE + GX_PAGE);
+
+    const chips = GX_FILTERS.map((f) =>
+      `<button class="gxlf${f.id === _gxFilter ? ' on' : ''}" data-gxf="${f.id}">${f.label}</button>`).join('');
+    const sorts = GX_SORTS.map((s) =>
+      `<option value="${s.id}"${s.id === _gxSort ? ' selected' : ''}>${s.label}</option>`).join('');
+
+    let rows = page.map((r) => {
+      const t = r.t;
+      const rd = GM.RES[r.res] || { glyph: '', color: '#8ba0b5', name: '' };
+      const marks = (t.citadel || r.citLv ? '<i class="gxr-m cit" title="Citadel">⛓</i>' : '')
+        + (t.boss ? '<i class="gxr-m boss">☠</i>' : '')
+        + (t.alien ? '<i class="gxr-m xen">◈</i>' : '')
+        + (t.deep ? '<i class="gxr-m deep">◆</i>' : '');
+      // WHO HOLDS IT, and WHAT IS ON IT. A list of anonymous tiles cannot answer
+      // "is this one worth attacking" — the holder's name and the fortress rank
+      // are the whole decision.
+      const bits = ['Lv ' + r.level, t.type];
+      if (r.citLv) bits.push('⛓ rank ' + r.citLv);
+      else if (t.citadel) bits.push('⛓ fortress');
+      if (r.myCit) bits.push('⛓ your citadel');
+      if (r.rivalName) bits.push('held by ' + esc(r.rivalName));
+      else if (r.ally) bits.push('allied');
+      const state = r.owned ? '<em class="gxr-s mine">YOURS</em>'
+        : r.ally ? '<em class="gxr-s ally">ALLIED</em>'
+        : r.cd > 0 ? '<em class="gxr-s cd" title="Contest shield — cannot be attacked yet">▷ ' + fmtLeft(r.cd) + '</em>'
+        : r.rival ? '<em class="gxr-s rival">RIVAL</em>'
+        : r.locked ? '<em class="gxr-s lock">Lv ' + r.level + '</em>'
+        : '<em class="gxr-s open">OPEN</em>';
+      return `<button class="gxr${r.owned ? ' mine' : ''}${r.attackCit ? ' target' : ''}" data-gxrow="${r.id}">`
+        + `<span class="gxr-ring">R${r.ring}</span>`
+        + `<span class="gxr-main"><span class="gxr-n">${esc(t.name)}${marks}</span>`
+        + `<span class="gxr-sub">${bits.join(' · ')}</span></span>`
+        + `<span class="gxr-rate" style="color:${rd.color}">${rd.glyph} ${G.formatNum(r.rate)}<i>/h</i></span>`
+        + state + '</button>';
+    }).join('');
+    if (!rows) {
+      // AN EMPTY FILTER MUST SAY WHY. "Available" legitimately returns nothing on
+      // a busy map, and a bare "no matches" reads as a broken screen — so count
+      // what is actually blocking and name it.
+      let why;
+      if (_gxQ) why = 'No system matches “' + esc(_gxQ) + '”.';
+      else if (_gxFilter === 'free') {
+        const all2 = gxCandidates();
+        let held = 0, lock = 0, shield = 0;
+        all2.forEach((r) => { if (r.owned || r.rival || r.ally) held++; else if (r.locked) lock++; else if (r.cd > 0) shield++; });
+        why = '<b>Nothing is open to you right now.</b><br>'
+          + G.formatNum(held) + ' already held · ' + G.formatNum(lock) + ' above your level band'
+          + (shield ? ' · ' + G.formatNum(shield) + ' under a contest shield' : '')
+          + '.<br><span class="gxl-hint">Level up to widen the band, or take one from a rival.</span>';
+      }
+      else if (_gxFilter === 'cit') why = 'No citadels match. They are rare — about one tile in thirty, ring 2 and deeper.';
+      else if (_gxFilter === 'mine') why = 'You hold nothing yet. Claim a tile from the map or the Available filter.';
+      else why = 'Nothing matches this filter.';
+      rows = '<div class="gxl-empty">' + why + '</div>';
+    }
+    const from = all.length ? _gxPage * GX_PAGE + 1 : 0;
+    const to = Math.min(all.length, (_gxPage + 1) * GX_PAGE);
+    return '<div class="gxlist">'
+      + '<div class="gxl-bar">'
+        + `<input id="gxl-q" class="gxl-q" type="search" autocomplete="off" placeholder="Search systems…" value="${esc(_gxQ)}">`
+        + `<select id="gxl-sort" class="gxl-sort">${sorts}</select>`
+      + '</div>'
+      + `<div class="gxl-chips">${chips}</div>`
+      + `<div class="gxl-count">${all.length ? from + '–' + to + ' of ' + G.formatNum(all.length) : '0'} systems</div>`
+      + `<div class="gxl-rows" id="gxl-rows">${rows}</div>`
+      + (pages > 1 ? '<div class="gxl-page">'
+          + `<button class="gxl-pg" data-gxp="prev"${_gxPage <= 0 ? ' disabled' : ''}>‹ Prev</button>`
+          + `<span class="gxl-pgn">Page ${_gxPage + 1} / ${pages}</span>`
+          + `<button class="gxl-pg" data-gxp="next"${_gxPage >= pages - 1 ? ' disabled' : ''}>Next ›</button>`
+        + '</div>' : '')
+      + '</div>';
+  }
+  // SECONDS in, human out. tileCooldownLeft() is seconds — a shield runs 24h, so
+  // days and hours are the units that matter, not a raw count.
+  function fmtLeft(sec) {
+    const s = Math.max(0, Math.round(sec || 0));
+    if (s >= 86400) return Math.floor(s / 86400) + 'd ' + Math.floor((s % 86400) / 3600) + 'h';
+    if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+    if (s >= 60) return Math.floor(s / 60) + 'm';
+    return s + 's';
+  }
+  function repaintGxList() {
+    const host = document.getElementById('gxl-rows'); if (!host) return renderGalaxy();
+    const wrap = host.closest('.gxlist'); if (!wrap) return renderGalaxy();
+    wrap.outerHTML = gxListHTML();
+    wireGxList();
+  }
+  function wireGxList() {
+    const body = el['galaxy-body']; if (!body) return;
+    body.querySelectorAll('[data-gxf]').forEach((b) => b.addEventListener('click', () => {
+      _gxFilter = b.dataset.gxf; _gxPage = 0; repaintGxList();
+    }));
+    body.querySelectorAll('[data-gxp]').forEach((b) => b.addEventListener('click', () => {
+      _gxPage += b.dataset.gxp === 'next' ? 1 : -1; repaintGxList();
+      const r = document.getElementById('gxl-rows'); if (r) r.scrollTop = 0;
+    }));
+    body.querySelectorAll('[data-gxrow]').forEach((b) => b.addEventListener('click', () => openTileAction(b.dataset.gxrow)));
+    const s = document.getElementById('gxl-sort');
+    if (s) s.addEventListener('change', () => { _gxSort = s.value; _gxPage = 0; repaintGxList(); });
+    // Search repaints ONLY the list, so the input keeps focus and caret between
+    // keystrokes — a full renderGalaxy() would rebuild the field and lose both.
+    const q = document.getElementById('gxl-q');
+    if (q) q.addEventListener('input', () => {
+      _gxQ = q.value || ''; _gxPage = 0;
+      const host = document.getElementById('gxl-rows');
+      const wrap = host && host.closest('.gxlist');
+      if (!wrap) return;
+      const at = q.selectionStart;
+      wrap.outerHTML = gxListHTML();
+      wireGxList();
+      const q2 = document.getElementById('gxl-q');
+      if (q2) { q2.focus(); try { q2.setSelectionRange(at, at); } catch (e) {} }
+    });
+  }
+  function setGxView(v) {
+    _gxView = v;
+    try { localStorage.setItem('lf_gx_view', v); } catch (e) {}
+    renderGalaxy();
+  }
+
   // ==========================================================================
   // MY SYSTEMS — every hold you own: revenue, citadel rank, one-tap abandon.
   // Opened from the ◈ N/M Systems pill on the My Galaxy legend.
@@ -3466,7 +3759,7 @@
           <div>⛴ <b>Hulls</b> — Carrier, Mothership, Oblivion and event ships</div>
           <div>◈ <b>Black Market</b> — cosmic &amp; primordial gear rolls</div>
           <div>☠ <b>Dread-class</b> — part of every Dread hull's price</div>
-          <div>⚡ <b>4× battle speed</b> — permanent, one purchase</div>
+          <div>⚡ <b>2× battle speed</b> — permanent, one purchase</div>
           <div>✦ <b>Skins &amp; auras</b> — pure cosmetic</div>
         </div>
         <p style="font-size:10.5px;line-height:1.5;color:var(--muted);margin:8px 0 0">Some of that is power, and we would rather say so than pretend otherwise. What LootCoins do not buy is a stat no one else can reach — nothing here is locked behind payment, and every buff you own is listed in Hangar ▸ My Ship where anyone can read it.</p>

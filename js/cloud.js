@@ -190,6 +190,7 @@
   let _lbNoNano = false, _lbNanoRetryAt = 0;
   let _lbNoArt = false, _lbArtRetryAt = 0, _lbArtWarned = false;
   let _lbNoNew = false, _lbNewRetryAt = 0, _lbNewWarned = false;
+  let _lbNoPilot = false, _lbPilotRetryAt = 0, _lbPilotWarned = false;
   // WHICH COLUMN SET THE LAST SUCCESSFUL BOARD READ ACTUALLY RETURNED.
   // The ladders need to know whether a migration has run, and inspecting the
   // returned ROWS cannot tell them: the caller merges the player's own live save
@@ -257,6 +258,7 @@
       if (_lbNoNano && Date.now() > _lbNanoRetryAt) _lbNoNano = false;
       if (_lbNoArt && Date.now() > _lbArtRetryAt) _lbNoArt = false;
       if (_lbNoNew && Date.now() > _lbNewRetryAt) _lbNoNew = false;
+      if (_lbNoPilot && Date.now() > _lbPilotRetryAt) _lbNoPilot = false;
 
       // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
       // p_asc. Folding them into the p_asc attempt would mean a server with
@@ -267,6 +269,33 @@
         p_tiles: p.tiles | 0, p_citadels: p.citadels | 0,
         p_tile_rev: bignum(p.tile_rev),
         p_ships: p.ships | 0, p_missions: p.missions | 0, p_badges: p.badges | 0,
+      } : null;
+      // ART FIELDS (discord-art-publish.sql). DECLARED HERE, ABOVE EVERY RUNG
+      // THAT READS IT.
+      //
+      // This block used to sit BELOW the hcwave/expo rung that tests `art` in its
+      // condition. `const` is in the temporal dead zone until its declaration
+      // runs, so that test threw `ReferenceError: Cannot access 'art' before
+      // initialization` on EVERY publish — and the whole function is wrapped in
+      // `catch (e) { lbFail('throw', e) }`, which turned a coding error into a
+      // silent, permanent publish failure. Not a degraded rung: no rung ran at
+      // all, so nothing was ever marked off and CLOUD.lbState() showed a clean
+      // ladder while the row had not moved since the rung was added.
+      //
+      // Same shape as the `_lbShape = shape` ReferenceError that killed all three
+      // Voidmaw reads, in this same file: a bare catch around a whole function
+      // body hides a coding error exactly as well as it hides a network one.
+      //
+      // WHY THIS RUNG EXISTS AT ALL: the columns were added, the client computed
+      // hull_last / nano_last / cargo_tier, and the feed selected them by name —
+      // but lb_upsert enumerates its params, so the widest overload silently
+      // discarded all three. Every row kept an empty hull_last, and the NEW HULL
+      // card posted with no sprite and the title "the a new hull". A card firing
+      // with no art is the symptom of a dropped WRITE, not a dropped read.
+      const art = (p.hull_last !== undefined || p.nano_last !== undefined || p.cargo_tier !== undefined) ? {
+        p_hull_last: String(p.hull_last || '').slice(0, 32),
+        p_nano_last: String(p.nano_last || '').slice(0, 32),
+        p_cargo_tier: Math.max(0, Math.min(5, p.cargo_tier | 0)),
       } : null;
       // NEW LADDERS (new-ladders.sql) — Home Defense wave and Exploration runs.
       // The topmost rung, tried before ART. Same five-minute back-off as ART and
@@ -279,6 +308,33 @@
         p_expo: Math.max(0, p.expo | 0),
         p_expo_best: Math.max(0, p.expo_best | 0),
       } : null;
+      // PILOT TREE (pilot-ladder.sql) — now the topmost rung, tried before the
+      // new-ladders rung for the same reason that one sits above ART: it is the
+      // one currently rolling out, so a refusal means minutes, not the standing
+      // six-hour fact the lower rungs describe. Math.floor(Number(x) || 0) and
+      // NOT `| 0` — the score is bounded well under 2^31 today, but this is a
+      // published progression figure and the bitwise habit is what wraps them.
+      const tree = (p.pilot_score !== undefined) ? {
+        p_pilot_score: Math.max(0, Math.min(1e9, Math.floor(Number(p.pilot_score) || 0))),
+        p_pilot_nodes: Math.max(0, Math.min(1e6, Math.floor(Number(p.pilot_nodes) || 0))),
+      } : null;
+      if (tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+            p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
+            base, ladder, art, fresh, tree));
+        if (!error) { _lbFails = 0; return; }
+        if (!isLegacy(error)) { lbFail('pilot', error); return; }
+        _lbNoPilot = true; _lbPilotRetryAt = Date.now() + 5 * 60 * 1000;
+        if (!_lbPilotWarned) {
+          _lbPilotWarned = true;
+          try {
+            console.warn('[LOOTFLEET] leaderboard pilot_score / pilot_nodes rejected — the Pilot Tree ladder will rank every human at zero. '
+              + 'Run supabase/pilot-ladder.sql, then "notify pgrst, \'reload schema\';". Retrying automatically every 5 minutes. '
+              + 'Inspect with CLOUD.lbState().');
+          } catch (e) {}
+        }
+      }
       if (fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
@@ -296,18 +352,8 @@
           } catch (e) {}
         }
       }
-      // ART FIELDS are the newest rung (discord-art-publish.sql) and try FIRST.
-      // WHY THIS RUNG EXISTS AT ALL: the columns were added, the client computed
-      // hull_last / nano_last / cargo_tier, and the feed selected them by name —
-      // but lb_upsert enumerates its params, so the widest overload silently
-      // discarded all three. Every row kept an empty hull_last, and the NEW HULL
-      // card posted with no sprite and the title "the a new hull". A card firing
-      // with no art is the symptom of a dropped WRITE, not a dropped read.
-      const art = (p.hull_last !== undefined || p.nano_last !== undefined || p.cargo_tier !== undefined) ? {
-        p_hull_last: String(p.hull_last || '').slice(0, 32),
-        p_nano_last: String(p.nano_last || '').slice(0, 32),
-        p_cargo_tier: Math.max(0, Math.min(5, p.cargo_tier | 0)),
-      } : null;
+      // ART FIELDS — the rung itself. The declaration is above, with the rest of
+      // the payload builders, so every rung that tests it can see it.
       if (art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && p.nano_legend !== undefined && !_lbNoArt) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
@@ -373,7 +419,14 @@
       const { error: e2 } = await client.rpc('lb_upsert', base);
       if (e2) { _lbNoAsc = false; _lbAscRetryAt = 0; lbFail('6-arg', e2); }   // 6-arg failed too — go back to p_asc
       else _lbFails = 0;
-    } catch (e) { lbFail('throw', e); }
+    } catch (e) {
+      // A THROW HERE IS A CODING ERROR, NOT A NETWORK ONE — network failures come
+      // back as `error` on the response and are handled per rung above. Say which
+      // it was rather than folding it into the generic counter silently; the last
+      // one to reach this line went unnoticed for twenty-odd builds.
+      try { console.warn('[LOOTFLEET] leaderboard publish threw (this is a bug, not a connection problem):', e); } catch (x) {}
+      lbFail('throw', e);
+    }
   }
   async function lbTop(n) {
     try {
@@ -383,10 +436,17 @@
       // READ BACK here, so the Haulage ladder ranked every human at zero and a
       // Nanocore ladder was impossible to build. Each migration gets its own
       // rung on the ladder below, so a server missing one still serves the rest.
-      let shape = 'new';
+      let shape = 'pilot';
       let { data, error } = await client.from('leaderboard')
-        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best')
+        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best,pilot_score,pilot_nodes')
         .order('power', { ascending: false }).limit(n || 100);
+      if (error) {   // pilot-ladder.sql not run yet
+        shape = 'new';
+        const rP = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = rP.data; error = rP.error;
+      }
       if (error) {   // new-ladders.sql not run yet
         shape = 'nano';
         const rW = await client.from('leaderboard')
@@ -508,6 +568,7 @@
     // re-arms. One line in the console instead of reading source to find out why
     // a column is not moving.
     lbState: () => ({
+      pilot:  { off: _lbNoPilot,  retryIn: Math.max(0, Math.round((_lbPilotRetryAt  - Date.now()) / 1000)) },
       new:    { off: _lbNoNew,    retryIn: Math.max(0, Math.round((_lbNewRetryAt    - Date.now()) / 1000)) },
       art:    { off: _lbNoArt,    retryIn: Math.max(0, Math.round((_lbArtRetryAt    - Date.now()) / 1000)) },
       nano:   { off: _lbNoNano,   retryIn: Math.max(0, Math.round((_lbNanoRetryAt   - Date.now()) / 1000)) },

@@ -197,6 +197,19 @@
 .pa-bank b{font-family:'Orbitron',sans-serif;font-size:25px;font-weight:900;color:#fff;line-height:1;}
 .pa-bank em{font-style:normal;font-size:11px;color:#bfaee0;}
 .pa-perks{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:9px;}
+
+/* PERK RESPEC — the way back out of a build. Sits at the FOOT of the perks tab,
+   because it is what you want after reading your build, not before. */
+.pa-respec{margin-top:13px;padding:13px;border-radius:14px;
+  border:1px solid rgba(255,214,106,.32);background:linear-gradient(180deg,rgba(255,214,106,.08),rgba(255,214,106,.02));}
+.pa-rs-h{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:800;letter-spacing:.14em;color:#ffd66a;margin-bottom:6px;}
+.pa-rs-s{font-size:11.5px;line-height:1.55;color:#bfaee0;margin:0 0 10px;text-wrap:pretty;}
+.pa-rs-s b{color:#fff;}
+.pa-rs-go{width:100%;min-height:44px;font-family:'Orbitron',sans-serif;font-size:12.5px;font-weight:800;
+  color:#2a1f05;background:linear-gradient(180deg,#ffe08a,#f2b24b);border:none;border-radius:11px;cursor:pointer;}
+.pa-rs-go:active{transform:translateY(1px);}
+.pa-rs-go.cant{color:#8ba0b5;background:#171226;border:1px solid #2c2340;}
+.pa-rs-need{margin-top:6px;font-size:10.5px;color:#ffab8a;text-align:center;}
 .pa-perk{border:1px solid #241b3c;border-radius:14px;padding:12px;background:linear-gradient(180deg,#150f28,#0d0a19);}
 .pa-perk.owned{border-color:color-mix(in srgb,var(--pc) 45%,#241b3c);}
 .pa-perk-top{display:flex;align-items:center;gap:9px;}

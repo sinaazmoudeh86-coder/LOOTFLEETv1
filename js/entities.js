@@ -190,7 +190,13 @@
         this.contactTimer = Math.max(0, this.contactTimer - dt);
         return;
       }
-      const chill = this.chillT > 0 ? 0.42 : 1;      // chilled → crawling + slow guns
+      let chill = this.chillT > 0 ? 0.42 : 1;      // chilled → crawling + slow guns
+      // AEGIS CRYO FIELD / PLAGUE EMITTER — an area slow, folded into the SAME
+      // term the FrostyFrost chill uses so a hostile can never be slowed twice
+      // by two systems that do not know about each other. slowOf() is a flag
+      // read with an expiry; the distance test happens once per 8Hz stamp in
+      // aegis-auras.js, never here in the per-enemy movement path.
+      if (window.AEGIS) { const _s = window.AEGIS.slowOf(this); if (_s) chill *= 1 - _s / 100; }
       if (this.chillT > 0) this.chillT -= dt;
       // move toward archer
       const dx = archer.x - this.x, dy = archer.y - this.y;

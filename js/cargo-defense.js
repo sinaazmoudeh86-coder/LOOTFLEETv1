@@ -26,6 +26,12 @@
   const UNLOCK_STARS = 3;
   const DAILY_RUNS = 2;
   const EXTRA_RUN_LC = 1000;
+  // A DAILY CEILING ON BOUGHT RUNS (build 712). The purchase was uncapped, so the
+  // event's two-a-day pacing was really "as many as you hold LootCoins for" — and
+  // a cargo run deploys deeper than the pilot's own frontier, which made the
+  // uncapped run the widest faucet in the game. Three is the ceiling: a Pro
+  // subscriber still more than doubles the daily allowance, and the day still ends.
+  const MAX_EXTRA_RUNS = 3;
 
   const stars = () => { try { return window.PASCEND ? PASCEND.stars() | 0 : (G().ascStars() | 0); } catch (e) { return 0; } };
   const hz = () => { try { return Math.max(1, G().state.highestUnlocked || 1); } catch (e) { return 1; } };
@@ -60,11 +66,14 @@
   // deepest tier a non-ascension roll can reach — and every tier below was
   // re-laddered up from it so the five shipments read as one continuous climb
   // rather than four cheap runs and one jackpot.
-  // NO COMPONENTS. A cargo run is a HAULING CONTRACT: you are paid in gold,
-  // with salvage and a little hard currency on top. Fittings came out (Aug 2026)
-  // because they made the manifest read as a loot table competing with the
-  // zones, and buried the one thing the event is actually for — the gold.
-  // The escort itself drops nothing either; see the cargo-run kill guard.
+  // NO FITTINGS, ANYWHERE IN THIS EVENT. The manifest pays gold, salvage and a
+  // little hard currency — nothing else — and the run itself drops nothing from
+  // any kill in it: the zone hostiles, the sector bosses and the escort are all
+  // covered by lootBlocked() in game-v93.js. Fittings came off the manifest in
+  // Aug 2026 because they read as a loot table competing with the zones and
+  // buried what the event is actually for. Build 712 finished the job at the
+  // other end, where a run deploys ~50% deeper than the pilot's own frontier and
+  // the sector bosses were quietly paying full boss showers on that inflated zone.
   const MANIFEST = {
     1: [['res', 0.75], ['lc', 0.08, 120]],
     2: [['res', 0.80], ['lc', 0.12, 260]],
@@ -106,8 +115,9 @@
   // every pilot past that frontier. Zones are endless, so this is too.
   const mobLevel = (tier) => { try { return C().zoneCombatLevel(deployZone(tier)); } catch (e) { return deployZone(tier); } };
   // PILOT LEVEL SCALING. Everything the manifest pays in CURRENCY rides the
-  // pilot's level, so a Level 400 commander is not hauling Level 100 wages;
-  // component drops already scale because they generate at the pilot's own zone.
+  // pilot's level, so a Level 400 commander is not hauling Level 100 wages.
+  // Nothing here rides the DEPLOY zone: that number is difficulty, and pricing a
+  // reward off it is what let a bought run out-earn the ground it was flown over.
   // The same figure drives the run's difficulty (cargo-run.js reads it) — pay and
   // pressure move together, never one without the other.
   const plvl = () => { try { return Math.max(1, G().state.level | 0); } catch (e) { return 1; } };
@@ -267,13 +277,14 @@
           '<div class="cd-lock-ic">🔒</div>' +
           '<div class="cd-lock-t">SPACE CARGO DEFENSE</div>' +
           '<div class="cd-lock-s">This event opens at <b>Pilot Ascension ★' + UNLOCK_STARS + '</b>.<br>You are at <b>★' + stars() + '</b> — ' + (UNLOCK_STARS - stars()) + ' more ascension' + (UNLOCK_STARS - stars() === 1 ? '' : 's') + ' to go.</div>' +
-          '<div class="cd-lock-b">Buy a shipment and escort it to the Citadel yourself, in your own zone, in your own ship. Real combat, real loot — with something fragile in the middle of it that you have to keep alive.</div>' +
+          '<div class="cd-lock-b">Buy a shipment and escort it to the Citadel yourself, in your own zone, in your own ship. Real combat, real stakes — with something fragile in the middle of it that you have to keep alive.</div>' +
         '</div>' + eternumCard();
       wire(body);
       return;
     }
 
     const left = runsLeft(), total = DAILY_RUNS + (c.extra | 0);
+    const extraLeft = Math.max(0, MAX_EXTRA_RUNS - (c.extra | 0));
     const pro = (() => { try { return G().isPro(); } catch (e) { return false; } })();
     body.innerHTML =
       '<div class="cd-top">' +
@@ -282,9 +293,11 @@
           '<b class="cd-runs-v">' + left + ' / ' + total + '</b>' +
           '<span class="cd-runs-s">' + (left ? 'A run is consumed the moment the cargo launches — abandoning or losing still spends it.' : 'Out of runs. They reset at midnight.') + '</span>' +
           (pro
-            ? '<button class="cd-buyrun" id="cd-buyrun">✦ PRO — BUY ONE MORE RUN · ' + EXTRA_RUN_LC.toLocaleString() + ' LC</button>' +
-              '<span class="cd-runs-fine">Purchased runs expire at the daily reset.</span>'
-            : '<div class="cd-pro-hint">LootFleet <b>Pro</b> can buy extra runs at ' + EXTRA_RUN_LC.toLocaleString() + ' LC each.</div>') +
+            ? (extraLeft > 0
+                ? '<button class="cd-buyrun" id="cd-buyrun">✦ PRO — BUY ONE MORE RUN · ' + EXTRA_RUN_LC.toLocaleString() + ' LC</button>' +
+                  '<span class="cd-runs-fine">' + extraLeft + ' of ' + MAX_EXTRA_RUNS + ' purchases left today · bought runs expire at the daily reset.</span>'
+                : '<span class="cd-runs-fine">All ' + MAX_EXTRA_RUNS + ' extra runs bought today — the limit resets at midnight.</span>')
+            : '<div class="cd-pro-hint">LootFleet <b>Pro</b> can buy up to ' + MAX_EXTRA_RUNS + ' extra runs a day at ' + EXTRA_RUN_LC.toLocaleString() + ' LC each.</div>') +
         '</div>' +
         manualCard() +
       '</div>' +
@@ -304,13 +317,14 @@
       '<div class="cd-rules-l"><i>✕</i>No auto play or auto battle — <b>always manual</b></div>' +
       '<div class="cd-rules-l"><i>✕</i>No skip or instant complete</div>' +
       '<div class="cd-rules-l"><i>◷</i>Ten minutes, deployment edge to Citadel</div>' +
-      '<div class="cd-rules-l"><i>▶</i>Battle speed <b>allowed</b> — 1× to 5×</div>' +
+      '<div class="cd-rules-l"><i>▶</i>Battle speed <b>allowed</b> — every tier you own</div>' +
       '<div class="cd-rules-n">Speed compresses the whole run — the freighter, the waves and the clock advance together.</div>' +
+      '<div class="cd-rules-l"><i>✕</i>No fittings drop — <b>the manifest is the payout</b></div>' +
       '<div class="cd-warn-hull">' +
         '<div class="cd-wh-t">☠ YOU LOSE YOUR HULL UPGRADES IF YOU DIE</div>' +
         '<div class="cd-wh-s"><b>The ship is not taken.</b> Die on an escort run and every <b>hull upgrade level</b> on your flagship is destroyed — back to stock, Lv 1. You keep the hull, its Ship Ascension and every fitted item. <b>Abandoning is not dying</b>: you lose the shipment and the run, the upgrades survive.</div>' +
       '</div>' +
-      '<div class="cd-rules-f">Everything else is the normal game: your stats, your escorts, your drones, real drops from every kill.</div>' +
+      '<div class="cd-rules-f">Everything else is the normal game: your stats, your escorts, your drones, the zone’s real hostiles.</div>' +
     '</div>';
   }
 
@@ -366,6 +380,7 @@
   function buyRun() {
     const g = G(), c = st();
     if (!g.isPro()) { toast('Pro subscribers only', '#e23b4e'); return; }
+    if ((c.extra | 0) >= MAX_EXTRA_RUNS) { toast('Daily limit — ' + MAX_EXTRA_RUNS + ' extra runs a day', '#e23b4e'); return; }
     if ((g.state.credits || 0) < EXTRA_RUN_LC) { toast('Not enough LootCoins', '#e23b4e'); return; }
     g.state.credits -= EXTRA_RUN_LC;
     c.extra = (c.extra | 0) + 1;
@@ -425,12 +440,6 @@
   function payRow(kind, ch, arg, t) {
     const eff = Math.min(0.98, ch * 1.25), pc = Math.round(eff * 100);
     const chip = '<span class="cdm-p-ch">' + (pc < 1 ? (eff * 100).toFixed(1) : pc) + '%</span>';
-    if (kind === 'item') {
-      const q = rar(arg);
-      return '<div class="cdm-p cdm-p-loot" style="--c:' + q.color + '"><i class="cdm-p-sw"></i>' +
-        '<div class="cdm-p-l"><b class="cdm-p-nm">' + q.name + '</b><em>Component · Zone ' + hz() + '</em></div>' +
-        chip + '</div>';
-    }
     const p = payRange(kind, arg, t);
     if (kind === 'res') {
       const lo = p[0], hi = p[1];
@@ -495,7 +504,7 @@
 
   function rollManifest(t, integrity) {
     const m = condMult(integrity), L = lvlMul();
-    const out = { gold: 0, res: null, items: [], lc: 0, cores: 0, missed: [], lvlMul: L };
+    const out = { gold: 0, res: null, lc: 0, cores: 0, missed: [], lvlMul: L };
     const goldMul = t.gold[0] + Math.random() * (t.gold[1] - t.gold[0]);
     out.gold = Math.round(t.cost * goldMul * (0.6 + 0.4 * (integrity / 100)) * L);
     (MANIFEST[t.tier] || []).forEach((r) => {
@@ -504,10 +513,8 @@
       if (kind === 'res') {
         const base = t.cost * 0.000045 * (0.8 + Math.random() * 0.6) * L;   // ÷10 — see NON-GOLD ECONOMY
         out.res = { fuel: Math.round(base), iron: Math.round(base), plasma: Math.round(base * 0.7) };
-      } else if (kind === 'item') {
-        try { out.items.push(I().generate(hz(), Math.min(C().RARITY.length - 1, arg))); } catch (e) {}
       // 0.1 → 0.05: LootCoin manifest lines halved in the Aug 2026 payout pass
-      // (build 614). Gold, resources, items and Dread Cores are unchanged.
+      // (build 614). Gold, resources and Dread Cores are unchanged.
       } else if (kind === 'lc') out.lc += Math.round(arg * 0.05 * (0.8 + Math.random() * 0.5) * Math.min(4, L));
       else if (kind === 'cores') out.cores += Math.max(1, Math.round(arg * 0.1 * (0.7 + Math.random() * 0.7) * Math.min(5, L)));
     });
@@ -535,7 +542,6 @@
     return '⬢ ' + amtTxt(lo, hi) + '  ◆ ' + amtTxt(lo, hi) + '  ✦ ' + amtTxt(lo * 0.7, hi * 0.7); };
 
   function rowLabel(kind, arg) {
-    if (kind === 'item') return rar(arg).name + ' component';
     return ROWNAME[kind] || kind;
   }
 
@@ -548,15 +554,8 @@
     }
     if (p.lc) s.credits = (s.credits || 0) + p.lc;
     if (p.cores) s.dreadCores = (s.dreadCores || 0) + p.cores;
-    let added = 0, scrapped = 0;
-    const cap = g.invCap();
-    if (!s.inventory) s.inventory = [];
-    p.items.forEach((it) => {
-      if (s.inventory.length < cap) { s.inventory.push(it); added++; s.itemsFound = (s.itemsFound || 0) + 1; }
-      else { scrapped++; try { s.gold += C().sellValue(it); } catch (e) {} }
-    });
     g.save(); if (window.UI) window.UI.refreshAll();
-    showReveal(p, t, { added, scrapped });
+    showReveal(p, t);
   }
 
   // ===========================================================================
@@ -569,14 +568,13 @@
   }
   function closeOverlay() { const o = $('cd-overlay'); if (o) { o.classList.remove('show'); o.innerHTML = ''; } }
 
-  function showReveal(p, t, bag) {
+  function showReveal(p, t) {
     const o = overlay(); o.className = 'show';
     const line = (name, val, col, found) =>
       '<div class="cdr-row' + (found ? '' : ' miss') + '"><span class="cdr-n" style="color:' + (found ? col : '#5d6b84') + '">' + name + '</span>' +
       '<b class="cdr-v" style="color:' + (found ? col : '#5d6b84') + '">' + val + '</b></div>';
     let rows = line('Gold', curChip('gold', p.gold), '#f2b24b', true);
     if (p.res) rows += line('Salvage', '<span class="wallet cdr-chips">' + curChip('fuel', p.res.fuel) + curChip('iron', p.res.iron) + curChip('plasma', p.res.plasma) + '</span>', '#8fc4ff', true);
-    p.items.forEach((it) => { const q = rar(it.rarity); rows += line(q.name + ' component', esc(it.name), q.color, true); });
     if (p.lc) rows += line('LootCoins', curChip('credits', p.lc), '#ffd66a', true);
     if (p.cores) rows += line('Dread Cores', curChip('cores', p.cores), '#ff8a96', true);
     p.missed.forEach((m) => { rows += line(m, 'NOT FOUND', '', false); });
@@ -587,7 +585,6 @@
         '<div class="cdr-t">MANIFEST RECEIVED</div>' +
         '<div class="cdr-sub">' + t.name + ' · ×' + (p.lvlMul || 1).toFixed(1) + ' LEVEL PAYOUT</div>' +
         '<div class="cdr-rows">' + rows + '</div>' +
-        (bag.scrapped ? '<div class="cdr-note">' + bag.scrapped + ' component' + (bag.scrapped === 1 ? '' : 's') + ' sold — your bag is full.</div>' : '') +
         '<button class="cdr-ok">COLLECT</button>' +
       '</div>';
     o.querySelector('.cdr-ok').addEventListener('click', closeOverlay);
@@ -796,7 +793,7 @@
   .cdm-blurb{ font-size:11.5px; color:#8ba0b5; line-height:1.5; }
   .cdm-sec{ font:800 10px/1 'Rajdhani',sans-serif; letter-spacing:.18em; color:#7d8fa5; margin-top:2px; }
   .cdm-rows{ display:flex; flex-direction:column; gap:1px; background:#111a28; border:1px solid #1e2b45; border-radius:11px; overflow:hidden; }
-  .cdm-cost{ display:flex; flex-direction:column; gap:2px; background:#0b1220; border:1px solid #2a3category; border-radius:12px; padding:10px 13px; }
+  .cdm-cost{ display:flex; flex-direction:column; gap:2px; background:#0b1220; border:1px solid #2a3a58; border-radius:12px; padding:10px 13px; }
   .cdm-pay{ display:flex; flex-direction:column; gap:1px; background:#111a28; border:1px solid #1e2b45; border-radius:12px; overflow:hidden; }
   .cdm-p{ display:flex; align-items:center; gap:11px; padding:9px 12px; background:#0b1220; border-left:3px solid var(--c); }
   .cdm-p-hero{ background:#0e1526; padding:11px 12px; }

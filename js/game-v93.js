@@ -153,13 +153,14 @@
     'pilotName',                                               // a rename is identity, not progress
     'pasc',                                                    // stars, points, perks, history
     // PAID ENTITLEMENTS — anything real money or LootCoins bought is permanent.
-    // `purchases` carries the one-time 4× battle-speed unlock (speed4lc) and
+    // `purchases` carries the one-time premium battle-speed unlock (speed4lc,
+    // which is 2× since build 712 — the sku is a receipt, not a label) and
     // `proUntil` carries the LootFleet Pro subscription window, so the Pro badge
     // and every PRO_PERKS benefit survive an ascension untouched. `secretSpeed`
     // is the 10× tier from the Mothership easter egg — it was MISSING here, so
     // every ascension revoked it, sanitizeSave() then demoted gameSpeed off 10×,
-    // and the pill vanished from the HUD leaving 5× as the ceiling. It is a
-    // one-time unlock like the other two: it survives.
+    // and the pill vanished from the HUD leaving the top ordinary tier as the
+    // ceiling. It is a one-time unlock like the other two: it survives.
     'purchases', 'credits', 'proUntil', 'vipPts', 'iap', 'payments', 'redeemedCodes', 'secretSpeed',
     // ONE-TIME OFFERS. discordJoin records the 1,000-LC join reward; keeping it
     // here means an ascension (which wipes the fleet to nothing) cannot re-arm
@@ -222,6 +223,14 @@
     // (deliveries, best condition, Eternums recovered) on exactly the action that
     // qualifies you for it, and hand back today's spent runs for free.
     'cargo',
+    // A LOCKOUT CLOCK IS NOT RUN PROGRESS (build 712). `dreadLock` is the
+    // one-hunt-per-tier-per-week record, `dreadProFree` the Pro extra attempt and
+    // `dreadRespawn` the count of paid respawns. None of the three were listed, so
+    // pilotAscend() wiped them and every hunt tier came back unlocked — max the
+    // level, run the whole tier ladder, ascend, run it again. `cargo` directly
+    // above was protected for exactly this reason; the hunt was simply missed.
+    // The pilot's RUN resets. The calendar does not.
+    'dreadLock', 'dreadProFree', 'dreadRespawn',
     // NANOCORES — cores, unlocked slots and rolled buffs all survive, exactly
     // like the Prism Ingots they were bought with.
     'nano',
@@ -537,6 +546,11 @@
     const m = skillMods();
     // PILOT TREE — permanent, account-wide bonuses that benefit EVERY ship.
     const pm = (window.DREAD && window.DREAD.combatMods) ? window.DREAD.combatMods() : {};
+    // AEGIS BANNER ARRAY — a flat fleet-damage bonus. Folded in HERE, with every
+    // other dmgPct source, so score(), theoryDps and the clone matchup all see it
+    // without a second code path. refreshStats() is also where the aura set is
+    // re-read, which is what keeps the field in step with the fitted hardpoint.
+    try { if (window.AEGIS) { window.AEGIS.refresh(); const am2 = window.AEGIS.mods(); if (am2.fleetDmgPct) m.dmgPct += am2.fleetDmgPct; } } catch (e) {}
     ['dmgPct','atkSpeedPct','critChance','critDamage','hpPct','moveSpeed','lifeSteal','multiShot'].forEach((k) => { if (pm[k]) m[k] += pm[k]; });
     // ship passive modifiers
     const ship = C.SHIP_BY_KEY[state.ship] || C.SHIPS[0];
@@ -1270,6 +1284,40 @@
     }
     return { x: pad + Math.random() * (w - pad * 2), y: pad + Math.random() * (h - pad * 2) };
   }
+  // ---- SPAWN ACROSS THE WHOLE MAP, NOT AROUND THE PILOT ---------------------
+  // ringSpawn keeps a constant DISTANCE from the pilot, which fixed hostiles
+  // materialising on top of someone camping a corner. It did not fix the other
+  // half of the same exploit: a ring centred on the pilot is clipped by the world
+  // edges, so in a corner only about a QUARTER of it is in bounds and every
+  // hostile arrives inside one narrow wedge, on one bearing, bunched together.
+  // Bunched hostiles are worth far more than spread ones — multi-shot, splash,
+  // the Prism aura and every AOE hit several at once, and the guns never have to
+  // turn. Kills per hour then depends on WHERE THE PILOT PARKED, which on an XP
+  // curve is the whole progression.
+  //
+  // A uniform point in the world has no such geometry: the distribution is the
+  // same from the middle, an edge or a corner, so position stops being a
+  // multiplier. `minDist` only keeps them from appearing in the pilot's lap; it
+  // is a floor, never a ring.
+  function worldSpawn(minDist, pad) {
+    pad = pad || 30;
+    const w = rt.worldW, h = rt.worldH;
+    const a = rt.archer, cx = a ? a.x : w / 2, cy = a ? a.y : h / 2;
+    const md = Math.max(0, minDist || 0);
+    for (let i = 0; i < 30; i++) {
+      const x = pad + Math.random() * (w - pad * 2), y = pad + Math.random() * (h - pad * 2);
+      if (!md || Math.hypot(x - cx, y - cy) >= md) return { x, y };
+    }
+    // A world too small to hold the standoff (or a pilot dead centre of a tiny
+    // one): take the farthest of the four corners rather than giving up and
+    // dropping one on their head.
+    let best = { x: pad, y: pad }, bd = -1;
+    for (const c of [[pad, pad], [w - pad, pad], [pad, h - pad], [w - pad, h - pad]]) {
+      const d = Math.hypot(c[0] - cx, c[1] - cy);
+      if (d > bd) { bd = d; best = { x: c[0], y: c[1] }; }
+    }
+    return best;
+  }
   function spawnAtNode(node) {
     const a = Math.random() * Math.PI * 2, r = Math.random() * RESPAWN_SPREAD;
     const x = Math.max(20, Math.min(rt.worldW - 20, node.x + Math.cos(a) * r));
@@ -1600,6 +1648,12 @@
     if (_elite && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
     // ASCENSION: Siege Protocols — bonus damage vs boss-class targets
     if (window.PASCEND && _elite) _dmg *= window.PASCEND.mult('boss');
+    // AEGIS VENOM LATTICE — hostiles standing in the haze take MORE damage from
+    // every source. Applied HERE, at the one point every damage path converges,
+    // so bolts, fighters, drones, escorts, prism splash and the plague tick all
+    // honour it without a second implementation. vulnOf() is a flag read with an
+    // expiry — no distance is measured on this path.
+    if (window.AEGIS) { const _v = window.AEGIS.vulnOf(e); if (_v) _dmg *= 1 + _v / 100; }
     const killed = e.takeDamage(_dmg);
     // FROSTYFROST — cryo tech is FLEET tech: if a FrostyFrost is anywhere in
     // your fleet (flagship OR escort), every player bolt chills the target and
@@ -1831,7 +1885,7 @@
     // (gold / xp / salvage) is stamped on the entity itself in lanceTick.
     if (e.fracT) {
       e.fracT = 0;
-      if (!inVoidSystem() && !_kothRun) try {
+      if (!lootBlocked()) try {
         const zone = e.dungeon || state.currentDungeon;
         const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 3));
         const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
@@ -1880,7 +1934,7 @@
     commitTileShield();   // first blood in a contested tile arms its 24 h shield
     // SWARM ZONES drop junk: 25% of the normal drop rate, rolled 2 tiers lower.
     const _swarmKill = isSwarmZone(state.currentDungeon) && !state.currentSystem;
-    if (!_cargoRun && !_voidRun && !_kothRun && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
+    if (!lootBlocked() && Math.random() < C.dropChance(state.currentDungeon) * (_swarmKill ? SWARM_DROP_MULT : 1) * (window.PASCEND ? window.PASCEND.mult('loot') : 1) * (e.tithe || 1) * proMods().loot) {
       const _q = _swarmKill ? 1 : lootQ();
       let item = _q > 1 ? I.generate(state.currentDungeon, rollRarityBoosted(state.currentDungeon, _q)) : I.generate(state.currentDungeon);
       if (_swarmKill && item.rarity > 0) item = I.generate(state.currentDungeon, Math.max(0, item.rarity - SWARM_RARITY_PENALTY));
@@ -2083,7 +2137,7 @@
     // PARTICLE BUDGET — halved during a cargo run, where 25-40 hostiles are dying
     // on a hand-flown escort and every explosion competes with the freighter for
     // frame time.
-    if (pc > ((rt.cgrun && rt.cgrun.active) ? 120 : 240)) return;
+    if (pc > Math.max(30, Math.round(((rt.cgrun && rt.cgrun.active) ? 120 : 240) * _partScale()))) return;
     const speed = (opts.speed ?? 140) * 1.25;
     n = Math.ceil(n * 1.7);                               // more debris everywhere
     if (pc > 160) n = Math.max(1, Math.ceil(n * 0.3));
@@ -2137,7 +2191,7 @@
   // Void's prize and are untouched — fittings are not.
   function bossLoot(e, isSuper) {
     const zone = state.currentDungeon;
-    if (inVoidSystem()) {
+    if (lootBlocked()) {
       // the resource bounty still pays; the 5–12 fittings do not
       if (isSuper) {
         if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
@@ -2419,6 +2473,12 @@
       if (ms > 34) rt.lod = Math.min(2, cur + 1);
       else if (ms > 24) rt.lod = Math.min(2, Math.max(1, cur));
       else if (ms < 17 && cur > 0) rt.lod = cur - 1;
+      // THE PLAYER'S GRAPHICS TIER IS A FLOOR, NOT A SECOND OPINION. The governor
+      // above only ever reacts AFTER the frames have already gone bad, which is
+      // no use to someone whose device is never going to be fast. Medium and Low
+      // pin the starting point; the governor can still climb HIGHER under load,
+      // it just can never come back below what the player asked for.
+      try { if (window.PERF) rt.lod = Math.max(window.PERF.lodFloor() | 0, rt.lod | 0); } catch (e) {}
     }
     const total = dt * Math.max(1, state.gameSpeed | 0);
     // A CARGO RUN IS THE HEAVIEST FRAME IN THE GAME and it is flown by hand, so
@@ -2697,6 +2757,10 @@
     // the real combat sim. Only active inside a Prism Field run.
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.tick) { try { window.PRISM.tick(dt, rt); } catch (e) {} }
     if (state.prismFleetRun && state.prismFleetRun.active && window.PRISMFLEET && window.PRISMFLEET.tick) { try { window.PRISMFLEET.tick(dt, rt); } catch (e) {} }
+    // AEGIS FIELD PROJECTORS — area debuffs on hostiles inside the fields. The
+    // module throttles its own scan to 8Hz, so this call costs an early return
+    // on most frames and never walks the enemy list per frame.
+    if (window.AEGIS && window.AEGIS.active && window.AEGIS.active()) { try { window.AEGIS.tick(dt, rt); } catch (e) {} }
     // DREADNAUGHT HUNT — raid-boss phase logic (adds, novas, enrage) on the real sim.
     if (state.dreadRun && state.dreadRun.active && window.DREAD && window.DREAD.tick) { try { window.DREAD.tick(dt, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — seasonal world-boss run (timer, stages, boss scaling).
@@ -2814,7 +2878,7 @@
     // storm bolts fade fast; flash decays
     if (rt.bolts && rt.bolts.length) { for (const b of rt.bolts) b.t -= dt; { let w = 0; for (let i = 0; i < rt.bolts.length; i++) if (rt.bolts[i].t > 0) rt.bolts[w++] = rt.bolts[i]; rt.bolts.length = w; } const _bc = window.__lfPlayRecovery ? 16 : 80; if (rt.bolts.length > _bc) rt.bolts.splice(0, rt.bolts.length - _bc); }
     if (rt.stormFlash > 0) rt.stormFlash -= dt;
-    { const _pcap = (rt.cgrun && rt.cgrun.active) ? 160 : 320;
+    { const _pcap = Math.max(40, Math.round(((rt.cgrun && rt.cgrun.active) ? 160 : 320) * _partScale()));
       if (rt.particles.length > _pcap) rt.particles.splice(0, rt.particles.length - _pcap); }
     for (const f of rt.floats) f.update(dt); sweepDead(rt.floats);
     if (rt.floats.length > 60) rt.floats.splice(0, rt.floats.length - 60);
@@ -2985,7 +3049,7 @@
       // paints the whole arena into one small corner and leaves the rest of the
       // element blank — the reported broken battle screen — and neither shows up
       // as CSS-box drift, so both are checked here.
-      const _dpr = Math.min(2, window.devicePixelRatio || 1);
+      const _dpr = dpr();
       if (_oh > 0 && (Math.abs(_ow - rt.w) > 2 || Math.abs(_oh - rt.h) > 2
                       || Math.abs(rt.canvas.width - Math.round(_ow * _dpr)) > 2
                       || Math.abs(rt.canvas.height - Math.round(_oh * _dpr)) > 2)) resize();
@@ -3154,6 +3218,10 @@
     // escort nothing and gives the arena back a whole canvas's worth of work.
     if (!(rt.cgrun && rt.cgrun.active)) drawPortrait();
     else if (!rt._prT || rt.time - rt._prT > 0.08) { rt._prT = rt.time; drawPortrait(); }
+    // AEGIS FIELD PROJECTORS — the fields themselves, painted UNDER the fleet and
+    // every other effect so they read as space rather than as an overlay. One
+    // cached sprite blit per field; see the frame-time note in aegis-auras.js.
+    if (window.AEGIS && window.AEGIS.active && window.AEGIS.active()) { try { window.AEGIS.render(ctx, rt.time, rt); } catch (e) {} }
     // DREADNAUGHT raid-boss phase FX (telegraphs, novas) — drawn over the arena.
     if (window.DREAD && window.DREAD.render) { try { window.DREAD.render(ctx, rt.time, rt); } catch (e) {} }
     // SERVER DREADNAUGHT — void aura + weak-point FX over the arena.
@@ -3367,10 +3435,10 @@
     // CSS stretch the bitmap and cut ships off at the frame edges
     const pr = rt.portraitCanvas;
     if (pr && pr.offsetWidth && (pr.offsetWidth !== rt.portW || pr.offsetHeight !== rt.portH)) {
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const d = dpr();
       rt.portW = pr.offsetWidth; rt.portH = pr.offsetHeight;
-      pr.width = rt.portW * dpr; pr.height = rt.portH * dpr;
-      rt.portraitCtx = pr.getContext('2d'); rt.portraitCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pr.width = rt.portW * d; pr.height = rt.portH * d;
+      rt.portraitCtx = pr.getContext('2d'); rt.portraitCtx.setTransform(d, 0, 0, d, 0, 0);
     }
     const ctx = rt.portraitCtx, cw = rt.portW, ch = rt.portH;
     ctx.clearRect(0, 0, cw, ch);
@@ -3440,7 +3508,13 @@
     // pool items by slot before checking the ship (auto-equip, auto-sell).
     if (item.slot === 'fighter') return !!sh.fighterCapacity;
     if (item.slot !== 'bow') return true;
-    return I.weaponClassOf(item).key !== 'support' || sh.cls === 'Aegis';
+    // HULL-LOCKED CLASSES. The Warden Array and the four AEGIS FIELD PROJECTORS
+    // are the support hull's entire identity, so nothing else may mount one.
+    // Asked via the class table's own `aura` flag rather than a list of keys —
+    // a fifth projector added later is locked automatically.
+    const wc = I.weaponClassOf(item);
+    if (wc.key === 'support' || wc.aura) return sh.cls === 'Aegis';
+    return true;
   }
   function equip(item, targetSlot) {
     const idx = state.inventory.indexOf(item); if (idx === -1) return;
@@ -3976,6 +4050,9 @@
         // ONE SPRITE, MANY GUNS. dr.n is the flight this craft stands for, so
         // the bay's damage is unchanged no matter how few are drawn.
         let dmg = s.attackDamage * C.DRONE.dmgFrac * (0.9 + Math.random() * 0.2) * Math.max(1, dr.n);
+        // WING TACTICS (build 712) — the perk names DRONES explicitly and this
+        // path never applied it. Escort hulls did, fighters now do, drones do.
+        if (window.PASCEND) dmg *= window.PASCEND.mult('fleet');
         if (crit) dmg *= 1 + s.critDamage / 100;
         if (state.auto) dmg *= 0.8;
         p.damage = Math.max(1, Math.round(dmg * (crowd2 ? 2 : 1))); p.crit = crit; p.drone = true;
@@ -4856,8 +4933,40 @@
   // Lv 500 Singularity is ZONE 750. Every reward priced off the zone number is
   // therefore priced far above what the pilot earned. Gold, loot and resources
   // are the intended prize and keep it; XP does not (see onKill / computeOffline).
+  // Particle / debris ceilings ride the graphics tier. Cosmetic only — nothing
+  // here is simulated, so shedding them costs the player no combat and no time.
+  function _partScale() { try { return window.PERF ? window.PERF.partScale() : 1; } catch (e) { return 1; } }
   function inVoidSystem() {
     try { if (!state.currentSystem) return false; const t = sysAt(state.currentSystem); return !!(t && t.void); } catch (err) { return false; }
+  }
+
+  // ---- WHERE FITTINGS DO NOT DROP ------------------------------------------
+  // ONE STATEMENT OF THE RULE, asked by every path that generates a fitting.
+  //
+  // Three instances deploy the pilot into a zone priced ABOVE their own frontier,
+  // so anything generated at `state.currentDungeon` inside them is gear the pilot
+  // never earned the ground for:
+  //   · CARGO RUN  — deployZone is depthBase × (1 + 0.10 × tier) + tier × 6, i.e.
+  //                  Omega V lands ~50% deeper than the pilot's own frontier
+  //   · VOID TILE  — level requirement × 1.5 (casino House Citadels included)
+  //   · KOTH ARENA — a fixed Level 200 arena, and a kill race besides
+  // Gold, salvage, Dread Cores and event currency are the prize in all three and
+  // are untouched. Fittings are not. NOTE this is NOT the XP carve-out list: the
+  // Dreadnaught Hunt and Home Citadel defence withhold levels and keep their
+  // loot, which is deliberate. Two different rules, two different lists.
+  //
+  // It is ONE function because it used to be four hand-copied `!_cargoRun &&
+  // !_voidRun` clauses, and they had already drifted apart: the normal kill drop
+  // tested all three instances, the Fracture Zone drop tested two, and bossLoot()
+  // and citadelDown() tested only inVoidSystem(). So a cargo run's five sector
+  // bosses each paid out a full 5–12 fitting boss shower rolled on the INFLATED
+  // zone — the reported "cargo runs drop loot" loophole, and the reason a pilot
+  // could carry Lv 1000 gear. A new drop path asks this, or it leaks the same way.
+  function lootBlocked() {
+    if (inVoidSystem()) return true;
+    if (rt.cgrun && rt.cgrun.active) return true;
+    if (rt.kothrun && rt.kothrun.active) return true;
+    return false;
   }
   // NAME → TILE ID. War reports written before tile ids were recorded only carry
   // the system NAME, and the ◎ jump-to-map button needs an id. Names are
@@ -5693,8 +5802,14 @@
       x = 30 + Math.random() * (rt.worldW - 60);
       y = 30 + Math.random() * rt.worldH * 0.30;
     } else {
+      // ACROSS THE WHOLE MAP. This used to be a ring centred on the pilot, which
+      // is what made corner-camping a farming strategy: the ring clipped to a
+      // wedge and delivered every wave bunched onto one bearing. Wave hostiles
+      // rush the player anyway, so a uniform spawn still brings the fight to
+      // them — it just arrives from every side, the way it does mid-map, and the
+      // rate no longer depends on where they parked.
       const base = Math.min(rt.worldW, rt.worldH);
-      const p = ringSpawn(rt.archer.x, rt.archer.y, base * 0.28, base * 0.46, 30);
+      const p = worldSpawn(base * 0.28, 30);
       x = p.x; y = p.y;
     }
     const e = new E.Enemy(pickType(), state.currentDungeon, x, y);
@@ -5765,7 +5880,7 @@
     // loot shower — better than the zone average, nothing absurd: +2 rarity
     // tiers over a 4×-quality roll, dropped in a ring around the PLAYER so the
     // magnet vacuums every piece before the tow home.
-    const drops = inVoidSystem() ? 0 : 8, zone = state.currentDungeon;
+    const drops = lootBlocked() ? 0 : 8, zone = state.currentDungeon;
     for (let i = 0; i < drops; i++) {
       const base = rollRarityBoosted(zone, Math.min(2, qualityMult(zone) * 4));
       const item = I.generate(zone, Math.min(Math.min(10, C.rarityCap(zone) + 1), base + 2));
@@ -6543,19 +6658,26 @@
     try { if (window.UI && window.UI.syncAuto) window.UI.syncAuto(); } catch (e) {}
   }
   function setJoystick(x, y, active) { rt.joy.x = x; rt.joy.y = y; rt.joy.active = active; }
+  // THREE TIERS, EACH WITH ITS OWN ENTITLEMENT (build 712). 4× and 5× no longer
+  // exist; anything not named here is refused rather than silently accepted.
+  //   1×  the game
+  //   2×  bought once with 500 LootCoins (sku 'speed4lc' — see SPEED_TIERS)
+  //   3×  LootFleet Pro, for as long as it is active
+  //   10× the Mothership easter egg, never shown until it fires
+  function ownsPaidSpeed() { return !!(state.purchases && state.purchases.speed4lc); }
   function setGameSpeed(mult) {
+    if (mult === 1) { state.gameSpeed = 1; save(); return true; }
     // 10× is the SECRET tier — ONLY the Mothership easter egg unlocks it
     if (mult === 10) { if (!state.secretSpeed) return false; state.gameSpeed = 10; save(); return true; }
-    // 4× is the PREMIUM tier — ONLY a 500-LootCoin unlock opens it
-    if (mult === 4) { if (!state.purchases || !state.purchases.speed4lc) return false; state.gameSpeed = 4; save(); return true; }
-    // 5× is PRO-exclusive — active LootFleet Pro subscription required
-    if (mult === 5) { if (!isPro()) return false; state.gameSpeed = 5; save(); return true; }
-    if (mult === 1 || hasSpeed('speed' + mult)) { state.gameSpeed = mult; save(); return true; }
+    // 2× is the PREMIUM tier — ONLY the 500-LootCoin unlock opens it
+    if (mult === 2) { if (!ownsPaidSpeed()) return false; state.gameSpeed = 2; save(); return true; }
+    // 3× is PRO-exclusive — active LootFleet Pro subscription required
+    if (mult === 3) { if (!isPro()) return false; state.gameSpeed = 3; save(); return true; }
     return false;
   }
-  // Speed tiers + offline play are FREE in this game — except 4× (LootCoins)
-  // and 10× (easter egg), which have explicit branches in setGameSpeed.
-  function hasSpeed(sku) { return sku !== 'speed4lc'; }
+  // Kept for callers that ask by sku. Every tier above 1× is now paid for in one
+  // way or another, so nothing here is free.
+  function hasSpeed(sku) { return sku === 'speed4lc' ? ownsPaidSpeed() : false; }
   function purchase(sku) { state.purchases[sku] = true; save(); if (window.UI) window.UI.refreshAll(); }
   // One-time premium unlock: permanent 4× battle speed for 500 LootCoins.
   // —— LOOTFLEET PRO —— $20/mo subscription. Every benefit lives in PRO_PERKS
@@ -6576,7 +6698,7 @@
     beaconCdCut: 0.25,// −25% beacon recharge
     tiles: 10,        // +10 galaxy tile cap
     dreadAttempts: 1, // +1 Dreadnaught hunt per tier each week (see DREAD.proAttempt)
-    speed: 5,         // exclusive 5× battle speed tier
+    speed: 3,         // exclusive 3× battle speed tier — the top of the ladder (712)
   };
   function proMods() {
     const on = isPro();
@@ -6611,6 +6733,8 @@
     save();
     return { ok: true };
   }
+  // Buys the PREMIUM battle-speed tier — 2× since build 712, 4× before it. The
+  // sku is unchanged on purpose so an old receipt still redeems; see SPEED_TIERS.
   function buySpeed4() {
     if (state.purchases && state.purchases.speed4lc) return { ok: false, reason: 'owned' };
     if ((state.credits || 0) < 500) return { ok: false, reason: 'credits' };
@@ -7114,15 +7238,23 @@
   // --------------------------------------------------------------------------
   // INIT
   // --------------------------------------------------------------------------
+  // THE CANVAS BACKING STORE IS THE BIGGEST SINGLE LEVER ON A PHONE. A 3× DPR
+  // handset fills nine times the pixels of a 1× one for the identical scene, so
+  // the graphics tier caps it before anything else is considered.
+  function dpr() {
+    let cap = 2;
+    try { if (window.PERF) cap = window.PERF.dprCap(); } catch (e) {}
+    return Math.min(cap, window.devicePixelRatio || 1);
+  }
   function resize() {
     const c = rt.canvas; if (!c || !rt.ctx) return;
-    const cw = c.offsetWidth, ch = c.offsetHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cw = c.offsetWidth, ch = c.offsetHeight, d = dpr();
     // A HIDDEN CANVAS HAS NO BOX. Re-fitting to 0×0 destroys the backing store and
     // leaves the last good fit unrecoverable; keep what we had until it is on
     // screen again (the fit guard in step() picks it up on the first live frame).
     if (!cw || !ch) return;
-    c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr);
-    rt.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.width = Math.round(cw * d); c.height = Math.round(ch * d);
+    rt.ctx.setTransform(d, 0, 0, d, 0, 0);
     rt.w = cw; rt.h = ch;
     fitWorld(state.currentDungeon);
     if (rt.archer && (rt.archer.x === 0 || rt.archer.x > rt.worldW)) { rt.archer.x = rt.worldW/2; rt.archer.y = rt.worldH/2; }
@@ -7141,9 +7273,9 @@
   function initPortrait() {
     rt.portraitCanvas = document.getElementById('portrait-canvas');
     if (!rt.portraitCanvas) return;
-    const pr = rt.portraitCanvas, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pr = rt.portraitCanvas, d = dpr();
     rt.portW = pr.offsetWidth || 240; rt.portH = pr.offsetHeight || 200;
-    pr.width = rt.portW * dpr; pr.height = rt.portH * dpr;
+    pr.width = rt.portW * d; pr.height = rt.portH * d;
     rt.portraitCtx = pr.getContext('2d'); rt.portraitCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -7301,13 +7433,22 @@
     // tap is 5× — that is the "it resorts to 5×" report). Now each tier is
     // validated against its OWN entitlement, 10× first, and an earned 10× is
     // never touched.
+    // BUILD 712 — THE LADDER IS 1 / 2 / 3 (+10 secret). 4× and 5× are gone, and
+    // a save can be sitting on either, so they are MIGRATED rather than reset to
+    // 1×: a player who paid for the old 4× lands on the paid 2×, and a Pro member
+    // on 5× lands on Pro's 3×. Dropping them to 1× would read as the release
+    // having taken their speed away, which is exactly what it must not do.
+    if (state.gameSpeed === 5) state.gameSpeed = isPro() ? 3 : 1;
+    else if (state.gameSpeed === 4) state.gameSpeed = (state.purchases && state.purchases.speed4lc) ? 2 : 1;
+    // …and each surviving tier is then validated against its OWN entitlement,
+    // 10× first, so an earned 10× is never touched.
     if (state.gameSpeed === 10) {
       if (!state.secretSpeed) state.gameSpeed = 1;          // never unlocked, or a tampered save
-    } else if (state.gameSpeed === 5) {
-      if (!isPro()) state.gameSpeed = 1;                    // Pro lapsed → drop the 5× tier
-    } else if (state.gameSpeed === 4) {
-      if (!(state.purchases && state.purchases.speed4lc)) state.gameSpeed = 1;   // 4× needs its LootCoin unlock
-    } else if (!(state.gameSpeed >= 1 && state.gameSpeed <= 3)) {
+    } else if (state.gameSpeed === 3) {
+      if (!isPro()) state.gameSpeed = 1;                    // Pro lapsed → drop the 3× tier
+    } else if (state.gameSpeed === 2) {
+      if (!(state.purchases && state.purchases.speed4lc)) state.gameSpeed = 1;   // 2× needs its LootCoin unlock
+    } else if (state.gameSpeed !== 1) {
       state.gameSpeed = 1;                                  // anything else out of range
     }
     // ---- COSMETICS + CREDITS (premium currency) ----
@@ -7889,6 +8030,7 @@
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
+    resizeCanvas: () => { try { rt.portW = 0; rt.portH = 0; resize(); } catch (e) {} },
     buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     kothCrowns, addKothCrowns, setKothCrowns, syncCrownBlueprints,

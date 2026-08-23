@@ -183,17 +183,24 @@
   }
 
   async function claim() {
-    const c = cl();
-    if (!c || !window.MAIL || !G() || !G().state) return;
+    if (!window.MAIL || !G() || !G().state) return 'wait';
+    const c = cl(); if (!c) return 'wait';
     let rows;
     try {
       const r = await c.rpc('claim_rank_awards');
-      // The RPC arrives with rank-rewards.sql. Until that runs, do nothing at
-      // all — quietly, since this fires on every login.
-      if (r.error) return;
+      // The RPC arrives with rank-rewards.sql. A MISSING function is a standing
+      // fact (stay quiet, stop asking); anything else is a failure worth
+      // retrying — returning silently on both is how an awarded prize ends up
+      // marked undelivered forever with the player holding nothing.
+      if (r.error) {
+        const missing = r.error.code === 'PGRST202' || /not find the function/i.test(r.error.message || '');
+        if (missing) return 'ok';
+        _warn(r.error);
+        return 'err';
+      }
       rows = r.data || [];
-    } catch (e) { return; }
-    if (!rows.length) return;
+    } catch (e) { _warn(e); return 'err'; }
+    if (!rows.length) return 'ok';
 
     // Group by day so a week away produces seven days of letters, not seventy.
     const byDay = new Map();
@@ -212,11 +219,49 @@
       for (const a of podium) window.MAIL.push(podiumMail(a, day));
       if (rest.length) window.MAIL.push(digestMail(rest, day));
     }
+    return 'ok';
+  }
+  let _warned = false;
+  function _warn(err) {
+    if (_warned) return; _warned = true;
+    try { console.warn('[ranks] award claim failed — prizes stay undelivered until this succeeds. Retrying.', err); } catch (e) {}
+  }
+
+  // ---- KEEP TRYING UNTIL IT LANDS --------------------------------------------
+  // One attempt 9s after boot used to be the whole delivery mechanism, and it
+  // returned silently if the player was not signed in yet, if the cloud client
+  // had not come up, or if the RPC failed once. Any of those and the prize sat
+  // in rank_awards undelivered for the rest of the session. daily_ranks_award()
+  // writes at 00:05 UTC, so a client left open across midnight had already used
+  // its single attempt hours before the row existed.
+  let _t = 0, _tries = 0, _day = -1;
+  const dayIdx = () => Math.floor(Date.now() / 86400000);
+  function schedule(delay) { if (_t) clearTimeout(_t); _t = setTimeout(run, Math.max(0, delay | 0)); }
+  async function run() {
+    _t = 0;
+    let r = 'err';
+    try { r = await claim(); } catch (e) {}
+    if (r === 'ok') { _tries = 0; _day = dayIdx(); return; }
+    _tries++;
+    schedule(r === 'wait' ? 15000 : Math.min(300000, 20000 * Math.pow(2, Math.min(4, _tries - 1))));
   }
 
   // After the cloud save has landed, so the inbox we push into is the real one
   // rather than a fresh local save about to be replaced.
-  function boot() { setTimeout(() => { claim().catch(() => {}); }, 9000); }
+  function boot() {
+    schedule(9000);
+    // A NEW UTC DAY MEANS NEW AWARDS. Checked when the tab returns to the
+    // foreground, which is when a long-open client notices midnight passed.
+    try {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        if (dayIdx() === _day) return;
+        schedule(2000);
+      });
+    } catch (e) {}
+    // …and a slow safety tick for a client that is simply never backgrounded.
+    setInterval(() => { if (!document.hidden && dayIdx() !== _day) schedule(0); }, 600000);
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 

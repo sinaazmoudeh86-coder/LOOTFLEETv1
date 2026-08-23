@@ -31,31 +31,21 @@
 (function () {
   'use strict';
 
-  const BUILD = 712;
+  const BUILD = 713;
   const NOTES = {
-    build: 712,
-    title: 'BUILD 712',
-    sub: 'Field projectors, three speed tiers, and the leaderboards are live again.',
+    build: 713,
+    title: 'BUILD 713',
+    sub: 'The stutter is fixed — and it was never your device.',
     groups: [
-      { k: 'NEW', c: '#7ce0a0', rows: [
-        ['\u2623', 'Aegis field projectors', 'Four huge auras \u2014 Venom, Cryo, Banner, Plague. Aegis hull only.'],
-        ['\u25e7', 'Graphics quality', 'Low / Medium / High in \u2699 Account. Visual only \u2014 never your progress.'],
-        ['\u2630', 'List views', 'Pilot Tree and My Galaxy now have searchable, sortable lists.'],
-        ['\u2b21', 'Pilot Tree ladder', 'A new Ranks board, scored on your unlocked nodes.'],
-      ] },
-      { k: 'CHANGED', c: '#ffcf7a', rows: [
-        ['\u26a1', 'Battle speed is 1\u00d7 / 2\u00d7 / 3\u00d7', '4\u00d7 and 5\u00d7 are retired. On 5\u00d7 with Pro? You are on 3\u00d7. Bought the old 4\u00d7? You keep it, as 2\u00d7.'],
-        ['\u2715', 'Cargo runs drop no fittings', 'They were paying gear from zones above your own frontier. Gold, salvage and cores are untouched \u2014 and anything you already earned is yours.'],
-        ['\u2691', 'Bought cargo runs capped at 3 a day', 'Pro purchases only. Resets at midnight.'],
-        ['\u2620', 'Ascending no longer resets the Dreadnaught Hunt', 'The weekly lockout is a calendar, not run progress.'],
-        ['\u27a4', 'Fighters hit 20% harder', 'And Wing Tactics finally applies to fighters and drones, as its text always said.'],
-      ] },
       { k: 'FIXED', c: '#8fc4ff', rows: [
-        ['\u25c8', 'Leaderboards were not publishing', 'Nobody\u2019s row had moved in twenty builds. Fixed \u2014 yours updates on your next sync.'],
-        ['\u265b', 'King of the Hill crowned the wrong pilot', 'Being in the arena at midnight wiped your own score. Owed crown prizes are being delivered now.'],
-        ['\u23f8', 'Why KOTH pauses', 'The rule is on the arena screen and on the pill. The idle window is now 10 minutes, up from 4.'],
-        ['\u2637', 'Corner farming', 'Hostiles now spawn across the whole map instead of bunching on one side.'],
-        ['\u2756', 'Item names hidden in Loadouts', 'Weapon and fighter chips show their names again.'],
+        ['⚡', 'The game was running at 7fps', 'A dead render loop, not your hardware. Combat should feel instant again.'],
+        ['❖', 'Fighters lost their colours', 'Same cause — the game had stripped its own visuals trying to cope. Your wing wears its bay rarity again.'],
+        ['⛨', 'Failing an attack no longer shields the tile', 'Lose a Void spire or a galaxy tile and it stays open — for your retry, and for everyone else.'],
+        ['⬡', 'Pilot Tree rank showed zero', 'Your own row now reads your live tree score.'],
+        ['✦', 'Legendary filter in the Pilot Tree list', 'The Rare chip and searching “legendary” both find them now.'],
+      ] },
+      { k: 'KNOWN', c: '#ffcf7a', rows: [
+        ['◈', 'Leaderboard levels look stale', 'Publishing was broken for twenty builds. Every pilot’s row corrects itself the next time they log in.'],
       ] },
     ],
   };

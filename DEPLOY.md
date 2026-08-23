@@ -1,151 +1,94 @@
-# Loot Fleet — deploy v242 · build 712 · CARGO LOOT LEAK · HALL OF KINGS · PILOT TREE LIST
+# Loot Fleet — deploy v243 · build 713 · RENDER LOOP FIX
 
 Push the **contents of this folder** to the repo root Vercel serves.
-Supersedes v241 (build 707). Service worker cache is `lootfleet-v712`.
-**Login screen reads `BUILD 712`.**
 
-**This folder carries builds 708–712.** 708 through 711 were staged here and
-never pushed, so everything below ships in one go.
+Supersedes v242 (build 712). Service worker cache is `lootfleet-v713`.
+**Login screen reads `BUILD 713`.**
 
-**⚠ TWO SQL FILES TO RUN: `supabase/koth-archive.sql`, then `supabase/pilot-ladder.sql`.**
+## ⚠ NO SQL THIS BUILD
 
-`pilot-ladder.sql` adds the Pilot Tree ladder (`pilot_score`, `pilot_nodes`) and
-is **the new canonical `lb_upsert`** — a strict superset of `new-ladders.sql`. It
-drops every existing overload by catalogue lookup and asserts exactly one
-survives, so run the whole file in one go. After both files:
-`notify pgrst, 'reload schema';`
+`koth-archive.sql` and `pilot-ladder.sql` were required at 712 and are unchanged.
+If both already ran, there is nothing to do on the database.
 
-`koth-archive.sql` is required, and it grew a
-section in 712. Without it: King of the Hill keeps crowning the wrong pilot, the
-two new carrier blueprints read a crown count that stays at zero, and the Hall of
-Kings cannot show which day a crown was won. It drops and recreates `koth_bump`
-by catalogue lookup and asserts exactly one copy survives, so run the whole file
-in one go, not in pieces. **If you already ran this file at 711, run it again** —
-it is idempotent, and section 8 (`koth_hall_days`) is new. No Edge Function
-deploy; `discord-feed` stays at `FEED_VER 694`.
+## Order
 
-**`supabase/temple.sql` IS GONE and must NOT be run.** The Temple was removed in
-711; the file no longer exists in this folder. Earlier notes below still describe
-the Temple fix that shipped into 710 — they are historical record, superseded.
-The Postgres tables it created are harmless if left in place; nothing reads them.
+1. Push everything **except** `version.json`.
+2. Push `version.json` **last** — it is the eviction beacon. `js/update-gate.js`
+   polls it every 90s and force-reloads anyone on a lower build within ~90s.
+   Pushing it early evicts players onto code that is not live yet.
+3. Confirm the login screen reads `BUILD 713`.
 
----
-
-## THIS RELEASE EVICTS EVERY LIVE CLIENT
-
-| mechanism | how it forces the reload |
-|---|---|
-| `version.json` = **712** vs clients running `LF_BUILD` 707 | `js/update-gate.js` polls `version.json` every 90s; a higher build blocks the screen and force-reloads within ~90 seconds |
-| `sw.js` `CACHE` = **lootfleet-v712** | the cache name changed, so the old bundle is evicted rather than served from disk |
-| every changed `js/`+`css/` ref carries `?v=712` | no browser can serve a stale copy of a changed file |
-
-**Push the site FIRST, then `version.json` last** if your host publishes
-incrementally — bumping the beacon ahead of the files evicts players onto code
-that is not live yet. A single upload of the whole folder is fine.
-
----
-
-## THE FOUR BUILD STAMPS
+## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 712 |
-| root `version.json` | 712 |
-| `deploy-v242/version.json` | 712 |
-| `deploy-v242/sw.js` `CACHE` | `lootfleet-v712` |
+| root `game.html` `window.LF_BUILD` | 713 |
+| root `version.json` | 713 |
+| `deploy-v243/version.json` | 713 |
+| `deploy-v243/sw.js` `CACHE` | `lootfleet-v713` |
 
-Root `sw.js` is NOT a stamp — it is the kill-switch worker for the old poisoned
-origin and is never versioned.
+**Every `js/` and `css/` reference carries `?v=713`** — a blanket bump, not just
+the changed files. Bumping only what changed is how a fix ships looking deployed
+and is not; one extra re-download removes the whole class of stale-copy bug.
 
-Rebuilt from the project root at 712: `js/`, `css/`, `guides/` and `supabase/`
-were deleted from this folder and re-copied fresh, then the HTML files, then the
-beacon — never seeded from the previous release. `game.html` in this folder is
-identical to the project root copy. No `temple` reference survives anywhere in
-the shipped HTML.
+Rebuilt from the project root: `js/`, `css/`, `guides/` and `supabase/` deleted
+from this folder and re-copied fresh, then the HTML, then the beacon — never
+seeded from the previous release.
 
 ---
 
-## STEP BY STEP
+## What changed in 713
 
-1. **Supabase → SQL Editor → run `supabase/koth-archive.sql`** (whole file, one
-   go), then `notify pgrst, 'reload schema';`. Read section 6 of that file first
-   if you want to know which bug took day 1 — the queries are read-only.
-2. **Push the contents of this folder** to the repo root Vercel serves. One upload
-   of the whole folder is the safe way — the beacon then lands with the files.
-   If your host publishes incrementally, push everything EXCEPT `version.json`
-   first, then `version.json`.
-3. **Watch the eviction.** Within ~90 seconds every live client blocks and reloads
-   onto 712.
-4. **Confirm the login screen reads `BUILD 712`.**
-5. **Smoke test, in this order:**
-   - **Command sheet on a phone (360px and 390px wide)** — no card title sliced
-     along its top edge, no subtitle running under a count badge, and every card
-     icon still centred in its tile. Then open with `?fitaudit`: the chip must
-     read **✔ NO CLIPPING** with the Command sheet open (the auditor covers that
-     sheet for the first time in 711).
-   - **Voidmaw ▸ LEADERBOARDS** — the note reads **LIVE**, not "Connecting to live
-     standings". Do a run, reload, and confirm the figure survives. If you are the
-     only published operator the board says so and shows **no rank at all** rather
-     than #2.
-   - **Any zone, attack running, then tap between Command items** — the menu
-     should respond immediately. The simulation keeps real time regardless: check
-     a Voidmaw or KOTH run's clock still matches the wall clock.
-   - **Fleet Exploration ▸ any contract ▸ ASSIGN FLEET** — scroll to the bottom of
-     the hull list and pick several. The sheet must stay where you left it.
-   - **King of the Hill** — fight through the UTC midnight rollover on one account
-     while a second account sits idle with a smaller score. Next day the crown goes
-     to the bigger score. (This is the day-1 bug; it needs the SQL.)
-   - **KOTH, a corner of the arena** — hostiles still arrive from 640–1160px out,
-     not on top of you. Kills/second in a corner should match the middle.
-   - **Dreadnaught Hunt, any tier** — kills pay **no XP**. Cores, drops and gold
-     unchanged.
-   - **Hangar ▸ Ships ▸ Titan Aquila / Celestial Corvus** — each reads
-     `👑 n / 25` or `👑 n / 100` crowns with a progress bar and its full build
-     cost, instead of "Not yet available".
-   - **Command** — no Temple card, and `#screen-temple` is gone from the DOM.
-   - **Cargo Defense ▸ any run** — kill things all the way to the Citadel and
-     confirm **nothing drops on the ground**: no fittings from ordinary kills, and
-     none from the five sector bosses (that was the leak). Gold, salvage, LootCoins
-     and Dread Cores still pay on delivery.
-   - **Cargo Defense as a Pro subscriber** — buy extra runs until the button is
-     replaced by "All 3 extra runs bought today". The counter resets at midnight.
-   - **Ascend, then open Dreadnaught Hunt** — every tier you already used this week
-     is **still locked**, with the weekly countdown intact.
-   - **KOTH ▸ Hall of Kings** — each row reads a real date (**Aug 22**, not
-     Dec 31) with the winner's hull. Check it from a US timezone too: a crown won
-     on the 22nd must not read the 21st.
-   - **King of the Hill ▸ the screen, before entering** — a WHEN KILLS COUNT card
-     states the presence rule. In the arena, leave it alone for 10 minutes: the
-     pill goes grey, says PAUSED **and prints the reason on a second line**.
-   - **Ranks ▸ PILOT TREE** — the new board ranks by Pilot Score with node count
-     and pilot rank underneath. Before `pilot-ladder.sql` runs it must show a
-     LOADING state, never "waiting on a migration" and never a board of zeroes.
-   - **Ranks ▸ HOME DEFENSE and EXPLORATION** — still live after the new
-     migration (the shape ladder moved from `new` to `pilot`).
-   - **The Pro pill in the top bar, as an ACTIVE member** — it opens the Pro
-     sheet with an ACTIVE MEMBER banner, the full benefit list and a Manage /
-     cancel button. It used to open the Account sheet, which listed none of them.
-   - **⚙ Account ▸ Graphics** — Low / Medium / High. Switch to Low on the battle
-     screen and confirm: tracers go single-stroke, bloom and ambient drift stop,
-     the colour grade drops, and the fleet keeps fighting at exactly the same
-     rate. On a high-DPR phone the canvas should visibly soften on Low.
-   - **Battle speed row** — three pills only: 1× / 2× / 3×. 2× is locked behind
-     the 500-LootCoin buy, 3× behind Pro. Log in on an account that was sitting
-     on 4× or 5× and confirm it lands on 2× / 3× (not 1×) if it owns the
-     entitlement.
-   - **A carrier hull** — the wing hits ~20% harder, and an ascended pilot with
-     Wing Tactics ranks should see fighters AND drones scale with it now.
-   - **Command ▸ Pilot Tree** — the ⬡ Map / ☰ List toggle. List view searches,
-     filters by category, sorts affordable-first and unlocks from the row. The
-     choice survives a reload. Run `?fitaudit` on it at 360×640.
+### ⚡ The game was running at 7.5fps — and it was never a rendering cost
 
-### Rollback
+`loop()` read `if (!rt.running) return;` **before** re-arming rAF. The instant
+anything set `rt.running` false for a single frame — `freeze()` on a session
+kick, a recovery pass — the animation chain terminated and **nothing restarted
+it**. `rt.running` going back to true did not help: there was no longer a
+callback scheduled to observe it.
 
-Push `deploy-v241` (build 707) and set `version.json` back to 707. 712 writes one
-new save field (`kothCrowns`, a monotonic count) and one localStorage preference
-(`lf_pltree_view`), both of which 707 ignores, so a rollback costs nothing.
-`koth-archive.sql` is additive — the archive table, the frozen close and
-`koth_hall_days()` are all safe to leave in place under 707.
+What kept the game alive was the 30Hz watchdog at the bottom of `boot()`, which
+only steps when `now - rt.last > 120`. That is a last-resort safety net, not a
+game loop, and it produces exactly one step per ~132ms. Measured `_fdt` was
+**132.7ms on a 120Hz display with an idle main thread**.
+
+`loop()` now re-arms **first, unconditionally**. A paused loop is a scheduled
+callback that does nothing, costs nothing, and resumes on the very next frame.
+`rt.last` is kept current while paused so resuming never hands `step()` a
+multi-second `dt`. **132.7ms → 5.27ms.** Sim still keeps exact real time.
+
+### ✦ Fighters lost their rarity colour
+
+Same root cause: the LOD governor saw a 132ms frame time and pinned itself at 2
+(survival), and the tint was gated behind `lod < 2`. The gate is gone for good —
+the tinted blit measures 1.03µs against 0.90µs for the raw sprite, so it was
+never a frame-time decision. **LOD sheds decoration; it must never shed
+information.**
+
+### ⛨ A failed attack no longer shields the tile
+
+Two shields fired on failure: a 24h one armed on warp-in and committed on your
+first kill, plus 15 minutes from `failTimedSiege()`. Losing therefore protected
+the tile you had just failed to take — you could not retry and nobody else could
+attack. The shield is now stamped **only where a tile changes hands**
+(`captureTile`, siege win). Void spires and galaxy tiles share this path.
+`log_repelled()` never wrote `cooldown_until`, so this was entirely client-side —
+no migration. Existing `tileCd` entries are left to expire on their own.
+
+### ⬡ Pilot Tree rank read zero
+
+`mineInto()` reads every figure on your own row live from the save so it never
+lags the publish heartbeat — but the two new pilot fields were missing, so the
+row fell through to the server's 0. Now read from `DREAD`, the same source as
+the publish.
+
+### ✦ Legendary filter in the Pilot Tree list
+
+Two faults. A legendary node keeps its own combat category and carries
+`rare: true` separately, so the Rare chip's `cat === 'rare'` test matched almost
+nothing. And the search haystack did not contain "legendary" even though the row
+prints that badge. The chip now tests the flag, and anything printed on a row is
+searchable.
 
 ---
 

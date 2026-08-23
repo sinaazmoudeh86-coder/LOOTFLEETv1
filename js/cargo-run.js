@@ -181,8 +181,24 @@
   // Damage per boarder is now a third of that and only the closest few count, so
   // the run is a coverage problem — be where the raiders are — rather than a
   // damage race the pilot cannot win.
-  const LATCH_DPS = 0.85;     // integrity/sec per boarder, before hull fragility
-  const LATCH_MAX = 6;        // boarders that can chew at once
+  const LATCH_DPS = 0.55;     // integrity/sec per boarder, before hull fragility
+  const LATCH_MAX = 5;        // boarders that can chew at once
+  // ---- THE PILOT'S POWER HAS TO PROTECT THE FREIGHTER ------------------------
+  // The reported failure was "best gear, best ships, still lost the cargo", and
+  // that is a DESIGN fault rather than a tuning one: nothing about the freighter's
+  // survival responded to how hard the pilot hits. Boarder damage is capped by
+  // COUNT (LATCH_MAX), not by clear speed, so past a certain hostile density the
+  // hull loses a fixed 7.9 integrity/sec no matter how fast you delete things —
+  // an unwinnable damage race dressed as a skill test.
+  //
+  // Integrity now REPAIRS whenever nothing is latched. That is the lever a strong
+  // fleet was missing: clearing the boarders off the hull is no longer merely
+  // pausing the bleed, it actively buys the hull back. A pilot who can hold the
+  // lane clear recovers; one who cannot still loses. Damage taken is never
+  // erased for free — the repair is slower than a single boarder chewing, so it
+  // rewards coverage without ever making the freighter immortal.
+  const REPAIR_DPS = 1.6;     // integrity/sec while the hull is clear of boarders
+  const REPAIR_DELAY = 2.5;   // seconds clear before repairs start
   const GRACE_S = 6;          // launch grace — nothing touches the hull for six seconds
   // LAUNCH SETTLE — REAL milliseconds, not sim seconds. The opening moments of a
   // run are the most expensive frames in the game (texture upload, the first
@@ -544,6 +560,16 @@
     }
     if (n) hurt(LATCH_DPS * Math.min(LATCH_MAX, n) * dt, rt);
     run.latched = n;
+    // REPAIR WHEN CLEAR. The delay stops it flickering on between two waves of
+    // boarders — you have to actually clear the hull, not just kill the last one
+    // a moment before the next latches.
+    if (n > 0) { run.clearT = 0; }
+    else {
+      run.clearT = (run.clearT || 0) + dt;
+      if (run.clearT > REPAIR_DELAY && run.integrity < 100) {
+        run.integrity = Math.min(100, run.integrity + REPAIR_DPS * dt);
+      }
+    }
   }
 
   function voidTick(dt, rt) {

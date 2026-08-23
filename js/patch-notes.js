@@ -31,7 +31,7 @@
 (function () {
   'use strict';
 
-  const BUILD = 714;
+  const BUILD = 715;
   const NOTES = {
     build: 713,
     title: 'BUILD 713',
@@ -45,7 +45,7 @@
         ['✦', 'Legendary filter in the Pilot Tree list', 'The Rare chip and searching “legendary” both find them now.'],
       ] },
       { k: 'ALSO', c: '#7ce0a0', rows: [
-        ['\u{1F69A}', 'Cargo Defense is survivable again', 'The frame fix accidentally tripled its difficulty. Rings, hostiles and anomalies are all back down — and no longer depend on how fast your device is.'],
+        ['\u{1F69A}', 'Cargo Defense is survivable again', 'Fewer rings and raiders, tougher freighters — and the hull now REPAIRS itself whenever you clear the boarders off it.'],
         ['\u2b21', 'Pilot Tree ranks show real pilots only', 'No stand-in names. The board fills in as pilots log in.'],
       ] },
       { k: 'KNOWN', c: '#ffcf7a', rows: [

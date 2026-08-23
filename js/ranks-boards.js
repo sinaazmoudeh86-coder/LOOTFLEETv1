@@ -213,7 +213,7 @@
         if (!n) return 'No nodes unlocked \u00b7 Lv ' + (p.level | 0);
         return n + ' node' + (n === 1 ? '' : 's') + ' \u00b7 ' + pilotRank(Number(p.pilot_score) || 0) + ' \u00b7 Lv ' + (p.level | 0);
       },
-      empty: 'No other pilot has published a tree yet. Rows appear as pilots log in — this board shows real trees only, never stand-ins.',
+      empty: 'No other pilot has published a tree yet. This board lists real published trees only — never stand-ins, and never a pilot we have not heard from. Rows appear as pilots log in.',
     },
     {
       // KING OF THE HILL — the only board with two views, because the event has
@@ -531,7 +531,23 @@
     // BELOW the fabricated ones, so the board showed a handful of AI names and
     // hid the actual humans. Same rule the Voidmaw boards learned in 710 — real
     // published rows only, and if a board is thin, let it be thin.
-    .filter((q) => !(tab.realOnly && !q.isMe && (q._sim || q.is_simulated || q._filler)));
+    .filter((q) => {
+      if (!tab.realOnly || q.isMe) return true;
+      // No stand-ins (above), and no UNPUBLISHED rows either.
+      //
+      // A pilot whose row has never carried a pilot_score reads 0, and the board
+      // rendered that as "No nodes unlocked · Lv 700" — which is a statement of
+      // fact we do not have. FrostSkull at Lv 700 certainly has a tree; what we
+      // have is silence from a client that has not published one yet, and
+      // silence must not be printed as zero. Same rule as the Voidmaw rank fix:
+      // an empty result and a missing one must not look the same.
+      //
+      // A leaderboard of tree scores lists pilots who have a tree score. If that
+      // is a short list today, the board says so rather than padding itself with
+      // rows asserting something false about real people.
+      if (q._sim || q.is_simulated || q._filler) return false;
+      return tab.metric(q) > 0;
+    });
     rows.sort((a, b) => tab.metric(b) - tab.metric(a));
     rows.forEach((p, i) => { p.rank = i + 1; });
     return { rows, real: data.real || 0, tab, pending: false };

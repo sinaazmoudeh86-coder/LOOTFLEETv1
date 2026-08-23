@@ -53,11 +53,11 @@
       blurb: 'A short-haul crate run. Light resistance, honest pay.' },
     { tier: 2, key: 'c2', name: 'BULK FREIGHTER II', short: 'Cargo II',  cost: 1e9,    frag: 0.80, accent: '#5bc0ff', risk: 'MODERATE',  gold: [1.8, 3.2],
       blurb: 'Real tonnage. Raiders start showing up in numbers.' },
-    { tier: 3, key: 'c3', name: 'VAULTSHIP III',     short: 'Cargo III', cost: 2.5e10, frag: 1.00, accent: '#b15cff', risk: 'HIGH',      gold: [1.9, 3.4],
+    { tier: 3, key: 'c3', name: 'VAULTSHIP III',     short: 'Cargo III', cost: 2.5e10, frag: 0.92, accent: '#b15cff', risk: 'HIGH',      gold: [1.9, 3.4],
       blurb: 'A sealed vault hull. Bombers and elites join the screen.' },
-    { tier: 4, key: 'c4', name: 'SOVEREIGN IV',      short: 'Cargo IV',  cost: 4e11,   frag: 1.24, accent: '#f0972a', risk: 'VERY HIGH', gold: [2.0, 3.6],
+    { tier: 4, key: 'c4', name: 'SOVEREIGN IV',      short: 'Cargo IV',  cost: 4e11,   frag: 1.05, accent: '#f0972a', risk: 'VERY HIGH', gold: [2.0, 3.6],
       blurb: 'Sovereign-grade freight. Void casters seed the lane ahead of you.' },
-    { tier: 5, key: 'c5', name: 'OMEGA CARGO V',     short: 'Cargo V',   cost: 6e12,   frag: 1.55, accent: '#ff3b4e', risk: 'EXTREME',   gold: [2.1, 3.9],
+    { tier: 5, key: 'c5', name: 'OMEGA CARGO V',     short: 'Cargo V',   cost: 6e12,   frag: 1.15, accent: '#ff3b4e', risk: 'EXTREME',   gold: [2.1, 3.9],
       blurb: 'The deepest manifest in the galaxy. Nothing pays like it, and nothing breaks as easily.' },
   ];
 

@@ -235,6 +235,33 @@
       ['Sanctuary Array X', 'Warden Prime Lattice', 'Bastion Halo', 'Custodian Field Rig'],
       ['Archangel Lattice', 'Eternal Warden Array', 'Sovereign Halo Prime', 'Pantheon Field Omega'],
     ],
+    // ---- AEGIS FIELD PROJECTORS ---------------------------------------------
+    // Named as INSTRUMENTS, not guns: a projector emits a field, it does not
+    // fire. Same four quality buckets as every other class.
+    venom: [
+      ['Bilge Haze Emitter', 'Corroder Coil', 'VN-1 Miasma Pod', 'Rust Lattice'],
+      ['Venom Lattice Mk II', 'Nightshade Diffuser', 'Toxin Bloom Array', 'Hemlock Emitter'],
+      ['Basilisk Haze X', 'Nerve-Lattice Prime', 'Widowmaker Diffuser', 'Necrosis Field Rig'],
+      ['Serpent Crown Lattice', 'Eternal Miasma Array', 'Gorgon Prime Emitter', 'Requiem Field Omega'],
+    ],
+    cryo: [
+      ['Frost Coil Rig', 'Chill Diffuser', 'CR-2 Rime Pod', 'Icebox Emitter'],
+      ['Cryo Field Mk II', 'Glacier Lattice', 'Permafrost Array', 'Hoarfrost Diffuser'],
+      ['Absolute Zero X', 'Winterheart Prime', 'Iceclad Field Rig', 'Stillfrost Lattice'],
+      ['Fimbulwinter Array', 'Eternal Rime Prime', 'Heat-Death Lattice', 'Cold Sleep Omega'],
+    ],
+    banner: [
+      ['Signal Mast', 'Rally Horn Rig', 'BN-1 Colours Pod', 'Muster Emitter'],
+      ['Banner Array Mk II', 'War Chorus Rig', 'Standard-Bearer Lattice', 'Oath Resonator'],
+      ['Triumph Array X', 'Warsong Prime', 'Vanguard Colours Rig', 'Herald Lattice'],
+      ['Imperator Standard', 'Eternal Warsong Array', 'Sovereign Colours Prime', 'Apotheosis Omega'],
+    ],
+    plague: [
+      ['Spore Vent', 'Blight Coil', 'PG-1 Rot Pod', 'Culler Emitter'],
+      ['Plague Emitter Mk II', 'Contagion Lattice', 'Pestilence Diffuser', 'Wither Array'],
+      ['Pandemic Bloom X', 'Rotfield Prime', 'Carrion Lattice', 'Sepsis Field Rig'],
+      ['Extinction Bloom', 'Eternal Rot Array', 'Pale Horse Prime', 'Last Breath Omega'],
+    ],
     fighter: [
       ['Mk I Sortie Rack', 'Kestrel Bay', 'Light Launch Rail', 'Hangar Rack A'],
       ['Talon Sortie Bay', 'Shrike Rack', 'Vector Launch Bay', 'Skirmish Hangar'],
@@ -377,8 +404,26 @@ const WCLASS_WEIGHTS = { laser: 1, gatling: 1, missile: 1, rail: 1, plasma: 0.75
     return b[(Math.random() * b.length) | 0];
   }
   function pickWeaponName(wkey, tier) {
+    // A CLASS WITHOUT A NAME POOL MUST NOT KILL THE FRAME.
+    //
+    // This read WCLASS_NAMES[wkey] and indexed straight into it, so any weapon
+    // class missing from that table threw "cannot read properties of undefined"
+    // — inside generate(), inside onKill(), inside the game loop. One bad drop
+    // therefore took down the whole render loop, not just the item.
+    //
+    // That is what the four Aegis field projectors did the moment one rolled:
+    // they were added to WEAPON_CLASSES and to the roll weights, but not here.
+    // The pools below fix that specific gap; this guard fixes the CLASS of bug,
+    // so the next class added without a pool degrades to a plain name instead of
+    // ending the session.
     const buckets = WCLASS_NAMES[wkey];
+    if (!buckets || !buckets.length) {
+      try { console.warn('[LOOTFLEET] no name pool for weapon class "' + wkey + '" — add one to WCLASS_NAMES in js/items.js'); } catch (e) {}
+      const wc = WEAPON_CLASSES.find((w) => w.key === wkey);
+      return (wc && wc.name) || 'Hardpoint';
+    }
     const b = buckets[Math.min(buckets.length - 1, bucketFor(tier))];
+    if (!b || !b.length) return (WEAPON_CLASSES.find((w) => w.key === wkey) || {}).name || 'Hardpoint';
     return b[(Math.random() * b.length) | 0];
   }
 

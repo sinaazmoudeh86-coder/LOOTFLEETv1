@@ -5,9 +5,26 @@ Push the **contents of this folder** to the repo root Vercel serves.
 Supersedes v243 (build 713). Service worker cache is `lootfleet-v714`.
 **Login screen reads `BUILD 714`.**
 
-## ⚠ NO SQL THIS BUILD
+## ⚠ SQL — CHECK BOTH
 
-`koth-archive.sql` and `pilot-ladder.sql` were required at 712 and are unchanged.
+**1. `supabase/temple-retire.sql` — run once.** The Temple left the client in 711
+but its RPCs are still installed, and the server's `temple_claim()` is the
+pre-fix version that throws `42883 operator does not exist: record ->> unknown`
+on every call. Stale cached clients still poll it, which is what has been filling
+the Postgres log. This drops the temple FUNCTIONS by catalogue lookup and
+deliberately leaves the TABLES alone — nothing reads them, and they hold the
+record of what players actually did in that arena.
+
+**2. `supabase/pilot-ladder.sql` — verify it ran at 712.** If the Pilot Tree
+board shows every real pilot at 0, this is why. Check with:
+
+```sql
+select column_name from information_schema.columns
+ where table_name = 'leaderboard' and column_name like 'pilot%';
+```
+
+No rows = it never ran. Run it, then `notify pgrst, 'reload schema';`.
+`koth-archive.sql` is unchanged since 712.
 
 ## ⚠ EDGE FUNCTION DEPLOY REQUIRED
 
@@ -87,6 +104,32 @@ best players" report.
 | void anomalies | 12 | **6** |
 | extra cargo-hunters per wave | ×2.4 | **×1.2** |
 | spawn interval floor | 1.4s | **2.0s** |
+
+**Second pass — the pilot's power now protects the freighter.** Cutting the
+population was not enough on its own, and the reason is structural: boarder
+damage is capped by COUNT (`LATCH_MAX`), not by how fast the lane is cleared, so
+past a certain density the hull lost a fixed rate per second **however hard the
+pilot hit**. Best gear, best ships, same result — an unwinnable damage race
+dressed as a skill test.
+
+Integrity now **repairs at 1.6/s once the hull has been clear of boarders for
+2.5 seconds**. Clearing them is no longer merely pausing the bleed; it buys the
+hull back. A pilot who can hold the lane recovers, one who cannot still loses,
+and the repair is slower than a single boarder chewing — the freighter is never
+immortal.
+
+| | was | now |
+|---|---|---|
+| boarder DPS on Omega V | 7.9/s | **3.2/s** |
+| Omega V hull | 65 HP | **87 HP** |
+| Cargo IV hull | 81 HP | **95 HP** |
+| Cargo III hull | 100 HP | **109 HP** |
+| time to lose a full hull, unopposed | 13s | **32s** |
+| repair when clear | none | **1.6/s** |
+
+`frag` is the one fragility number — `hullHp = 100/frag` is exactly what the
+Cargo Defense sheet prints, so these move the shop copy and the simulation
+together with no second edit.
 
 Rings got cut hardest on purpose: they burn the freighter as readily as the
 pilot, they cannot be shot — only outrun — and 26 live rings saturate a 760px

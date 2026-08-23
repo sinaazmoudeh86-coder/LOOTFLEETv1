@@ -218,6 +218,34 @@
     return msg.indexOf('pgrst202') !== -1 || msg.indexOf('42883') !== -1 ||
            msg.indexOf('does not exist') !== -1 || msg.indexOf('could not find') !== -1;
   }
+  // A CASCADE DOWN EVERY RUNG IS NOT AN OLD SERVER — IT IS A BAD PAYLOAD.
+  //
+  // isLegacy() answers "is this ONE signature missing", which is the right
+  // question for a single rung: the server predates that migration, mark it off,
+  // try the next. It is the wrong question when EVERY rung 202s in the same
+  // publish, because the only thing all the rungs share is `base` — so a stale
+  // key there (see the p_fleet note below) degrades the client all the way to a
+  // shape that has not existed for years, and the console then blames a
+  // migration that ran correctly. That misdiagnosis cost two days.
+  //
+  // Counting the fall is enough to tell them apart: one or two rungs off is a
+  // server behind on migrations, all of them is our own payload. Say so once,
+  // plainly, instead of printing a different "run this .sql" warning per rung.
+  let _lbCascade = 0, _lbCascadeSaid = false;
+  function noteRungMissing(rung) {
+    _lbCascade++;
+    if (_lbCascade >= 4 && !_lbCascadeSaid) {
+      _lbCascadeSaid = true;
+      try {
+        console.error('[LOOTFLEET] EVERY lb_upsert rung reports "function not found" (last: ' + rung + '). '
+          + 'That is not a missing migration — a signature the server really lacks would stop at ONE rung. '
+          + 'It means the shared `base` payload contains a parameter lb_upsert does not declare, so PostgREST '
+          + 'cannot match any overload. Compare the keys in base/ladder/art/fresh/tree against the CREATE '
+          + 'FUNCTION in supabase/pilot-ladder.sql. Do NOT re-run migrations first.');
+      } catch (e) {}
+    }
+  }
+  function noteRungOk() { _lbCascade = 0; }
   // BIG NUMBERS ON THE WIRE. Late-game fleet power reaches ~1e29, and two things
   // then go wrong on the way to Postgres:
   //   · JS serialises anything past ~1e21 in exponential notation ("2.3e+29"),
@@ -250,8 +278,22 @@
       const base = {
         p_name: p.name || 'Operator', p_power: bignum(p.power),
         p_level: p.level || 1, p_zone: p.zone || 1, p_kills: bignum(p.kills),
-        p_fleet: p.fleet || [],
       };
+      // NO p_fleet. It was removed from lb_upsert's signature by new-ladders.sql
+      // and is absent from pilot-ladder.sql, but this object kept sending it —
+      // and `base` is merged into EVERY rung, so one obsolete parameter made
+      // PostgREST fail to match ANY overload. Every rung 404'd with PGRST202,
+      // isLegacy() read that as "older server" and walked the ladder to the
+      // bottom, and the last error printed `base` alone (p_fleet, p_level,
+      // p_name, p_power, p_zone) — which reads like a legacy 6-arg call and sent
+      // the diagnosis the wrong way for two days.
+      //
+      // Live from the day new-ladders.sql shipped. Nobody's row published in that
+      // window; the boards were frozen, not slow.
+      //
+      // THE RULE: `base` is the ONE payload every rung inherits, so a stale key
+      // here breaks all of them at once. Anything removed from the SQL signature
+      // must be removed here in the same change.
       if (_lbNoAsc && Date.now() > _lbAscRetryAt) _lbNoAsc = false;   // re-arm
       if (_lbNoLadder && Date.now() > _lbLadderRetryAt) _lbNoLadder = false;
       if (_lbNoCargo && Date.now() > _lbCargoRetryAt) _lbNoCargo = false;
@@ -323,8 +365,9 @@
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art, fresh, tree));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('pilot', error); return; }
+        noteRungMissing('pilot');
         _lbNoPilot = true; _lbPilotRetryAt = Date.now() + 5 * 60 * 1000;
         if (!_lbPilotWarned) {
           _lbPilotWarned = true;
@@ -340,8 +383,9 @@
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art, fresh));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('new', error); return; }
+        noteRungMissing('new');
         _lbNoNew = true; _lbNewRetryAt = Date.now() + 5 * 60 * 1000;
         if (!_lbNewWarned) {
           _lbNewWarned = true;
@@ -359,8 +403,9 @@
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('art', error); return; }
+        noteRungMissing('art');
         // FIVE MINUTES, NOT SIX HOURS. Every other rung backs off for six hours
         // because a missing migration is a standing fact about that server. This
         // rung is different: it is the one being rolled out, so its failure is
@@ -387,8 +432,9 @@
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 }, base, ladder));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('nano', error); return; }
+        noteRungMissing('nano');
         _lbNoNano = true; _lbNanoRetryAt = Date.now() + 6 * 3600 * 1000;
       }
       // HAULAGE COLUMNS degrade on their own flag, exactly like the tiers below:
@@ -397,20 +443,22 @@
       if (ladder && !_lbNoLadder && p.cargo !== undefined && !_lbNoCargo) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0 }, base, ladder));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('cargo', error); return; }
+        noteRungMissing('cargo');
         _lbNoCargo = true; _lbCargoRetryAt = Date.now() + 6 * 3600 * 1000;
       }
       if (ladder && !_lbNoLadder) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0) }, base, ladder));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('ladder', error); return; }
+        noteRungMissing('ladder');
         _lbNoLadder = true; _lbLadderRetryAt = Date.now() + 6 * 3600 * 1000;
       }
       if (!_lbNoAsc) {
         const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc: (p.asc | 0) }, base));
-        if (!error) { _lbFails = 0; return; }
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
         // Only a genuinely missing function means "legacy server". Ambiguity,
         // network blips and RLS errors must NOT disable stars.
         if (!isLegacy(error)) { lbFail('p_asc', error); return; }  // keep p_asc; retry next save

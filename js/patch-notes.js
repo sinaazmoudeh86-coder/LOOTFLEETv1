@@ -31,16 +31,19 @@
 (function () {
   'use strict';
 
-  const BUILD = 718;
+  const BUILD = 719;
   const NOTES = {
-    build: 718,
-    title: 'BUILD 718',
+    build: 719,
+    title: 'BUILD 719',
     sub: 'The Mech faction is here — and it fights differently.',
     groups: [
       { k: 'NEW', c: '#ff8a9a', rows: [
         ['\u2699', 'The Mech Foundry', 'Five tiers in Command, from the Spawn Nest at Level 120 to the Titan Forge at 550. Clear one for \u2699 Mech Cores.'],
         ['\u26a0', 'Mech attacks strip your armor', 'Every Mech hit stacks ARMOR CORRUPTION and you take more damage while it holds. The class sets the ceiling, the swarm sets how fast they get there \u2014 a Spawn is nothing, a Titan is +25%. It shows over your ship, and it fades in 5s once they stop hitting you.'],
         ['\u2699', 'Mech Archon &amp; Mech Titan', 'Two new hulls, earned only in the Foundry \u2014 first clear of the top two tiers hands over the blueprint. Neither is your biggest gun: they CORRUPT the target so every other ship in your fleet hits it harder.'],
+      ] },
+      { k: 'CHANGED', c: '#ffcf7a', rows: [
+        ['\u2726', 'Fusing a Commander costs more at high rarity', 'It was 4 spare copies a tier at every rarity, which let the cheapest crate in the game build a Primordial. A step is now priced by the tier it leaves \u2014 3 spares at Common, 39 at Legendary, 141 at Ancient. <b>Every card and every duplicate you already hold is untouched</b>, and climbing the lower tiers is barely changed.'],
       ] },
       { k: 'ALSO', c: '#7ce0a0', rows: [
         ['\u2726', 'You ascend in the Frigate now', 'Every hull stays in your hangar at full strength \u2014 switch back the moment you meet its licence again. Commanders tied to a class or hull go quiet until you do, and tell you why.'],

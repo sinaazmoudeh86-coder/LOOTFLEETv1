@@ -1306,6 +1306,10 @@
     // Oblivion Final (4) and the Corvus (5), which is where its class and price
     // put it; the four below it climb from frigate to carrier weight.
     mechspawn:0.9, mechgremlin:1.2, mechbeast:1.7, mecharchon:2.4, mechtitan:3.4, mechsovereign:4.6,
+    // THE CHOIR LINE. Ember Mote is a frigate-weight recovery, Choirmaster Vhorn is
+    // the 1-in-200 chase at the top of it — so the ladder spans nearly the whole
+    // scale, the same way its drop odds do.
+    emb1:1, emb2:1.6, emb3:2.3, emb4:3.2, emb5:4.4,
     titanaquila:4.5, corvus:5 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
@@ -1316,7 +1320,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','eternum','aeternum','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4','xen1','xen2','xen3','xen4','xen5'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','eternum','aeternum','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4','xen1','xen2','xen3','xen4','xen5','emb1','emb2','emb3','emb4','emb5','mechspawn','mechgremlin','mechbeast','mecharchon','mechtitan','mechsovereign'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }

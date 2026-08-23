@@ -420,7 +420,13 @@
   // it is now ~225. That is a deliberate order-of-magnitude move, not a trim —
   // duplicates are meant to accumulate into something rare, and at the old rates a
   // week of pulls converted straight into a tier.
-  const PROMO_COST = 4;
+  // spares to raise a card ONE tier, priced by the tier being left:
+  //   Common 3 · Rare 11 · Epic 21 · Legendary 39 · Mythic 74 · Ancient 141 · …
+  // Reaching Primordial by fusion alone now costs thousands of duplicates rather
+  // than 44, which is the point: the LootCoin vaults remain the real route to the
+  // top of the table and the grind can still climb the part of it it is meant to.
+  const promoCost = (r) => Math.max(3, Math.round(3 * Math.pow(1.9, Math.max(0, r | 0))));
+  const PROMO_COST = promoCost(0);       // legacy export — the entry-tier figure
   const dustFor = (r) => 2 * Math.pow(2, Math.min(9, r | 0));
   const DUST_PULL = 2400;                      // dust for one Mythic-capped pull
   // TARGETED PROMOTION is the sink that makes dust make sense. Scrapping spares
@@ -432,8 +438,9 @@
   function canPromote(id) {
     const o = rec().own[id]; if (!o) return { ok: false, why: 'unowned' };
     if (o.r >= CMDR_W.length - 1) return { ok: false, why: 'max' };
-    if (spare(id) < PROMO_COST) return { ok: false, why: 'short', need: (PROMO_COST - spare(id)) + ' more spare' };
-    return { ok: true };
+    const cost = promoCost(o.r);
+    if (spare(id) < cost) return { ok: false, why: 'short', cost, need: (cost - spare(id)) + ' more spare' };
+    return { ok: true, cost };
   }
   // What a bulk fuse would actually do, computed before anything is spent so the
   // button can state it rather than surprise with it.
@@ -443,20 +450,21 @@
     // deepest-first, so the tier that matters most lands even if something below
     // it turns out to be ineligible
     ids.sort((a, b) => (own[b].r | 0) - (own[a].r | 0));
-    return { ids, spares: ids.length * PROMO_COST };
+    return { ids, spares: ids.reduce((n, id) => n + promoCost(own[id].r), 0) };
   }
   function promoteAll() {
     if (_ex) return 0;
     _ex = true;
     try {
       const { ids } = promoteAllPlan();
-      if (!ids.length) { toast('Nothing can fuse \u2014 each needs ' + PROMO_COST + ' spare copies'); return 0; }
+      if (!ids.length) { toast('Nothing can fuse \u2014 a step costs ' + promoCost(0) + ' spares at Common and more at every tier above'); return 0; }
       let n = 0; const named = [];
       for (const id of ids) {
         // RE-CHECKED PER CARD AT ITS OWN WRITE, not once for the batch.
-        if (!canPromote(id).ok) continue;
+        const chk = canPromote(id);
+        if (!chk.ok) continue;
         const o = rec().own[id];
-        o.n = num(o.n) - PROMO_COST;
+        o.n = num(o.n) - chk.cost;           // priced at THIS card's tier
         o.r = Math.min(CMDR_W.length - 1, (o.r | 0) + 1);
         named.push(BY_ID[id].name + ' \u2192 ' + rarityOf(o.r).name);
         n++;
@@ -472,9 +480,10 @@
     if (_ex) return false;
     _ex = true;
     try {
-      const c = canPromote(id); if (!c.ok) { toast(c.why === 'max' ? 'Already at the top tier' : 'Needs ' + PROMO_COST + ' spare copies'); return false; }
+      const c = canPromote(id);
+      if (!c.ok) { toast(c.why === 'max' ? 'Already at the top tier' : 'Needs ' + promoCost((rec().own[id] || {}).r | 0) + ' spare copies at this tier'); return false; }
       const o = rec().own[id];
-      o.n = num(o.n) - PROMO_COST;             // spares consumed
+      o.n = num(o.n) - c.cost;                 // spares consumed, priced at its tier
       o.r = Math.min(CMDR_W.length - 1, (o.r | 0) + 1);
       persist();
       toast('\u2726 ' + BY_ID[id].name.toUpperCase() + ' PROMOTED \u2014 now ' + rarityOf(o.r).name);
@@ -832,7 +841,7 @@
         + (o.r >= CMDR_W.length - 1
           ? '<span class="cmx-max">TOP TIER</span>'
           : '<button class="cm-ex-btn' + (pr.ok ? ' go' : '') + '" data-cm-promo="' + esc(id) + '"' + (pr.ok ? '' : ' disabled') + '>'
-            + 'FUSE \u2192 ' + esc(nextR.name) + '<i>' + PROMO_COST + ' spares</i></button>')
+            + 'FUSE \u2192 ' + esc(nextR.name) + '<i>' + promoCost(o.r) + ' spares \u00b7 have ' + sp + '</i></button>')
         + '<button class="cm-ex-btn" data-cm-scrapall="' + esc(id) + '">SCRAP \u00d7' + sp
         + '<i>+' + fmt(dustFor(o.r) * sp) + ' dust</i></button>'
         + '</span></div>';
@@ -845,7 +854,10 @@
       + '<span class="cm-db-s">Dust comes from <b>scrapping spare copies</b>. Spend it to <b>promote a card you already hold</b> one rarity tier, or on a pull capped at Mythic.</span></div>'
       + '<div class="cmx-grid">'
       + '<div class="cmx-card"><div class="cmx-h">FUSE DUPLICATES</div>'
-      + '<div class="cmx-note"><b>' + PROMO_COST + ' spare copies</b> of one officer raise that card <b>one tier</b>. The only route up that is not a roll.</div>'
+      + '<div class="cmx-note">Spare copies of one officer raise that card <b>one tier</b> \u2014 the only route up that is not a roll. '
+      + 'A step is priced by the tier it leaves: <b>' + promoCost(0) + '</b> at ' + esc(rarityOf(0).name)
+      + ', <b>' + promoCost(4) + '</b> at ' + esc(rarityOf(4).name)
+      + ', <b>' + promoCost(7) + '</b> at ' + esc(rarityOf(7).name) + '.</div>'
       + (dupes.length ? '<div class="cmx-list">' + dupes.map(row).join('') + '</div>'
          : '<div class="cmx-empty">No duplicates yet. Pull the same officer twice and the spare shows up here.</div>')
       + (() => {
@@ -1601,7 +1613,7 @@
     ROSTER, CRATES, GATE_STARS, DROP, STAT_LABEL, render,
     unlocked, gate, rec, owned, dust, equipped, equip, mods,
     onFoundryKill, open, canOpen, rollRarity, rarityOf, bonusFor, BY_ID,
-    CMDR_W, oddsOf, promote, scrap, canPromote, spare, dustPull, PROMO_COST, DUST_PULL,
+    CMDR_W, oddsOf, promote, scrap, canPromote, spare, dustPull, PROMO_COST, promoCost, DUST_PULL,
     dustPromote, canDustPromote, dustPromo, scrapUpTo, exchangeHTML, promoteAll, promoteAllPlan,
     fighterMult, capacity, slots, isEquipped, specOk, specLabel, specShort,
     vaultHTML, albumHTML, bind, fleetRowHTML, bindFleetRow, openPicker,

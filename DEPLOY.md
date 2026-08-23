@@ -1,42 +1,14 @@
-# Loot Fleet — deploy v247 · build 718 · FRIGATE DEFAULT + COMMANDER BENCH
+# Loot Fleet — deploy v248 · build 719 · FUSION REPRICE + CHOIR HULL ART
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v246 (build 717). Service worker cache is `lootfleet-v718`.
-**Login screen reads `BUILD 718`.**
+Supersedes v247 (build 718). Service worker cache is `lootfleet-v719`.
+**Login screen reads `BUILD 719`.**
 
-## ✅ NO SQL TO RUN
+## ✅ NO SQL TO RUN · NO EDGE FUNCTION DEPLOY
 
-**Nothing to run if you already ran the four files from v246** — this build is
-client-only. No new column, no RPC change, no `lb_upsert` republish.
-
-Confirm the v246 SQL landed (both queries should be as noted):
-
-```sql
--- expect BOTH rows: pilot_score, mech_cores
-select column_name from information_schema.columns
- where table_name = 'leaderboard' and column_name in ('pilot_score','mech_cores');
-
--- expect exactly 1
-select count(*) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.proname = 'lb_upsert';
-```
-
-If `mech_cores` is missing, run `supabase/mech-ladder.sql` (it is idempotent).
-If `lb_upsert` returns anything other than 1, run `mech-ladder.sql` again — it
-drops every overload by catalogue lookup and asserts one survives.
-
-**Standing rule, unchanged:** re-running `new-ladders.sql`,
-`pilot-ladder.sql`, `cargo-ladder.sql`, `nanocore-ladder.sql` or
-`discord-art-publish.sql` re-adds an older overload and requires re-running
-`mech-ladder.sql` afterwards.
-
-## ✅ NO EDGE FUNCTION DEPLOY
-
-`discord-feed` is unchanged from v246. `FEED_VER` stays **717** — it tracks the
-build that last changed the function, not the client. If you did not deploy it at
-v246, do it now: `supabase functions deploy discord-feed` (all four files
-together; a partial upload does not boot).
+Client-only. Nothing new since the four files run at v246, and `discord-feed` is
+unchanged (`FEED_VER` stays 717).
 
 ## Order
 
@@ -44,24 +16,68 @@ together; a partial upload does not boot).
 2. Push `version.json` **last** — it is the eviction beacon. A higher build than
    the running client force-reloads every session within ~90s, so pushing it ahead
    of the files evicts players onto code that is not live yet.
-3. Confirm the login screen reads `BUILD 718`.
+3. Confirm the login screen reads `BUILD 719`.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 718 |
-| root `version.json` | 718 |
-| `deploy-v247/version.json` | 718 |
-| `deploy-v247/sw.js` `CACHE` | `lootfleet-v718` |
+| root `game.html` `window.LF_BUILD` | 719 |
+| root `version.json` | 719 |
+| `deploy-v248/version.json` | 719 |
+| `deploy-v248/sw.js` `CACHE` | `lootfleet-v719` |
 | `discord-feed` `FEED_VER` | 717 (unchanged — function not modified) |
 
-Every `js/`+`css/` reference carries `?v=718`. Folder rebuilt from the project
-root, never seeded from a previous release: v246 was copied first, then `js/`,
-`css/`, `guides/` and `supabase/` were DELETED and re-copied fresh as separate
-calls. All 73 js and 18 css files game.html references were diffed against the
-root copies — zero stale, zero missing. Root `sw.js` is deliberately unversioned
-(kill-switch worker for the old poisoned origin) and was not touched.
+Every `js/`+`css/` reference carries `?v=719`. Folder rebuilt from the project
+root: v247 copied first, then `js/`, `css/`, `guides/` and `supabase/` DELETED and
+re-copied fresh as separate calls. All 73 js and 18 css files game.html references
+diffed against root — zero stale, zero missing. Root `sw.js` deliberately
+unversioned (kill-switch worker) and untouched.
+
+---
+
+## What changed in 719
+
+### ⚠ Fusing a Commander is priced by rarity now — an exploit fix
+
+`PROMO_COST` was **4 spare copies per tier, flat, at every rarity**. Resource
+crates stop at Mythic precisely so grinding cannot reach Ancient and above — and a
+flat cost walked straight through that wall: 4 spares × 11 steps = **44
+duplicates** turned the cheapest crate in the game into a Primordial. Duplicates
+are the thing a grinder accumulates most of, so the intended paywall on the top
+four tiers was decorative.
+
+A step is now priced by the tier it is **leaving**, geometrically — the same shape
+as the rarity table's own odds:
+
+| leaving | spares | leaving | spares |
+|---|---|---|---|
+| Common | 3 | Ancient | 141 |
+| Rare | 11 | Divine | 268 |
+| Epic | 21 | Cosmic | 510 |
+| Legendary | 39 | Void | 968 |
+| Mythic | 74 | Eternal | 1,839 |
+
+The resource band (Common→Mythic) still costs **80 spares total** and is meant to
+be climbed. The full climb to Primordial went **44 → 3,880**, so fusion
+self-limits instead of needing a hard wall that would read as theft to anyone
+already holding spares.
+
+**Nothing was clawed back.** Every card and every duplicate already held is
+untouched, and it is stated on the patch card with what the player keeps — a
+silent removal of something someone is holding reads exactly like a bug.
+
+### Fixed
+
+- **The Choir hulls drew a `?` placeholder.** `ships/ship-emb1..5.png` existed and
+  `emb5` was in `HULL_VIS`, but the five hulls were never added to `SHIP_KEYS` — so
+  `SHIP_IMG` never preloaded them, `shipImg()` returned nothing, and every surface
+  that draws a hull fell back to the placeholder. Choirmaster Vhorn was the
+  reported case. They were missing from `SHIP_SCALE` too, so they would have drawn
+  at frigate weight the moment the art appeared; the line now ladders 1× (Ember
+  Mote) to 4.4× (Vhorn), matching how far apart their drop odds are.
+- **The six Mech hulls had the identical gap** — art on disk, in `HULL_VIS`, absent
+  from `SHIP_KEYS`. Same fix. All 49 registered keys now have art on disk.
 
 ---
 

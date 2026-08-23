@@ -2579,8 +2579,29 @@
     // silently, and the breadcrumb + console warning keep the forensics.
     try { console.warn('[LOOTFLEET] recovery engaged: ' + reason + ' ' + sample); } catch (e) {}
   }
+  // THE RAF CHAIN MUST NEVER DIE.
+  //
+  // This used to read `if (!rt.running) return;` BEFORE re-arming — so the moment
+  // anything set rt.running false for a single frame (freeze() on a session kick,
+  // a recovery pass, a pause), the chain terminated and NOTHING restarted it.
+  // rt.running going back to true did not help: there was no longer a rAF
+  // callback scheduled to observe it.
+  //
+  // What kept the game alive after that was the 30Hz watchdog at the bottom of
+  // boot(), which only steps when `now - rt.last > 120`. That is a last-resort
+  // safety net, not a game loop, and it produces EXACTLY the symptom reported:
+  // a step every ~132ms — 7.5fps — on a machine whose display is doing 120Hz and
+  // whose main thread is otherwise idle. The LOD governor then pinned itself at
+  // 2 (survival) trying to fix a frame time that was never a rendering problem,
+  // which stripped the visuals as well.
+  //
+  // Re-arming FIRST makes the chain unkillable: a paused loop is a scheduled
+  // callback that does nothing, costs nothing, and resumes on the very next frame
+  // the moment it is allowed to. rt.last is kept current while paused so resuming
+  // never hands step() a multi-second dt.
   function loop(now) {
-    if (!rt.running) return;
+    requestAnimationFrame(loop);
+    if (!rt.running || window.__sessionKicked) { rt.last = now; return; }
     // rAF suspends in background tabs — only count stalls while visible and settled
     if (rt.last && !document.hidden && now - _visT > 3000) {
       const gap = now - rt.last;
@@ -2590,7 +2611,7 @@
         if (gap > 4000 || _stallN >= 2) engageRecovery(Math.round(gap) + 'ms stall');
       }
     }
-    step(now); requestAnimationFrame(loop);
+    step(now);
   }
   // SESSION KICK — a screen that lost the account lock must stop SIMULATING,
   // not just stop saving: otherwise the player keeps banking progress behind
@@ -5643,9 +5664,12 @@
     for (const ck in c) eff[ck] = Math.ceil(c[ck] * disc);
     return eff;
   }
-  // Arms the pending 24 h attack shield set by warp(). Called on the first kill
-  // in the tile — the moment the attack is real. Warping in and leaving without
-  // firing leaves the tile unshielded and freely attackable, by you or anyone.
+  // NO LONGER ARMS ANYTHING. Kept as the single choke point the kill path calls,
+  // so that if a future flow ever needs to stamp a shield mid-engagement it has
+  // one obvious home — but attacking a tile no longer shields it. A shield is
+  // stamped only where a tile actually CHANGES HANDS (captureTile, siege win).
+  // See the rule at the arming site in warp(). `_pendShield` is never set now, so
+  // this returns on its first line and costs nothing.
   function commitTileShield() {
     const p = rt._pendShield; if (!p || !p.k) return;
     // BELT AND BRACES — a pending stamp must never outlive the visit that created
@@ -5696,17 +5720,20 @@
       state.resources.iron -= cost.iron || 0;
       state.resources.plasma -= cost.plasma || 0;
     }
-    if (!owned && (rivalOf(k) || tile.citadel)) {
-      // ATTACK SHIELD — 24 h, so nobody can attack a contested tile again win or
-      // lose. It used to be stamped RIGHT HERE, on warp-in, which meant entering
-      // a tile and immediately bailing to the hangar burned the shield without a
-      // shot fired (reported on both My Galaxy and Void spires). The stamp is now
-      // PENDING until the engagement is genuinely joined — see commitTileShield,
-      // called on the first kill. Retreating before that costs you nothing.
-      rt._pendShield = { k, until: Date.now() + 24 * 3600 * 1000 };
-    } else {
-      rt._pendShield = null;
-    }
+    // A SHIELD IS EARNED BY TAKING THE TILE, NOT BY ATTACKING IT.
+    //
+    // This used to arm a pending 24 h shield on warp-in and commit it on the
+    // first kill — "so nobody can attack a contested tile again win or lose".
+    // Losing therefore protected the tile you had just failed to take: the
+    // defender got a free day out of beating you, you could not retry, and
+    // nobody else could attack either. A failed assault is not a defence, and it
+    // is certainly not the ATTACKER's achievement to hand out.
+    //
+    // The shield now comes from the two places that actually capture a tile —
+    // captureTile() and the siege win in claimTile — both of which stamp 24 h on
+    // success. Fail, bail, or die, and the tile stays exactly as open as it was.
+    // Applies to My Galaxy tiles and Void spires alike; they share this path.
+    rt._pendShield = null;
     enterTile(k);
     save();
     return { ok: true };
@@ -6015,7 +6042,11 @@
     s.active = false; rt.waves = null;
     rt.nodes = [];                                   // stop further escort spawns
     if (rt.archer) rt.archer.invuln = 6;             // the defender may still be firing
-    if (k) { if (!state.tileCd) state.tileCd = {}; state.tileCd[k] = Date.now() + 15 * 60 * 1000; }
+    // NO COOLDOWN ON A FAILED ASSAULT. This stamped 15 minutes on the tile, which
+    // meant being pushed out locked the tile for you AND for every other pilot —
+    // the defender was rewarded with a shield for a fight they were already
+    // winning. Losing costs you the entry resources and the time; it must not
+    // cost everyone else their shot at the tile.
     rt._towVoid = !!(tile && tile.void && !tile.casino);  // tow back to the right screen
     rt._towCasino = !!(tile && tile.casino);              // a House Citadel → the casino floor
     rt.towT = 3.0;

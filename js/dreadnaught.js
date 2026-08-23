@@ -571,9 +571,18 @@
     return parts.join(' · ') || '—';
   }
   function matches(d) {
-    if (_filter && d.cat !== _filter) return false;
+    // THE RARE CHIP FILTERS ON THE FLAG, NOT THE CATEGORY. A legendary node keeps
+    // its own combat category (offense/defense/utility) and carries `rare: true`
+    // separately — so `cat === 'rare'` matched almost nothing, and the one chip a
+    // player taps to find their legendaries returned an empty list.
+    if (_filter === 'rare') { if (!d.rare && d.cat !== 'rare') return false; }
+    else if (_filter && d.cat !== _filter) return false;
     if (!_q) return true;
-    const hay = (d.label + ' ' + d.cat + ' ' + effSummary(d)).toLowerCase();
+    // THE SEARCHABLE TEXT MUST INCLUDE WHAT THE ROW ACTUALLY SAYS. A legendary
+    // node renders a LEGENDARY badge, so "legendary" is the obvious thing to
+    // type — and it matched nothing, because the haystack was only the label,
+    // the category and the stat line. Anything printed on the row is searchable.
+    const hay = (d.label + ' ' + d.cat + ' ' + (d.rare ? 'legendary rare ' : '') + effSummary(d)).toLowerCase();
     return hay.indexOf(_q.toLowerCase()) !== -1;
   }
   const LIST_CAP = 80;

@@ -544,6 +544,17 @@
     q.hcwave = (s.homecit && s.homecit.wave) | 0;
     q.expo = (s.expo && s.expo.log && s.expo.log.done) | 0;
     q.expo_best = (s.expo && s.expo.log && s.expo.log.best) | 0;
+    // PILOT TREE — read live from the save, for the same reason as every other
+    // figure here. Without it your own row fell through to the SERVER's value,
+    // which is 0 until pilot-ladder.sql has run and a publish has landed — so the
+    // one board a player checks to see their own tree showed them at zero while
+    // the Pilot screen showed the real score. Same source as publishFields(), so
+    // the row and the publish can never disagree.
+    try {
+      const D = window.DREAD;
+      q.pilot_score = Math.max(0, Math.floor(Number(D && D.pilotScore ? D.pilotScore() : 0) || 0));
+      q.pilot_nodes = Math.max(0, Math.floor(Number(D && D.nodeCount ? D.nodeCount() : 0) || 0));
+    } catch (e) {}
     // Nanocores read through the module so this row, the badge chains and the
     // Discord feed all quote one number.
     try {

@@ -488,7 +488,15 @@
     // surface. Each colour therefore gets its own offscreen canvas, tinted once
     // and cached; the arena just blits the right bitmap. Correct, and cheaper
     // than the per-craft composite it replaces.
-    const tint = (h.rt.lod | 0) < 2;
+    // RARITY COLOUR IS IDENTITY, NOT DECORATION — so it is NOT tied to LOD.
+    // It was gated behind `lod < 2`, which meant the survival tier flew a wing of
+    // identical grey craft: exactly when a player most needs to read which bay is
+    // their good one, the answer was taken away. Measured cost of the tinted blit
+    // is 1.03µs against 0.90µs for the raw sprite — 1.15× one draw call, for a
+    // handful of craft. That is not a frame-time decision, it is free.
+    //
+    // LOD sheds bloom, trails and motes. It never sheds information.
+    const tint = true;
     for (let i = 0; i < list.length; i++) {
       const f = list[i];
       if (f.st === DOCKED) continue;

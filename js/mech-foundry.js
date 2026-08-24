@@ -370,6 +370,80 @@
   // clear's cores would be twenty ambient lines a day per pilot; the thresholds
   // are spaced so a card means something.
   const CORE_MARKS = [1000, 5000, 25000, 100000, 400000];
+
+  // ---- THE ASSAULT WINDOW WATCHER ------------------------------------------
+  // A window opening is not an action any player takes, so nothing in the game
+  // was ever going to notice it — the other Foundry announcements all fire off a
+  // player's own kill. This watches the clock instead and posts on the transition.
+  //
+  // EVERY CLIENT SEES THE SAME CLOCK, so every client would post the same card.
+  // That is why these three kinds dedupe GLOBALLY on the server (world + cycle
+  // number, no actor scoping) rather than per pilot like every other mech kind:
+  // the first client to notice wins and the rest are refused. Follows kothOpen,
+  // which had the same shape.
+  //
+  // THEY ARE AMBIENT ON PURPOSE. Five worlds × four cycles a day is twenty
+  // openings, and twenty cards a day is a channel people mute. Ambient rolls into
+  // one digest line per kind per drain, which turns the same information into a
+  // live status feed instead of a flood.
+  const WARN_MS = 15 * 60 * 1000;      // "closing soon" while a window is live
+  const SOON_MS = 30 * 60 * 1000;      // "opens shortly" heads-up before one
+  const _fired = {};                   // kind|tier|cycle -> 1, this session only
+  // The cycle number a world's window belongs to, so a card can be deduped against
+  // the exact window it describes rather than against a time range.
+  function cycleOf(x, now) {
+    return Math.floor((now - (x.t - 1) * STAGGER_MS) / CYCLE_MS);
+  }
+  // What a pilot needs to actually enter — sent with every window card, because a
+  // ping that does not say who may join is an advert for a locked door.
+  function reqMeta(x) {
+    const wd = worldOf(x) || {};
+    return {
+      world: planetName(x), tier: x.t, stage: wd.stage || '',
+      lv: x.lv, asc: x.asc | 0, cores: x.cores, waves: x.waves,
+      req: 'Level ' + x.lv + (x.asc ? ' \u00b7 Ascension \u2605' + x.asc : ' \u00b7 no ascension needed'),
+      hull: x.bp ? ((shipOf(x.bp) || {}).name || '') : '',
+    };
+  }
+  function tickWindows() {
+    // Nothing to say if the player cannot reach the event themselves — and nothing
+    // to post through, since log_mech needs a signed-in caller.
+    if (!unlocked()) return;
+    try { if (!(window.CLOUD && window.CLOUD.client && window.CLOUD.client())) return; } catch (e) { return; }
+    const now = nowMs();
+    for (const x of TIERS) {
+      const w = windowOf(x, now), cyc = cycleOf(x, now);
+      const key = (k) => k + '|' + x.t + '|' + cyc;
+      if (w.open) {
+        // OPEN. Only within the first two minutes of the window, so a client that
+        // loads mid-window does not announce something already half over.
+        if (WINDOW_MS - w.ms < 120000 && !_fired[key('mechOpen')]) {
+          _fired[key('mechOpen')] = 1;
+          announce('mechOpen', Object.assign(reqMeta(x), { mins: Math.round(w.ms / 60000) }));
+        }
+        if (w.ms <= WARN_MS && !_fired[key('mechWarn')]) {
+          _fired[key('mechWarn')] = 1;
+          announce('mechWarn', Object.assign(reqMeta(x), { mins: Math.max(1, Math.round(w.ms / 60000)) }));
+        }
+      } else if (w.ms <= SOON_MS && !_fired[key('mechSoon')]) {
+        _fired[key('mechSoon')] = 1;
+        announce('mechSoon', Object.assign(reqMeta(x), { mins: Math.max(1, Math.round(w.ms / 60000)) }));
+      }
+    }
+  }
+  // Runs on its own clock, not the Foundry screen's: a window opens whether or not
+  // the player is looking at the event. 60s is well inside the 15-minute warning
+  // band and the 2-minute open band, so nothing can be missed between ticks.
+  let _wt = null;
+  function startWatcher() {
+    if (_wt) return;
+    _wt = setInterval(() => { try { tickWindows(); } catch (e) {} }, 60000);
+    setTimeout(() => { try { tickWindows(); } catch (e) {} }, 8000);
+  }
+  try {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startWatcher);
+    else startWatcher();
+  } catch (e) {}
   function announceWorld(x, bpMsg) {
     const deep = x.t >= 4;                       // the two star-gated worlds
     announce(deep ? 'mechDeep' : 'mechWorld', {
@@ -886,5 +960,6 @@
   window.MECHF = {
     TIERS, BUILD, render, unlocked, tiers: () => TIERS, tierOf: (n) => TIER_BY_N[n],
     start, onRunCleared, onMechKill, cores, earned, build, canBuild,
+    tickWindows, windowOf, nextEvent, dur,
   };
 })();

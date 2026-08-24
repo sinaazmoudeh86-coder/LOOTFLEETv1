@@ -504,8 +504,13 @@
       const have = g.state.shipParts[sh.key] = (g.state.shipParts[sh.key] | 0) + 1;
       // THE SHIP'S OWN ART, not a diamond. A shard is meaningless without knowing
       // which hull it is toward, and the name alone makes 5 shards a wall of text.
+      // READ THE REAL REQUIREMENT. It ranges 10 (Frigate) to 2,000 (Titan Sina),
+      // and printing a flat 100 told a player chasing a Dread they were finished
+      // at 5% — the same fault the Voidmaw card had at 100 against a real 150.
+      const need = (() => { try { return (window.SHIPWORKS && SHIPWORKS.needOf) ? SHIPWORKS.needOf(sh.key) : 100; } catch (e) { return 100; } })();
       out.push({ img: 'ships/ship-' + sh.key + '.png', col: '#9ad4ff',
-                 text: sh.name + ' shard', sub: have + ' / 100 collected', pct: have });
+                 text: sh.name + ' shard', sub: have + ' / ' + need + ' collected',
+                 pct: Math.min(100, Math.round(have / Math.max(1, need) * 100)) });
     }
     return out;
   }

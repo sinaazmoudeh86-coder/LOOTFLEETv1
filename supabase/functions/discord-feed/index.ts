@@ -45,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 717;
+const FEED_VER = 720;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1413,6 +1413,97 @@ Deno.serve(async (req) => {
       }
       // BIG BET — posted the moment the round settles. Rate limited in SQL
       // (casino_big_bet), so anything arriving here has already earned its place.
+      // ---- THE MECH FOUNDRY --------------------------------------------------
+      // EVERY mech kind was previously unhandled. log_mech() wrote its rows, the
+      // drain walked straight past them, and the cursor advanced — so the world
+      // clears, the core milestones, the Sovereign, the Commanders and the assault
+      // windows were all written and then silently discarded. Nothing in the feed
+      // has ever announced this event. That is the reported "no pings", and it was
+      // never a client problem.
+      //
+      // The registry in catalog.ts is meant to be a TRUE statement of what the feed
+      // can say. Registering a kind there with no producer here is exactly the gap
+      // that made it a false one.
+      if (String(w.kind || '').startsWith('mech')) {
+        const m: any = w.meta || {};
+        const who = String(w.actor_name || 'A pilot');
+        const world = String(m.world || '');
+        const req = String(m.req || '');
+        const mins = Number(m.mins) || 0;
+        const hull = String(m.hull || '');
+        const K = String(w.kind);
+
+        // WINDOW CARDS NAME NO PILOT. The actor is whichever client happened to
+        // notice the clock first, so crediting them would read as an achievement.
+        if (K === 'mechOpen' || K === 'mechWarn' || K === 'mechSoon') {
+          const body = K === 'mechOpen'
+            ? `**${world}** is in range for the next **${mins} min** — ${req}${hull ? ` · first clear recovers the **${hull}**` : ''}`
+            : K === 'mechWarn'
+              ? `**${world}** closes in **${mins} min** — last call`
+              : `**${world}** comes in range in **${mins} min** — ${req}`;
+          events.push({
+            kind: K, sys: world,
+            line: K === 'mechOpen' ? `◉ **${world}** in range · ${mins}m`
+                : K === 'mechWarn' ? `⏳ **${world}** closing · ${mins}m`
+                : `⚙ **${world}** in ${mins}m`,
+            embed: { color: COLOR.mech, description: body },
+          });
+          continue;
+        }
+
+        if (K === 'mechCore') {
+          events.push({
+            kind: K, sys: '', actor: who,
+            line: `◉ **${who}** passed **${fmt(Number(m.mark) || 0)}** Mech Cores`,
+            embed: { color: COLOR.mech, description: `**${who}** has earned **${fmt(Number(m.mark) || 0)}** ⚙ Mech Cores.` },
+          });
+          continue;
+        }
+
+        if (K === 'mechCmdr') {
+          events.push({
+            kind: K, sys: '', actor: who,
+            line: `✦ **${who}** recovered **${m.cmdr || 'a Commander'}** (${m.rarity || ''})`,
+            embed: {
+              color: COLOR.mech,
+              author: { name: '✦  A COMMANDER HAS BEEN RECOVERED' },
+              title: `${m.cmdr || 'Commander'} — ${m.rarity || ''}`,
+              description: `**${who}** pulled **${m.cmdr || 'a Commander'}**${m.title ? `, *${m.title}*` : ''} at **${m.rarity || ''}**.\nCommanders drop only in the Mech Foundry.`,
+            },
+          });
+          continue;
+        }
+
+        if (K === 'mechSov') {
+          events.push({
+            kind: K, sys: '', actor: who,
+            line: `⚙ **${who}** assembled the **Mech Sovereign**`,
+            embed: {
+              color: COLOR.mech,
+              author: { name: '⚙  A MECH SOVEREIGN HAS BEEN ASSEMBLED' },
+              description: `**${who}** has completed the entire Mech line and assembled the **Mech Sovereign** — two cannons, six fighter bays, and the deepest corruption field in the game.`,
+            },
+          });
+          continue;
+        }
+
+        // mechWorld / mechDeep — a world taken
+        events.push({
+          kind: K, sys: world, actor: who,
+          line: `⚙ **${who}** took **${world}**`,
+          embed: {
+            color: COLOR.mech,
+            author: { name: K === 'mechDeep' ? '⚙  A CORRUPTED WORLD HAS FALLEN' : '⚙  WORLD TAKEN' },
+            title: world + (m.stage ? ' · ' + String(m.stage) : ''),
+            description: `**${who}** cleared **${world}** — ${Number(m.waves) || 0} waves and the tier boss.`
+              + ` **+${fmt(Number(m.cores) || 0)}** ⚙ Mech Cores.`
+              + (m.blueprint ? `\n**A hull blueprint was recovered.**` : '')
+              + (req ? `\nEntry: ${req}` : ''),
+          },
+        });
+        continue;
+      }
+
       if (w.kind === 'bigbet') {
         const m: any = w.meta || {};
         const who = String(w.actor_name || 'A pilot');
@@ -1481,7 +1572,20 @@ Deno.serve(async (req) => {
         },
       });
     }
-    if (maxId !== seenId) snap.push({ kind: '_meta', ref: 'war', data: { id: maxId }, updated_at: now });
+    // THE WAR CURSOR HAS THE SAME EXPOSURE. Kaevith hulls, new hulls and the
+    // daily digest all post their own messages below this line, so the id
+    // high-water mark is persisted here — before those posts — rather than only
+    // by saveSeen() at the end of the tick. A throw after this point costs one
+    // missed card; a throw before it used to cost an infinite replay.
+    if (maxId !== seenId) {
+      snap.push({ kind: '_meta', ref: 'war', data: { id: maxId }, updated_at: now });
+      try {
+        await db.from('feed_seen').upsert(
+          [{ kind: '_meta', ref: 'war', data: { id: maxId }, updated_at: now }],
+          { onConflict: 'kind,ref' },
+        );
+      } catch (e) { /* saveSeen() at the end is the backstop */ }
+    }
 
     // ---- ANY HULL EARNED -----------------------------------------------------
     // The Kaevith card below is the same idea at maximum volume; this is it for
@@ -1652,6 +1756,21 @@ Deno.serve(async (req) => {
     };
     if (fresh) { next.leader = null; next.leaderAt = 0; }
 
+    // Persist the KOTH cursor RIGHT NOW rather than at the end of the request.
+    // Called immediately after every card this block posts, so a failure further
+    // down the tick can never replay one that already went out. Deliberately
+    // swallows its own error: a cursor write that fails must not abort a card
+    // that has already been delivered — the worst case is one duplicate on the
+    // next tick, which is what this whole helper exists to bound.
+    const kothSave = async () => {
+      try {
+        await db.from('feed_seen').upsert(
+          [{ kind: '_meta', ref: 'koth', data: next, updated_at: now }],
+          { onConflict: 'kind,ref' },
+        );
+      } catch (e) { /* next tick re-tries; one duplicate at worst */ }
+    };
+
     // 1 — YESTERDAY'S CHAMPION. Read straight from koth_hall so the card only
     // ever fires on a row koth_close() actually wrote — no double-crowning if a
     // cron tick retries.
@@ -1676,6 +1795,7 @@ Deno.serve(async (req) => {
           }],
           allowed_mentions: { parse: [] },
         });
+        await kothSave();
       }
     }
 
@@ -1699,6 +1819,7 @@ Deno.serve(async (req) => {
         }],
         allowed_mentions: { parse: [] },
       });
+      await kothSave();
     }
 
     // 3 — THE CROWN CHANGED HANDS. Cooldown-gated so a two-player slugfest does
@@ -1728,6 +1849,7 @@ Deno.serve(async (req) => {
           }],
           allowed_mentions: { parse: [] },
         });
+        await kothSave();
       } else if (!was) {
         next.leaderAt = Date.now();
       }
@@ -1754,6 +1876,7 @@ Deno.serve(async (req) => {
           }],
           allowed_mentions: { parse: [] },
         });
+        await kothSave();
       }
     }
 
@@ -1786,6 +1909,7 @@ Deno.serve(async (req) => {
         }],
         allowed_mentions: { parse: [] },
       });
+      await kothSave();
     }
 
     // ---- 👑 A DYNASTY (688) --------------------------------------------------

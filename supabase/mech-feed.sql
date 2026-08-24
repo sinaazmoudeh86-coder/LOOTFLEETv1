@@ -36,11 +36,38 @@ begin
   -- WHITELIST THE KINDS. An RPC the client can call with an arbitrary string is
   -- an arbitrary-content channel post; the registry in catalog.ts is the only
   -- set of things the Foundry is allowed to say.
-  if p_kind not in ('mechWorld', 'mechDeep', 'mechCore', 'mechSov', 'mechCmdr') then
+  if p_kind not in ('mechWorld', 'mechDeep', 'mechCore', 'mechSov', 'mechCmdr',
+                    'mechOpen', 'mechWarn', 'mechSoon') then
     return false;
   end if;
 
   w := coalesce(p_meta ->> 'world', '');
+
+  -- ---- WINDOW CARDS DEDUPE GLOBALLY, NOT PER PILOT -------------------------
+  -- Every client reads the same UTC clock, so every client tries to post the same
+  -- opening. Unlike every other kind here there is no actor scoping: the first
+  -- caller to notice a window wins and the rest are refused, which is what makes
+  -- exactly one card per window per kind. Keyed on the WORLD plus the CYCLE the
+  -- window belongs to, so it is deduped against that specific window and not
+  -- merely against a time range.
+  if p_kind in ('mechOpen', 'mechWarn', 'mechSoon') then
+    if exists (
+      select 1 from public.war_events
+       where kind = p_kind
+         and coalesce(meta ->> 'world', '') = w
+         and created_at > now() - interval '80 minutes'
+    ) then
+      return false;
+    end if;
+    -- Window cards are not a player achievement, so they skip the per-account
+    -- ceiling below: they are already capped by there being five worlds and a
+    -- six-hour cycle, and counting them against a pilot's daily total would let
+    -- one active player's own announcements crowd out their own crown.
+    select name into nm from public.leaderboard where user_id = auth.uid();
+    insert into public.war_events (kind, tile_id, actor_id, actor_name, meta)
+    values (p_kind, null, auth.uid(), coalesce(nm, 'A pilot'), coalesce(p_meta, '{}'::jsonb));
+    return true;
+  end if;
 
   -- ONE CARD PER PILOT PER WORLD PER HOUR. A world can be assaulted repeatedly
   -- inside its own window, and each clear is a real event — but the channel does

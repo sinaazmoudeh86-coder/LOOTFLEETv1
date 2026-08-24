@@ -1,38 +1,133 @@
-# Loot Fleet — deploy v248 · build 719 · FUSION REPRICE + CHOIR HULL ART
+# Loot Fleet — deploy v249 · build 721 · FEEDBACK PASS + FEED REPAIR
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v247 (build 718). Service worker cache is `lootfleet-v719`.
-**Login screen reads `BUILD 719`.**
+Supersedes v248 (build 719). Service worker cache is `lootfleet-v721`.
+**Login screen reads `BUILD 721`.**
 
-## ✅ NO SQL TO RUN · NO EDGE FUNCTION DEPLOY
+## ⚠ TWO THINGS TO RUN
 
-Client-only. Nothing new since the four files run at v246, and `discord-feed` is
-unchanged (`FEED_VER` stays 717).
+**1. `supabase functions deploy discord-feed`** — all four files together, a
+partial upload does not boot. `FEED_VER` is **720**. This is REQUIRED: the
+running function is 717 and it has never been able to announce the Mech Foundry
+at all (see below), and it is what stops the KOTH spam.
+
+**2. `supabase/mech-feed.sql`** — re-run, idempotent. Adds `mechOpen`,
+`mechWarn`, `mechSoon` and `mechCmdr` to the `log_mech` whitelist. Without it
+the window pings are refused server-side.
+
+Nothing else. No `lb_upsert` change, no new column.
 
 ## Order
 
-1. Push everything **except** `version.json`.
-2. Push `version.json` **last** — it is the eviction beacon. A higher build than
-   the running client force-reloads every session within ~90s, so pushing it ahead
-   of the files evicts players onto code that is not live yet.
-3. Confirm the login screen reads `BUILD 719`.
+1. Run the SQL, deploy the edge function.
+2. Push everything **except** `version.json`.
+3. Push `version.json` **last** — it is the eviction beacon; ahead of the files
+   it evicts players onto code that is not live yet.
+4. Confirm the login screen reads `BUILD 721`.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 719 |
-| root `version.json` | 719 |
-| `deploy-v248/version.json` | 719 |
-| `deploy-v248/sw.js` `CACHE` | `lootfleet-v719` |
-| `discord-feed` `FEED_VER` | 717 (unchanged — function not modified) |
+| root `game.html` `window.LF_BUILD` | 721 |
+| root `version.json` | 721 |
+| `deploy-v249/version.json` | 721 |
+| `deploy-v249/sw.js` `CACHE` | `lootfleet-v721` |
+| `discord-feed` `FEED_VER` | 720 |
 
-Every `js/`+`css/` reference carries `?v=719`. Folder rebuilt from the project
-root: v247 copied first, then `js/`, `css/`, `guides/` and `supabase/` DELETED and
-re-copied fresh as separate calls. All 73 js and 18 css files game.html references
+Every `js/`+`css/` reference carries `?v=721`. Folder rebuilt from the project
+root: v248 copied first, then `js/`, `css/`, `guides/` and `supabase/` DELETED
+and re-copied fresh as separate calls. All 73 js files game.html references
 diffed against root — zero stale, zero missing. Root `sw.js` deliberately
 unversioned (kill-switch worker) and untouched.
+
+---
+
+## What changed in 721
+
+### ⚠ The Mech Foundry had never announced anything
+
+`log_mech()` was writing rows to `war_events` correctly, but the feed's drain
+loop only handled four kinds — `digest`, `xen_hull`, `hull_earned`, `bigbet`.
+Every `mech*` row fell through with no producer while the cursor advanced past
+it, so world clears, core milestones, the Sovereign and Commander pulls were all
+written and then silently discarded. The registry in `catalog.ts` claimed the
+feed could say those things; nothing behind it could.
+
+Also added, as asked: **assault window pings**. `mechSoon` (30 min out),
+`mechOpen` (in range, with the level and ascension needed and the hull the first
+clear recovers) and `mechWarn` (15 min left). They are **ambient** — five worlds
+× four cycles is sixty events a day, so they roll into one digest line per kind
+rather than sixty cards. They **name no pilot** (the actor is just whichever
+client noticed the clock) and **dedupe globally** on world + cycle.
+
+### ⚠ KOTH Discord spam — a durability bug, not a gating one
+
+Every KOTH card posts the moment it is detected, but `_meta:koth` was only
+written by `saveSeen()` at the END of the request. `post()` throws on any
+non-2xx and so does `saveSeen` — so any later failure (a 429, the temple query,
+the situation report) meant the cursor never persisted and the next tick
+re-posted the champion, the crown and every clock card. Every two minutes,
+indefinitely. The gates were correct; they were checking a value that was never
+saved. Each of the five cards now persists its own cursor as it posts, and the
+war cursor got the same treatment.
+
+### ⚠ Commanders were paying half their card
+
+Legendary and above earn a second stat via `secondOf()`. Every surface rendered
+it — album, bench, picker — and `mods()` only ever emitted the PRIMARY, so that
+line was decoration. Reported as "my Sylle doesn't add crit damage", and correct:
+it never reached `refreshStats`. Now paid at the same 45% of the primary the
+cards state.
+
+### Fixed
+
+- **The perk board showed stale points.** `buyPerk` deducts `rankCost(r)`
+  correctly — it just never re-rendered its own screen, so the bank and every
+  next-rank cost kept pre-purchase values until the tab was left and re-entered.
+  `respec()` two functions above already called `render()`. Reported twice, as
+  "goes down by 1 instead of 3" and "calculating each level instead of points".
+- **Ship shards printed "/ 100" for every hull.** Real requirements run 10
+  (Frigate) to 2,000 (Titan Sina), so a pilot chasing a Dread was told they were
+  finished at 5%. `needOf` is exported now so nothing keeps a second copy —
+  the same fault the Voidmaw card had at 100 against a real 150.
+- **LootCoin vaults advertised Eclipse.** Commanders roll on `CMDR_W` (12 tiers,
+  ending at Primordial); the card computed its ceiling from the ITEM ladder (18
+  tiers, ending at Eclipse), so the headline promised a tier the odds table
+  beneath it correctly stopped short of. The ceiling comes from the same array
+  the roll walks now. Nobody was denied a pull — only the name was wrong.
+- **A Foundry clear dumped you on the empty battle screen** instead of the
+  Foundry, where the cores, the blueprint and the next tier are.
+- **The planet surfaces were blinding** — a real battery cost on OLED. Down ~35%
+  in luminance, rust hue and corruption contrast kept.
+- **The Paragon Vault could lock the screen.** CONTINUE stayed hidden until all
+  ten cards flipped (~6s) and the row had no scroll. SKIP is live from the first
+  frame and the flip cadence scales with pull size.
+- **The Choir hulls drew a `?`.** Art existed and `emb5` was in `HULL_VIS`, but
+  the five were never added to `SHIP_KEYS`, so `SHIP_IMG` never preloaded them.
+  The six Mech hulls had the identical gap.
+- **Crossed-out Commander stats** now read `○ PAYS NOTHING HERE / needs CARRIER
+  ONLY` rather than leaving the player to infer it.
+
+### Explained, not changed
+
+- **"+176% hull only adds 30qa" is correct.** `game-v93:613` folds every
+  percentage source — gear, skills, perks, hull levels, nanocores, auras and
+  Commanders — into ONE pool that multiplies base health once. A pilot on
+  +2,000% going to +2,176% gains ~8%. Making Commanders multiply separately
+  would be an enormous silent buff to every endgame account, so the math stands
+  and the Commanders screen now states how pooling works.
+- **All 31 Commanders drop from resource crates.** Identity and rarity are
+  independent rolls; a crate caps the rarity, never which officer you get.
+
+### Known, not fixed in this build
+
+Zone-0 items not auto-selling (needs a save inspected), ranks showing a stale
+level after ascension (needs a live row), the Cargo Defense boss drop (`rt.cgrun`
+is set and `lootBlocked()` tests it, so the documented path is closed — the drop
+came from somewhere else and needs a repro), Commanders not shown under Lv 100
+(fleet-panel gating), and the drag-and-drop / repeat-battle requests.
 
 ---
 

@@ -31,16 +31,26 @@
 (function () {
   'use strict';
 
-  const BUILD = 719;
+  const BUILD = 721;
   const NOTES = {
-    build: 719,
-    title: 'BUILD 719',
+    build: 721,
+    title: 'BUILD 721',
     sub: 'The Mech faction is here — and it fights differently.',
     groups: [
       { k: 'NEW', c: '#ff8a9a', rows: [
         ['\u2699', 'The Mech Foundry', 'Five tiers in Command, from the Spawn Nest at Level 120 to the Titan Forge at 550. Clear one for \u2699 Mech Cores.'],
         ['\u26a0', 'Mech attacks strip your armor', 'Every Mech hit stacks ARMOR CORRUPTION and you take more damage while it holds. The class sets the ceiling, the swarm sets how fast they get there \u2014 a Spawn is nothing, a Titan is +25%. It shows over your ship, and it fades in 5s once they stop hitting you.'],
         ['\u2699', 'Mech Archon &amp; Mech Titan', 'Two new hulls, earned only in the Foundry \u2014 first clear of the top two tiers hands over the blueprint. Neither is your biggest gun: they CORRUPT the target so every other ship in your fleet hits it harder.'],
+      ] },
+      { k: 'FIXED', c: '#8fc4ff', rows: [
+        ['\u2726', 'Commanders were paying only half their card', 'Legendary and above carry a second stat. It was printed on every card and never applied \u2014 it counts now.'],
+        ['\u2756', 'Perk board showed stale points', 'Buying a rank deducted correctly but the screen kept the old numbers until you left and came back.'],
+        ['\u25c8', 'Ship shards said \u201c/ 100\u201d for every hull', 'They range 10 to 2,000. The Tour now shows the real requirement.'],
+        ['\u2699', 'Foundry runs return you to the Foundry', 'Not to an empty arena. The planet surface is also much darker \u2014 it was punishing on phones.'],
+        ['\u2726', 'Paragon Vault could lock the screen', 'Ten pulls had no way out until every card had flipped. Skip works from the first frame.'],
+      ] },
+      { k: 'NEW', c: '#8fc4ff', rows: [
+        ['\u25c9', 'Discord now calls the assault windows', 'When a corrupted world comes in range, when it is about to close, and what level or ascension you need to join it. The Mech Foundry had never announced anything at all \u2014 that was a bug, not a design.'],
       ] },
       { k: 'CHANGED', c: '#ffcf7a', rows: [
         ['\u2726', 'Fusing a Commander costs more at high rarity', 'It was 4 spare copies a tier at every rarity, which let the cheapest crate in the game build a Primordial. A step is now priced by the tier it leaves \u2014 3 spares at Common, 39 at Legendary, 141 at Ancient. <b>Every card and every duplicate you already hold is untouched</b>, and climbing the lower tiers is barely changed.'],

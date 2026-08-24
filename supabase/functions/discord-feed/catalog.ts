@@ -165,6 +165,14 @@ export const CATALOG: Record<string, EventDef> = {
   // Commanders. Only Ancient and above reach the channel — the client gates it, and
   // log_mech() de-duplicates per officer per tier. A Common pull is not news.
   mechCmdr: { feature: 'mech',     tier: 'notable',  color: COLOR.mech,     icon: '✦', label: 'A COMMANDER HAS BEEN RECOVERED', gif: 'owned', selfPost: true },
+  // ASSAULT WINDOWS. Five worlds on staggered one-hour windows is twenty openings
+  // a day, so these are AMBIENT: rolled into one digest line per kind per drain
+  // rather than twenty cards nobody reads. They dedupe globally in log_mech (world
+  // + cycle, no actor scoping), because every client reads the same clock and would
+  // otherwise all post the same opening.
+  mechOpen: { feature: 'mech',     tier: 'ambient',  color: COLOR.mech,     icon: '◉', label: 'IN RANGE', selfPost: true },
+  mechWarn: { feature: 'mech',     tier: 'ambient',  color: COLOR.mech,     icon: '⏳', label: 'WINDOW CLOSING', selfPost: true },
+  mechSoon: { feature: 'mech',     tier: 'ambient',  color: COLOR.mech,     icon: '⚙', label: 'APPROACHING', selfPost: true },
 };
 
 export const TIER_OF = (kind: string): Tier => (CATALOG[kind]?.tier ?? 'notable');
@@ -178,7 +186,7 @@ export const PRIORITY = [
   'ascend', 'dread', 'repel', 'steal', 'citadel', 'nano', 'hull', 'cargo',
   'mechSov', 'mechDeep', 'mechCmdr', 'mechWorld',
   'kothLead', 'kothWarn', 'kothOpen', 'templeClaim', 'expo', 'hcwave', 'bigbet',
-  'mechCore',
+  'mechCore', 'mechOpen', 'mechWarn', 'mechSoon',
   'top10', 'zone', 'claim', 'alliance', 'level', 'lost', 'pilot',
 ];
 

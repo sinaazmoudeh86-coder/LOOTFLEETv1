@@ -665,7 +665,19 @@
       if (!c || !who) return;
       if (who.t === 'fighterDmg') return;          // delivered via fighterMult()
       if (!specOk(who)) return;
-      out[who.t] = (out[who.t] || 0) + bonusFor(c.r, who.t, who);
+      const b = bonusFor(c.r, who.t, who);
+      out[who.t] = (out[who.t] || 0) + b;
+      // THE SECOND STAT WAS PRINTED BUT NEVER PAID. Legendary and above earn a
+      // second line (secondOf), and every surface that draws a card renders it —
+      // the album, the bench and the picker all promise "+18% Crit Damage" on a
+      // Legendary Sylle. mods() only ever emitted the PRIMARY, so that line was
+      // decoration: the stat never reached refreshStats and the player was right
+      // that it was not being calculated.
+      //
+      // Paid at the same 45% of the primary the cards state, so the number the
+      // fleet gets is the number on the card rather than a second opinion.
+      const s2 = secondOf(who, c.r);
+      if (s2) out[s2] = (out[s2] || 0) + Math.max(1, Math.round(b * 0.45));
     });
     return out;
   }
@@ -899,8 +911,11 @@
     }
     const lc = num(st().credits);
     const res = st().resources || {};
-    const R = CFG().RARITY || [];
-    const top = R.length - 1;
+    // CMDR_W IS THE LADDER, not CFG().RARITY. The item table is longer (it ends
+    // at Eclipse); a Commander cannot roll past Primordial, and the card must not
+    // say otherwise.
+    const top = CMDR_W.length - 1;
+    const R = Array.from({ length: CMDR_W.length }, (_, i) => rarityOf(i));
     return '<div class="mf-sec">COMMANDER VAULT</div>'
       + '<div class="mf-note">Every pull rolls the game\u2019s own rarity table — a crate only decides <b>which part of it</b> you roll on. The first three are bought with <b>Galaxy Resources</b> and ladder up the middle; <b>LootCoin vaults are the only crates with no ceiling</b>, and the only route to Ancient and above.</div>'
       + '<div class="mf-grid mf-shop">' + CRATES.map((c) => {
@@ -1101,7 +1116,7 @@
     o.innerHTML =
       '<div class="cm-rv">'
       + '<div class="cm-rv-k">' + esc((crate && crate.name) || 'COMMANDER CRATE') + '</div>'
-      + '<div class="cm-rv-row">' + pulls.map((p, i) => {
+      + '<div class="cm-rv-row' + (pulls.length > 5 ? ' many' : '') + '">' + pulls.map((p, i) => {
         const R = rarityOf(p.r), w = p.who;
         return '<div class="cm-rv-c" data-i="' + i + '" data-pid="' + esc(w.id) + '" style="--cc:' + R.color + '">'
           + '<div class="cm-rv-in">'
@@ -1113,8 +1128,8 @@
              : p.dust ? '<span class="cm-rv-dup">\u2726 ' + fmt(p.dust) + '</span>' : '')
           + '</div></div></div>';
       }).join('') + '</div>'
-      + '<div class="cm-rv-foot"><button class="cm-rv-x" data-x hidden>CONTINUE</button>'
-      + '<div class="cm-rv-hint">tap to reveal</div></div>'
+      + '<div class="cm-rv-foot"><button class="cm-rv-x" data-x>SKIP</button>'
+      + '<div class="cm-rv-hint">tap to reveal all</div></div>'
       + '</div>';
     document.body.appendChild(o);
 
@@ -1123,6 +1138,10 @@
     const btn = o.querySelector('[data-x]');
     const hint = o.querySelector('.cm-rv-hint');
     let n = 0;
+    // The cadence SHRINKS as the pull gets bigger, so a ten-card vault takes about
+    // as long as a five-card one instead of twice as long. A reveal is a beat, not
+    // a wait.
+    const GAP = Math.max(190, Math.round(2600 / Math.max(1, cards.length)));
     const flip = (i) => {
       const el = cards[i]; if (!el || el.classList.contains('flip')) return;
       el.classList.add('flip');
@@ -1141,19 +1160,23 @@
     };
     const finish = () => {
       cards.forEach((_, i) => flip(i));
-      if (btn) btn.hidden = false;
+      if (btn) btn.textContent = 'CONTINUE';
       if (hint) hint.remove();
       if (o._t) { clearTimeout(o._t); o._t = null; }
     };
     const step = () => {
       flip(n++);
-      if (n < cards.length) o._t = setTimeout(step, 620);
-      else { o._t = null; if (btn) btn.hidden = false; if (hint) hint.remove(); }
+      if (n < cards.length) o._t = setTimeout(step, GAP);
+      else { o._t = null; if (btn) btn.textContent = 'CONTINUE'; if (hint) hint.remove(); }
     };
     o._t = setTimeout(step, 260);
 
     const close = () => { if (o._t) { clearTimeout(o._t); o._t = null; } o.remove(); try { render(); } catch (e) {} };
-    if (btn) btn.addEventListener('click', close);
+    if (btn) btn.addEventListener('click', () => {
+      // SKIP reveals; CONTINUE closes. One button, and it is never a dead end.
+      if (n < cards.length) { finish(); n = cards.length; return; }
+      close();
+    });
     // A tap SKIPS AHEAD rather than closing, so an impatient player is never shown
     // a result they did not get to read.
     o.addEventListener('click', (ev) => {
@@ -1265,6 +1288,8 @@
       '.cm-hero-q{font:700 21px/1.3 Rajdhani,sans-serif;color:#fff;text-wrap:pretty}',
       '.cm-hero-b{font-size:15px;line-height:1.55;color:#c4cfe0;text-wrap:pretty}',
       '.cm-hero-b b{color:#e0b3ff}',
+      '.cm-poolnote{font:700 13px/1.5 Rajdhani,sans-serif;color:#9fb0c4;background:#121821;border:1px solid #2a3546;border-left:3px solid #7d8ba0;border-radius:9px;padding:11px 13px}',
+      '.cm-poolnote b{color:#e6edf7}',
       '.cm-bk{display:flex;flex-direction:column;gap:10px;max-width:440px;width:100%;background:#121821;border:1px solid #2a3546;border-left:4px solid #ffb0ba;border-radius:14px;padding:20px}',
       '.cm-bk-k{font:800 12px/1 Rajdhani,sans-serif;letter-spacing:.16em;color:#ffb0ba}',
       '.cm-bk-t{font:800 24px/1.15 Rajdhani,sans-serif;color:#fff}',
@@ -1321,6 +1346,7 @@
       '.cmr-line.dim b{color:#5d6b84}',
       '.cmr-line.dim i{color:#6d7b90}',
       '.cmr-unmet{font:800 11px/1.25 Rajdhani,sans-serif;color:#ffb0ba;text-align:center}',
+      '.cmr-need{font:700 10px/1.2 Rajdhani,sans-serif;color:#7d8ba0;text-align:center}',
       // ---- the exchange -------------------------------------------------------
       '.cm-dustbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#121821;border:1px solid #2a3546;border-left:3px solid #c07bff;border-radius:10px;padding:12px 13px}',
       '.cm-db-k{font:800 15px/1 Rajdhani,sans-serif;letter-spacing:.1em;color:#c9a2ff;flex:0 0 auto}',
@@ -1395,7 +1421,9 @@
       '.cm-rv-banner{display:flex;flex-direction:column;align-items:center;gap:3px;animation:cmpop .4s cubic-bezier(.2,1.5,.4,1)}',
       '.cm-rv-banner b{font:800 26px/1.1 Rajdhani,sans-serif;letter-spacing:.1em;color:#fff;text-align:center}',
       '.cm-rv-banner i{font:800 14px/1 Rajdhani,sans-serif;letter-spacing:.16em;color:#ffd24d;font-style:normal}',
-      '.cm-rv-row{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}',
+      '.cm-rv-row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-height:62vh;overflow-y:auto;padding:2px}',
+      '.cm-rv-row.many .cm-rv-c{width:132px;height:224px}',
+      '@media (max-width:560px){.cm-rv-row.many .cm-rv-c{width:104px;height:172px}}',
       '.cm-rv-c{width:184px;height:306px;perspective:900px}',
       '.cm-rv-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.3,1.2,.4,1)}',
       '.cm-rv-c.flip .cm-rv-in{transform:rotateY(180deg)}',
@@ -1459,6 +1487,7 @@
       '<div class="cm-hero"><div class="cm-hero-k">\u2726 THE CHASE</div>'
       + '<div class="cm-hero-q">Commanders are not earned. They are hunted.</div>'
       + '<div class="cm-hero-b">' + chaseCopy() + '</div></div>'
+      + '<div class="cm-poolnote">Commander percentages join the <b>same pool</b> as your gear, skills, perks, hull levels and nanocores — they add to that total, then it multiplies your base once. On a deep account <b>+176% hull is +176 points on top of everything else</b>, not a 176% jump in the number on your HUD.</div>'
       + '<div class="mf-wallet"><span class="mf-w-ic">✦</span><span class="mf-w-n">' + fmt(dust()) + '</span>'
       + '<span class="mf-w-l">DUST</span>'
       + '<span class="mf-w-r">from scrapped spares \u00b7 promotes a card or buys a pull<br>' + fmt(num(c.pulls)) + ' lifetime pulls</span></div>'

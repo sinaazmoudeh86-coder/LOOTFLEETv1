@@ -703,6 +703,10 @@
     p.pts -= cost; p.spent = (p.spent | 0) + cost; p.perks[k] = r + 1;
     try { G().refreshStats(); G().save(); } catch (e) {}
     if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    // REPAINT THIS SCREEN. refreshAll() rebuilds the shell, not the perk board,
+    // so without this the bank and every "rank n costs n" line keep showing the
+    // pre-purchase figures until the tab is left and re-entered.
+    render();
     toast(d.ic + ' ' + d.name + ' → rank ' + (r + 1) + ' (+' + perkPct(k) + '%)', d.col);
     render();
   }

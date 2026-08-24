@@ -186,15 +186,15 @@
   // corruption stage advances, so the ladder is legible at a glance.
   const MECHS = [
     { key: 'mspawn',   name: 'Mech Spawn',   mech: 'mspawn',   hpMod: 1.1, dmgMod: 0.9, spd: 78, size: 15, tint: '#c2323f', xp: 1.2,
-      world: { name: 'Verath',   stage: 'SEEDED',      sky: '#6b4436', ground: '#c98a5e', rock: '#a86b45', vein: '#d4462f' } },
+      world: { name: 'Verath',   stage: 'SEEDED',      sky: '#3d2720', ground: '#7d5639', rock: '#6a442c', vein: '#d4462f' } },
     { key: 'mgremlin', name: 'Mech Gremlin', mech: 'mgremlin', hpMod: 1.7, dmgMod: 1.2, spd: 88, size: 18, tint: '#d13645', xp: 1.6,
-      world: { name: 'Korrus',   stage: 'OVERRUN',     sky: '#64382c', ground: '#c07a4c', rock: '#9c5c39', vein: '#e04a2d' } },
+      world: { name: 'Korrus',   stage: 'OVERRUN',     sky: '#3a2019', ground: '#764a2e', rock: '#603923', vein: '#e04a2d' } },
     { key: 'mbeast',   name: 'Mech Beast',   mech: 'mbeast',   hpMod: 3.2, dmgMod: 1.8, spd: 62, size: 24, tint: '#e03a4c', xp: 2.4,
-      world: { name: 'Dravok',   stage: 'CONSUMED',    sky: '#5c3028', ground: '#b56a42', rock: '#8f4e30', vein: '#ef4a34' } },
+      world: { name: 'Dravok',   stage: 'CONSUMED',    sky: '#341b17', ground: '#6d4028', rock: '#57301d', vein: '#ef4a34' } },
     { key: 'marchon',  name: 'Mech Archon',  mech: 'marchon',  hpMod: 6.0, dmgMod: 2.6, spd: 54, size: 30, tint: '#f04455', xp: 3.6,
-      world: { name: 'Sethyr',   stage: 'ENTHRONED',   sky: '#52281f', ground: '#a85c38', rock: '#82422a', vein: '#ff4a3a' } },
+      world: { name: 'Sethyr',   stage: 'ENTHRONED',   sky: '#2e1712', ground: '#643723', rock: '#4e2819', vein: '#ff4a3a' } },
     { key: 'mtitan',   name: 'Mech Titan',   mech: 'mtitan',   hpMod: 11.0, dmgMod: 3.4, spd: 40, size: 38, tint: '#ff4d5e', xp: 5.2,
-      world: { name: 'Malgrave', stage: 'FORGE WORLD', sky: '#4a2018', ground: '#9c5030', rock: '#763822', vein: '#ff5a3c' } },
+      world: { name: 'Malgrave', stage: 'FORGE WORLD', sky: '#29120e', ground: '#5c301d', rock: '#462115', vein: '#ff5a3c' } },
   ];
   const MECH_BY_KEY = {};
   MECHS.forEach((m) => { MECH_BY_KEY[m.key] = m; });

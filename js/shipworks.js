@@ -683,7 +683,10 @@
   // may hand out shards toward it. season-pass.js reads this to build its crate
   // pool; the two lists drifting is what let the Tour pay shards for hulls the
   // Shipworks could not redeem.
-  window.SHIPWORKS = { render, buildableKeys: () => buildable().map((s) => s.key) };
+  // needOf is exported so nothing else has to keep its own copy of the number —
+  // a hardcoded requirement is how the Tour of Duty came to promise every hull
+  // at 100 parts.
+  window.SHIPWORKS = { render, buildableKeys: () => buildable().map((s) => s.key), needOf };
 
   const CSS = `
   /* Command card */

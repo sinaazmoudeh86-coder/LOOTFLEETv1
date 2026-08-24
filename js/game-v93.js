@@ -6183,6 +6183,9 @@
         state.mechRun = null;
         if (window.MECHF && window.MECHF.onRunCleared) { try { window.MECHF.onRunCleared(_t); } catch (x) {} }
         respawnAt(0);
+        // Back to the Foundry, not the empty arena. Deferred one tick so the tow
+        // home finishes first and the screen switch is not fighting resetZone().
+        setTimeout(() => { try { if (window.UI && window.UI.showScreen) window.UI.showScreen('mech'); } catch (x) {} }, 60);
         return;
       }
       if (s.clone) {

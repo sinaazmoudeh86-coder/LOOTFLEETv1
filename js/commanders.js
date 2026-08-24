@@ -682,6 +682,54 @@
     return out;
   }
 
+  // ---- COMMAND SCORE ----------------------------------------------------------
+  // One number for a whole roster, so Commanders can be ranked the way fleet
+  // power ranks hulls.
+  //
+  // WHAT IT REWARDS, AND WHY IN THIS ORDER:
+  //
+  //   COLLECTION is the floor. Every officer held scores on its BEST rarity ever
+  //   pulled, weighted 1.9^r — the same curve the pull odds run on, so the score
+  //   tracks how improbable the roster is rather than how big it is. Duplicates
+  //   add nothing: forty copies of one Common is not a collection.
+  //
+  //   SEATING is the multiplier. A card in the fleet is a decision; a card in the
+  //   album is inventory. Seated officers count DOUBLE — but only when their seat
+  //   requirement is met, exactly as mods() pays them. A Titan-only specialist
+  //   benched on a frigate contributes its collection value and nothing more,
+  //   because that is precisely what it is giving the fleet.
+  //
+  //   BREADTH is a bonus, not the point. Completing the roster is worth a flat
+  //   25% at 100%, scaling linearly — enough to make the last few officers matter
+  //   without letting a wide roster of Commons out-score a deep one.
+  //
+  // Derived entirely from the album and the live seat check, so a rarity retune
+  // or a flagship change moves it with no second table to keep in step.
+  const SCORE_BASE = 10;
+  function score() {
+    const own = rec().own;
+    const ids = Object.keys(own).filter((id) => BY_ID[id]);
+    if (!ids.length) return 0;
+    let total = 0;
+    ids.forEach((id) => {
+      const o = own[id], w = BY_ID[id];
+      const v = SCORE_BASE * Math.pow(1.9, Math.max(0, o.r | 0));
+      // seated AND paying — the same test mods() uses, so the score cannot
+      // credit a bonus the fleet is not receiving
+      const paying = isEquipped(id) && specOk(w);
+      total += paying ? v * 2 : v;
+    });
+    const breadth = 1 + 0.25 * (ids.length / ROSTER.length);
+    return Math.max(0, Math.floor(total * breadth));
+  }
+  // The seated line-up, for the board to draw the way it draws hulls. Officer id
+  // plus the rarity it is held at — enough to render a card, small enough to sit
+  // in a published row.
+  function lineup() {
+    return slots().filter((id) => BY_ID[id] && rec().own[id])
+      .map((id) => ({ id, r: rec().own[id].r | 0 }));
+  }
+
   // ---- ANNOUNCEMENTS --------------------------------------------------------
   // An ultra-rare pull is an event, not a line. Ancient+ (index 6) posts to the
   // channel through the Foundry's own RPC — fire and forget, never blocking the
@@ -1640,7 +1688,7 @@
 
   window.COMMANDERS = {
     ROSTER, CRATES, GATE_STARS, DROP, STAT_LABEL, render,
-    unlocked, gate, rec, owned, dust, equipped, equip, mods,
+    unlocked, gate, rec, owned, dust, equipped, equip, mods, score, lineup, SCORE_BASE,
     onFoundryKill, open, canOpen, rollRarity, rarityOf, bonusFor, BY_ID,
     CMDR_W, oddsOf, promote, scrap, canPromote, spare, dustPull, PROMO_COST, promoCost, DUST_PULL,
     dustPromote, canDustPromote, dustPromo, scrapUpTo, exchangeHTML, promoteAll, promoteAllPlan,

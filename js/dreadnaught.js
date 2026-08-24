@@ -235,8 +235,39 @@
   function nodeCount() { return Math.max(0, unlockedKeys().length - 1); }
   function combatMods() { return ensureAgg().combat; }
   function mult(k) { const v = ensureAgg().util[k] || 0; return 1 + v / 100; }
-  function dmgVs(e) { const c = ensureAgg().combat; if (!e) return 1; let b = (c.bossDamage || 0); const elite = e.isSuper || e.isDread || e.isCitadel || e.isClone; if (elite) b += (c.eliteDamage || 0); return 1 + b / 100; }
+  // BOSS AND ELITE DAMAGE DO NOT APPLY TO ANOTHER PILOT'S DEFENCE.
+  //
+  // A rival's My Galaxy tile and a held Void spire are fought as a CLONE of that
+  // pilot's own fleet (isClone, spawned with isBoss + isSuper) or as their
+  // citadel. Both flags are read here, so the attacker was landing bossDamage AND
+  // eliteDamage on a defence built out of another player's ships — perks meant for
+  // PvE monsters silently became a PvP damage multiplier, and the defender has no
+  // equivalent because they are not present for the fight.
+  //
+  // The clone matchup is already calibrated against the defender's TRUE power, so
+  // a perk stacked on top of that is not a difficulty knob; it is a thumb on the
+  // scale of a contest between two accounts.
+  //
+  // This also closes a second fault in the same line: bossDamage was added
+  // UNCONDITIONALLY — there was no isBoss test at all — so the boss-damage perk
+  // was multiplying every ordinary hostile in the game.
+  function isPlayerDefence(e) {
+    if (!e) return false;
+    if (e.isClone) return true;                 // a rival's fleet, fought as a clone
+    if (e.isCitadel && e.rivalOwned) return true;   // their fortress, on their tile
+    return false;
+  }
+  function dmgVs(e) {
+    const c = ensureAgg().combat;
+    if (!e) return 1;
+    if (isPlayerDefence(e)) return 1;           // PvP: no perk multiplier, either way
+    let b = e.isBoss ? (c.bossDamage || 0) : 0;
+    const elite = e.isSuper || e.isDread || e.isCitadel || e.isClone;
+    if (elite) b += (c.eliteDamage || 0);
+    return 1 + b / 100;
+  }
   function hasSpecial(name) { return !!ensureAgg().special[name]; }
+  function playerDefence(e) { return isPlayerDefence(e); }
 
   // pilot score + rank
   function pilotScore() {

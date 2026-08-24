@@ -298,6 +298,12 @@
       const ph = bonusHtml();
       if (pills._lastHtml !== ph) { pills._lastHtml = ph; pills.innerHTML = ph; }
 
+      // MY FLEET DEEP DETAILS sits directly above these pills. It mounts itself
+      // relative to #sp-pills-host, so it is driven from here rather than from
+      // renderHero — one owner for the whole block, and it can never end up on
+      // the wrong side of the pills after a re-render.
+      try { if (window.FLEETDEEP) window.FLEETDEEP.mount(); } catch (e) {}
+
       let inc = document.getElementById('sp-inc-host');
       if (!inc) { inc = document.createElement('div'); inc.id = 'sp-inc-host'; host.appendChild(inc); }
       else if (inc.parentNode !== host || inc.nextSibling) host.appendChild(inc);   // keep last in the scroll

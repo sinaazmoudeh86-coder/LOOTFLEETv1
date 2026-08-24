@@ -192,6 +192,7 @@
   let _lbNoNew = false, _lbNewRetryAt = 0, _lbNewWarned = false;
   let _lbNoPilot = false, _lbPilotRetryAt = 0, _lbPilotWarned = false;
   let _lbNoMech = false, _lbMechRetryAt = 0, _lbMechWarned = false;
+  let _lbNoCmdr = false, _lbCmdrRetryAt = 0, _lbCmdrWarned = false;
   // WHICH COLUMN SET THE LAST SUCCESSFUL BOARD READ ACTUALLY RETURNED.
   // The ladders need to know whether a migration has run, and inspecting the
   // returned ROWS cannot tell them: the caller merges the player's own live save
@@ -367,10 +368,35 @@
       const mech = (p.mech_cores !== undefined) ? {
         p_mech_cores: Math.max(0, Math.min(1e12, Math.floor(Number(p.mech_cores) || 0))),
       } : null;
+      // Command Score + the seated line-up. Declared HERE, above the first rung
+      // that reads it — the temporal-dead-zone bug that froze every publish for
+      // twenty-four builds was a const declared below its own condition.
+      const cmdr = (p.cmdr_score !== undefined) ? {
+        p_cmdr_score: Math.max(0, Math.min(1e12, Math.floor(Number(p.cmdr_score) || 0))),
+        p_cmdr_line: Array.isArray(p.cmdr_line) ? p.cmdr_line.slice(0, 5) : [],
+      } : null;
       // NEWEST RUNG FIRST. mech-ladder.sql is a strict superset of pilot-ladder,
       // so this rung carries everything the one below it does plus p_mech_cores;
       // if the server has not run it, we fall through and the Foundry board simply
       // reports as not-yet-live rather than the whole publish failing.
+      if (cmdr && mech && tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot && !_lbNoMech && !_lbNoCmdr) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+            p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
+            base, ladder, art, fresh, tree, mech, cmdr));
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
+        if (!isLegacy(error)) { lbFail('cmdr', error); return; }
+        noteRungMissing('cmdr');
+        _lbNoCmdr = true; _lbCmdrRetryAt = Date.now() + 5 * 60 * 1000;
+        if (!_lbCmdrWarned) {
+          _lbCmdrWarned = true;
+          try {
+            console.warn('[LOOTFLEET] leaderboard cmdr_score rejected \u2014 the Command Rank board will rank every human at zero. '
+              + 'Run supabase/cmdr-ladder.sql, then "notify pgrst, \'reload schema\';". Retrying automatically every 5 minutes. '
+              + 'Inspect with CLOUD.lbState().');
+          } catch (e) {}
+        }
+      }
       if (mech && tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot && !_lbNoMech) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
@@ -518,10 +544,20 @@
       // 'mech' too — the shapes are a LADDER, and testing for one exact value is
       // what silently switched Home Defense and Exploration off the day
       // pilot-ladder landed.
-      let shape = 'mech';
+      // cmdr-ladder.sql supersedes mech-ladder.sql, so 'cmdr' is the newest rung
+      // and every consumer that accepts 'mech' must accept 'cmdr' too — the
+      // shapes are a LADDER (see ranks-boards RANK/NEED).
+      let shape = 'cmdr';
       let { data, error } = await client.from('leaderboard')
-        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best,pilot_score,pilot_nodes,mech_cores')
+        .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best,pilot_score,pilot_nodes,mech_cores,cmdr_score,cmdr_line')
         .order('power', { ascending: false }).limit(n || 100);
+      if (error) {   // cmdr-ladder.sql not run yet
+        shape = 'mech';
+        const rC = await client.from('leaderboard')
+          .select('user_id,name,power,level,zone,kills,fleet,asc_stars,tiles,citadels,tile_rev,ships,missions,badges,cargo,cargo_best,nano_legend,nano_slots,nano_god,hcwave,expo,expo_best,pilot_score,pilot_nodes,mech_cores')
+          .order('power', { ascending: false }).limit(n || 100);
+        data = rC.data; error = rC.error;
+      }
       if (error) {   // mech-ladder.sql not run yet
         shape = 'pilot';
         const rM = await client.from('leaderboard')
@@ -657,6 +693,11 @@
     // re-arms. One line in the console instead of reading source to find out why
     // a column is not moving.
     lbState: () => ({
+      // mech is the NEWEST rung and was missing from this readout — the flag was
+      // being kept and never reported, so the one command the notes point at for
+      // "is this rung degraded or is it just not running" could not answer for it.
+      cmdr:   { off: _lbNoCmdr,   retryIn: Math.max(0, Math.round((_lbCmdrRetryAt   - Date.now()) / 1000)) },
+      mech:   { off: _lbNoMech,   retryIn: Math.max(0, Math.round((_lbMechRetryAt   - Date.now()) / 1000)) },
       pilot:  { off: _lbNoPilot,  retryIn: Math.max(0, Math.round((_lbPilotRetryAt  - Date.now()) / 1000)) },
       new:    { off: _lbNoNew,    retryIn: Math.max(0, Math.round((_lbNewRetryAt    - Date.now()) / 1000)) },
       art:    { off: _lbNoArt,    retryIn: Math.max(0, Math.round((_lbArtRetryAt    - Date.now()) / 1000)) },

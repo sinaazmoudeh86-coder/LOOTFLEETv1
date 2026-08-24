@@ -6698,6 +6698,7 @@
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
     const b = new E.Enemy(type, state.currentDungeon, cx, cy);
     b.isBoss = true; b.isSuper = true; b.isClone = true;
+    b.rivalOwned = true;         // another account's fleet — see DREAD.dmgVs
     // TRUE-POWER MATCHUP (see cloneMatchup). Previously this compared COMPRESSED
     // scores and set HP to "16s of theoryDps", so a defender four times your real
     // power read as twice and died in eleven seconds — which is why attacking
@@ -8308,7 +8309,7 @@
     // was two allocations per frame forever, and per-frame garbage is the known
     // shape of "giga laggy" in this engine (see the kill-path note above).
     _fx: () => { _fxo.rt = rt; _fxo.state = state; return _fxo; }, getShipKills: (k) => (state.shipKills[k] || 0),
-    skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills,
+    skillRank, branchSpent, skillReqMet, canInvest, investSkill, resetSkills, skillMods,
     getShop, shopTimeLeft, buyShopItem, getBossInfo, shopItemPrice, shopIsUpgrade,
     getLCMarket, buyLCMarket, lcCosmicTimeLeft, lcPrimTimeLeft, LC_PRICES,
     secondUnlocked: (b) => secondUnlocked(b), equipLayout,

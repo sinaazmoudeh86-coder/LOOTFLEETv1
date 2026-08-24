@@ -31,10 +31,10 @@
 (function () {
   'use strict';
 
-  const BUILD = 721;
+  const BUILD = 723;
   const NOTES = {
-    build: 721,
-    title: 'BUILD 721',
+    build: 723,
+    title: 'BUILD 723',
     sub: 'The Mech faction is here — and it fights differently.',
     groups: [
       { k: 'NEW', c: '#ff8a9a', rows: [
@@ -42,7 +42,16 @@
         ['\u26a0', 'Mech attacks strip your armor', 'Every Mech hit stacks ARMOR CORRUPTION and you take more damage while it holds. The class sets the ceiling, the swarm sets how fast they get there \u2014 a Spawn is nothing, a Titan is +25%. It shows over your ship, and it fades in 5s once they stop hitting you.'],
         ['\u2699', 'Mech Archon &amp; Mech Titan', 'Two new hulls, earned only in the Foundry \u2014 first clear of the top two tiers hands over the blueprint. Neither is your biggest gun: they CORRUPT the target so every other ship in your fleet hits it harder.'],
       ] },
+      { k: 'NEW', c: '#c9a2ff', rows: [
+        ['\u2726', 'Command Rank', 'Your Commander roster now has a board. Every officer scores on its best rarity, seated ones count double, and the board draws your actual line-up.'],
+        ['\u25c8', 'My Fleet Deep Details', 'On My Ship: every system feeding every stat, what each is worth, and the equation the engine actually uses.'],
+      ] },
+      { k: 'CHANGED', c: '#ffcf7a', rows: [
+        ['\u2694', 'Boss damage now only applies to bosses', 'It was being added to <b>every</b> hostile in the game, which was never intended \u2014 ordinary kills will feel slower if you invested in it. Every boss, elite and Dreadnaught figure is unchanged.'],
+        ['\u26e8', 'Boss perks no longer hit player defences', 'Attacking a rival tile or Void spire fights a clone of their fleet, and boss/elite damage was multiplying against it. Those are other people\u2019s ships, not monsters.'],
+      ] },
       { k: 'FIXED', c: '#8fc4ff', rows: [
+        ['\u2756', 'Pilot skill tier countdown', 'Buying a 6-point skill moved the "points to next tier" number by 1. It moves by the real cost now \u2014 the save was always right, the on-screen number was not.'],
         ['\u2726', 'Commanders were paying only half their card', 'Legendary and above carry a second stat. It was printed on every card and never applied \u2014 it counts now.'],
         ['\u2756', 'Perk board showed stale points', 'Buying a rank deducted correctly but the screen kept the old numbers until you left and came back.'],
         ['\u25c8', 'Ship shards said \u201c/ 100\u201d for every hull', 'They range 10 to 2,000. The Tour now shows the real requirement.'],
@@ -51,6 +60,10 @@
       ] },
       { k: 'NEW', c: '#8fc4ff', rows: [
         ['\u25c9', 'Discord now calls the assault windows', 'When a corrupted world comes in range, when it is about to close, and what level or ascension you need to join it. The Mech Foundry had never announced anything at all \u2014 that was a bug, not a design.'],
+      ] },
+      { k: 'NEW', c: '#c9a2ff', rows: [
+        ['\u2726', 'Command Rank', 'Your Commander roster now has a board. Every officer scores on its best rarity, seated ones count double, and the board draws your actual line-up.'],
+        ['\u25c8', 'My Fleet Deep Details', 'On My Ship: every system feeding every stat, what each is worth, and the equation the engine actually uses.'],
       ] },
       { k: 'CHANGED', c: '#ffcf7a', rows: [
         ['\u2726', 'Fusing a Commander costs more at high rarity', 'It was 4 spare copies a tier at every rarity, which let the cheapest crate in the game build a Primordial. A step is now priced by the tier it leaves \u2014 3 spares at Common, 39 at Legendary, 141 at Ancient. <b>Every card and every duplicate you already hold is untouched</b>, and climbing the lower tiers is barely changed.'],

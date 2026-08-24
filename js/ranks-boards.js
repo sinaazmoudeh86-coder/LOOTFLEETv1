@@ -216,6 +216,43 @@
       empty: 'No other pilot has published a tree yet. This board lists real published trees only — never stand-ins, and never a pilot we have not heard from. Rows appear as pilots log in.',
     },
     {
+      // COMMAND RANK. The Commander roster ranked the way fleet power ranks
+      // hulls — and like that board, it DRAWS THE LINE-UP: the actual officers
+      // seated, at the rarity they are held, not a count.
+      //
+      // The score is live rather than a lifetime best. Standing an officer down
+      // or switching flagship so a specialist stops paying both lower it, and
+      // the board should say so — a Command Rank is a statement about the fleet
+      // you are fielding right now, not the best roster you ever had.
+      id: 'command', ic: '\u2726', col: '#c07bff', label: 'COMMAND', sub: 'Commander roster',
+      sql: 'cmdr-ladder.sql',
+      info: 'Every Commander you hold scores on its BEST rarity, weighted the way the pull odds are — so the board tracks how improbable a roster is, not how big. Officers SEATED and actually paying count double; a specialist benched in the wrong hull scores as collection only. Completing the roster adds up to 25%.',
+      unit: 'CMD',
+      realOnly: true,
+      metric: (p) => Number(p.cmdr_score) || 0,
+      fmt: (v, p) => fmt(Number(p.cmdr_score) || 0),
+      // The line-up is DRAWN, the way the power board draws hulls — tab.meta() is
+      // inserted as markup by the renderer, and there is no separate art hook.
+      // Portrait where one exists, rarity-tinted monogram where it does not.
+      meta: (p) => {
+        const line = Array.isArray(p.cmdr_line) ? p.cmdr_line : [];
+        if (!line.length) return 'No Commanders seated \u00b7 Lv ' + (p.level | 0);
+        const CO = window.COMMANDERS || {};
+        const strip = line.slice(0, 5).map((c) => {
+          const id = String(c.id || '').replace(/[^a-z0-9_-]/gi, '');
+          const w = CO.BY_ID ? CO.BY_ID[id] : null;
+          const R = CO.rarityOf ? CO.rarityOf(c.r | 0) : { color: '#888', name: '' };
+          const nm = w ? w.name : id;
+          return '<span class="rb-cc" style="--c:' + R.color + '" title="' + nm + ' \u2014 ' + R.name + '">'
+            + '<img src="commanders/' + id + '.png" alt="" loading="lazy" onerror="this.remove()">'
+            + '<i>' + nm.slice(0, 2).toUpperCase() + '</i></span>';
+        }).join('');
+        return '<span class="rb-cline">' + strip + '</span>'
+          + line.length + ' seated \u00b7 Lv ' + (p.level | 0);
+      },
+      empty: 'No other pilot has published a roster yet. This board lists real published Commanders only \u2014 never stand-ins.',
+    },
+    {
       // THE MECH FOUNDRY. Measures lifetime Mech Cores EARNED, never the wallet:
       // a wallet falls the moment a pilot assembles a hull, and a ladder whose
       // rows drop when you play it punishes playing. `earned` only climbs, and
@@ -464,6 +501,7 @@
     expo: ['expo', 'expo_best'],
     pilot: ['pilot_score'],
     mech: ['mech_cores'],
+    command: ['cmdr_score'],
   };
   function migrated(rows, id) {
     // THE NEW LADDERS ASK THE SERVER, NOT THE ROWS.
@@ -479,7 +517,7 @@
     //
     // CLOUD.lbShape() reports which SELECT actually succeeded, which is a direct
     // statement about the schema and cannot be faked by a merged local row.
-    if (id === 'hcwave' || id === 'expo' || id === 'pilot' || id === 'mech') {
+    if (id === 'hcwave' || id === 'expo' || id === 'pilot' || id === 'mech' || id === 'command') {
       try {
         const s = window.CLOUD && window.CLOUD.lbShape && window.CLOUD.lbShape();
         // The shapes are a LADDER, newest first: 'pilot' implies 'new'. So the
@@ -490,8 +528,8 @@
         // 'new'. Each board names the OLDEST shape that carries its column and
         // accepts anything newer, so landing a migration can never switch an
         // older board off.
-        const RANK = { legacy: 0, base: 1, ladder: 2, cargo: 3, nano: 4, new: 5, pilot: 6, mech: 7 };
-        const NEED = { hcwave: 5, expo: 5, pilot: 6, mech: 7 };
+        const RANK = { legacy: 0, base: 1, ladder: 2, cargo: 3, nano: 4, new: 5, pilot: 6, mech: 7, cmdr: 8 };
+        const NEED = { hcwave: 5, expo: 5, pilot: 6, mech: 7, command: 8 };
         if (s) return (RANK[s] || 0) >= (NEED[id] || 0);
       } catch (e) {}
       // No board read has landed yet (offline, signed out, first paint). We do
@@ -623,6 +661,9 @@
     // what a pilot has earned. Never `| 0` — a career total is a published figure
     // and the bitwise habit is what wraps them negative.
     try { q.mech_cores = Math.max(0, Math.floor(Number(window.MECHF && MECHF.earned ? MECHF.earned() : 0) || 0)); } catch (e) {}
+    // Command Score reads through COMMANDERS so the board and the roster screen
+    // can never disagree about what a line-up is worth.
+    try { q.cmdr_score = Math.max(0, Math.floor(Number(window.COMMANDERS && COMMANDERS.score ? COMMANDERS.score() : 0) || 0)); } catch (e) {}
     // Nanocores read through the module so this row, the badge chains and the
     // Discord feed all quote one number.
     try {
@@ -693,6 +734,10 @@
         // wallet falls when a hull is assembled, and a ladder whose rows drop when
         // you play it punishes playing.
         mech_cores: (() => { try { return Math.max(0, Math.floor(Number(window.MECHF && MECHF.earned ? MECHF.earned() : 0) || 0)); } catch (e) { return 0; } })(),
+        // COMMAND RANK — the score, plus the seated line-up so the board can draw
+        // the officers the way the power board draws hulls.
+        cmdr_score: (() => { try { return Math.max(0, Math.floor(Number(window.COMMANDERS && COMMANDERS.score ? COMMANDERS.score() : 0) || 0)); } catch (e) { return 0; } })(),
+        cmdr_line: (() => { try { return (window.COMMANDERS && COMMANDERS.lineup) ? COMMANDERS.lineup().slice(0, 5) : []; } catch (e) { return []; } })(),
         expo: (s.expo && s.expo.log && s.expo.log.done) | 0,
         expo_best: (s.expo && s.expo.log && s.expo.log.best) | 0,
         cargo: (s.cargo && s.cargo.wins) | 0,
@@ -717,4 +762,11 @@
   }
 
   window.RANKBOARDS = { TABS, BY_ID, board, publishFields, tileRevenue };
+})();
+
+(function rbCmdrCss(){
+  if (document.getElementById('rb-cmdr-css')) return;
+  const s = document.createElement('style'); s.id = 'rb-cmdr-css';
+  s.textContent = "\n/* ---- COMMAND RANK line-up -------------------------------------------------\n   The seated officers, drawn in the row the way fleetThumbs draws hulls. The\n   monogram sits UNDER the portrait rather than beside it, so a card with no art\n   yet still reads as an officer instead of a broken image. */\n.rb-cline{display:inline-flex;gap:4px;vertical-align:middle;margin-right:7px}\n.rb-cc{position:relative;width:22px;height:22px;flex:0 0 22px;border-radius:50%;overflow:hidden;\n  border:1px solid color-mix(in srgb,var(--c) 65%,transparent);\n  background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 55%,transparent),#0b0f16 78%);\n  box-shadow:0 0 6px -2px var(--c)}\n.rb-cc img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 18%;display:block}\n.rb-cc i{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;\n  font:800 9px/1 Rajdhani,sans-serif;font-style:normal;color:color-mix(in srgb,var(--c) 80%,#fff);letter-spacing:.02em}\n";
+  document.head.appendChild(s);
 })();

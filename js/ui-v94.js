@@ -4149,9 +4149,21 @@
     if (el['skills-sub']) el['skills-sub'].textContent = (G.state.skillPoints || 0) + ' pts';
 
     // A locked tier whose requirement is now met needs real new markup.
+    //
+    // THE COUNTDOWN MOVES BY THE NODE'S COST, NOT BY ONE. This decremented the
+    // displayed number by a hardcoded 1 on every purchase, so buying a 3-point
+    // node showed "still 8 more points" when the real figure was 6. The value was
+    // never wrong in the save — `branchSpent()` counts ranks × cost correctly —
+    // it was this in-place updater GUESSING at the delta instead of reading it,
+    // which is why re-opening the tab showed the right number.
+    //
+    // Derived from the node actually bought, so it can never drift from what
+    // branchSpent() will report on the next full render.
+    const bought = skNodeById[id] || null;
+    const step = Math.max(1, (bought && bought.cost) | 0);
     let structural = false;
     body.querySelectorAll('.skt-locked b').forEach((b) => {
-      const left = Math.max(0, (parseInt(b.textContent, 10) || 0) - 1);
+      const left = Math.max(0, (parseInt(b.textContent, 10) || 0) - step);
       if (left <= 0) { structural = true; return; }
       b.textContent = String(left);
       // keep the singular/plural honest as the number ticks down

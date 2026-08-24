@@ -1,46 +1,135 @@
-# Loot Fleet — deploy v249 · build 721 · FEEDBACK PASS + FEED REPAIR
+# Loot Fleet — deploy v250 · build 723 · COMMAND RANK + FLEET DEEP DETAILS
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v248 (build 719). Service worker cache is `lootfleet-v721`.
-**Login screen reads `BUILD 721`.**
+Supersedes v249 (build 721). Service worker cache is `lootfleet-v723`.
+**Login screen reads `BUILD 723`.**
 
-## ⚠ TWO THINGS TO RUN
+## ⚠ THREE THINGS TO RUN
 
-**1. `supabase functions deploy discord-feed`** — all four files together, a
-partial upload does not boot. `FEED_VER` is **720**. This is REQUIRED: the
-running function is 717 and it has never been able to announce the Mech Foundry
-at all (see below), and it is what stops the KOTH spam.
+**1. `supabase/cmdr-ladder.sql` — NEW, and it is now the canonical `lb_upsert`.**
+A strict superset of `mech-ladder.sql`: 26 params to its 24, same order, same
+types. Adds `cmdr_score bigint` and `cmdr_line jsonb`. It drops every existing
+overload by catalogue lookup and asserts exactly one survives, because
+`create or replace` cannot replace an overload whose argument types differ — it
+silently adds a second copy and PostgREST then picks the wrong candidate or
+refuses to pick (PGRST203).
 
-**2. `supabase/mech-feed.sql`** — re-run, idempotent. Adds `mechOpen`,
-`mechWarn`, `mechSoon` and `mechCmdr` to the `log_mech` whitelist. Without it
-the window pings are refused server-side.
+**Re-running `new-ladders.sql`, `pilot-ladder.sql`, `mech-ladder.sql`,
+`cargo-ladder.sql`, `nanocore-ladder.sql` or `discord-art-publish.sql` re-adds an
+older overload and requires re-running `cmdr-ladder.sql` afterwards.**
 
-Nothing else. No `lb_upsert` change, no new column.
+**2. `supabase/mech-feed.sql`** — re-run if it was not run at v249. Idempotent.
+
+**3. `supabase functions deploy discord-feed`** — all four files together, a
+partial upload does not boot. `FEED_VER` is **720**. Required if not already done
+at v249: the running function has never been able to announce the Mech Foundry,
+and this is what stops the KOTH spam.
+
+Verify:
+
+```sql
+select column_name from information_schema.columns
+ where table_name = 'leaderboard'
+   and column_name in ('pilot_score','mech_cores','cmdr_score','cmdr_line');
+select count(*) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+ where ns.nspname = 'public' and p.proname = 'lb_upsert';   -- must be exactly 1
+```
 
 ## Order
 
 1. Run the SQL, deploy the edge function.
 2. Push everything **except** `version.json`.
-3. Push `version.json` **last** — it is the eviction beacon; ahead of the files
-   it evicts players onto code that is not live yet.
-4. Confirm the login screen reads `BUILD 721`.
+3. Push `version.json` **last** — it is the eviction beacon.
+4. Confirm the login screen reads `BUILD 723`.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 721 |
-| root `version.json` | 721 |
-| `deploy-v249/version.json` | 721 |
-| `deploy-v249/sw.js` `CACHE` | `lootfleet-v721` |
+| root `game.html` `window.LF_BUILD` | 723 |
+| root `version.json` | 723 |
+| `deploy-v250/version.json` | 723 |
+| `deploy-v250/sw.js` `CACHE` | `lootfleet-v723` |
 | `discord-feed` `FEED_VER` | 720 |
 
-Every `js/`+`css/` reference carries `?v=721`. Folder rebuilt from the project
-root: v248 copied first, then `js/`, `css/`, `guides/` and `supabase/` DELETED
-and re-copied fresh as separate calls. All 73 js files game.html references
-diffed against root — zero stale, zero missing. Root `sw.js` deliberately
-unversioned (kill-switch worker) and untouched.
+Every `js/`+`css/` reference carries `?v=723`. Folder rebuilt from the project
+root: v249 copied first, then `js/`, `css/`, `guides/` and `supabase/` DELETED
+and re-copied fresh as separate calls. All 74 js files game.html references
+diffed against root — zero stale, zero missing. `js/fleet-deep.js` is new and is
+in the service worker precache. Root `sw.js` deliberately unversioned.
+
+---
+
+## What changed in 723
+
+### ✦ COMMAND RANK — the Commander roster, ranked
+
+Every officer scores on its **best rarity ever pulled**, weighted `1.9^r` — the
+same curve the pull odds run on, so the board tracks how IMPROBABLE a roster is
+rather than how big. Duplicates add nothing. Officers **seated and actually
+paying** count double, using the same seat test `mods()` uses, so a Titan-only
+specialist benched on a frigate scores as collection only — exactly what it is
+giving the fleet. Completing the roster adds up to 25%.
+
+One Ancient outscores five seated Commons, which is the shape a chase economy
+should have.
+
+The board **draws the line-up** the way the power board draws hulls: the actual
+seated officers as rarity-tinted portraits, monogram underneath so a card with no
+art still reads as an officer.
+
+`cmdr_score` is deliberately **not monotonic**, unlike crowns or cores. Standing
+an officer down or switching flagship legitimately lowers it, and the board should
+say so — a Command Rank is a statement about the fleet you are fielding now, not
+the best roster you ever had.
+
+### ◈ MY FLEET DEEP DETAILS
+
+A hero panel on Hangar ▸ My Ship, above the multiplier pills. It reads eight
+systems — flagship hull, hull upgrades, skill tree, ascension perks, escort wing,
+nanocore, Aegis auras and Commanders — and shows exactly how every fleet stat is
+built: the equation the engine actually uses, a build-shape radar across all nine
+stats, per-source contribution bars, each system's share of the pool, and what
+your multiplier would be WITHOUT it.
+
+Every figure derives from the same functions `computeStats()` reads, so a balance
+retune moves the panel on its own.
+
+It exists mostly to make one thing visible: percentage sources **do not
+compound**. `s.health *= (1 + (sum of every source) / 100)` — one pool, applied to
+base once. That is the single most misread thing in the game.
+
+### ⚔ Boss damage now only applies to bosses
+
+`bossDamage` was added UNCONDITIONALLY in `dmgVs()` — no `isBoss` test at all — so
+the perk was multiplying every ordinary hostile in the game. **This is a real nerf
+to general clear speed for anyone who invested in it**, and it is in the patch
+notes as one. Every boss, elite and Dreadnaught figure is unchanged.
+
+### ⛨ Boss and elite perks no longer hit player defences
+
+A rival's My Galaxy tile and a held Void spire are fought as a CLONE of that
+pilot's own fleet (`isClone`, spawned with `isBoss` + `isSuper`). Both flags were
+read by `dmgVs()`, so PvE perks silently became a PvP damage multiplier — and the
+defender has no equivalent, because they are not present for the fight. The clone
+matchup is already calibrated against the defender's true power.
+
+### Fixed
+
+- **Pilot skill tier countdown moved by 1 instead of the real cost.** Buying a
+  6-point skill showed 42 → 41 where the true figure was 36. The save was always
+  right (`branchSpent()` counts ranks × cost) — the fast in-place updater was
+  GUESSING at the delta instead of reading it, which is why re-opening the tab
+  snapped it to the correct number.
+- **`CLOUD.lbState()` never reported the `mech` rung.** The retry flag was kept
+  and never surfaced, so the one command the notes point at for "is this rung
+  degraded or simply not running" could not answer for the newest rung. Both
+  `mech` and `cmdr` are in the readout now.
+- **Fleet Deep Details was under-reporting.** `skillMods()` was never exported
+  from game-v93 and `PASCEND.mods()` does not exist, so the two largest
+  contributors on most accounts were invisible and Fire Rate read a key
+  (`fireRate`) the engine does not have, printing 0/s next to a +1030% pool.
 
 ---
 

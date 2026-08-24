@@ -1,63 +1,103 @@
-# Loot Fleet — deploy v250 · build 723 · COMMAND RANK + FLEET DEEP DETAILS
+# Loot Fleet — deploy v251 · build 724 · RANKS PUBLISH REPAIR
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v249 (build 721). Service worker cache is `lootfleet-v723`.
-**Login screen reads `BUILD 723`.**
+Supersedes v250 (build 723). Service worker cache is `lootfleet-v724`.
+**Login screen reads `BUILD 724`.** The update gate force-reloads every live
+session within ~90s of the beacon, which is what this build needs — the fix is
+client-side and only takes effect once a player is running it.
 
-## ⚠ THREE THINGS TO RUN
+## ⚠ RUN ALL THREE
 
-**1. `supabase/cmdr-ladder.sql` — NEW, and it is now the canonical `lb_upsert`.**
-A strict superset of `mech-ladder.sql`: 26 params to its 24, same order, same
-types. Adds `cmdr_score bigint` and `cmdr_line jsonb`. It drops every existing
-overload by catalogue lookup and asserts exactly one survives, because
-`create or replace` cannot replace an overload whose argument types differ — it
-silently adds a second copy and PostgREST then picks the wrong candidate or
-refuses to pick (PGRST203).
+**1. `supabase/cmdr-ladder.sql`** — re-run even if you ran an earlier copy. This
+version removes `p_fleet` entirely (it was overwriting every pilot's hull array
+with an empty one on each publish) and includes a repair step that restores the
+rows already emptied. It is the canonical `lb_upsert`.
 
-**Re-running `new-ladders.sql`, `pilot-ladder.sql`, `mech-ladder.sql`,
-`cargo-ladder.sql`, `nanocore-ladder.sql` or `discord-art-publish.sql` re-adds an
-older overload and requires re-running `cmdr-ladder.sql` afterwards.**
+**Do NOT run `mech-ladder.sql`** — it carries the original `p_fleet int` bug and
+is marked SUPERSEDED at the top of the file. `cmdr-ladder.sql` includes
+everything it did.
 
-**2. `supabase/mech-feed.sql`** — re-run if it was not run at v249. Idempotent.
+**2. `supabase functions deploy discord-feed`** — all four files, `FEED_VER`
+**723**. Carries both KOTH spam fixes. Verify it landed:
+`select content from net._http_response order by created desc limit 3;` must show
+`"ver":723`. If it shows anything lower, the old function is still running and the
+spam will continue regardless of anything else in this release.
 
-**3. `supabase functions deploy discord-feed`** — all four files together, a
-partial upload does not boot. `FEED_VER` is **720**. Required if not already done
-at v249: the running function has never been able to announce the Mech Foundry,
-and this is what stops the KOTH spam.
-
-Verify:
-
-```sql
-select column_name from information_schema.columns
- where table_name = 'leaderboard'
-   and column_name in ('pilot_score','mech_cores','cmdr_score','cmdr_line');
-select count(*) from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.proname = 'lb_upsert';   -- must be exactly 1
-```
-
-## Order
-
-1. Run the SQL, deploy the edge function.
-2. Push everything **except** `version.json`.
-3. Push `version.json` **last** — it is the eviction beacon.
-4. Confirm the login screen reads `BUILD 723`.
+**3. Push the site, `version.json` last.**
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 723 |
-| root `version.json` | 723 |
-| `deploy-v250/version.json` | 723 |
-| `deploy-v250/sw.js` `CACHE` | `lootfleet-v723` |
-| `discord-feed` `FEED_VER` | 720 |
+| root `game.html` `window.LF_BUILD` | 724 |
+| root `version.json` | 724 |
+| `deploy-v251/version.json` | 724 |
+| `deploy-v251/sw.js` `CACHE` | `lootfleet-v724` |
+| `discord-feed` `FEED_VER` | 723 |
 
-Every `js/`+`css/` reference carries `?v=723`. Folder rebuilt from the project
-root: v249 copied first, then `js/`, `css/`, `guides/` and `supabase/` DELETED
-and re-copied fresh as separate calls. All 74 js files game.html references
-diffed against root — zero stale, zero missing. `js/fleet-deep.js` is new and is
-in the service worker precache. Root `sw.js` deliberately unversioned.
+All 74 js files game.html references diffed against the project root — zero
+stale, zero missing.
+
+---
+
+## What changed in 724
+
+### ⚑ Ranks were publishing a stripped row, and had been since the outage
+
+This is the whole of it, because four boards looked broken in four different ways
+and it was one fault.
+
+Every rung of the publish ladder marks itself off when the server refuses its
+shape, with a retry timer — 5 minutes for the recent ones, **six hours** for the
+oldest. That is correct for a column whose migration has not run: do not hammer
+it. It is badly wrong for a server-side OUTAGE.
+
+When `lb_upsert` was broken by the `p_fleet` type error, every rung failed in the
+same publish and every one marked itself off — **including `asc`, the last rung
+before the legacy call**. With nothing left, the client fell through to the
+6-argument legacy write: name, power, level, zone, kills, and nothing else.
+
+So rows kept updating — which is exactly why this never presented as an outage —
+while `asc_stars`, `mech_cores`, `cmdr_score` and the fleet array were silently
+never sent again. Every pilot read ★0 with no ships. **Fixing the server did not
+recover it**, because clients were sitting out six-hour timers set during the
+failure.
+
+Three changes:
+
+- **A successful call clears every off-flag.** It cannot prove which columns
+  exist, but it definitively refutes "the server is down" — the only thing that
+  could turn every rung off at once. The next publish re-probes from the top.
+- **Four rungs refusing in one publish is treated as an outage, not four missing
+  columns.** Migrations land one at a time. The retry drops to 60 seconds.
+- **The legacy 6-arg call is no longer a safe floor.** It writes a stripped row,
+  so falling through to it overwrites good data with blanks. A cascade now skips
+  the write entirely and re-probes rather than damaging the row.
+
+### 👑 The KOTH dynasty line posted every two minutes
+
+The champion card is gated on `champ.day > next.hall` and correctly posts once,
+advancing that cursor. The dynasty line below it was gated on
+`champ.day === next.hall` — which the champion card had just made true, and which
+stays true for the rest of the day.
+
+It has its own cursor now (`next.dyn`), gated on `>`, persisted before the post
+so a single-crown champion does not leave it unset and re-query every tick.
+
+The mirror of the earlier KOTH spam: that one re-posted because a cursor was never
+written, this one because it was reading a cursor that meant something else.
+
+### ⚑ p_fleet removed from lb_upsert
+
+`cloud.js` documents that `p_fleet` was removed from the signature by
+`new-ladders.sql` and the client has not sent it since. Re-adding it typed `int`
+broke every insert (42804); re-adding it typed `jsonb` with a default was worse —
+the call matched, nothing errored, and every publish quietly replaced the row's
+real hull array with an empty one. An empty array is truthy in `leaderboard.js`,
+so it short-circuits the generated fallback and renders no ships at all.
+
+The fleet column is not that function's business and is now left untouched.
 
 ---
 

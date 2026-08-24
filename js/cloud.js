@@ -236,6 +236,15 @@
   let _lbCascade = 0, _lbCascadeSaid = false;
   function noteRungMissing(rung) {
     _lbCascade++;
+    // FOUR RUNGS REFUSING IN ONE PUBLISH IS AN OUTAGE, NOT FOUR MISSING COLUMNS.
+    // Migrations land one at a time; a whole ladder failing together means the
+    // function itself is broken. Keep the retry SHORT in that case so the client
+    // recovers minutes after the server is fixed rather than hours.
+    if (_lbCascade >= 4) {
+      const soon = Date.now() + 60 * 1000;
+      _lbCmdrRetryAt = _lbMechRetryAt = _lbPilotRetryAt = _lbNewRetryAt = _lbArtRetryAt = soon;
+      _lbNanoRetryAt = _lbCargoRetryAt = _lbLadderRetryAt = _lbAscRetryAt = soon;
+    }
     if (_lbCascade >= 4 && !_lbCascadeSaid) {
       _lbCascadeSaid = true;
       try {
@@ -247,7 +256,51 @@
       } catch (e) {}
     }
   }
-  function noteRungOk() { _lbCascade = 0; }
+  // ---- A HEALTHY SERVER CLEARS EVERY "OFF" FLAG -------------------------------
+  //
+  // THE FAULT THIS FIXES, in full, because it is the reason four boards went wrong
+  // at once and none of them looked related:
+  //
+  // Each rung marks itself off when the server refuses its shape, with a retry
+  // timer — 5 minutes for the recent ones, SIX HOURS for the oldest. That is right
+  // for a genuinely missing column: do not hammer a migration that has not run.
+  //
+  // It is badly wrong for a server-side OUTAGE. When lb_upsert was broken by the
+  // p_fleet type error, EVERY rung failed in the same publish and every one of
+  // them marked itself off — including `asc`, the bottom rung. From that moment
+  // the client had no rung left to use and fell through to the legacy minimal
+  // call: name, power, level, zone, kills. Nothing else.
+  //
+  // So rows kept updating — which is why this did not look like an outage — while
+  // asc_stars, mech_cores, cmdr_score and the fleet array were never sent again.
+  // Every pilot read ★0 with no ships. Fixing the server did NOT recover it,
+  // because the client was sitting out a six-hour timer on flags set during the
+  // failure.
+  //
+  // A SUCCESSFUL CALL IS PROOF THE SERVER IS ANSWERING. It cannot tell us which
+  // columns exist, but it definitively refutes "the server is down", which is the
+  // only thing that could have turned every rung off at once. So the flags are
+  // cleared and the next publish re-probes from the top: at worst it costs one
+  // rejected call per rung to rediscover a genuinely missing column, and at best
+  // it restores full publishing the moment a migration lands instead of hours
+  // later.
+  function resetRungs() {
+    _lbNoCmdr = _lbNoMech = _lbNoPilot = _lbNoNew = _lbNoArt = false;
+    _lbNoNano = _lbNoCargo = _lbNoLadder = _lbNoAsc = false;
+    _lbCmdrRetryAt = _lbMechRetryAt = _lbPilotRetryAt = _lbNewRetryAt = _lbArtRetryAt = 0;
+    _lbNanoRetryAt = _lbCargoRetryAt = _lbLadderRetryAt = _lbAscRetryAt = 0;
+  }
+  function noteRungOk() {
+    // Only re-probe when something WAS off — a healthy client must not pay a
+    // rediscovery cost on every publish.
+    const wasDegraded = _lbNoCmdr || _lbNoMech || _lbNoPilot || _lbNoNew || _lbNoArt
+                     || _lbNoNano || _lbNoCargo || _lbNoLadder || _lbNoAsc;
+    if (wasDegraded) {
+      resetRungs();
+      try { console.info('[LOOTFLEET] leaderboard publish recovered \u2014 re-probing every rung from the top.'); } catch (e) {}
+    }
+    _lbCascade = 0;
+  }
   // BIG NUMBERS ON THE WIRE. Late-game fleet power reaches ~1e29, and two things
   // then go wrong on the way to Postgres:
   //   · JS serialises anything past ~1e21 in exponential notation ("2.3e+29"),
@@ -518,6 +571,17 @@
         // network blips and RLS errors must NOT disable stars.
         if (!isLegacy(error)) { lbFail('p_asc', error); return; }  // keep p_asc; retry next save
         _lbNoAsc = true; _lbAscRetryAt = Date.now() + 6 * 3600 * 1000;
+      }
+      // A DEGRADED CLIENT MUST NOT WRITE A STRIPPED ROW. This call carries no
+      // stars and no ladder columns, so letting an OUTAGE fall through to it
+      // overwrites a good row with a blank one — the row keeps updating, which is
+      // why the failure never looked like an outage, while every board silently
+      // reads zero. Only a client that has genuinely never seen p_asc work may use
+      // it; anything else re-probes on the next publish instead of writing.
+      if (_lbCascade >= 4) {
+        resetRungs();
+        lbFail('cascade', { message: 'every rung refused in one publish — the function is broken, not the schema. Skipping the legacy write so a good row is not overwritten with a stripped one.' });
+        return;
       }
       const { error: e2 } = await client.rpc('lb_upsert', base);
       if (e2) { _lbNoAsc = false; _lbAscRetryAt = 0; lbFail('6-arg', e2); }   // 6-arg failed too — go back to p_asc

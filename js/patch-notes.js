@@ -31,16 +31,19 @@
 (function () {
   'use strict';
 
-  const BUILD = 723;
+  const BUILD = 724;
   const NOTES = {
-    build: 723,
-    title: 'BUILD 723',
+    build: 724,
+    title: 'BUILD 724',
     sub: 'The Mech faction is here — and it fights differently.',
     groups: [
       { k: 'NEW', c: '#ff8a9a', rows: [
         ['\u2699', 'The Mech Foundry', 'Five tiers in Command, from the Spawn Nest at Level 120 to the Titan Forge at 550. Clear one for \u2699 Mech Cores.'],
         ['\u26a0', 'Mech attacks strip your armor', 'Every Mech hit stacks ARMOR CORRUPTION and you take more damage while it holds. The class sets the ceiling, the swarm sets how fast they get there \u2014 a Spawn is nothing, a Titan is +25%. It shows over your ship, and it fades in 5s once they stop hitting you.'],
         ['\u2699', 'Mech Archon &amp; Mech Titan', 'Two new hulls, earned only in the Foundry \u2014 first clear of the top two tiers hands over the blueprint. Neither is your biggest gun: they CORRUPT the target so every other ship in your fleet hits it harder.'],
+      ] },
+      { k: 'FIXED', c: '#8fc4ff', rows: [
+        ['\u2691', 'Ranks are publishing properly again', 'Stars, ladders and event scores had stopped being sent \u2014 rows kept updating with only power and level, so every board read zero. Your next login republishes everything.'],
       ] },
       { k: 'NEW', c: '#c9a2ff', rows: [
         ['\u2726', 'Command Rank', 'Your Commander roster now has a board. Every officer scores on its best rarity, seated ones count double, and the board draws your actual line-up.'],
@@ -60,6 +63,9 @@
       ] },
       { k: 'NEW', c: '#8fc4ff', rows: [
         ['\u25c9', 'Discord now calls the assault windows', 'When a corrupted world comes in range, when it is about to close, and what level or ascension you need to join it. The Mech Foundry had never announced anything at all \u2014 that was a bug, not a design.'],
+      ] },
+      { k: 'FIXED', c: '#8fc4ff', rows: [
+        ['\u2691', 'Ranks are publishing properly again', 'Stars, ladders and event scores had stopped being sent \u2014 rows kept updating with only power and level, so every board read zero. Your next login republishes everything.'],
       ] },
       { k: 'NEW', c: '#c9a2ff', rows: [
         ['\u2726', 'Command Rank', 'Your Commander roster now has a board. Every officer scores on its best rarity, seated ones count double, and the board draws your actual line-up.'],

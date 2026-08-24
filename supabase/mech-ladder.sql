@@ -1,4 +1,18 @@
 -- =============================================================================
+--  ⚠ SUPERSEDED — DO NOT RUN THIS FILE
+--  ---------------------------------------------------------------------------
+--  This migration declares `p_fleet int` while `leaderboard.fleet` is jsonb, so
+--  the lb_upsert it installs fails EVERY insert with
+--      42804  column "fleet" is of type jsonb but expression is of type integer
+--  and because it drops every existing overload first, it takes down publishing
+--  for ALL boards, not just the Mech Foundry.
+--
+--  Run `supabase/cmdr-ladder.sql` instead. It is a strict superset (mech_cores
+--  included), declares p_fleet correctly, and self-typechecks against the table
+--  before it finishes.
+-- =============================================================================
+
+-- =============================================================================
 --  mech-ladder.sql — THE MECH FOUNDRY BOARD
 --  ---------------------------------------------------------------------------
 --  Adds `mech_cores` to public.leaderboard and republishes lb_upsert carrying it.

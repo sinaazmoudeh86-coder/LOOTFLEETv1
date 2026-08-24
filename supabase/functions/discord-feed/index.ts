@@ -45,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 720;
+const FEED_VER = 723;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1753,6 +1753,10 @@ Deno.serve(async (req) => {
       r6: fresh ? 0 : (meta.r6 || 0), r1: fresh ? 0 : (meta.r1 || 0),
       r10: fresh ? 0 : (meta.r10 || 0), close: fresh ? 0 : (meta.close || 0),
       hall: Number(meta.hall) || 0,
+      // The dynasty line's own cursor. It cannot share `hall` — that one records
+      // "the champion card has been posted", which is exactly the state the
+      // dynasty check was mistaking for "not yet posted".
+      dyn: Number(meta.dyn) || 0,
     };
     if (fresh) { next.leader = null; next.leaderAt = 0; }
 
@@ -1919,10 +1923,15 @@ Deno.serve(async (req) => {
     //
     // Only fires on a champion the tick already recognised, so it costs one
     // extra query a DAY rather than one every two minutes.
-    if (champ && champ.name && Number(champ.day) === Number(next.hall)) {
+    if (champ && champ.name && Number(champ.day) > Number(next.dyn)) {
+      next.dyn = Number(champ.day);
       const wins = await db.from('koth_hall').select('day', { count: 'exact', head: true })
                            .eq('name', champ.name);
       const w = Number(wins.count) || 0;
+      // Persist the cursor BEFORE the card can be dropped for any reason, so a
+      // champion with a single crown does not leave dyn unset and re-query every
+      // tick for the rest of the day.
+      await kothSave();
       if (!wins.error && w >= 2) {
         const ds = 'kothdyn:' + champ.name + ':' + w;
         events.push({

@@ -62,7 +62,6 @@ create function public.lb_upsert(
   p_level        int,
   p_zone         int,
   p_kills        numeric,
-  p_fleet        int,
   p_asc_stars    int    default 0,
   p_tiles        int    default 0,
   p_citadels     int    default 0,
@@ -93,13 +92,13 @@ begin
   if auth.uid() is null then return; end if;
 
   insert into public.leaderboard as l (
-    user_id, name, power, level, zone, kills, fleet, asc_stars,
+    user_id, name, power, level, zone, kills, asc_stars,
     tiles, citadels, tile_rev, ships, missions, badges,
     cargo, cargo_best, nano_legend, nano_slots, nano_god,
     hcwave, expo, expo_best, pilot_score, pilot_nodes, mech_cores,
     cmdr_score, cmdr_line, updated_at
   ) values (
-    auth.uid(), p_name, p_power, p_level, p_zone, p_kills, p_fleet, p_asc_stars,
+    auth.uid(), p_name, p_power, p_level, p_zone, p_kills, p_asc_stars,
     p_tiles, p_citadels, p_tile_rev, p_ships, p_missions, p_badges,
     p_cargo, p_cargo_best, p_nano_legend, p_nano_slots, p_nano_god,
     p_hcwave, p_expo, p_expo_best, p_pilot_score, p_pilot_nodes, p_mech_cores,
@@ -111,7 +110,6 @@ begin
     level       = excluded.level,
     zone        = excluded.zone,
     kills       = excluded.kills,
-    fleet       = excluded.fleet,
     asc_stars   = excluded.asc_stars,
     tiles       = excluded.tiles,
     citadels    = excluded.citadels,
@@ -141,11 +139,11 @@ begin
 end $$;
 
 revoke all on function public.lb_upsert(
-  text, numeric, int, int, numeric, int, int, int, int, bigint, int, int, int,
+  text, numeric, int, int, numeric, int, int, int, bigint, int, int, int,
   int, int, int, int, int, int, int, int, bigint, int, bigint, bigint, jsonb
 ) from public, anon;
 grant execute on function public.lb_upsert(
-  text, numeric, int, int, numeric, int, int, int, int, bigint, int, int, int,
+  text, numeric, int, int, numeric, int, int, int, bigint, int, int, int,
   int, int, int, int, int, int, int, int, bigint, int, bigint, bigint, jsonb
 ) to authenticated;
 
@@ -164,6 +162,39 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+-- ---- 5. PROVE THE FUNCTION CAN ACTUALLY WRITE -------------------------------
+-- The 42804 failure was invisible until a client tried to publish, because
+-- creating a function does not type-check its body against the table. This runs
+-- the real insert path once, inside a transaction that is rolled back, so a
+-- column/param mismatch surfaces HERE instead of silently killing every publish.
+do $$
+begin
+  begin
+    perform public.lb_upsert('__typecheck__', 1::numeric, 1, 1, 1::numeric);
+    raise exception 'ROLLBACK_TYPECHECK_OK';
+  exception
+    when others then
+      if sqlerrm <> 'ROLLBACK_TYPECHECK_OK' then
+        raise exception 'lb_upsert body does not match the table: %', sqlerrm;
+      end if;
+  end;
+end $$;
+
+-- ---- 6. REPAIR THE ROWS THE BROKEN VERSION ALREADY EMPTIED ------------------
+-- Anyone who published while p_fleet defaulted to '[]' had their hull list
+-- overwritten with an empty array. The list is client-owned and is re-sent on the
+-- next publish, so nothing is permanently lost — but an empty array is TRUTHY in
+-- leaderboard.js (`if (p._fleet) return p._fleet`), which short-circuits the
+-- generated fallback and renders no ships at all rather than falling back.
+--
+-- Setting the empties to NULL restores that fallback immediately, and the real
+-- list overwrites it the moment that pilot's client publishes again.
+update public.leaderboard
+   set fleet = null
+ where fleet is not null
+   and jsonb_typeof(fleet) = 'array'
+   and jsonb_array_length(fleet) = 0;
 
 -- ---- verify -----------------------------------------------------------------
 select 'lb_upsert copies' as check,

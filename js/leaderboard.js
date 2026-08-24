@@ -40,7 +40,7 @@
   function mapReal(r){ return Object.assign({}, r, {
     name: r.name || 'Operator', level: r.level || 1, zone: r.zone || 1,
     power: r.power || 0, kills: r.kills || 0, asc: (r.asc_stars || 0) | 0,
-    _fleet: Array.isArray(r.fleet) ? r.fleet : null, _uid: r.user_id, isReal: true }); }
+    _fleet: (Array.isArray(r.fleet) && r.fleet.length) ? r.fleet : null, _uid: r.user_id, isReal: true }); }
   function ensureReal(cb){
     if (!(window.CLOUD && window.CLOUD.enabled && window.CLOUD.lbTop)) return;
     if (_realInflight || Date.now() - _realT < 8000) return;
@@ -99,7 +99,10 @@
   // fleets (1–5 unique hulls, flagship first). Seeded by name; stable per heat.
   const FLEET_POOL = ['frigate', 'interceptor', 'cruiser', 'heavycruiser', 'destroyer', 'battleship', 'dreadnought', 'carrier', 'aegis', 'supercarrier', 'titan', 'mothership'];
   function fleetFor(p, rank, total) {
-    if (p._fleet) return p._fleet;
+    // LENGTH, NOT EXISTENCE. An empty array is truthy, so a row that published
+    // no hulls — or had its array emptied server-side — returned [] here and
+    // rendered a blank row instead of falling through to the generated fleet.
+    if (p._fleet && p._fleet.length) return p._fleet;
     let h = 0; const nm = p.name || '?';
     for (let i = 0; i < nm.length; i++) h = (h * 31 + nm.charCodeAt(i)) >>> 0;
     const r = () => { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 8) / 16777216; };

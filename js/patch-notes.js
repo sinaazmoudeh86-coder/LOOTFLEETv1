@@ -31,10 +31,10 @@
 (function () {
   'use strict';
 
-  const BUILD = 724;
+  const BUILD = 725;
   const NOTES = {
-    build: 724,
-    title: 'BUILD 724',
+    build: 725,
+    title: 'BUILD 725',
     sub: 'The Mech faction is here — and it fights differently.',
     groups: [
       { k: 'NEW', c: '#ff8a9a', rows: [

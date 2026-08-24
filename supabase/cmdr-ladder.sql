@@ -181,20 +181,22 @@ begin
   end;
 end $$;
 
--- ---- 6. REPAIR THE ROWS THE BROKEN VERSION ALREADY EMPTIED ------------------
--- Anyone who published while p_fleet defaulted to '[]' had their hull list
--- overwritten with an empty array. The list is client-owned and is re-sent on the
--- next publish, so nothing is permanently lost — but an empty array is TRUTHY in
--- leaderboard.js (`if (p._fleet) return p._fleet`), which short-circuits the
--- generated fallback and renders no ships at all rather than falling back.
+-- ---- 6. NOTE ON THE EMPTIED FLEET ARRAYS ------------------------------------
+-- An earlier version of this file wrote '[]' into every row's fleet column on
+-- each publish. The obvious repair — setting those empties back to NULL so the
+-- board's generated fallback takes over — CANNOT be done here: `fleet` carries a
+-- NOT NULL constraint, so the update fails with 23502.
 --
--- Setting the empties to NULL restores that fallback immediately, and the real
--- list overwrites it the moment that pilot's client publishes again.
-update public.leaderboard
-   set fleet = null
- where fleet is not null
-   and jsonb_typeof(fleet) = 'array'
-   and jsonb_array_length(fleet) = 0;
+-- Loosening that constraint to work around a client-side display quirk would be
+-- the wrong trade: the column has been NOT NULL since it shipped, other code may
+-- rely on it, and a schema change is permanent while the bad data is not. Every
+-- row repairs itself the moment that pilot's client publishes again, because the
+-- hull list is client-owned and re-sent every time.
+--
+-- The display side is handled in js/leaderboard.js instead: an EMPTY array now
+-- reads as "no fleet published" rather than "a fleet of zero ships", so the
+-- generated thumbnails show immediately instead of a blank row. That fix ships
+-- in build 724.
 
 -- ---- verify -----------------------------------------------------------------
 select 'lb_upsert copies' as check,

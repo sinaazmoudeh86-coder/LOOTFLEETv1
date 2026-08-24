@@ -434,7 +434,7 @@
       // reports as not-yet-live rather than the whole publish failing.
       if (cmdr && mech && tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot && !_lbNoMech && !_lbNoCmdr) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art, fresh, tree, mech, cmdr));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
@@ -452,7 +452,7 @@
       }
       if (mech && tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot && !_lbNoMech) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art, fresh, tree, mech));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
@@ -470,7 +470,7 @@
       }
       if (tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art, fresh, tree));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
@@ -488,7 +488,7 @@
       }
       if (fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art, fresh));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
@@ -508,7 +508,7 @@
       // the payload builders, so every rung that tests it can see it.
       if (art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && p.nano_legend !== undefined && !_lbNoArt) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
             base, ladder, art));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
@@ -538,7 +538,7 @@
       // haulage and every other ladder untouched.
       if (ladder && !_lbNoLadder && !_lbNoCargo && p.nano_legend !== undefined && !_lbNoNano) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
             p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 }, base, ladder));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('nano', error); return; }
@@ -550,7 +550,7 @@
       // publishing every other ladder untouched.
       if (ladder && !_lbNoLadder && p.cargo !== undefined && !_lbNoCargo) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0 }, base, ladder));
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0 }, base, ladder));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('cargo', error); return; }
         noteRungMissing('cargo');
@@ -558,14 +558,14 @@
       }
       if (ladder && !_lbNoLadder) {
         const { error } = await client.rpc('lb_upsert',
-          Object.assign({ p_asc: (p.asc | 0) }, base, ladder));
+          Object.assign({ p_asc_stars: (p.asc | 0) }, base, ladder));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
         if (!isLegacy(error)) { lbFail('ladder', error); return; }
         noteRungMissing('ladder');
         _lbNoLadder = true; _lbLadderRetryAt = Date.now() + 6 * 3600 * 1000;
       }
       if (!_lbNoAsc) {
-        const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc: (p.asc | 0) }, base));
+        const { error } = await client.rpc('lb_upsert', Object.assign({ p_asc_stars: (p.asc | 0) }, base));
         if (!error) { _lbFails = 0; noteRungOk(); return; }
         // Only a genuinely missing function means "legacy server". Ambiguity,
         // network blips and RLS errors must NOT disable stars.

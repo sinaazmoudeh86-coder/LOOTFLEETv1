@@ -47,7 +47,34 @@
     _realInflight = true; _realT = Date.now();
     window.CLOUD.lbTop(100).then((rows) => { _realInflight = false; if (rows) { _real = rows.map(mapReal); if (cb) cb(); } }).catch(() => { _realInflight = false; });
   }
-  function realOthers(){ const id = myId(); return (_real || []).filter((p) => !id || p._uid !== id); }
+  // ---- WHO IS "ME" ON A ROW THAT CAME BACK FROM THE SERVER -------------------
+  // `!id ||` MEANT "IDENTITY UNKNOWN, SO KEEP EVERY ROW" — INCLUDING MY OWN.
+  //
+  // myId() reads AUTH.session(), which is null before sign-in resolves, on a
+  // signed-out browse, and any time auth.js has not booted yet. In that window
+  // the player's OWN published row stayed in the pool as a rival, and every board
+  // then rendered them TWICE: once as their live "★ You" row from meEntry, and
+  // once under their commander name from the cloud, ranked separately on stale
+  // figures. On a thin board that reads as "I am #2 and the pilot above me is
+  // me".
+  //
+  // This is the same fault the Voidmaw boards were fixed for in 710 and the note
+  // there states the rule: a row is only ever attributed once the identity is
+  // known. Dropping every row while it is unknown would blank the board for
+  // signed-out players, who are allowed to browse it — so the NAME is the
+  // fallback identity. It is weaker than a uid (two pilots can share a name) but
+  // it fails in the safe direction: at worst one genuine rival is hidden for a
+  // few seconds, instead of the player being shown to themselves as a stranger.
+  function myName(){ try { return (window.GAME && GAME.state && GAME.state.name) || null; } catch (e) { return null; } }
+  function realOthers(){
+    const rows = _real || [];
+    const id = myId();
+    if (id) return rows.filter((p) => p._uid !== id);
+    const nm = myName();
+    if (!nm) return rows;
+    const n = String(nm).toLowerCase();
+    return rows.filter((p) => String(p.name || '').toLowerCase() !== n);
+  }
   // Look up a REAL account's public row by commander name — used by My Galaxy
   // to reconstruct a tile owner's actual fleet when their claim carries no
   // defense snapshot. Warms the cache on a miss.
@@ -97,12 +124,30 @@
 
   // Deterministic rival FLEET — higher-ranked pilots field bigger, fancier
   // fleets (1–5 unique hulls, flagship first). Seeded by name; stable per heat.
+  //
+  // FOR SIMULATED AND FILLER PILOTS ONLY. See the guard in fleetFor().
   const FLEET_POOL = ['frigate', 'interceptor', 'cruiser', 'heavycruiser', 'destroyer', 'battleship', 'dreadnought', 'carrier', 'aegis', 'supercarrier', 'titan', 'mothership'];
   function fleetFor(p, rank, total) {
     // LENGTH, NOT EXISTENCE. An empty array is truthy, so a row that published
     // no hulls — or had its array emptied server-side — returned [] here and
     // rendered a blank row instead of falling through to the generated fleet.
     if (p._fleet && p._fleet.length) return p._fleet;
+    // ---- A REAL ACCOUNT NEVER GETS AN INVENTED FLEET -------------------------
+    // `fleet` stopped being written to the leaderboard row the day p_fleet was
+    // removed from lb_upsert to end the 42804 outage (restored in lb-fleet.sql,
+    // build 725). So for months every human row arrived here with an empty array
+    // and fell through to the generator below — and the power board drew a hull
+    // list seeded from the pilot's NAME next to that pilot's real identity. Not a
+    // placeholder in an empty board: fabricated equipment attributed to a named
+    // person, on the one screen players read to see what the top fleets fly. The
+    // pool has not been updated since launch either, so the invention was also
+    // two years stale — no Voidmaw, no Dread class, none of the mech hulls.
+    //
+    // Fake rivals are not a fallback, and fake KIT on a real rival is worse. An
+    // account that has not published a hull list shows no ships until it does,
+    // which is a fact rather than a guess. Sims and filler keep the generated
+    // fleet: they are labelled as sims and there is no real fleet to misreport.
+    if (p.isReal) return [];
     let h = 0; const nm = p.name || '?';
     for (let i = 0; i < nm.length; i++) h = (h * 31 + nm.charCodeAt(i)) >>> 0;
     const r = () => { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 8) / 16777216; };
@@ -119,8 +164,12 @@
     return picks;
   }
 
+  const _loadoutCache = {};
+  const loadoutKey = (p) => (p._uid || p.name || '?') + '|' + (p.zone | 0);
   function loadoutFor(p, rank, total) {
     if (p._loadout) return p._loadout;
+    const ck = loadoutKey(p);
+    if (_loadoutCache[ck]) return (p._loadout = _loadoutCache[ck]);
     // SIX SLOTS, AND ONLY THESE SIX. `generate()` now also rolls `fighter` (Fighter
     // Bay) from SLOT_KEYS, which no rival loadout has a place for — those rolls
     // simply cost loop iterations and, before the guard was raised, could leave the
@@ -137,6 +186,16 @@
       if (eq[it.slot] === null) { eq[it.slot] = it; filled++; }
     }
     p._loadout = eq;
+    // STABLE FOR THE SESSION, keyed on the pilot rather than the row object.
+    // Every render rebuilds the board through `realOthers().map((p) => ({ ...p }))`
+    // and SIMPILOTS.forBoard(), so `p` is a FRESH COPY each time and the
+    // `p._loadout` cache above never survived to a second look. Tapping the same
+    // pilot twice showed two entirely different fittings — which is wrong on its
+    // own terms, and on a board where simulated pilots are deliberately
+    // indistinguishable from humans it is also the tell that gives them away.
+    // ITEMS.generate() has its own internal randomness, so seeding cannot fix this
+    // the way fleetFor() is seeded; the generated set is simply remembered.
+    _loadoutCache[loadoutKey(p)] = eq;
     return eq;
   }
 
@@ -164,7 +223,7 @@
       const zone = Math.max(1, Math.round((refZone || 5) * (0.45 + r() * 0.55)));
       const level = Math.max(1, Math.round(zone * (1.4 + r()) + r() * 6));
       const kills = Math.round(pw * (3 + r() * 8));
-      list.push({ name: nameFor(r), zone, level, power: pw, kills, _loadout: null });
+      list.push({ name: nameFor(r), zone, level, power: pw, kills, _loadout: null, _filler: true });
     }
     return list;
   }

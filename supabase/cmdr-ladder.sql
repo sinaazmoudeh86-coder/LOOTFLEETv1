@@ -1,14 +1,26 @@
 -- =============================================================================
 --  cmdr-ladder.sql — THE COMMAND RANK BOARD
 --  ---------------------------------------------------------------------------
+--  ⚠ SUPERSEDED BY `supabase/lb-fleet.sql` — PREFER THAT FILE
+--  ---------------------------------------------------------------------------
+--  This file is still internally consistent, but the lb_upsert it installs is
+--  MISSING FOUR PARAMETERS THE CLIENT SENDS: `p_fleet` (the hull list the Ranks
+--  power board draws beside each pilot's name) and `p_hull_last` / `p_nano_last`
+--  / `p_cargo_tier` (the art keys the Discord feed reads). lb_upsert matches by
+--  name, so an undeclared key does not get ignored — PostgREST rejects the whole
+--  call with PGRST202 and the client walks down its rungs blaming a migration
+--  that has already run.
+--
+--  lb-fleet.sql declares all 29 keys the client can send and asserts it. Run that
+--  instead. If you have already run this file since, re-run lb-fleet.sql after.
+--  ---------------------------------------------------------------------------
 --  Adds `cmdr_score bigint` and `cmdr_line jsonb` to public.leaderboard and
 --  republishes lb_upsert carrying both.
 --
---  THIS FILE IS NOW THE CANONICAL lb_upsert. It is a strict SUPERSET of
---  mech-ladder.sql — same parameters, same order, same types, TWO more on the
---  end. Re-running new-ladders.sql, pilot-ladder.sql, mech-ladder.sql,
+--  It was the canonical lb_upsert between builds 724 and 726.
+--  Re-running new-ladders.sql, pilot-ladder.sql, mech-ladder.sql,
 --  cargo-ladder.sql, nanocore-ladder.sql or discord-art-publish.sql re-adds an
---  older overload and requires re-running THIS file afterwards.
+--  older overload and requires re-running lb-fleet.sql afterwards.
 --
 --  `p_power` and `p_kills` stay numeric ON PURPOSE. Endgame fleet power passes
 --  1e29, bigint tops out near 9.22e18, and JS serialises numbers that large in

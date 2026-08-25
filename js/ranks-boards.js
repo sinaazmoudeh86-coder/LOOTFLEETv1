@@ -94,7 +94,11 @@
       metric: (p) => (p.stage || 0) * 1e12 + Math.min(1e12, Math.log10(Math.max(1, p.total || 0)) * 1e10),
       fmt: (v, p) => String(p.stage | 0),
       meta: (p) => 'Stage ' + (p.stage | 0) + ' · ' + fmt(p.total || 0) + ' total damage',
-      empty: 'Nobody has entered the Voidmaw this season.',
+      // NOT "this season". server-dreadnaught.js made the Voidmaw a PERMANENT
+      // fixture and states the rule out loud: no screen prints a deadline, because
+      // `SEASON.num` survives only as a wire key. Saying "this season" on an empty
+      // board implies a reset that will never come.
+      empty: 'Nobody has fought the Voidmaw yet.',
       async: true,
     },
     {
@@ -242,10 +246,20 @@
           const id = String(c.id || '').replace(/[^a-z0-9_-]/gi, '');
           const w = CO.BY_ID ? CO.BY_ID[id] : null;
           const R = CO.rarityOf ? CO.rarityOf(c.r | 0) : { color: '#888', name: '' };
-          const nm = w ? w.name : id;
-          return '<span class="rb-cc" style="--c:' + R.color + '" title="' + nm + ' \u2014 ' + R.name + '">'
-            + '<img src="commanders/' + id + '.png" alt="" loading="lazy" onerror="this.remove()">'
-            + '<i>' + nm.slice(0, 2).toUpperCase() + '</i></span>';
+          // AN OFFICER ID IS NOT AN OFFICER NAME. A roster published by a NEWER
+          // build can name a card this client has never heard of, and the strip
+          // then printed the raw save key as the officer's name — the same leak
+          // the KOTH board had with `dread6`. Title-case the unknown id instead.
+          const nm = w ? w.name : (id ? id.charAt(0).toUpperCase() + id.slice(1) : '?');
+          // ONLY EMIT AN <img> FOR A KNOWN OFFICER. Every card in ROSTER has a
+          // portrait, so a known id is a portrait that loads. An unknown id used
+          // to emit a tag that 404'd and deleted itself via onerror — and this
+          // board repaints every 4 seconds, so that was a request and a DOM churn
+          // per unknown card per repaint. The Commanders screen abandoned exactly
+          // this pattern for exactly this reason; the monogram is the fallback.
+          return '<span class="rb-cc" style="--c:' + R.color + '" title="' + esc(nm) + ' \u2014 ' + esc(R.name) + '">'
+            + (w ? '<img src="commanders/' + id + '.png" alt="" loading="lazy">' : '')
+            + '<i>' + esc(nm.slice(0, 2).toUpperCase()) + '</i></span>';
         }).join('');
         return '<span class="rb-cline">' + strip + '</span>'
           + line.length + ' seated \u00b7 Lv ' + (p.level | 0);
@@ -323,10 +337,17 @@
     try { if (window.DREAD && DREAD.rankFor) return DREAD.rankFor(score); } catch (e) {}
     return 'Pilot';
   }
+  // ---- ANY VALUE THAT CAME OFF THE WIRE IS UNTRUSTED -------------------------
+  // Names, hull keys and officer ids on this screen belong to OTHER accounts. The
+  // client's own name gate strips angle brackets, but lb_upsert's `p_name` is a
+  // bare text parameter with no server-side scrub, so a crafted row reaches every
+  // other player's board verbatim. `tab.meta()` is inserted as markup by the
+  // renderer, so anything it interpolates has to be escaped here.
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
   function hullName(k) {
     const key = String(k || '');
-    try { const s = (window.CONFIG && window.CONFIG.SHIP_BY_KEY) ? window.CONFIG.SHIP_BY_KEY[key] : null; if (s && s.name) return s.name; } catch (e) {}
-    return key ? key.charAt(0).toUpperCase() + key.slice(1) : '';
+    try { const s = (window.CONFIG && window.CONFIG.SHIP_BY_KEY) ? window.CONFIG.SHIP_BY_KEY[key] : null; if (s && s.name) return esc(s.name); } catch (e) {}
+    return key ? esc(key.charAt(0).toUpperCase() + key.slice(1)) : '';
   }
   // The badge ladder's size is ACHIEVE's to state, not this board's to remember:
   // the total moved from 1,000 to 1,110 when the nanocore chains joined the count
@@ -360,6 +381,27 @@
   }
   function derive(p) {
     if (p._derived) return p;
+    // ---- KNOWN DEFECT, DELIBERATELY NOT FIXED HERE \u2014 OPERATOR'S CALL ----------
+    // `p.asc_stars` IS ALWAYS UNDEFINED ON A SIM ROW. sim-pilots.js reads the
+    // server's asc_stars column and maps it onto the property `asc` (see its
+    // row builder), so this line resolves to 0 for every simulated pilot and
+    // `career` below is level-only. The stated intent of this function is the
+    // opposite \u2014 "a Lv 400 \u260512 pilot reads like one" \u2014 so the ascension term has
+    // never once been exercised.
+    //
+    // The visible symptom is mild: a sim shows \u260512 on the Ascension board and
+    // rookie-grade career figures on every other board. Reading it correctly is a
+    // one-word change (`ascOf(p)`), and it is NOT being made in this pass because
+    // it is a BALANCE change wearing a bug's clothes. A 12-star sim's career term
+    // goes 500 \u2192 6,500, which puts simulated pilots at the badge cap and around
+    // 3,500\u20138,500 lifetime missions \u2014 above every human on both boards. That is
+    // precisely the outcome the migration gates and the realOnly filters exist to
+    // prevent, and the numbers below were tuned while the term read zero, so no
+    // one has ever seen the intended curve.
+    //
+    // To turn it on: swap in ascOf(p) AND retune the per-star weight (500) and the
+    // missions/badges exponents together, then check the top 20 of every board
+    // against the real roster before shipping.
     const r = seed(String(p.name || '?')), lv = Math.max(1, p.level | 0), st = Math.max(0, p.asc_stars | 0);
     const career = lv + 500 * st;                        // total levels ever walked
 
@@ -437,6 +479,7 @@
 
   // ---- async sources ---------------------------------------------------------
   const _cache = {};                                     // id → { at, rows }
+  const _inflight = {};                                  // id → 1 while a fetch is open
   const TTL = 30000;
 
   async function fetchVoidmaw() {
@@ -473,12 +516,20 @@
   function loadAsync(id, cb) {
     const hit = _cache[id];
     if (hit && Date.now() - hit.at < TTL) { cb(hit.rows, hit.err); return; }
+    // ONE FETCH AT A TIME PER BOARD. The Ranks screen re-renders every 4 seconds
+    // and board() calls this on every render once the cache is stale, so a fetch
+    // slower than 4s stacked a fresh request on every repaint until one landed —
+    // unbounded, and worst exactly when the connection is worst. KOTH's own polls
+    // are guarded inside the module; the Voidmaw read was not guarded anywhere.
+    if (_inflight[id]) return;
+    _inflight[id] = 1;
+    const done = () => { delete _inflight[id]; };
     const job = id === 'voidmaw' ? fetchVoidmaw()
       : id === 'koth' ? fetchKoth('day')
       : id === 'koth:hall' ? fetchKoth('hall')
       : Promise.resolve([]);
-    job.then((rows) => { _cache[id] = { at: Date.now(), rows, err: null }; cb(rows, null); })
-       .catch((err) => { _cache[id] = { at: Date.now(), rows: [], err }; cb([], err); });
+    job.then((rows) => { done(); _cache[id] = { at: Date.now(), rows, err: null }; cb(rows, null); })
+       .catch((err) => { done(); _cache[id] = { at: Date.now(), rows: [], err }; cb([], err); });
   }
 
   // ---- has lb-onefunction.sql run? --------------------------------------------
@@ -488,7 +539,15 @@
   // quietly credit simulated pilots with records no human could be shown to
   // beat. Detected by absence of the property (not a zero value), and those
   // boards refuse to render until the columns exist.
-  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, hcwave: 1, expo: 1, pilot: 1 };
+  // THE MECH AND COMMAND BOARDS BELONG IN THIS LIST TOO.
+  // Both have a SQL_PROBE entry and a NEED rank below, and migrated() has a
+  // dedicated branch for each — but board() only consults migrated() when
+  // NEEDS_SQL[id] is set, and neither id was here. So all of that was dead code:
+  // on a server without cmdr-ladder.sql or mech-ladder.sql the boards did not say
+  // "not live yet", they ranked every human at zero, the realOnly filter then
+  // dropped every one of them, and the player was left alone at #1 on a board
+  // with no explanation for why nobody else was on it.
+  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, hcwave: 1, expo: 1, pilot: 1, mech: 1, command: 1 };
   // Which property proves the migration for THIS board ran. Haulage and Nanocore
   // ship in their OWN migrations (cargo-ladder.sql, nanocore-ladder.sql), so the
   // shared lb-onefunction probe would pass on a server that had run neither and
@@ -567,8 +626,15 @@
         loadAsync(vId, () => { if (onReady) onReady(); });
         if (!hit) return { rows: [], real: 0, tab, view, pending: true };
       }
-      const mine = myName();
-      const rows = (hit ? hit.rows : []).map((p) => Object.assign({}, p, { isMe: p.name === mine }));
+      const mine = myName(), myId = myUid();
+      // MATCH ON THE ACCOUNT ID WHEN THE ROW CARRIES ONE. Both koth_top and
+      // koth_hall_top return user_id, and sdread_scores does too — matching on the
+      // display NAME instead meant a pilot who renamed lost their highlight, and
+      // two pilots sharing a name both lit up as "you". Name stays as the fallback
+      // for a signed-out read, where there is no id to compare.
+      const rows = (hit ? hit.rows : []).map((p) => Object.assign({}, p, {
+        isMe: (myId && p.user_id) ? (p.user_id === myId) : (!!mine && p.name === mine),
+      }));
       rows.sort((a, b) => tab.metric(b) - tab.metric(a));
       rows.forEach((p, i) => { p.rank = i + 1; });
       return { rows, real: rows.length, tab, view, pending: false, err: hit && hit.err };
@@ -664,6 +730,14 @@
     // Command Score reads through COMMANDERS so the board and the roster screen
     // can never disagree about what a line-up is worth.
     try { q.cmdr_score = Math.max(0, Math.floor(Number(window.COMMANDERS && COMMANDERS.score ? COMMANDERS.score() : 0) || 0)); } catch (e) {}
+    // THE SEATED LINE-UP, read live from the roster for the same reason as every
+    // other figure on this row. Without it YOUR OWN row on the Command board fell
+    // through to `meEntry`, which carries no cmdr_line at all — so the board drew
+    // a real Command Score on a row captioned "No Commanders seated", and the one
+    // row a player checks to see their own officers was the only row that never
+    // showed them. Same source as publishFields(), so the row and the publish can
+    // never disagree.
+    try { q.cmdr_line = (window.COMMANDERS && COMMANDERS.lineup) ? COMMANDERS.lineup().slice(0, 5) : []; } catch (e) { q.cmdr_line = []; }
     // Nanocores read through the module so this row, the badge chains and the
     // Discord feed all quote one number.
     try {
@@ -715,6 +789,9 @@
   function myName() {
     try { return (G().state && G().state.name) || null; } catch (e) { return null; }
   }
+  function myUid() {
+    try { return (window.AUTH && AUTH.session && AUTH.session()) ? AUTH.session().id : null; } catch (e) { return null; }
+  }
 
   // What THIS account publishes on its heartbeat — read by account.js.
   function publishFields() {
@@ -722,6 +799,14 @@
       const s = G().state || {};
       const out = {
         tiles: Object.keys(s.ownedSystems || {}).length,
+        // CITADELS WAS MISSING FROM THIS OBJECT AND NOWHERE ELSE.
+        // `mineInto()` set it, cloud.js sent `p_citadels`, lb_upsert declared it
+        // and the column existed — but the value originates HERE, and it was never
+        // added, so every real account published a hard 0. Simulated pilots get a
+        // citadel count from derive(), so the Territory board showed fortresses for
+        // bots and none for humans, on the one board where a citadel is the whole
+        // point. Your own row looked right because mineInto reads the live save.
+        citadels: Object.keys(s.citadels || {}).length,
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,

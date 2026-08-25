@@ -3909,7 +3909,7 @@
       <div class="lb-row ${p.isMe ? 'me' : ''}" data-rank="${from + i}">
         <div class="lb-rank ${p.rank <= 3 ? 'top' : ''}">${p.rank}</div>
         <div class="lb-nm">
-          <div class="lb-topline"><span class="lb-name">${p.isMe ? '★ ' : ''}${p.name}</span>${ascBadge(p)}${simChip(p)}
+          <div class="lb-topline"><span class="lb-name">${p.isMe ? '★ ' : ''}${esc(p.name)}</span>${ascBadge(p)}${simChip(p)}
             ${showFleet ? `<span class="lb-fleet">${fleetThumbs(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.rows.length) : []))}</span>` : ''}</div>
           <div class="lb-meta">${tab.meta(p)}</div></div>
         <div class="lb-pow"><span class="pl">${((views && views.find((v) => v.id === curView)) || tab).unit}</span>${tab.fmt(tab.metric(p), p)}</div></div>`).join('');
@@ -3982,7 +3982,7 @@
       <div class="lb-row ${p.isMe?'me':''}" data-rank="${i}">
         <div class="lb-rank ${p.rank<=3?'top':''}">${p.rank}</div>
         <div class="lb-nm">
-          <div class="lb-topline"><span class="lb-name">${p.isMe?'★ ':''}${p.name}</span>${ascBadge(p)}${simChip(p)}
+          <div class="lb-topline"><span class="lb-name">${p.isMe?'★ ':''}${esc(p.name)}</span>${ascBadge(p)}${simChip(p)}
             <span class="lb-fleet">${fleetThumbs(p.isMe ? (p.fleet || [G.state.ship]) : (LB.fleetFor ? LB.fleetFor(p, p.rank, data.board.length) : []))}</span></div>
           <div class="lb-meta">Zone ${p.zone} · Lv ${p.level} · ${G.formatNum(p.kills)} kills</div></div>
         <div class="lb-pow"><span class="pl">PWR</span>${(G.formatNumRaw || G.formatNum)(p.power)}</div></div>`).join('');
@@ -4007,22 +4007,35 @@
       const sh = C.SHIP_BY_KEY[fk];
       return `<div class="lo-ship ${i === 0 ? 'flag' : ''}"><img src="ships/ship-${fk}.png" alt=""><div class="lo-sn">${sh ? sh.name : fk}</div><div class="lo-st">${i === 0 ? '★ FLAGSHIP' : 'ESCORT'}</div></div>`;
     }).join('');
-    const eq = p.isMe ? G.state.equipped : LB.loadoutFor(p, p.rank, total);
+    // ---- A REAL PILOT'S SHEET STATES ONLY WHAT THEY PUBLISHED ---------------
+    // The leaderboard row carries a hull list and nothing else — there is no gear
+    // column and never has been. So `loadoutFor()` INVENTED a full six-slot
+    // fitting, with item names, rarities and colours, and this sheet printed it
+    // under the pilot's real name beside their real rank, zone, level and power,
+    // formatted identically to the player's own loadout. Nothing on screen said it
+    // was generated. That is fabricated kit attributed to a named account, which is
+    // the fleet-strip bug again with more detail to be wrong about.
+    //
+    // Sims and filler keep the generated fitting: they are labelled as sims and
+    // there is no real loadout to misreport. A real pilot gets the truth instead.
+    const generated = !p.isMe && !p.isReal;
+    const eq = p.isMe ? G.state.equipped : (generated ? LB.loadoutFor(p, p.rank, total) : null);
     let grid = '';
     // Only the slots this loadout MODELS. SLOT_KEYS grew a `fighter` entry, and a
     // rival loadout has no launch bay — rendering one printed a permanently empty
     // Fighter Bay row on every pilot on the board.
-    C.SLOT_KEYS.filter((s) => s in eq).forEach((slot) => {
+    if (eq) C.SLOT_KEYS.filter((s) => s in eq).forEach((slot) => {
       const it = eq[slot], def = C.SLOTS[slot];
       grid += `<div class="lo-slot ${it?bl(it.rarity):''}"><div class="lo-ic ${it?rc(it.rarity):''}">${it?itemIcon(it):def.icon}</div>
         <div style="min-width:0"><div class="lo-nm ${it?rc(it.rarity):''}">${it?it.name:'—'}</div><div class="lo-r">${it?C.RARITY[it.rarity].name:'empty'}</div></div></div>`;
     });
-    const sheet = showSheet(`<div class="sheet-head">${p.isMe?'Your Loadout':p.name}${ascBadge(p)}${simChip(p)}</div><div class="sheet-body">
-      ${p._sim ? '' : ''}
+    const noteStyle = 'font-size:11.5px;line-height:1.5;color:var(--muted);padding:10px 12px;border:1px dashed var(--line-2,#37475f);border-radius:10px';
+    const sheet = showSheet(`<div class="sheet-head">${p.isMe?'Your Loadout':esc(p.name)}${ascBadge(p)}${simChip(p)}</div><div class="sheet-body">
       <p style="margin-bottom:10px">Rank <b>#${p.rank}</b> · Zone <b>${p.zone}</b> · Level <b>${p.level}</b> · Power <b style="color:var(--gold)">${G.formatNum(p.power)}</b>${ascLine(p)}</p>
-      <div class="lo-fleet">${fleetHtml}</div>
-      <div class="lo-sect">Flagship loadout</div>
-      <div class="loadout-grid">${grid}</div>
+      ${fleetHtml
+        ? `<div class="lo-fleet">${fleetHtml}</div>`
+        : `<div style="${noteStyle}">No hulls published yet — this pilot’s fleet appears here once their client next reports in.</div>`}
+      ${eq ? `<div class="lo-sect">Flagship loadout</div><div class="loadout-grid">${grid}</div>` : ''}
       <div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Close</button></div></div>`);
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
   }

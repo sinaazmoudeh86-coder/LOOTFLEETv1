@@ -1,43 +1,180 @@
-# Loot Fleet — deploy v251 · build 724 · RANKS PUBLISH REPAIR
+# Loot Fleet — deploy v253 · build 726 · RANKS CORRECTNESS AUDIT
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes v250 (build 723). Service worker cache is `lootfleet-v724`.
-**Login screen reads `BUILD 724`.** The update gate force-reloads every live
-session within ~90s of the beacon, which is what this build needs — the fix is
-client-side and only takes effect once a player is running it.
+Supersedes v252 (build 725). Service worker cache is `lootfleet-v726`.
+**Login screen reads `BUILD 726`.** The update gate force-reloads every live
+session within ~90s of the beacon.
 
-## ⚠ RUN ALL THREE
+> **Note on v252.** Its `DEPLOY.md` was never re-stamped and still carried the
+> v251 / build 724 header while the folder shipped 725. Its `version.json` and
+> `sw.js` were correct, so the release itself was sound — only the checklist
+> drifted. That is why the stamp table below is now verified by script rather
+> than by hand.
 
-**1. `supabase/cmdr-ladder.sql`** — re-run even if you ran an earlier copy. This
-version removes `p_fleet` entirely (it was overwriting every pilot's hull array
-with an empty one on each publish) and includes a repair step that restores the
-rows already emptied. It is the canonical `lb_upsert`.
+## ⚠ RUN ONE SQL FILE
 
-**Do NOT run `mech-ladder.sql`** — it carries the original `p_fleet int` bug and
-is marked SUPERSEDED at the top of the file. `cmdr-ladder.sql` includes
-everything it did.
+**`supabase/lb-fleet.sql`** — required, and it is now the canonical `lb_upsert`.
 
-**2. `supabase functions deploy discord-feed`** — all four files, `FEED_VER`
-**723**. Carries both KOTH spam fixes. Verify it landed:
-`select content from net._http_response order by created desc limit 3;` must show
-`"ver":723`. If it shows anything lower, the old function is still running and the
-spam will continue regardless of anything else in this release.
+It declares **all 29 parameters the client actually sends** and asserts it in
+step 6 by diffing `pg_proc.proargnames` against the payload list. Every previous
+migration in this chain was checked against the *previous migration* rather than
+against the payload, which is how `p_hull_last` / `p_nano_last` / `p_cargo_tier`
+came to be sent on every rung and declared by none of them.
 
-**3. Push the site, `version.json` last.**
+It restores `p_fleet` (the hull list the power board draws) with a **NULL**
+default and `fleet = coalesce(excluded.fleet, l.fleet)` — a client that says
+nothing leaves the stored list alone. A `'[]'` default is what emptied every row
+the first time.
+
+**Do NOT run `cmdr-ladder.sql` or `mech-ladder.sql`.** Both are marked SUPERSEDED
+at the top of the file. Running either drops the 29-arg overload and puts the
+fleet and art columns back to unwritable.
+
+**No Edge Function deploy.** `discord-feed` is unchanged at `FEED_VER 723`.
+
+**Push the site, `version.json` last** — never bump the beacon ahead of the
+files, or players are evicted onto code that is not live yet.
 
 ## Stamps
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 724 |
-| root `version.json` | 724 |
-| `deploy-v251/version.json` | 724 |
-| `deploy-v251/sw.js` `CACHE` | `lootfleet-v724` |
-| `discord-feed` `FEED_VER` | 723 |
+| root `game.html` `window.LF_BUILD` | 726 |
+| root `version.json` | 726 |
+| `deploy-v253/version.json` | 726 |
+| `deploy-v253/sw.js` `CACHE` | `lootfleet-v726` |
+| `discord-feed` `FEED_VER` | 723 (unchanged) |
 
-All 74 js files game.html references diffed against the project root — zero
-stale, zero missing.
+Verified by script: all **92** `js`/`css` files `game.html` references diffed
+byte-for-byte against the project root — **zero stale, zero missing**, every ref
+cache-busted. The five files changed this build carry `?v=726`; the other 87 stay
+at `?v=725` so players keep their cached copies. `deploy-v253/sw.js` confirmed
+NOT to be the root kill-switch worker.
+
+---
+
+## What changed in 726
+
+Ranks was reviewed end to end — every tab probed against the live board rather
+than read in source, which is why this pass found faults the previous ones did
+not.
+
+### ➤ The ships beside a pilot were invented
+
+`leaderboard.fleet` stopped being written the day `p_fleet` was pulled from
+`lb_upsert` to end the 42804 outage. No migration since has written it and no
+client has sent it, so every row has been frozen for months — `'[]'` for accounts
+that published during the bad window, a build-688 hull list for everyone else.
+
+`fleetFor()` then filled the gap by generating hulls **seeded from the pilot's
+name**. Not a placeholder on an empty board: fabricated equipment attributed to a
+named person, on the screen players read to see what the top fleets fly. The pool
+has not been touched since launch either, so the invention was also two years
+stale — no Voidmaw, no Dread class, none of the mech hulls.
+
+Real accounts now show only what they have published. Sims and filler keep the
+generated fleet — they are labelled as sims and there is no real fleet to
+misreport. Rows fill back in as pilots relog onto 726.
+
+### ➤ A rival's loadout was invented too, in more detail
+
+The row carries a hull list and nothing else — there is no gear column and never
+has been. `loadoutFor()` generated a full six-slot fitting with names and
+rarities and the sheet printed it under the pilot's real name beside their real
+rank, formatted identically to the player's own. Real pilots now show their fleet
+and their real figures, and the sheet says plainly when nothing is published yet.
+
+That generated set is also **cached per pilot** now. The cache lived on the row
+object, which is rebuilt on every render, so tapping the same pilot twice showed
+two different fittings.
+
+### ⚑ Territory never counted anyone's citadels
+
+`publishFields()` simply did not include the key. `mineInto()` set it, `cloud.js`
+sent `p_citadels`, `lb_upsert` declared it and the column existed — the value
+never originated. Confirmed against the live board: every real account `c=0`,
+and only your own row non-zero because it reads the save directly. So the board
+showed fortresses for simulated pilots and none for humans, on the one board
+where a citadel is the point. Your own row looked correct, which is why it
+survived so many passes.
+
+### ✦ Your own Command Rank row said "No Commanders seated"
+
+`mineInto()` set `cmdr_score` and not `cmdr_line`, so the board drew a real
+Command Score above a caption stating the opposite. The one row a player checks
+for their own officers was the only row that never showed them.
+
+### ⚑ You were shown to yourself as a rival
+
+`realOthers()` filtered your own row out by account id but wrote
+`!id || p._uid !== id` — so whenever the id was not yet known it kept
+**everything**, including you. `AUTH.session()` is null before sign-in resolves,
+on a signed-out browse, and any time auth.js has not booted. In that window every
+board rendered you twice: your live "★ You" row, and your cloud row under your
+commander name on stale figures.
+
+This is the fault the Voidmaw boards were fixed for in 710. Identity is the uid
+when known and your own name as the fallback, which fails safe — at worst one
+same-named rival is hidden for a few seconds, instead of the player being shown
+to themselves as a stranger.
+
+### ⚙ Two migration gates were dead code
+
+`mech` and `command` both have a `SQL_PROBE` entry, a `NEED` rank and a dedicated
+branch in `migrated()` — but `board()` only consults it when `NEEDS_SQL[id]` is
+set, and neither id was in that object. On a server missing those migrations the
+boards would not say "not live yet": they would rank every human at zero, the
+`realOnly` filter would drop all of them, and the player would sit alone at #1
+with no explanation.
+
+### ⚑ Stored-XSS on the board
+
+Remote pilot names rendered as raw HTML in three places on Ranks, and the KOTH
+board printed the hull key through an unescaped title-caser. The client's own
+name gate strips brackets, but `lb_upsert`'s `p_name` is a bare text parameter
+with no server-side scrub, so a crafted row reaches every other player's board
+verbatim. Escaped at all four sites.
+
+### Also
+
+- **The async boards stacked requests.** Ranks repaints every 4s and `board()`
+  re-fires the fetch each time once the 30s cache lapses, so any read slower than
+  4 seconds queued a new one per repaint — unbounded, and worst exactly when the
+  connection is worst. KOTH guards its own polls internally; the Voidmaw read was
+  guarded nowhere.
+- **KOTH and Voidmaw matched "you" by display name.** All three RPCs return
+  `user_id`; a rename lost your highlight and a shared name lit up two rows.
+- **`_filler` was checked in three guards and never set** by `fillerRoster()`.
+- **The Voidmaw empty state promised a season** that `server-dreadnaught.js`
+  explicitly abolished — "no screen prints a deadline… `SEASON.num` survives only
+  as a wire key."
+
+### Checked and found correct — not changed
+
+- **A Lv 150 account owning 47 hulls.** Checked whether
+  `Object.keys(ownedShips).length` counts sold hulls; nothing in the codebase
+  ever writes a falsy value there. The count is honest and that pilot is a whale.
+- **`1.52X` missions and `3.70c` damage** were artifacts of the audit's own
+  screenshot capture. The real values are 1,515 and 3.70No.
+- **The badge total.** Reads `ACHIEVE.TOTAL` live (1,210 today) with no hardcode
+  drift anywhere on the board.
+
+### Known, deliberately not fixed — operator's call
+
+**`derive()` reads `p.asc_stars`, which is always undefined on a sim row.**
+`sim-pilots.js` maps the server column onto `asc`, so the ascension term in every
+derived figure has never executed and `career` is level-only. The fix is one
+word. The consequence is not: a 12-star sim's career term goes 500 → 6,500, which
+parks simulated pilots at the badge cap and 3,500–8,500 lifetime missions —
+above every human on both boards. That is the outcome the migration gates and
+`realOnly` filters exist to prevent, and the curve was tuned while the term read
+zero. Documented in place with what retuning it requires.
+
+**The `asc` and `hcwave` sort keys exceed 53-bit integer precision** in their
+power tiebreak above roughly eight stars. Ordering is still correct in practice
+because power gaps are enormous. Restructuring them as comparators is a live
+sort-key change and was not made mid-season without a decision.
 
 ---
 

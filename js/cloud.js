@@ -193,6 +193,7 @@
   let _lbNoPilot = false, _lbPilotRetryAt = 0, _lbPilotWarned = false;
   let _lbNoMech = false, _lbMechRetryAt = 0, _lbMechWarned = false;
   let _lbNoCmdr = false, _lbCmdrRetryAt = 0, _lbCmdrWarned = false;
+  let _lbNoFleet = false, _lbFleetRetryAt = 0, _lbFleetWarned = false;
   // WHICH COLUMN SET THE LAST SUCCESSFUL BOARD READ ACTUALLY RETURNED.
   // The ladders need to know whether a migration has run, and inspecting the
   // returned ROWS cannot tell them: the caller merges the player's own live save
@@ -242,7 +243,7 @@
     // recovers minutes after the server is fixed rather than hours.
     if (_lbCascade >= 4) {
       const soon = Date.now() + 60 * 1000;
-      _lbCmdrRetryAt = _lbMechRetryAt = _lbPilotRetryAt = _lbNewRetryAt = _lbArtRetryAt = soon;
+      _lbFleetRetryAt = _lbCmdrRetryAt = _lbMechRetryAt = _lbPilotRetryAt = _lbNewRetryAt = _lbArtRetryAt = soon;
       _lbNanoRetryAt = _lbCargoRetryAt = _lbLadderRetryAt = _lbAscRetryAt = soon;
     }
     if (_lbCascade >= 4 && !_lbCascadeSaid) {
@@ -251,8 +252,8 @@
         console.error('[LOOTFLEET] EVERY lb_upsert rung reports "function not found" (last: ' + rung + '). '
           + 'That is not a missing migration — a signature the server really lacks would stop at ONE rung. '
           + 'It means the shared `base` payload contains a parameter lb_upsert does not declare, so PostgREST '
-          + 'cannot match any overload. Compare the keys in base/ladder/art/fresh/tree against the CREATE '
-          + 'FUNCTION in supabase/pilot-ladder.sql. Do NOT re-run migrations first.');
+          + 'cannot match any overload. Compare the keys in base/ladder/art/fresh/tree/mech/cmdr/hulls '
+          + 'against the CREATE FUNCTION in supabase/lb-fleet.sql. Do NOT re-run migrations first.');
       } catch (e) {}
     }
   }
@@ -285,15 +286,15 @@
   // it restores full publishing the moment a migration lands instead of hours
   // later.
   function resetRungs() {
-    _lbNoCmdr = _lbNoMech = _lbNoPilot = _lbNoNew = _lbNoArt = false;
+    _lbNoFleet = _lbNoCmdr = _lbNoMech = _lbNoPilot = _lbNoNew = _lbNoArt = false;
     _lbNoNano = _lbNoCargo = _lbNoLadder = _lbNoAsc = false;
-    _lbCmdrRetryAt = _lbMechRetryAt = _lbPilotRetryAt = _lbNewRetryAt = _lbArtRetryAt = 0;
+    _lbFleetRetryAt = _lbCmdrRetryAt = _lbMechRetryAt = _lbPilotRetryAt = _lbNewRetryAt = _lbArtRetryAt = 0;
     _lbNanoRetryAt = _lbCargoRetryAt = _lbLadderRetryAt = _lbAscRetryAt = 0;
   }
   function noteRungOk() {
     // Only re-probe when something WAS off — a healthy client must not pay a
     // rediscovery cost on every publish.
-    const wasDegraded = _lbNoCmdr || _lbNoMech || _lbNoPilot || _lbNoNew || _lbNoArt
+    const wasDegraded = _lbNoFleet || _lbNoCmdr || _lbNoMech || _lbNoPilot || _lbNoNew || _lbNoArt
                      || _lbNoNano || _lbNoCargo || _lbNoLadder || _lbNoAsc;
     if (wasDegraded) {
       resetRungs();
@@ -356,6 +357,7 @@
       if (_lbNoArt && Date.now() > _lbArtRetryAt) _lbNoArt = false;
       if (_lbNoNew && Date.now() > _lbNewRetryAt) _lbNoNew = false;
       if (_lbNoPilot && Date.now() > _lbPilotRetryAt) _lbNoPilot = false;
+      if (_lbNoFleet && Date.now() > _lbFleetRetryAt) _lbNoFleet = false;
 
       // LADDER COLUMNS (Aug 2026) — tried FIRST and degraded independently of
       // p_asc. Folding them into the p_asc attempt would mean a server with
@@ -428,10 +430,51 @@
         p_cmdr_score: Math.max(0, Math.min(1e12, Math.floor(Number(p.cmdr_score) || 0))),
         p_cmdr_line: Array.isArray(p.cmdr_line) ? p.cmdr_line.slice(0, 5) : [],
       } : null;
-      // NEWEST RUNG FIRST. mech-ladder.sql is a strict superset of pilot-ladder,
-      // so this rung carries everything the one below it does plus p_mech_cores;
-      // if the server has not run it, we fall through and the Foundry board simply
-      // reports as not-yet-live rather than the whole publish failing.
+      // THE HULL LIST (lb-fleet.sql). Declared HERE, above the first rung that
+      // reads it — the temporal-dead-zone bug that froze every publish for
+      // twenty-four builds was a const declared below its own condition.
+      //
+      // This is the column the Ranks power board draws next to each pilot's name.
+      // It stopped being written the day p_fleet was removed from the signature to
+      // end the 42804 outage, and nothing has written it since: every row has been
+      // frozen at '[]' or at a build-688 hull list for months, and the board filled
+      // the gap with a fabricated fleet. Restored as its OWN rung, above cmdr, so a
+      // server that has not run lb-fleet.sql yet falls straight through to the cmdr
+      // rung and keeps publishing everything else exactly as before.
+      //
+      // NOT IN `base`. That is the standing rule in this file and the reason it is
+      // written down twice: `base` is inherited by every rung, so one parameter the
+      // server does not declare there breaks ALL of them at once. A parameter that
+      // only some servers have belongs in a rung of its own, never in base.
+      const hulls = (p.fleet !== undefined) ? {
+        p_fleet: (Array.isArray(p.fleet) ? p.fleet : [])
+          .filter((k) => k && typeof k === 'string').map((k) => k.slice(0, 32)).slice(0, 8),
+      } : null;
+      // NEWEST RUNG FIRST. lb-fleet.sql is a strict superset of cmdr-ladder.sql,
+      // so this rung carries everything the one below it does plus p_fleet; if the
+      // server has not run it we fall through to the cmdr rung and the only thing
+      // missing is the hull strip, rather than the whole publish failing.
+      if (hulls && cmdr && mech && tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot && !_lbNoMech && !_lbNoCmdr && !_lbNoFleet) {
+        const { error } = await client.rpc('lb_upsert',
+          Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
+            p_nano_legend: p.nano_legend | 0, p_nano_slots: p.nano_slots | 0, p_nano_god: p.nano_god | 0 },
+            base, ladder, art, fresh, tree, mech, cmdr, hulls));
+        if (!error) { _lbFails = 0; noteRungOk(); return; }
+        if (!isLegacy(error)) { lbFail('fleet', error); return; }
+        noteRungMissing('fleet');
+        // FIVE MINUTES, not six hours: this is the rung currently rolling out, so a
+        // refusal means "the SQL has not run yet" or "PostgREST has not reloaded",
+        // both measured in minutes.
+        _lbNoFleet = true; _lbFleetRetryAt = Date.now() + 5 * 60 * 1000;
+        if (!_lbFleetWarned) {
+          _lbFleetWarned = true;
+          try {
+            console.warn('[LOOTFLEET] leaderboard fleet rejected \u2014 the hull list next to each pilot on the Ranks power board is NOT being published, so rows show no ships. '
+              + 'Run supabase/lb-fleet.sql, then "notify pgrst, \'reload schema\';". Retrying automatically every 5 minutes. '
+              + 'Inspect with CLOUD.lbState().');
+          } catch (e) {}
+        }
+      }
       if (cmdr && mech && tree && fresh && art && ladder && !_lbNoLadder && !_lbNoCargo && !_lbNoNano && !_lbNoArt && p.nano_legend !== undefined && !_lbNoNew && !_lbNoPilot && !_lbNoMech && !_lbNoCmdr) {
         const { error } = await client.rpc('lb_upsert',
           Object.assign({ p_asc_stars: (p.asc | 0), p_cargo: p.cargo | 0, p_cargo_best: p.cargo_best | 0,
@@ -760,6 +803,7 @@
       // mech is the NEWEST rung and was missing from this readout — the flag was
       // being kept and never reported, so the one command the notes point at for
       // "is this rung degraded or is it just not running" could not answer for it.
+      fleet:  { off: _lbNoFleet,  retryIn: Math.max(0, Math.round((_lbFleetRetryAt  - Date.now()) / 1000)) },
       cmdr:   { off: _lbNoCmdr,   retryIn: Math.max(0, Math.round((_lbCmdrRetryAt   - Date.now()) / 1000)) },
       mech:   { off: _lbNoMech,   retryIn: Math.max(0, Math.round((_lbMechRetryAt   - Date.now()) / 1000)) },
       pilot:  { off: _lbNoPilot,  retryIn: Math.max(0, Math.round((_lbPilotRetryAt  - Date.now()) / 1000)) },

@@ -96,7 +96,8 @@
     allships: { name: 'FULL FLEET — every hull unlocked', repeatable: true, apply(g) {
       const st = g.state; st.ownedShips = st.ownedShips || {};
       // FLIGHT WAIVER. Granting the hull was only half the job: hulls with a
-      // `flyReq` licence (the Eternum wants 1,000 missions, ★50 and a Titan Sina)
+      // `flyReq` licence (only the Eternum has one — see its flyReq in config-v2
+      // for the live figures; never restate them here)
       // stayed unswitchable, so the code handed over a ship you could look at and
       // not fly. The waiver clears every licence check for the account.
       st.flightWaiver = 1;

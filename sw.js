@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v726';
+const CACHE = 'lootfleet-v728';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -56,6 +56,14 @@ const CORE = [
   'css/ember-choir.css', 'css/hangar-ships.css',
   'js/return-brief.js', 'js/rank-rewards.js', 'js/discord-reward.js', 'js/onboard.js',
   'js/pro-offer.js', 'js/paragon-cannon.js', 'js/casino-citadels.js',
+  // v255 / build 728 — GLOBAL CHAT. Referenced by game.html, so precached here
+  // for the same reason as the v217 batch above: an offline PWA would otherwise
+  // fall back to the network and the chat dock would come up unstyled.
+  'js/chat.js', 'css/chat.css',
+  // changed this release and never precached, so offline served a stale copy
+  'js/patch-notes.js', 'css/patch-notes.css', 'js/cloud.js', 'js/account.js',
+  'js/ui-v94.js', 'js/game-v93.js', 'js/home-citadel.js', 'js/dreadnaught.js',
+  'css/koth.css', 'css/expedition.css', 'css/season-pass.css',
 ];
 
 self.addEventListener('install', (e) => {

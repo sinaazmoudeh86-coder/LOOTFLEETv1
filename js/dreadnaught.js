@@ -174,6 +174,84 @@
     });
     return vis;
   }
+
+  // ---- THE DRAW SCENE — built once per tree, not once per frame -------------
+  // What made the map stutter as the tree grew was never the painting: it was
+  // that every frame REDERIVED THE WHOLE TREE. drawTree() called visibleSet()
+  // (N x 6 string keys), then per visible node parseKey() (split + two parseInt),
+  // nodeDef() (closure + seeded rng + fresh object) and isUnlockable() (six more
+  // string keys), then walked six neighbours again for the edges. A drag fires a
+  // pointer event per frame or more, so all of it ran 60-120 times a second and
+  // the cost grew with every node unlocked. Exactly the reported symptom.
+  //
+  // nodeDef() is PURE and deterministic (hash -> seeded rng), so its answer for a
+  // coordinate never changes for the life of the tab. Memoised for good.
+  const _defs = new Map();
+  function defFor(q, r) {
+    const k = key(q, r); let d = _defs.get(k);
+    if (!d) { d = nodeDef(q, r); d.key = k; _defs.set(k, d); }
+    return d;
+  }
+  // Every visible node with its coordinate, tree-space centre, definition and
+  // unlocked/available state resolved ONCE, plus a de-duplicated edge list.
+  // Rebuilt only when the unlocked set actually moves — keyed on object identity
+  // AND count, the same self-healing signal ensureAgg() uses, so a cloud pull,
+  // an account switch or an ascension that swaps state.pilot under the module
+  // cannot leave a stale tree on screen.
+  let _scene = null, _sceneRef = null, _sceneN = -1;
+  function scene() {
+    const src = nodes(), n = Object.keys(src).length;
+    if (_scene && src === _sceneRef && n === _sceneN) return _scene;
+    const vis = visibleSet(), list = [], byKey = new Map();
+    Object.keys(vis).forEach((k) => {
+      const [q, r] = parseKey(k), c = hexCenter(q, r);
+      const rec = { k, q, r, cx: c.x, cy: c.y, d: defFor(q, r), unlocked: !!src[k], avail: false };
+      list.push(rec); byKey.set(k, rec);
+    });
+    for (let i = 0; i < list.length; i++) {
+      const rec = list[i]; if (rec.unlocked) continue;
+      for (let j = 0; j < 6; j++) {
+        const nb = byKey.get(key(rec.q + DIRS[j][0], rec.r + DIRS[j][1]));
+        if (nb && nb.unlocked) { rec.avail = true; break; }
+      }
+    }
+    const edges = [];
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      for (let j = 0; j < 6; j++) {
+        const bk = key(a.q + DIRS[j][0], a.r + DIRS[j][1]);
+        if (a.k > bk) continue;                       // draw each edge once
+        const b = byKey.get(bk); if (!b) continue;
+        edges.push({ ax: a.cx, ay: a.cy, bx: b.cx, by: b.cy, own: a.unlocked && b.unlocked });
+      }
+    }
+    _scene = { list, byKey, edges }; _sceneRef = src; _sceneN = n;
+    return _scene;
+  }
+  // Gradients are the most expensive thing a hex asks for, and drawTree() built
+  // TWO PER NODE PER FRAME. They only ever differ by category colour and radius,
+  // so they are cached in NODE-LOCAL space (centred on 0,0) and painted under a
+  // translate. Cleared when the radius changes (zoom) or the cache gets silly.
+  const _grad = new Map();
+  function gradFor(ctx, kind, col, rad, alpha) {
+    const k = kind + '|' + col + '|' + rad.toFixed(1) + '|' + (alpha || 0).toFixed(2);
+    let g = _grad.get(k);
+    if (!g) {
+      if (_grad.size > 90) _grad.clear();
+      if (kind === 'fill') {
+        g = ctx.createLinearGradient(-rad, -rad, rad, rad);
+        g.addColorStop(0, shade(col, 1.25)); g.addColorStop(1, shade(col, 0.55));
+      } else {
+        g = ctx.createRadialGradient(0, 0, rad * 0.2, 0, 0, rad * 2.0);
+        g.addColorStop(0, rgba(col, alpha)); g.addColorStop(0.6, rgba(col, alpha * 0.37)); g.addColorStop(1, rgba(col, 0));
+      }
+      _grad.set(k, g);
+    }
+    return g;
+  }
+  // Graphics tier is a FLOOR, never a second opinion — see js/perf-tier.js. All
+  // it costs here is paint: auras and glows, never what a node is or costs.
+  function _gfxLow() { try { return !!(window.PERF && window.PERF.lodFloor && window.PERF.lodFloor() >= 2); } catch (e) { return false; } }
   function canUnlock(q, r) { return lvl() >= UNLOCK_LEVEL && isUnlockable(q, r) && cores() >= nodeDef(q, r).cost; }
   function unlock(q, r) {
     if (!canUnlock(q, r)) return false;
@@ -488,7 +566,39 @@
   function setView(v) {
     _view = v;
     try { localStorage.setItem('lf_pltree_view', v); } catch (e) {}
+    try { localStorage.setItem('lf_pltree_viewseen', '1'); } catch (e) {}
     renderPilot();
+  }
+  function plViewSeen() { try { return localStorage.getItem('lf_pltree_viewseen') === '1'; } catch (e) { return true; } }
+  // ONE BUTTON THAT NAMES ITS DESTINATION.
+  //
+  // The old control was a two-state segment wedged into a bar beside four category
+  // chips and two zoom buttons — seven small pills at the same weight — so the one
+  // control that changes how the entire screen works read as a fifth filter. And a
+  // segment with one side already lit is a STATUS, not an invitation: "⬡ Map"
+  // filled next to a grey "☰ List" looks like a label with a disabled sibling.
+  // Its only explanation was a `title` tooltip, which never reaches a touch
+  // device. That is the whole of "people don't know it exists".
+  //
+  // The AFFORDABLE COUNT is the reason to press it. Answering "what can I actually
+  // buy right now" is the list's entire purpose, and listNodes() only walks the
+  // visible set (unlocked plus one ring), so it is cheap enough to read here.
+  function viewBtnHTML() {
+    const onMap = _view === 'map';
+    let aff = 0;
+    if (onMap) { try { aff = listNodes().avail.filter((d) => cores() >= d.cost).length; } catch (e) {} }
+    const fresh = !plViewSeen();
+    return '<div class="pl-viewsw' + (fresh ? ' fresh' : '') + '" role="group" aria-label="Tree view">' +
+      '<div class="plv-row">' +
+        '<button class="plv-b' + (onMap ? ' on' : '') + '" data-view="map">\u2b21 Map</button>' +
+        '<button class="plv-b' + (onMap ? '' : ' on') + '" data-view="list">\u2630 List</button>' +
+      '</div>' +
+      '<span class="plv-s">' + (onMap
+        ? (aff ? 'Tap <b>List</b> \u2014 <b>' + aff + '</b> node' + (aff === 1 ? '' : 's') + ' you can afford now'
+               : 'Tap <b>List</b> to search, sort and unlock')
+        : 'Tap <b>Map</b> to see the shape of the tree') + '</span>' +
+      (fresh ? '<i class="plv-new">NEW</i>' : '') +
+      '</div>';
   }
   let pan = { x: 0, y: 0 };                  // tree pan offset (px)
   let zoom = 1;                              // tree zoom (0.35–1.8)
@@ -514,6 +624,7 @@
     }
     maybeTutorial();
     const score = pilotScore(), rank = rankFor(score);
+    const affN = _view === 'map' ? affordableNodes().length : 0;
 
     body.innerHTML =
       '<div class="pl-hero">' +
@@ -529,18 +640,27 @@
           '<div class="pl-filters">' + ['offense', 'defense', 'utility', 'rare'].map((c) =>
             '<button class="pl-fchip ' + c + (_filter === c ? ' on' : '') + '" data-filter="' + c + '"><i style="background:' + CAT_COL[c] + '"></i>' + c[0].toUpperCase() + c.slice(1) + '</button>').join('') +
           '</div>' +
-          '<div class="pl-viewtog" role="group" aria-label="Tree view">' +
-            '<button class="pl-vt' + (_view === 'map' ? ' on' : '') + '" data-view="map" title="Map view">⬡ Map</button>' +
-            '<button class="pl-vt' + (_view === 'list' ? ' on' : '') + '" data-view="list" title="List view">☰ List</button>' +
-          '</div>' +
-          (_view === 'map'
-            ? '<button class="pl-recenter" id="pl-zout" title="Zoom out">−</button>' +
-              '<button class="pl-recenter" id="pl-zin" title="Zoom in">+</button>' +
-              '<button class="pl-recenter" id="pl-recenter" title="Recenter">⊙</button>'
-            : '') +
+          viewBtnHTML() +
         '</div>' +
         (_view === 'map'
-          ? '<canvas id="pl-tree" class="pl-tree"></canvas>' +
+          ? '<div class="pl-mapwrap">' +
+              '<canvas id="pl-tree" class="pl-tree"></canvas>' +
+              // ON-CANVAS CONTROLS. These used to be three 28px pills at the far
+              // end of the filter bar — seven controls of equal weight in one row,
+              // where the two that MOVE THE MAP read as two more filters. They
+              // belong on the thing they move, at a size a thumb can hit.
+              //
+              // ⌘ FRONTIER is new and is the one that matters: the map's job is
+              // spending cores, and the nodes you can afford are routinely off
+              // screen with nothing to say which way to drag. It carries the count
+              // and walks them, nearest first.
+              '<div class="pl-mapctl">' +
+                '<button id="pl-zin" aria-label="Zoom in">+</button>' +
+                '<button id="pl-zout" aria-label="Zoom out">−</button>' +
+                '<button id="pl-frontier" class="pl-frontier' + (affN ? ' hot' : '') + '" aria-label="Go to the next node you can afford">⌖' + (affN ? '<i>' + affN + '</i>' : '') + '</button>' +
+                '<button id="pl-recenter" aria-label="Back to Pilot Core">⊙</button>' +
+              '</div>' +
+            '</div>' +
             '<div class="pl-hint">Drag to explore · pinch or scroll to zoom · tap a node to inspect</div>'
           : listHTML()) +
       '</div>' +
@@ -556,10 +676,11 @@
     $('pl-hunt-btn').addEventListener('click', openHuntScreen);
     body.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
     if (_view === 'map') {
-      $('pl-recenter').addEventListener('click', () => { pan = { x: 0, y: 0 }; zoom = 1; fitTree(); drawTree(); });
-      const zBtn = (f) => { const nz = Math.max(0.35, Math.min(1.8, zoom * f)); pan.x *= nz / zoom; pan.y *= nz / zoom; zoom = nz; drawTree(); };
+      $('pl-recenter').addEventListener('click', () => { stopFling(); pan = { x: 0, y: 0 }; zoom = 1; _grad.clear(); fitTree(); requestDraw(); });
+      const zBtn = (f) => { stopFling(); const nz = Math.max(0.35, Math.min(1.8, zoom * f)); pan.x *= nz / zoom; pan.y *= nz / zoom; zoom = nz; _grad.clear(); _motion = Date.now(); requestDraw(); };
       $('pl-zout').addEventListener('click', () => zBtn(1 / 1.3));
       $('pl-zin').addEventListener('click', () => zBtn(1.3));
+      $('pl-frontier').addEventListener('click', gotoFrontier);
     }
     body.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { _filter = _filter === b.dataset.filter ? null : b.dataset.filter; renderPilot(); }));
     body.querySelectorAll('[data-coach]').forEach((b) => b.addEventListener('click', () => { _coachOpen = !_coachOpen; renderPilot(); }));
@@ -706,38 +827,132 @@
     _treeCanvas = $('pl-tree'); if (!_treeCanvas) return;
     _treeCtx = _treeCanvas.getContext('2d');
     fitTree();
-    // pointer pan + tap
-    const dn = (x, y) => { _panActive = true; _panMoved = false; _panStart = { x, y, px: pan.x, py: pan.y }; };
-    const mv = (x, y) => { if (!_panActive) return; const dx = x - _panStart.x, dy = y - _panStart.y; if (Math.abs(dx) + Math.abs(dy) > 5) _panMoved = true; pan.x = _panStart.px + dx; pan.y = _panStart.py + dy; drawTree(); };
-    const up = (x, y) => { if (!_panActive) return; _panActive = false; if (!_panMoved) tapTree(x, y); };
-    _treeCanvas.addEventListener('mousedown', (e) => dn(e.offsetX, e.offsetY));
-    window.addEventListener('mousemove', (e) => { if (_panActive) { const r = _treeCanvas.getBoundingClientRect(); mv(e.clientX - r.left, e.clientY - r.top); } });
-    window.addEventListener('mouseup', (e) => { if (_panActive) { const r = _treeCanvas.getBoundingClientRect(); up(e.clientX - r.left, e.clientY - r.top); } });
-    _treeCanvas.addEventListener('touchstart', (e) => { const t = e.touches[0], r = _treeCanvas.getBoundingClientRect(); dn(t.clientX - r.left, t.clientY - r.top); }, { passive: true });
-    _treeCanvas.addEventListener('touchmove', (e) => { const t = e.touches[0], r = _treeCanvas.getBoundingClientRect(); mv(t.clientX - r.left, t.clientY - r.top); e.preventDefault(); }, { passive: false });
-    _treeCanvas.addEventListener('touchend', (e) => { const t = (e.changedTouches && e.changedTouches[0]) || {}, r = _treeCanvas.getBoundingClientRect(); up((t.clientX || 0) - r.left, (t.clientY || 0) - r.top); });
+    // ---- pointer pan + tap --------------------------------------------------
+    // ONE PAINT PER FRAME. Every one of these handlers used to call drawTree()
+    // synchronously, so a 120Hz trackpad or a fast thumb drew the whole tree two
+    // or three times per displayed frame — work thrown away before the compositor
+    // ever saw it. Everything now marks the map dirty and the rAF coalesces it.
+    const dn = (x, y) => { stopFling(); _panActive = true; _panMoved = false; _vel = { x: 0, y: 0 }; _velT = 0; _panStart = { x, y, px: pan.x, py: pan.y }; };
+    const mv = (x, y) => {
+      if (!_panActive) return;
+      const dx = x - _panStart.x, dy = y - _panStart.y;
+      if (Math.abs(dx) + Math.abs(dy) > 5) _panMoved = true;
+      const nx = _panStart.px + dx, ny = _panStart.py + dy, t = (window.performance && performance.now()) || Date.now();
+      if (_velT) { const dt = Math.max(8, t - _velT); _vel.x = (nx - pan.x) / dt; _vel.y = (ny - pan.y) / dt; }
+      _velT = t; pan.x = nx; pan.y = ny; _motion = Date.now(); requestDraw();
+    };
+    const up = (x, y) => {
+      if (!_panActive) return;
+      _panActive = false;
+      if (!_panMoved) { tapTree(x, y); return; }
+      // INERTIA. A drag that ended mid-flick used to stop dead on the pixel the
+      // finger left, which is most of what "doesn't feel smooth" is.
+      if (Math.hypot(_vel.x, _vel.y) > 0.05) fling();
+      else requestDraw();                       // one full-quality frame back
+    };
     // ZOOM — wheel (desktop) + pinch (touch), anchored on the cursor / pinch midpoint
     const applyZoom = (nz, cx, cy) => {
       nz = Math.max(0.35, Math.min(1.8, nz));
+      if (nz === zoom) return;
       const W = _treeCanvas._w, H = _treeCanvas._h;
       const wx = (cx - W / 2 - pan.x) / zoom, wy = (cy - H / 2 - pan.y) / zoom;
       zoom = nz; pan.x = cx - W / 2 - wx * zoom; pan.y = cy - H / 2 - wy * zoom;
-      drawTree();
+      _grad.clear();                            // hex radius moved: cached gradients are stale
+      _motion = Date.now(); requestDraw();
     };
-    _treeCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const r = _treeCanvas.getBoundingClientRect(); applyZoom(zoom * (e.deltaY < 0 ? 1.12 : 0.89), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+    _treeCanvas.addEventListener('mousedown', (e) => dn(e.offsetX, e.offsetY));
+    // HOVER — desktop only, and only ever a rim highlight + a cursor. A node the
+    // pointer is over is the one thing the map could never tell you without a tap.
+    _treeCanvas.addEventListener('mousemove', (e) => {
+      if (_panActive) return;
+      const h = nodeAt(e.offsetX, e.offsetY);
+      const k = h ? h.k : null;
+      if (k !== _hover) { _hover = k; _treeCanvas.style.cursor = k ? 'pointer' : 'grab'; requestDraw(); }
+    });
+    _treeCanvas.addEventListener('mouseleave', () => { if (_hover) { _hover = null; requestDraw(); } });
+    _treeCanvas.addEventListener('touchstart', (e) => { const t = e.touches[0], r = rect(); dn(t.clientX - r.left, t.clientY - r.top); }, { passive: true });
+    _treeCanvas.addEventListener('touchmove', (e) => { const t = e.touches[0], r = rect(); mv(t.clientX - r.left, t.clientY - r.top); e.preventDefault(); }, { passive: false });
+    _treeCanvas.addEventListener('touchend', (e) => { const t = (e.changedTouches && e.changedTouches[0]) || {}, r = rect(); up((t.clientX || 0) - r.left, (t.clientY || 0) - r.top); });
+    _treeCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const r = rect(); applyZoom(zoom * (e.deltaY < 0 ? 1.12 : 0.89), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
     let _pinch = null;
     const pinchInfo = (e, r) => { const a = e.touches[0], b = e.touches[1]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), x: (a.clientX + b.clientX) / 2 - r.left, y: (a.clientY + b.clientY) / 2 - r.top }; };
-    _treeCanvas.addEventListener('touchstart', (e) => { if (e.touches.length === 2) { _panActive = false; const r = _treeCanvas.getBoundingClientRect(); _pinch = pinchInfo(e, r); _pinch.z0 = zoom; } }, { passive: true });
-    _treeCanvas.addEventListener('touchmove', (e) => { if (_pinch && e.touches.length === 2) { const r = _treeCanvas.getBoundingClientRect(); const p = pinchInfo(e, r); applyZoom(_pinch.z0 * (p.d / _pinch.d), p.x, p.y); e.preventDefault(); } }, { passive: false });
-    _treeCanvas.addEventListener('touchend', (e) => { if (e.touches.length < 2) _pinch = null; });
-    // re-fit once flex layout settles, and on viewport resize, so the canvas
-    // always fills the space left by the pinned hero/detail rows (no scroll).
-    requestAnimationFrame(() => { fitTree(); drawTree(); });
-    if (!setupTree._resizeBound) { setupTree._resizeBound = true; window.addEventListener('resize', () => { if (_treeCanvas && document.getElementById('pl-tree') === _treeCanvas) { fitTree(); drawTree(); } }); }
-    drawTree();
+    _treeCanvas.addEventListener('touchstart', (e) => { if (e.touches.length === 2) { _panActive = false; stopFling(); _pinch = pinchInfo(e, rect()); _pinch.z0 = zoom; } }, { passive: true });
+    _treeCanvas.addEventListener('touchmove', (e) => { if (_pinch && e.touches.length === 2) { const p = pinchInfo(e, rect()); applyZoom(_pinch.z0 * (p.d / _pinch.d), p.x, p.y); e.preventDefault(); } }, { passive: false });
+    _treeCanvas.addEventListener('touchend', (e) => { if (e.touches.length < 2) { _pinch = null; requestDraw(); } });
+    // WINDOW-LEVEL LISTENERS ARE BOUND ONCE, EVER. setupTree() runs on every
+    // render of the Pilot screen, and a mousemove/mouseup pair was being added to
+    // `window` each time — so the twentieth visit had twenty handlers, each doing
+    // a forced-layout getBoundingClientRect on drag. The canvas ones go with the
+    // canvas (innerHTML replaces it); these do not.
+    if (!setupTree._winBound) {
+      setupTree._winBound = true;
+      window.addEventListener('mousemove', (e) => { if (_panActive) { const r = rect(); mv(e.clientX - r.left, e.clientY - r.top); } });
+      window.addEventListener('mouseup', (e) => { if (_panActive) { const r = rect(); up(e.clientX - r.left, e.clientY - r.top); } });
+      window.addEventListener('resize', () => { _rect = null; if (_treeCanvas && document.getElementById('pl-tree') === _treeCanvas) { fitTree(); requestDraw(); } });
+    }
+    setupTree._mv = mv; setupTree._up = up;
+    // re-fit once flex layout settles so the canvas always fills the space left
+    // by the pinned hero/detail rows (no scroll).
+    requestAnimationFrame(() => { fitTree(); requestDraw(); });
+    requestDraw();
+  }
+  // The canvas cannot move during a drag (it is an overlay screen), so its rect
+  // is measured once per gesture instead of on every pointer event — each of
+  // those reads forced a layout flush mid-drag.
+  let _rect = null;
+  function rect() {
+    if (!_rect && _treeCanvas) _rect = _treeCanvas.getBoundingClientRect();
+    return _rect || { left: 0, top: 0 };
+  }
+  let _drawRAF = 0, _motion = 0, _hover = null;
+  let _vel = { x: 0, y: 0 }, _velT = 0, _flingRAF = 0;
+  function requestDraw() { if (_drawRAF) return; _drawRAF = requestAnimationFrame(() => { _drawRAF = 0; drawTree(); }); }
+  function stopFling() { if (_flingRAF) { cancelAnimationFrame(_flingRAF); _flingRAF = 0; } }
+  function fling() {
+    stopFling();
+    const step = () => {
+      _flingRAF = 0;
+      if (!treeLive()) return;
+      pan.x += _vel.x * 16; pan.y += _vel.y * 16;
+      _vel.x *= 0.92; _vel.y *= 0.92;
+      _motion = Date.now(); requestDraw();
+      if (Math.hypot(_vel.x, _vel.y) > 0.02) _flingRAF = requestAnimationFrame(step);
+      else requestDraw();                       // settle at full quality
+    };
+    _flingRAF = requestAnimationFrame(step);
+  }
+  function treeLive() {
+    const sp = document.getElementById('screen-pilot');
+    return !!(_treeCanvas && document.getElementById('pl-tree') === _treeCanvas && sp && sp.classList.contains('active'));
+  }
+  // ⌘ FRONTIER — pan to the next node the pilot can actually afford, nearest to
+  // the core first, cycling on repeat taps. Answering "where do I spend this"
+  // was the map's worst failure: the affordable nodes are usually off screen and
+  // nothing pointed at them.
+  let _frontierI = 0;
+  let _affCache = null, _affRef = null, _affC = -1;
+  function affordableNodes() {
+    const sc = scene(), c = cores();
+    if (_affCache && _affRef === sc && _affC === c) return _affCache;
+    _affCache = sc.list.filter((n) => n.avail && !n.d.core && c >= n.d.cost)
+      .sort((a, b) => (axialDist(a.q, a.r) - axialDist(b.q, b.r)) || (a.d.cost - b.d.cost));
+    _affRef = sc; _affC = c;
+    return _affCache;
+  }
+  function gotoFrontier() {
+    const list = affordableNodes();
+    if (!list.length) { toast('No node you can afford yet — clear a Dreadnaught for cores'); return; }
+    stopFling();
+    const n = list[_frontierI % list.length]; _frontierI++;
+    if (zoom < 0.9) { zoom = 1; _grad.clear(); }
+    pan.x = -n.cx * zoom; pan.y = -n.cy * zoom;
+    _selected = n.k; renderDetail();
+    requestAnimationFrame(() => { fitTree(); requestDraw(); });
+    requestDraw();
   }
   function fitTree() {
     if (!_treeCanvas) return;
+    _rect = null;
     const w = _treeCanvas.clientWidth || 320;
     let h = _treeCanvas.clientHeight;
     if (!h || h < 120) h = 260;                 // fallback before flex layout settles
@@ -751,70 +966,129 @@
     for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i); const x = cx + rad * Math.cos(a), y = cy + rad * Math.sin(a); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
     ctx.closePath();
   }
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y); ctx.lineTo(x + w - rr, y); ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr); ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr); ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+  // A chip pinned to the viewport edge, pointing at something off screen.
+  function edgeMarker(ctx, W, H, tx, ty, col, glyph) {
+    const cx = W / 2, cy = H / 2;
+    let dx = tx - cx, dy = ty - cy;
+    const L = Math.hypot(dx, dy); if (L < 1) return;
+    dx /= L; dy /= L;
+    const hw = Math.max(12, W / 2 - 24), hh = Math.max(12, H / 2 - 24);
+    const t = Math.min(Math.abs(dx) > 1e-4 ? hw / Math.abs(dx) : 1e9, Math.abs(dy) > 1e-4 ? hh / Math.abs(dy) : 1e9);
+    const mx = cx + dx * t, my = cy + dy * t, ang = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.beginPath(); ctx.arc(0, 0, 13, 0, 7);
+    ctx.fillStyle = 'rgba(11,15,24,0.92)'; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = col; ctx.stroke();
+    ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(14.5, 0); ctx.lineTo(8, -4.5); ctx.lineTo(8, 4.5); ctx.closePath();
+    ctx.fillStyle = col; ctx.fill();
+    ctx.rotate(-ang);
+    ctx.font = '700 12px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = col; ctx.fillText(glyph, 0, 0.5);
+    ctx.restore();
+  }
   function drawTree() {
     if (!_treeCtx) return;
     const ctx = _treeCtx, W = _treeCanvas._w, H = _treeCanvas._h;
+    const sc = scene(), now = Date.now();
+    const ox = W / 2 + pan.x, oy = H / 2 + pan.y, z = zoom;
+    const rad = HEX * 0.82 * z;
+    // MOTION LOD — PAINT ONLY. While the map is sliding under a thumb, the auras,
+    // glows, labels and edge cues are dropped: they are the expensive half of a
+    // hex and none of them can be read mid-drag. Full quality comes back on the
+    // settling frame. Nothing here touches what a node is, costs or does — same
+    // guarantee js/perf-tier.js makes.
+    const moving = _panActive || !!_flingRAF || now - _motion < 80;
+    const rich = !moving && !_gfxLow() && z > 0.45;
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0b0f18'; ctx.fillRect(0, 0, W, H);
-    const ox = W / 2 + pan.x, oy = H / 2 + pan.y, z = zoom;
-    const vis = visibleSet();
-    _hitNodes = [];
-    // first pass: connection lines between unlocked & their visible neighbors
+    // EDGES — two batched paths (owned / not), one stroke each, instead of a
+    // beginPath+stroke per edge. A 400-node tree strokes twice, not 1,200 times.
     ctx.lineWidth = 2;
-    Object.keys(vis).forEach((k) => {
-      const [q, r] = parseKey(k); const c = hexCenter(q, r);
-      const sx = ox + c.x * z, sy = oy + c.y * z;
-      if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) return;
-      neighbors(q, r).forEach(([nq, nr]) => {
-        const nk = key(nq, nr); if (!vis[nk]) return;
-        if (k > nk) return; // draw each edge once
-        const nc = hexCenter(nq, nr); const ex = ox + nc.x * z, ey = oy + nc.y * z;
-        const bothU = isUnlocked(k) && isUnlocked(nk);
-        ctx.strokeStyle = bothU ? 'rgba(255,160,90,0.5)' : 'rgba(120,140,170,0.14)';
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
-      });
-    });
-    // second pass: nodes
-    Object.keys(vis).forEach((k) => {
-      const [q, r] = parseKey(k); const c = hexCenter(q, r);
-      const x = ox + c.x * z, y = oy + c.y * z;
-      if (x < -36 || x > W + 36 || y < -36 || y > H + 36) return;
-      const d = nodeDef(q, r);
-      const unlocked = isUnlocked(k);
-      const avail = !unlocked && isUnlockable(q, r);
+    for (let pass = 0; pass < 2; pass++) {
+      let any = false;
+      ctx.beginPath();
+      for (let i = 0; i < sc.edges.length; i++) {
+        const e = sc.edges[i];
+        if (e.own !== (pass === 0)) continue;
+        const ax = ox + e.ax * z, ay = oy + e.ay * z, bx = ox + e.bx * z, by = oy + e.by * z;
+        if ((ax < -40 && bx < -40) || (ax > W + 40 && bx > W + 40) || (ay < -40 && by < -40) || (ay > H + 40 && by > H + 40)) continue;
+        ctx.moveTo(ax, ay); ctx.lineTo(bx, by); any = true;
+      }
+      if (any) { ctx.strokeStyle = pass === 0 ? 'rgba(255,160,90,0.5)' : 'rgba(120,140,170,0.14)'; ctx.stroke(); }
+    }
+    // NODES
+    _hitNodes = [];
+    const onAvail = [];                       // on-screen available: cost pills + names
+    let coreOn = false, affOn = false;
+    const wallet = cores();
+    const glyphFont = '800 ' + Math.max(7, Math.round(14 * z)) + 'px Orbitron, Rajdhani, sans-serif';
+    const coreFont = '800 ' + Math.max(7, Math.round(18 * z)) + 'px Orbitron, Rajdhani, sans-serif';
+    let curFont = '';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < sc.list.length; i++) {
+      const rec = sc.list[i];
+      const x = ox + rec.cx * z, y = oy + rec.cy * z;
+      if (x < -36 || x > W + 36 || y < -36 || y > H + 36) continue;
+      const k = rec.k, q = rec.q, r = rec.r, d = rec.d;
+      const unlocked = rec.unlocked, avail = rec.avail;
       const col = CAT_COL[d.cat] || '#8aa';
-      const dim = _filter && d.cat !== _filter;
+      const dim = !!_filter && (_filter === 'rare' ? !(d.rare || d.cat === 'rare') : d.cat !== _filter);
       _hitNodes.push({ k, x, y });
+      if (d.core) coreOn = true;
+      if (avail && !dim) {
+        const afford = wallet >= d.cost;
+        if (afford) affOn = true;
+        onAvail.push({ d, x, y, afford });
+      }
+      const font = d.core ? coreFont : glyphFont;
+      if (font !== curFont) { ctx.font = font; curFont = font; }
+      ctx.save(); ctx.translate(x, y);
 
-      ctx.save();
-      const rad = HEX * 0.82 * z;
       // AURA — unlocked (filled) nodes glow in their category colour so they read
       // instantly as "owned", just like a lit galaxy tile. Empty nodes stay dark.
-      if (unlocked && !dim) {
-        ctx.save();
+      // The gradient is cached and painted in node-local space: this used to build
+      // a fresh radial gradient PER NODE PER FRAME, which on a large tree is most
+      // of the frame. The pulse is quantised to 0.05 so the cache still hits.
+      if (unlocked && !dim && rich) {
+        const pul = 0.82 + 0.18 * Math.sin(now / 600 + (q * 1.7 + r));
         ctx.globalCompositeOperation = 'lighter';
-        const pul = 0.82 + 0.18 * Math.sin(Date.now() / 600 + (q * 1.7 + r));
-        const ag = ctx.createRadialGradient(x, y, rad * 0.2, x, y, rad * 2.0);
-        ag.addColorStop(0, rgba(col, (d.rare ? 0.55 : 0.36) * pul));
-        ag.addColorStop(0.6, rgba(col, (d.rare ? 0.22 : 0.13) * pul));
-        ag.addColorStop(1, rgba(col, 0));
-        ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(x, y, rad * 2.0, 0, 7); ctx.fill();
-        ctx.restore();
+        ctx.fillStyle = gradFor(ctx, 'aura', col, rad, Math.round((d.rare ? 0.55 : 0.36) * pul * 20) / 20);
+        ctx.beginPath(); ctx.arc(0, 0, rad * 2.0, 0, 7); ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
       }
-      if (_selected === k) { hexPath(ctx, x, y, HEX * 0.98 * z); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0; }
-      hexPath(ctx, x, y, rad);
+      // SELECTION + HOVER. shadowBlur is the most expensive per-hex op there is,
+      // so it is spent here (one or two hexes) and on legendaries, never on every
+      // owned node every frame the way it was.
+      if (_selected === k || _hover === k) {
+        hexPath(ctx, 0, 0, HEX * 0.98 * z);
+        ctx.strokeStyle = _selected === k ? '#fff' : 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = _selected === k ? 2.5 : 1.5;
+        if (rich) { ctx.shadowColor = '#fff'; ctx.shadowBlur = 8; }
+        ctx.stroke(); ctx.shadowBlur = 0;
+      }
+      hexPath(ctx, 0, 0, rad);
       if (unlocked) {
-        const g = ctx.createLinearGradient(x - rad, y - rad, x + rad, y + rad);
-        g.addColorStop(0, shade(col, 1.25)); g.addColorStop(1, shade(col, 0.55));
-        ctx.fillStyle = g; ctx.globalAlpha = dim ? 0.35 : 1; ctx.fill();
-        ctx.globalAlpha = dim ? 0.35 : 1; ctx.lineWidth = 2; ctx.strokeStyle = shade(col, 1.5);
-        ctx.shadowColor = dim ? 'transparent' : col; ctx.shadowBlur = dim ? 0 : (d.rare ? 16 : 9);
+        ctx.fillStyle = gradFor(ctx, 'fill', col, rad, 0);
+        ctx.globalAlpha = dim ? 0.35 : 1; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = shade(col, 1.5);
+        if (rich && d.rare && !dim) { ctx.shadowColor = col; ctx.shadowBlur = 14; }
         ctx.stroke(); ctx.shadowBlur = 0;
       } else if (avail) {
         // empty but ready to unlock: hollow dark fill + pulsing coloured rim
         ctx.fillStyle = 'rgba(14,19,28,0.96)'; ctx.globalAlpha = dim ? 0.3 : 1; ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = col;
-        ctx.globalAlpha = dim ? 0.3 : (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(Date.now() / 340)));
+        ctx.globalAlpha = dim ? 0.3 : (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(now / 340)));
         ctx.stroke();
       } else {
         // undiscovered: barely-there dashed outline
@@ -822,30 +1096,60 @@
         ctx.setLineDash([3, 4]); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(150,165,190,0.28)'; ctx.stroke(); ctx.setLineDash([]);
       }
       ctx.globalAlpha = 1;
-      // glyph
-      const glyph = d.core ? '★' : avail || unlocked ? catGlyph(d) : '?';
+      // glyph (cached on the memoised def — catGlyph() walks Object.keys)
+      const glyph = d.core ? '★' : (avail || unlocked) ? (d._g || (d._g = catGlyph(d))) : '?';
       ctx.fillStyle = unlocked ? '#0b0f18' : avail ? col : 'rgba(180,195,215,0.5)';
-      ctx.font = '800 ' + Math.max(7, Math.round((d.core ? 18 : 14) * z)) + 'px Orbitron, Rajdhani, sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(glyph, x, y + 0.5);
+      ctx.fillText(glyph, 0, 0.5);
       ctx.restore();
-    });
+    }
+    // WHAT IT IS AND WHAT IT COSTS, ON THE MAP ITSELF. Every hex was a bare glyph,
+    // so the only way to learn a node was to tap it one at a time — and a node you
+    // could afford looked exactly like one you could not. Available nodes now
+    // carry their cost, tinted by affordability, and their name when there is room.
+    // Bounded by design: only AVAILABLE nodes, only on screen, only when legible.
+    if (onAvail.length && onAvail.length <= 60 && z >= 0.62 && !moving) {
+      const showName = z >= 1.02 && onAvail.length <= 30;
+      ctx.font = '700 ' + Math.max(9, Math.round(10.5 * Math.min(1.35, z))) + 'px Rajdhani, sans-serif';
+      for (let i = 0; i < onAvail.length; i++) {
+        const a = onAvail[i], py = a.y + rad + 10;
+        const label = '◇ ' + a.d.cost;
+        const w = ctx.measureText(label).width + 12;
+        ctx.fillStyle = a.afford ? 'rgba(255,207,77,0.18)' : 'rgba(16,22,32,0.88)';
+        roundRect(ctx, a.x - w / 2, py - 8, w, 16, 8); ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = a.afford ? 'rgba(255,207,77,0.8)' : 'rgba(120,135,160,0.38)'; ctx.stroke();
+        ctx.fillStyle = a.afford ? '#ffe08a' : 'rgba(168,183,203,0.8)';
+        ctx.fillText(label, a.x, py + 0.5);
+        if (showName) { ctx.fillStyle = 'rgba(202,216,235,0.92)'; ctx.fillText(a.d.label, a.x, py + 18); }
+      }
+    }
+    // OFF-SCREEN ORIENTATION. Two cues, each only when it is needed: which way
+    // the core is, and which way the nearest node you can afford is. An unbounded
+    // plane with nothing to steer by is how people got lost out in the fog.
+    if (!moving) {
+      if (!coreOn) edgeMarker(ctx, W, H, ox, oy, 'rgba(201,160,255,0.92)', '⊙');
+      if (!affOn) {
+        const aff = affordableNodes();
+        if (aff.length) edgeMarker(ctx, W, H, ox + aff[0].cx * z, oy + aff[0].cy * z, '#ffcf4d', '◇');
+      }
+    }
     // re-draw on availability pulse
-    _pulse();
+    _pulse(sc.list.length);
   }
-  let _pulseRAF = 0, _pulseT = 0;
+  let _pulseRAF = 0, _pulseT = 0, _pulseIv = 66;
   // Idle "available node" pulse. Self-sustaining rAF loop, but it (a) STOPS when
   // the Pilot screen isn't the active overlay — so it never burns frames redrawing
-  // an off-screen canvas — and (b) caps the redraw at ~15fps.
-  function _pulse() {
-    if (_pulseRAF) return;
+  // an off-screen canvas — (b) throttles to the SIZE of the tree instead of a flat
+  // 15fps, because a 400-node tree costs several times what a 40-node one does for
+  // the same barely-visible rim pulse, and (c) goes through requestDraw() so a
+  // pulse frame and a pan frame can never both paint inside one frame.
+  function _pulse(n) {
+    if (n != null) _pulseIv = n > 260 ? 150 : n > 120 ? 100 : 66;
+    if (_pulseRAF || _panActive || _flingRAF) return;   // motion is already drawing
     _pulseRAF = requestAnimationFrame((now) => {
       _pulseRAF = 0;
-      const sp = document.getElementById('screen-pilot');
-      const live = _treeCanvas && document.getElementById('pl-tree') === _treeCanvas && sp && sp.classList.contains('active');
-      if (!live) return;                              // leave the loop until the screen re-opens
-      if (now - _pulseT < 66) { _pulse(); return; }   // ~15fps cap
-      _pulseT = now; drawTree();
+      if (!treeLive()) return;                          // leave the loop until the screen re-opens
+      if (now - _pulseT < _pulseIv) { _pulse(); return; }
+      _pulseT = now; requestDraw();
     });
   }
   function catGlyph(d) {
@@ -854,14 +1158,25 @@
     const M = { dmgPct: '⚔', atkSpeedPct: '⟫', critChance: '✸', critDamage: '✸', multiShot: '≡', bossDamage: '☠', eliteDamage: '★', rangePct: '➤', hpPct: '❤', regen: '✚', dmgReduce: '⛊', lifeSteal: '⚕', lootQuality: '◈', goldFind: '$', xpGain: '▲', pickupRadius: '◎' };
     return M[k] || '◆';
   }
+  // MINIMUM 22px HIT RADIUS. The old test was HEX*zoom, which at the 0.35 zoom
+  // floor is a 9px target — smaller than a fingertip, so zoomed-out taps simply
+  // missed and the map felt broken rather than imprecise.
+  function nodeAt(x, y) {
+    const R = Math.max(22, HEX * zoom * 0.95);
+    let best = null, bd = R * R;
+    for (let i = 0; i < _hitNodes.length; i++) {
+      const n = _hitNodes[i], dx = n.x - x, dy = n.y - y, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = n; }
+    }
+    return best;
+  }
   function tapTree(x, y) {
-    let best = null, bd = HEX * zoom * HEX * zoom;
-    _hitNodes.forEach((n) => { const dx = n.x - x, dy = n.y - y, d2 = dx * dx + dy * dy; if (d2 < bd) { bd = d2; best = n; } });
+    const best = nodeAt(x, y);
     if (best) {
       _selected = best.k; renderDetail();
-      // the detail card resizes the flex layout → re-measure the canvas so the
+      // the detail card can resize the flex layout → re-measure the canvas so the
       // hexes never get squished by a stale backing-store size.
-      requestAnimationFrame(() => { fitTree(); drawTree(); });
+      requestAnimationFrame(() => { fitTree(); requestDraw(); });
     }
   }
   function renderDetail() {
@@ -1059,6 +1374,10 @@
   }
 
   window.DREAD = {
+    // MERGE PRICING (js/account.js). A charged union has to know what a node
+    // cost, and nodeDef() is pure and deterministic — hash to seeded rng — so
+    // this is a safe public read with no state behind it.
+    nodeCost: (k) => { try { const p = parseKey(k); return nodeDef(p[0], p[1]).cost | 0; } catch (e) { return 1; } },
     // engine hooks
     combatMods, mult, dmgVs, tick, render, onHuntCleared, proAttempt,
     // ui
@@ -1156,12 +1475,62 @@
   .pl-recenter:active{ transform:scale(.92); }
   .pl-tree{ display:block; width:100%; flex:1 1 auto; min-height:0; touch-action:none; cursor:grab; }
   .pl-tree:active{ cursor:grabbing; }
+  .pl-mapwrap{ position:relative; display:flex; flex:1 1 auto; min-height:0; }
+  /* The controls that MOVE the map live ON the map, at a size a thumb can hit —
+     not as three 28px pills at the end of a row of category filters. */
+  .pl-mapctl{ position:absolute; right:8px; bottom:8px; z-index:2; display:flex; flex-direction:column; gap:6px; }
+  .pl-mapctl button{ min-width:40px; height:40px; padding:0 9px; border-radius:11px; border:1px solid #2a3545;
+    background:rgba(13,19,29,.88); color:#cfe0f2; font:700 16px/1 Rajdhani, sans-serif; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:4px; touch-action:manipulation; }
+  .pl-mapctl button:active{ transform:scale(.92); }
+  .pl-mapctl .pl-frontier i{ font-style:normal; font-size:12px; font-weight:800; color:#0b0f18; background:#8ba0b5;
+    border-radius:6px; padding:1px 4px; min-width:14px; text-align:center; }
+  .pl-mapctl .pl-frontier.hot{ border-color:#ffcf4d; color:#ffe08a; box-shadow:0 0 16px -5px #ffcf4d; }
+  .pl-mapctl .pl-frontier.hot i{ background:#ffcf4d; }
   .pl-hint{ font-size:10.5px; color:#7e8aa0; text-align:center; padding:7px 8px; border-top:1px solid #1c2530; }
 
-  /* ---- MAP / LIST toggle + the list itself -------------------------------- */
-  .pl-viewtog{ display:inline-flex; flex:none; border:1px solid #25303f; border-radius:9px; overflow:hidden; background:#0d141e; }
-  .pl-vt{ font:800 10px/1 'Rajdhani',sans-serif; letter-spacing:.08em; color:#8b9bb0; background:none; border:none; padding:6px 9px; cursor:pointer; min-height:30px; }
-  .pl-vt.on{ color:#0b0f18; background:#ffd0d4; }
+  /* ---- MAP / LIST switch + the list itself -------------------------------- */
+  /* BOTH OPTIONS VISIBLE, treated loudly enough to find. The original segment was
+     the same size and weight as the four category chips beside it, so the one
+     control that changes the whole screen read as a fifth filter — and its only
+     explanation was a "title" tooltip, which never reaches a phone. Discoverability
+     is carried by the treatment: accent frame, breathing glow, a sheen sweep and a
+     pulse on the option you are NOT on. Everything is gated on .fresh and stops for
+     good once the switch has been used — an effect that never ends is just noise. */
+  .pl-viewsw{ position:relative; display:flex; flex-direction:column; gap:5px; flex:1 1 190px; min-width:0;
+    padding:7px 8px; border-radius:11px; overflow:hidden;
+    background:linear-gradient(180deg,rgba(255,208,212,.15),rgba(255,208,212,.04));
+    border:1px solid rgba(255,208,212,.55);
+    box-shadow:0 0 16px -7px rgba(255,208,212,.55), inset 0 0 20px -14px rgba(255,208,212,.9); }
+  .plv-row{ display:flex; gap:5px; }
+  .plv-b{ flex:1 1 0; min-width:0; min-height:36px; padding:7px 10px; cursor:pointer; border-radius:8px;
+    font:800 11.5px/1 'Rajdhani',sans-serif; letter-spacing:.08em;
+    color:#ffd7db; background:rgba(12,8,12,.55); border:1px solid rgba(255,208,212,.35); }
+  .plv-b.on{ color:#1a0b0e; background:linear-gradient(180deg,#ffe3e6,#ffd0d4); border-color:#ffe3e6;
+    box-shadow:0 0 14px -3px rgba(255,208,212,.9); }
+  .plv-b:active{ transform:scale(.98); }
+  .plv-s{ font:600 9.5px/1.25 'Rajdhani',sans-serif; letter-spacing:.02em; color:#c39aa0; }
+  .plv-s b{ color:#ffd7db; font-weight:800; }
+  .plv-new{ position:absolute; top:6px; right:7px; font:800 8px/1 'Rajdhani',sans-serif; letter-spacing:.1em; font-style:normal;
+    color:#1a0b0e; background:#ffd0d4; border-radius:5px; padding:3px 4px; box-shadow:0 0 10px -1px rgba(255,208,212,.95); }
+  .pl-viewsw.fresh::after{ content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(105deg,transparent 32%,rgba(255,227,230,.22) 49%,transparent 66%);
+    transform:translateX(-120%); animation:plvSheen 3.6s ease-in-out infinite; }
+  @keyframes plvSheen{ 0%,58%{ transform:translateX(-120%) } 100%{ transform:translateX(120%) } }
+  .pl-viewsw.fresh{ animation:plvBreathe 3.6s ease-in-out infinite; }
+  @keyframes plvBreathe{
+    0%,100%{ box-shadow:0 0 15px -9px rgba(255,208,212,.5), inset 0 0 20px -14px rgba(255,208,212,.9) }
+    50%{ box-shadow:0 0 26px -4px rgba(255,208,212,.85), inset 0 0 20px -11px rgba(255,208,212,1) } }
+  .pl-viewsw.fresh .plv-b:not(.on){ animation:plvBeckon 3.6s ease-in-out infinite; }
+  @keyframes plvBeckon{
+    0%,100%{ border-color:rgba(255,208,212,.35); color:#ffd7db }
+    50%{ border-color:rgba(255,227,230,.95); color:#fff3f4 } }
+  @media (prefers-reduced-motion: reduce){
+    .pl-viewsw.fresh, .pl-viewsw.fresh .plv-b:not(.on){ animation:none; }
+    .pl-viewsw.fresh::after{ display:none; }
+    .pl-viewsw.fresh{ box-shadow:0 0 22px -5px rgba(255,208,212,.8), inset 0 0 20px -11px rgba(255,208,212,1); }
+    .pl-viewsw.fresh .plv-b:not(.on){ border-color:rgba(255,227,230,.9); color:#fff3f4; } }
+  @media (pointer: coarse){ .plv-b{ min-height:44px; } }
   /* NO min-height OVERRIDE HERE. .scr-body on the Pilot screen does not scroll,
      so this pane must shrink to whatever room is left exactly like the canvas
      does — pinning it taller pushes it and every sibling past the clip edge.
@@ -1204,8 +1573,12 @@
     .pl-lic{ width:30px; height:30px; font-size:12.5px; }
   }
 
-  .pl-detail{ margin-top:0; flex:none; }
-  .pl-detail-empty{ font-size:12px; color:#8a93a6; text-align:center; padding:14px; background:#101725; border:1px dashed #26303f; border-radius:12px; }
+  /* RESERVED HEIGHT. Selecting a node swapped a one-line placeholder for a card,
+     which resized the flex column and forced the canvas to re-measure — the map
+     visibly jumped on every tap. min-height, never height: a taller card still
+     grows (see the layout fit contract in CLAUDE.md). */
+  .pl-detail{ margin-top:0; flex:none; min-height:104px; }
+  .pl-detail-empty{ font-size:12px; color:#8a93a6; text-align:center; padding:14px; background:#101725; border:1px dashed #26303f; border-radius:12px; min-height:76px; display:flex; align-items:center; justify-content:center; }
   .pl-detail-card{ background:linear-gradient(180deg,#121a27,#0e1320); border:1px solid var(--nc); border-radius:13px; padding:12px; box-shadow:0 0 22px -10px var(--nc); }
   .pl-detail-h{ display:flex; align-items:center; gap:8px; }
   .pl-cat-dot{ width:9px; height:9px; border-radius:50%; flex:none; }

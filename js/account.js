@@ -389,6 +389,35 @@
         const bt = base.homecit.tw || [], ot = other.homecit.tw || [];
         for (let i = 0; i < 8; i++) { const a = bt[i], o = ot[i]; if (!a) bt[i] = o || null; else if (o && (o.lv | 0) > (a.lv | 0)) bt[i] = o; }
         base.homecit.tw = bt;
+        // ---- ANTI-DUPLICATION STATE MERGES THE OTHER WAY ROUND ---------------
+        // Everything above is progression, so max wins. These are the opposite:
+        // they exist to stop the same production being paid twice, so the merge
+        // must never be generous with them.
+        //
+        // `last` is the COLLECT CLOCK, and it was not in this union — so it
+        // followed the base pick. Two clients each collecting the same window,
+        // or a stale copy winning the pick, re-opened a storage bucket that had
+        // already been paid out: up to 24h of production, which on a wave-400
+        // base is hundreds of billions of gold. The LATER stamp always wins now —
+        // a paid window never re-opens. The active pay bank is the same story:
+        // smaller balance, later stamp, so a budget spent on one device is never
+        // refunded by another. `cq` is an OWED reward, so that one is max —
+        // a queued part crate is not lost to a merge.
+        //
+        // NEVER `| 0` A TIMESTAMP: 1.78e12 ms wraps negative through int32.
+        const hcNum = (v) => (Number(v) > 0 ? Number(v) : 0);
+        base.homecit.last = Math.max(hcNum(base.homecit.last), hcNum(other.homecit.last));
+        // `dmg` is a repair floor, not currency, so take the EARLIER one: a stale
+        // damaged copy must not lock a repaired pilot out of their own mine. It
+        // cannot mint anything — accrued() reads max(last, dmg) and `last` is
+        // already the later of the two.
+        base.homecit.dmg = Math.min(hcNum(base.homecit.dmg), hcNum(other.homecit.dmg));
+        const bPay = base.homecit.pay, oPay = other.homecit.pay;
+        if (oPay && typeof oPay === 'object') {
+          if (!bPay || typeof bPay !== 'object') base.homecit.pay = oPay;
+          else { bPay.h = Math.min(hcNum(bPay.h), hcNum(oPay.h)); bPay.t = Math.max(hcNum(bPay.t), hcNum(oPay.t)); }
+        }
+        base.homecit.cq = Math.max(base.homecit.cq | 0, other.homecit.cq | 0);
       }
     }
     base.lifetimeMissions = Math.max(base.lifetimeMissions | 0, other.lifetimeMissions | 0);
@@ -664,16 +693,49 @@
         if ((o.lv | 0) > (b.lv | 0)) { b.lv = o.lv | 0; }
       }
     }
-    // ---- PILOT TREE node ranks. Bought with Dread Cores, and cores are a wallet we
-    // do not touch — so in the rare case two devices spent offline into different
-    // nodes, the union can leave a pilot with slightly more tree than they paid for.
-    // That is the same bounded, one-time, non-repeating trade the `pasc` block makes
-    // ("keep the perks and record the debt"), and it is the right way round: losing
-    // an entire Pilot Tree to a stale login is unrecoverable, an extra node is not.
+    // ---- PILOT TREE node ranks. THE UNION NOW PAYS FOR ITSELF.
+    //
+    // Nodes are bought with Dread Cores, and a wallet is never unioned (it
+    // follows the base pick). So this union used to hand back the SPEND while
+    // keeping the GOODS: buy nodes on one device, let the copy that still shows
+    // the pre-purchase wallet win the base pick, and the nodes arrive free. This
+    // comment used to call that "bounded, one-time, non-repeating". On an account
+    // with 672 `concurrent-session` conflicts it was none of the three — it built
+    // a 1,502-node tree out of one 32-core wallet, which is more tree than the
+    // rest of the player base combined (nobody else is past 60).
+    //
+    // The union STAYS: losing an entire Pilot Tree to a stale login is
+    // unrecoverable and an extra node is not. What changes is that every node
+    // this merge ADDS from the losing copy is priced and deducted from the
+    // merged wallet — the same "keep the ranks, record the debt" trade the
+    // `pasc` block above makes, and for the same reason.
+    //
+    // IDEMPOTENT BY CONSTRUCTION: merging the result again adds no nodes, so it
+    // charges nothing. UNDERCHARGING IS THE ONLY SAFE DIRECTION, so a node whose
+    // price cannot be read costs 1 (the ordinary node; legendaries are 3), and
+    // the charge floors at zero rather than driving a wallet negative — a debt
+    // bigger than the wallet is forgiven, because the refund loop is already
+    // dead once the wallet stops being handed back.
     if (other.pilot && other.pilot.nodes) {
       base.pilot = base.pilot || {};
       base.pilot.nodes = base.pilot.nodes || {};
-      for (const n in other.pilot.nodes) base.pilot.nodes[n] = Math.max(base.pilot.nodes[n] | 0, other.pilot.nodes[n] | 0);
+      const nodePrice = (k) => { try { return Math.max(1, window.DREAD.nodeCost(k) | 0); } catch (e) { return 1; } };
+      let debt = 0, gained = 0;
+      for (const n in other.pilot.nodes) {
+        const had = base.pilot.nodes[n] | 0, theirs = other.pilot.nodes[n] | 0;
+        if (theirs > had) {
+          base.pilot.nodes[n] = theirs;
+          if (!had) { debt += nodePrice(n); gained++; }
+        }
+      }
+      if (debt > 0) {
+        const before = Math.floor(Number(base.dreadCores) || 0);
+        base.dreadCores = Math.max(0, before - debt);
+        // permanent, queryable forensic: how many cores this save has had charged
+        // back by merges. Telemetry only — nothing reads it as progression.
+        base.pilot.mdebt = Math.floor(Number(base.pilot.mdebt) || 0) + debt;
+        try { console.warn('[LOOTFLEET] merge kept ' + gained + ' pilot node(s) from the losing copy and charged ' + debt + ' cores (' + before + ' → ' + base.dreadCores + ')'); } catch (e) {}
+      }
     }
     // ---- PRISM: refinery level and career bests only. `ingots` is a wallet.
     if (other.prism) {
@@ -783,10 +845,18 @@
     // it — and the hull ranks under it are permanent progression that nothing in
     // saveWeight() is large enough to defend.
     //
-    // NOT EPOCH-GUARDED, deliberately: neither pilot ascension nor the epoch
-    // reset touches `expo` (it is not in the PASC_EPOCH migration's clear list
-    // and pilotAscend() never assigns it), so unioning it cannot undo a reset —
-    // the test every entry in this block has to pass.
+    // NOT EPOCH-GUARDED: the PASC_EPOCH migration's clear list does not name
+    // `expo`, so unioning it cannot undo the epoch reset — the test every entry
+    // in this block has to pass.
+    //
+    // THIS COMMENT USED TO CLAIM PILOT ASCENSION DID NOT TOUCH `expo` EITHER,
+    // on the grounds that "pilotAscend() never assigns it". It never assigns it
+    // — it DELETED it. Step 2 of pilotAscend() is `delete state[k]` across every
+    // key, after which only ASC_KEEP names are restored, and `expo` was not one
+    // of them: the whole lifetime record went on every ascension. Fixed in build
+    // 727 by naming it in ASC_KEEP. A claim about save shape proved by the
+    // ABSENCE of an assignment is worthless when the reset works by deletion —
+    // read the KEEP list, not the assignments.
     //
     // `act` IS THE DANGEROUS FIELD, because collecting one PAYS OUT. It is
     // unioned by id with done-wins: if EITHER copy saw an expedition collected

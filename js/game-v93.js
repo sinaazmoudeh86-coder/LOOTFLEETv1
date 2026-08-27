@@ -239,6 +239,19 @@
     // back the blueprint chase they had already finished. The hulls themselves are
     // safe already — `blueprints` and `ownedShips` are entitlements and are kept.
     'mechCores', 'mech',
+    // FLEET EXPLORATION SURVIVES ASCENSION (build 727). `expo` holds the LIFETIME
+    // record the Exploration ladder is scored on (`log.done` expeditions flown,
+    // `log.best` strongest wing ever sent), every hull's survey rank, and any run
+    // still in flight. It was missing here, so pilotAscend() deleted it and ex()
+    // rebuilt it at done:0 — the board then reported expeditions flown SINCE THE
+    // LAST ASCENSION under a caption that claims a career total. That is the
+    // "I've flown a lot more than 12" report, and it broke two separate rules:
+    // a lifetime counter is not run progress (`totalKills` and `lifetimeMissions`
+    // are kept for exactly this reason), and an expedition is up to 24 REAL HOURS
+    // of wall clock the pilot has already paid fuel for — a calendar commitment,
+    // not a fleet the reset is entitled to take. Collecting a pre-ascension run
+    // afterwards is safe: restoreEscorts() no-ops on the disbanded wing.
+    'expo',
     // COMMANDERS SURVIVE ASCENSION. The collection is not the pilot's run — a card
     // pulled at 1-in-24,000 cannot be re-earned on demand, and the chase is gated
     // at ★5 so it only exists for pilots who ascend. The fleet resets; the album
@@ -2213,9 +2226,25 @@
   function isPickupUpgrade(item) {
     const targets = slotsForBase(item.slot);
     if (!targets.length) return false;
-    let weakest = Infinity, empty = false;
-    targets.forEach((t) => { const e = state.equipped[t]; if (!e) empty = true; else weakest = Math.min(weakest, I.itemPower(e)); });
-    if (empty || I.itemPower(item) > weakest) return true;
+    // CAN THE HULL BEING FLOWN EVEN MOUNT IT?
+    //
+    // The flagship test below is a POWER comparison against whatever sits in the
+    // matching slots, and it used to run for items the flagship structurally
+    // refuses. The four AEGIS FIELD PROJECTORS and the Warden Array are `bow`
+    // items, so on any hull that is not an Aegis they were power-compared against
+    // the CANNONS — a category error. An aura projector rolls ordinary stat lines,
+    // so it usually came out above the weakest cannon, returned "this is an
+    // upgrade", and was therefore pinned in the hold forever: auto-sell would
+    // never clear hull-locked gear the pilot cannot fit and may not even own the
+    // hull for. That is the reported "Aegis-only items don't auto-sell properly".
+    //
+    // The fleet loop below already asked this question. The flagship never did.
+    const flagOk = canMountWeapon(item, state.ship);
+    if (flagOk) {
+      let weakest = Infinity, empty = false;
+      targets.forEach((t) => { const e = state.equipped[t]; if (!e) empty = true; else weakest = Math.min(weakest, I.itemPower(e)); });
+      if (empty || I.itemPower(item) > weakest) return true;
+    }
     // FLEET-AWARE (Jul 2026): a drop that upgrades ANY escort's fitting is kept
     // too — auto-sell must never scrap gear the rest of the fleet needs.
     for (const sh of fleetShips()) {
@@ -2223,6 +2252,27 @@
       const fit = (state.fittings || {})[sh.key] || {};
       const eT = C.shipSlots(sh.key).filter((sk) => C.slotBase(sk) === item.slot);
       for (const t of eT) { const e = fit[t]; if (!e || I.itemPower(item) > I.itemPower(e)) return true; }
+    }
+    // …AND HANGAR-AWARE, for the hull-locked case only.
+    //
+    // Gating the flagship test above is what lets a projector sell — but on its own
+    // it would also scrap projectors belonging to an Aegis parked in the HANGAR,
+    // which is a hull the account owns and can fly at any time. Losing the only
+    // Venom Lattice a pilot has ever seen because they happened to be flying a
+    // Titan is not a convenience, it is a loss.
+    //
+    // So for an item this flagship cannot mount, ask every OWNED hull that can, on
+    // exactly the terms the fleet loop uses: better than what is in its slots, or
+    // filling an empty one. Anything no owned hull can use stays eligible, which is
+    // what makes auto-sell work again.
+    if (!flagOk) {
+      const owned = state.ownedShips || {};
+      for (const k in owned) {
+        if (!owned[k] || !C.SHIP_BY_KEY[k] || !canMountWeapon(item, k)) continue;
+        const fit = (state.fittings || {})[k] || {};
+        const eT = C.shipSlots(k).filter((sk) => C.slotBase(sk) === item.slot);
+        for (const t of eT) { const e = fit[t]; if (!e || I.itemPower(item) > I.itemPower(e)) return true; }
+      }
     }
     return false;
   }
@@ -4485,7 +4535,23 @@
   // Armed on ENTRY only (not from resetZone, which also fires mid-zone), so
   // turning it off to dodge something by hand stays off for that whole visit.
   function armAuto() {
-    if (state.auto) return;
+    // A DEPLOY IS A FRESH START.
+    //
+    // `autoManual` records that the pilot turned autopilot off BY HAND, and it
+    // lives in the SAVE — so one tap of the AUTO pill, or one arrow key on a
+    // desktop, latched it forever. From then on the arena's own re-arm in
+    // showScreen('battle') was permanently switched off, with nothing on screen
+    // explaining why. That is "auto attack should always default on — for some
+    // reason it's not on again": a single accidental tap, months ago, silently
+    // changed the default for good.
+    //
+    // Manual flight is a choice about the fight you are IN, not an account
+    // setting. Clearing it here scopes it to the visit: tap auto off and it stays
+    // off for this deployment; deploy again and you are back on autopilot.
+    state.autoManual = false;
+    // IDEMPOTENT, NOT EARLY-RETURNING. This used to bail the instant state.auto
+    // was already true, which skipped the stick reset below — so a deploy that
+    // began mid-drag carried a live joystick vector into the new zone.
     state.auto = true;
     rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
     try { save(); } catch (e) {}   // persist NOW — a reload must not resurrect stale manual

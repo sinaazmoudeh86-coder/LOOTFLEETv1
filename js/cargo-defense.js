@@ -155,9 +155,11 @@
   // ===========================================================================
   // ETERNUM — commissioned, never rolled
   // ---------------------------------------------------------------------------
-  // The Celestial Class is not loot. It is BUILT, once, by a pilot who has
-  // already done everything: 1,000 missions, ★50, a Titan Sina in the hangar —
-  // and then paid the yard 10T gold, 1T of every resource and 10,000 LootCoins.
+  // The Celestial Class is not loot. It is BUILT, once, by a pilot who holds the
+  // licence in the hull's own flyReq (cargo runs secured, Pilot Ascension stars,
+  // a Titan Sina in the hangar) and then pays the yard its claimCost. Both live
+  // in config-v2 and are READ here — this file used to keep its own copy of every
+  // figure, and they had drifted apart from the gate they described.
   // ===========================================================================
   const ETERNUM = 'eternum';
   const claimCost = () => ((C().SHIP_BY_KEY[ETERNUM] || {}).claimCost || {});
@@ -169,6 +171,15 @@
     credits: { ic: '◈', col: '#ffd66a', name: 'LootCoins', get: () => G().state.credits || 0 },
   };
   const claimShort = () => Object.keys(claimCost()).filter((k) => WALLET[k].get() < claimCost()[k]);
+  // What the yard actually takes, spelled out from claimCost. The confirm sheet
+  // used to say "10T of every primary and 100,000 LootCoins" for a bill that is
+  // 10T gold, 1T each of fuel/iron/plasma and 10,000 LootCoins — wrong on both
+  // counts, on the one sheet that authorises an irreversible spend.
+  function claimSummary() {
+    const c = claimCost();
+    return Object.keys(WALLET).filter((k) => c[k])
+      .map((k) => WALLET[k].ic + ' ' + fmt(c[k]) + ' ' + WALLET[k].name).join(' · ');
+  }
   function payClaim() {
     const s = G().state, c = claimCost();
     s.gold -= (c.gold || 0);
@@ -180,13 +191,14 @@
     const s = G().state;
     const own = !!(s.ownedShips || {})[ETERNUM];
     const fly = G().canFlyShip ? G().canFlyShip(ETERNUM) : { ok: true, need: [] };
+    const rq = ((C().SHIP_BY_KEY[ETERNUM] || {}).flyReq) || {};
     return { own, fly,
       // THE LICENCE COUNTS CARGO RUNS SECURED, not missions. This read
       // lifetimeMissions — the general board tally — so a capstone earned inside
       // Space Cargo Defense was being paid off by daily mission boards instead.
-      hauls: (s.cargo && s.cargo.wins) | 0, haulsNeed: 1000,
-      stars: stars(), starsNeed: 100,
-      sina: !!(s.ownedShips || {}).titansina };
+      hauls: (s.cargo && s.cargo.wins) | 0, haulsNeed: rq.cargo | 0,
+      stars: stars(), starsNeed: rq.stars | 0,
+      sina: !!(s.ownedShips || {})[rq.ship || 'titansina'] };
   }
   function commission() {
     const g = G(), r = eternumReq();
@@ -196,7 +208,7 @@
     if (short.length) { toast('Short on ' + short.map((k) => WALLET[k].name).join(' · '), '#e23b4e'); return; }
     if (!window.SOCIAL || !window.SOCIAL.confirmSheet) return doCommission();
     window.SOCIAL.confirmSheet('Commission the Eternum?',
-      'The yard takes 10T of every primary and 100,000 LootCoins. It is spent immediately and cannot be refunded.', doCommission);
+      'The yard takes ' + claimSummary() + '. It is spent immediately and cannot be refunded.', doCommission);
   }
   function doCommission() {
     const g = G(), c = st();
@@ -248,7 +260,7 @@
         '<div class="cd-et-line">1.5× the Titan Sina on every line · five <b>death beams</b> that lock the nearest hostiles and never let go · a standing <b>celestial aura</b> that burns anything near the hull.</div>' +
         '<div class="cd-et-reqs">' +
           '<div class="cd-et-reqh">' + (r.own ? 'LICENCE COMPLETE' : 'LICENCE TO BUILD AND FLY') + '</div>' +
-          row(r.hauls >= r.haulsNeed, fmt(r.hauls) + ' / 1,000', 'Cargo runs secured') +
+          row(r.hauls >= r.haulsNeed, fmt(r.hauls) + ' / ' + fmt(r.haulsNeed), 'Cargo runs secured') +
           row(r.stars >= r.starsNeed, '★' + r.stars + ' / ' + r.starsNeed, 'Pilot Ascension') +
           row(r.sina, r.sina ? 'IN HANGAR' : 'MISSING', 'Titan Sina') +
         '</div>' +

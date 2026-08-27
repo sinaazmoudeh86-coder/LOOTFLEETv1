@@ -70,15 +70,39 @@
     // would dereference a non-existent #screen-undefined and throw.
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => { if (b.dataset.screen) showScreen(b.dataset.screen); }));
     buildSpeedRow();
+    // WHICH SCREEN WAS SHOWING WHEN THE FINGER WENT DOWN.
+    //
+    // The pill floats over menus, and `screen` is reassigned SYNCHRONOUSLY at the
+    // top of showScreen() — so a single tap that overlapped both a Zone Grind row
+    // and this pill fired the row first (switching to battle and arming autopilot)
+    // and then the pill, which by that point saw screen === 'battle' and toggled
+    // autopilot straight back off, latching autoManual for good. The guard read
+    // the state the earlier handler had already changed.
+    //
+    // Judging by where the press STARTED closes that: a press that began on
+    // another screen can never toggle the arena's autopilot.
+    let _autoDownScreen = null;
+    el['auto-btn'].addEventListener('pointerdown', () => { _autoDownScreen = screen; });
+    // A PRESS THAT NEVER BECOMES A CLICK MUST NOT LEAVE ITS SCREEN LATCHED.
+    // Only the click handler cleared this, so a finger that slid off the pill (or a
+    // cancelled pointer) left 'battle' recorded — and the next click that arrived
+    // without a pointerdown of its own inherited it and passed the guard.
+    el['auto-btn'].addEventListener('pointercancel', () => { _autoDownScreen = null; });
     el['auto-btn'].addEventListener('click', () => {
+      const from = _autoDownScreen; _autoDownScreen = null;
       if (screen !== 'battle') return;   // the pill floats over menus too — dead unless the arena is showing
+      if (from !== null && from !== 'battle') return;   // …and the press has to have STARTED in the arena
       G.setAuto(!G.getAuto());
-      // REMEMBER THE PLAYER'S OWN CHOICE. Turning autopilot off by hand is a
-      // decision, and returning to the arena from any menu used to overwrite it
-      // (see showScreen('battle') below) — so a manual pilot who opened a tab
-      // came back on autopilot. Only a HAND toggle writes this flag; the event
-      // systems that force auto off for their own duration never touch it, so
-      // the post-event restore still works.
+      // REMEMBER THE PLAYER'S OWN CHOICE, FOR THIS DEPLOYMENT. Turning autopilot
+      // off by hand is a decision, and returning to the arena from any menu used
+      // to overwrite it (see showScreen('battle') below) — so a manual pilot who
+      // opened a tab came back on autopilot. Only a HAND toggle writes this flag;
+      // the event systems that force auto off for their own duration never touch
+      // it, so the post-event restore still works.
+      //
+      // IT IS NO LONGER PERMANENT. armAuto() clears it on every deploy, because a
+      // save-persisted flag meant one tap here silently disabled the arena's
+      // auto-default for the rest of the account's life.
       G.state.autoManual = !G.getAuto();
       try { G.save(); } catch (e) {}
       syncAuto();
@@ -171,6 +195,19 @@
     if (name !== 'battle') { try { window.PROOFFER && PROOFFER.flush(); } catch (e) {} }
     document.querySelectorAll('.screen.overlay').forEach((s) => s.classList.remove('active'));
     if (sc) sc.classList.add('active');
+    // STOP PAINTING THE ARENA ON THIS FRAME, not up to 140ms from now.
+    //
+    // draw() and update()'s render gate both cache "is an overlay covering me" on a
+    // ~7Hz poll of the DOM (rt._avT / rt._ovT). That is the right cadence for a
+    // steady state and the wrong one for the instant a menu opens: the arena kept
+    // compositing at full device resolution for several more frames — exactly while
+    // the player is waiting to see the screen they tapped. Harmless on a desktop,
+    // very visible on a phone at DPR 2–3.
+    //
+    // The class changes above have already landed, so invalidating both stamps here
+    // makes the very next frame re-read the DOM and skip the paint. Nothing about
+    // the SIMULATION is touched — it keeps real wall-clock time either way.
+    try { const _rt = G.rt; if (_rt) { _rt._avT = 0; _rt._ovT = 0; } } catch (e) {}
     const navName = (name === 'hero' || name === 'social' || name === 'mail') ? 'store' : name;
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navName));
     if (name === 'hero') renderHero();
@@ -557,7 +594,7 @@
            <p class="acct-hint" style="margin:6px 0 0;font-size:9.5px;color:#66798d">Sent to ${s.email}</p>`
         : `<p class="acct-hint">The daily fleet report needs a cloud account — sign up with email to enable it.</p>`}` : ''}
       <div class="lo-sect" style="margin-top:11px">🛠 Support</div>
-      <div class="acct-row"><a class="btn" href="support.html" target="_blank" rel="noopener" style="text-decoration:none;text-align:center;flex:1">Help &amp; Support</a></div>
+      <div class="acct-row"><a class="btn" href="https://discord.gg/4F6cYmP4f" target="_blank" rel="noopener noreferrer" style="text-decoration:none;text-align:center;flex:1">Help &amp; Support on Discord</a></div>
       ${(window.LF_FS && window.LF_FS.supported) ? `<div class="lo-sect" style="margin-top:11px">Display</div>
       <div class="acct-row"><button class="btn" id="ac-fs" style="flex:1">⛶ ${(window.LF_FS.on && window.LF_FS.on()) ? 'Exit full screen' : 'Enter full screen'}</button></div>` : ''}
       <div class="lo-sect" style="margin-top:11px;color:#ff8a96">Danger zone</div>
@@ -1364,6 +1401,7 @@
   // BAG
   // ==========================================================================
   function renderBag() {
+    bagCacheReset();
     const inv = G.state.inventory.slice();
     sortInv(inv);
     el['bag-sub'].textContent = inv.length + ' / ' + (G.invCap ? G.invCap() : 100) + ' slots';
@@ -1413,7 +1451,7 @@
         <option value="slot">Sort: Slot</option><option value="ilvl">Sort: Zone</option>
       </select></div>`;
     if (!inv.length) html += '<div id="bag-items"><div class="empty-note">No loot in your bag.<br>Run over drops to collect them.</div></div>';
-    else html += '<div id="bag-items">' + inv.map(itemCard).join('') + '</div>';
+    else html += '<div id="bag-items">' + bagRows(inv).map(itemCard).join('') + bagMoreBtn(inv) + '</div>';
     el['bag-body'].innerHTML = html;
     const cb = $('cargo-buy'); if (cb) cb.addEventListener('click', () => {
       const r = G.buyInvSlots();
@@ -1440,15 +1478,24 @@
     tierSel.addEventListener('change', () => { G.state.sellTier = +tierSel.value; G.save(); });
     keep.addEventListener('change', () => { G.state.keepUpgrades = keep.checked; G.save(); });
     $('auto-sell').addEventListener('click', () => openAutoSell(+tierSel.value, keep.checked));
+    const bm = $('bag-more'); if (bm) bm.addEventListener('click', () => { _bagAll = true; renderBag(); });
     bindBagItems();
   }
   // Bind click-to-open on the item cards. Used by both the full renderBag and the
   // lightweight live refresh below.
   function bindBagItems() {
-    const host = document.getElementById('bag-items'); if (!host) return;
-    host.querySelectorAll('[data-id]').forEach((node) => node.addEventListener('click', () => {
-      const it = G.state.inventory.find((x) => x.id === +node.dataset.id); if (it) openItem(it, 'inventory');
-    }));
+    const host = document.getElementById('bag-items'); if (!host || host._lfDeleg) return;
+    // ONE DELEGATED LISTENER, not one per card. This used to attach a handler to
+    // every row, so a 1,000-item hold registered 1,000 of them — and did it again on
+    // every live refresh while farming. The container survives an innerHTML swap of
+    // its children, so the flag holds it to exactly one for the life of the panel.
+    host._lfDeleg = 1;
+    host.addEventListener('click', (e) => {
+      const node = e.target.closest('[data-id]');
+      if (!node || !host.contains(node)) return;
+      const it = G.state.inventory.find((x) => x.id === +node.dataset.id);
+      if (it) openItem(it, 'inventory');
+    });
   }
   // LIVE bag refresh while farming with the Loot tab open. Rebuilds ONLY the
   // item-list container (not the whole panel) so the cargo meter, filters and
@@ -1456,6 +1503,7 @@
   function renderBagItems() {
     const host = document.getElementById('bag-items');
     if (!host) { renderBag(); return; }
+    bagCacheReset();
     const inv = G.state.inventory.slice();
     sortInv(inv);
     const cap = G.invCap ? G.invCap() : 100;
@@ -1464,15 +1512,27 @@
     const cf = el['bag-body'].querySelector('.cargo-fill');
     if (cf) cf.style.width = Math.min(100, inv.length / cap * 100) + '%';
     host.innerHTML = inv.length
-      ? inv.map(itemCard).join('')
+      ? bagRows(inv).map(itemCard).join('') + bagMoreBtn(inv)
       : '<div class="empty-note">No loot in your bag.<br>Run over drops to collect them.</div>';
+    const bm2 = document.getElementById('bag-more');
+    if (bm2) bm2.addEventListener('click', () => { _bagAll = true; renderBag(); });
     bindBagItems();
   }
   function sortInv(inv) {
-    if (sortMode === 'power') inv.sort((a,b) => G.itemPower(b) - G.itemPower(a));
-    else if (sortMode === 'rarity') inv.sort((a,b) => b.rarity - a.rarity || G.itemPower(b) - G.itemPower(a));
-    else if (sortMode === 'slot') inv.sort((a,b) => a.slot.localeCompare(b.slot) || b.rarity - a.rarity);
-    else inv.sort((a,b) => b.ilvl - a.ilvl);
+    // POWER WAS RECOMPUTED INSIDE THE COMPARATOR. itemPower() walks the item's stat
+    // map and runs classAdjustPower, and a comparator calls it twice per
+    // comparison — so sorting a 1,000-item hold cost roughly 20,000 of them, and
+    // the hold re-renders up to 3×/sec while farming with the Loot tab open.
+    // Decorated once and sorted on the number instead: 1,000 calls, not 20,000.
+    if (sortMode === 'power' || sortMode === 'rarity') {
+      const p = new Map();
+      for (let i = 0; i < inv.length; i++) p.set(inv[i], G.itemPower(inv[i]));
+      if (sortMode === 'power') inv.sort((a, b) => p.get(b) - p.get(a));
+      else inv.sort((a, b) => (b.rarity - a.rarity) || (p.get(b) - p.get(a)));
+      return;
+    }
+    if (sortMode === 'slot') inv.sort((a, b) => a.slot.localeCompare(b.slot) || b.rarity - a.rarity);
+    else inv.sort((a, b) => b.ilvl - a.ilvl);
   }
   function specialTags(it) {
     let t = '';
@@ -1489,7 +1549,58 @@
       <div class="ic-sub">${r.name} · ${C.SLOTS[it.slot].name} · Z${it.dungeon}</div></div>
       <div style="display:flex;gap:4px;align-items:center">${specialTags(it)}${up ? '<span class="ic-tag up">▲</span>' : ''}</div></div>`;
   }
-  function isUpgrade(it) { const cur = G.state.equipped[it.slot]; return !cur || G.itemPower(it) > G.itemPower(cur); }
+  // THE EQUIPPED ITEM'S POWER IS THE SAME NUMBER FOR EVERY ROW IN ITS SLOT, and it
+  // was recomputed once per card — N extra itemPower() calls per render to answer
+  // eight distinct questions. Cached per render pass instead. bagCacheReset() runs
+  // at the top of BOTH bag renders, so it can never serve a stale figure across a
+  // re-equip, a sell or a pickup.
+  let _eqPow = null;
+  function bagCacheReset() { _eqPow = new Map(); }
+  function eqPower(slot) {
+    if (!_eqPow) _eqPow = new Map();
+    if (!_eqPow.has(slot)) { const cur = G.state.equipped[slot]; _eqPow.set(slot, cur ? G.itemPower(cur) : -Infinity); }
+    return _eqPow.get(slot);
+  }
+  function isUpgrade(it) { return G.itemPower(it) > eqPower(it.slot); }
+  // ---- ROW CAP -------------------------------------------------------------
+  // Every other long list in this file is paginated, and the galaxy one says why
+  // in as many words: 1,950 rows is a browser-killer on a phone. The hold was the
+  // one list that rendered ALL of it — one card per item, each carrying an inline
+  // SVG icon, rebuilt up to 3×/sec while farming. That is main-thread work a phone
+  // cannot hide, so the next menu tap queues behind it. It never showed on desktop
+  // because a desktop simply absorbs it.
+  //
+  // The cap is deliberately generous: an ordinary hold renders exactly as it did
+  // and nobody sees a change. Only a hoard is bounded, the count says so plainly,
+  // and one tap opts back into the full list.
+  const BAG_CAP = 200;
+  let _bagAll = false;
+  function bagRows(inv) { return (!_bagAll && inv.length > BAG_CAP) ? inv.slice(0, BAG_CAP) : inv; }
+  function bagMoreBtn(inv) {
+    if (_bagAll || inv.length <= BAG_CAP) return '';
+    return `<button class="bag-more" id="bag-more">Showing the top ${BAG_CAP} of ${inv.length} — show all</button>`;
+  }
+  // A MEASUREMENT, NOT A GUESS. Reported mobile lag on the battle → zones → loot
+  // path is main-thread render cost; this is how to confirm it on the device that
+  // actually has the problem instead of inferring it from a desktop. Same idea as
+  // CARGORUN.trace(). Call UI.bagTrace() in the console.
+  function bagTrace() {
+    const inv = (G.state.inventory || []).slice();
+    const t0 = performance.now();
+    bagCacheReset();
+    sortInv(inv);
+    const t1 = performance.now();
+    const rows = bagRows(inv);
+    const html = rows.map(itemCard).join('');
+    const t2 = performance.now();
+    const probe = document.createElement('div');
+    probe.innerHTML = html;
+    const t3 = performance.now();
+    const nodes = probe.querySelectorAll('*').length;
+    return { items: inv.length, rendered: rows.length, cap: _bagAll ? 'off' : BAG_CAP, sort: sortMode,
+      sortMs: +(t1 - t0).toFixed(1), buildMs: +(t2 - t1).toFixed(1), parseMs: +(t3 - t2).toFixed(1),
+      totalMs: +(t3 - t0).toFixed(1), domNodes: nodes };
+  }
 
   // confirm auto-sell with the chosen filter
   function openAutoSell(maxTier, keepUpgrades) {
@@ -1624,10 +1735,31 @@
       feed.slice(0, 3).forEach((f) => { html += `<div class="gxf-row ${f.mine ? 'mine' : ''}">${f.msg}</div>`; });
       html += '</div>';
     }
-    html += `<div class="gx-viewtog" role="group" aria-label="Galaxy view">`
-      + `<button class="gx-vt${_gxView === 'map' ? ' on' : ''}" data-gxv="map">⬡ Map</button>`
-      + `<button class="gx-vt${_gxView === 'list' ? ' on' : ''}" data-gxv="list">☰ List</button>`
-      + `</div>`;
+    // BOTH OPTIONS, ALWAYS VISIBLE — AND LOUD.
+    //
+    // A single destination-naming button was clearer per-word but hid the fact that
+    // TWO views exist at all, which is the thing players need to see. So it is a
+    // segment again: both options on screen, the active one filled, the other one
+    // plainly tappable rather than greyed like a disabled sibling.
+    //
+    // Discoverability comes from the treatment instead of the wording: an accent
+    // frame, a breathing glow, a sheen that sweeps across it and a pulse on the
+    // option you are NOT on — all of which stop for good the first time the control
+    // is used. The caption says what the other view gives you, so the payoff is
+    // stated rather than guessed at.
+    {
+      const fresh = !gxViewSeen();
+      html += `<div class="gx-viewsw${fresh ? ' fresh' : ''}" role="group" aria-label="Galaxy view">`
+        + `<div class="gxv-row">`
+          + `<button class="gxv-b${_gxView === 'map' ? ' on' : ''}" data-gxv="map">\u2b21 Map</button>`
+          + `<button class="gxv-b${_gxView === 'list' ? ' on' : ''}" data-gxv="list">\u2630 List</button>`
+        + `</div>`
+        + `<span class="gxv-s">${_gxView === 'map'
+            ? 'Tap <b>List</b> to search, sort and filter every system'
+            : 'Tap <b>Map</b> to go back to the galaxy'}</span>`
+        + (fresh ? '<i class="gxv-new">NEW</i>' : '')
+        + `</div>`;
+    }
     if (_gxView === 'list') {
       html += gxListHTML();
       el['galaxy-body'].innerHTML = html;
@@ -1714,9 +1846,23 @@
     // this wrong printed a 24-hour shield as "86s".
     const cd = G.tileCooldownLeft ? G.tileCooldownLeft(id) : 0;
     const citLv = (G.state.rivalCitadels && G.state.rivalCitadels[id]) || 0;
-    const myCit = owned && G.state.citadels && G.state.citadels[id];
-    const attackCit = !owned && (t.citadel || citLv > 0);
-    return { t, id, owned, rival, rivalName, ally, locked, cd, citLv, myCit, attackCit,
+    // THREE DIFFERENT THINGS, CLASSIFIED APART.
+    //
+    // There used to be two flags with a gap between them: `myCit` for a fortress
+    // the pilot BUILT, `attackCit` for one they can go and hit — and the second was
+    // gated on `!owned`. So a NATURAL citadel sitting on a tile the pilot already
+    // owns matched neither, and dropped straight out of the ⛓ Citadels filter. It
+    // is the same blind spot the My Systems header had: the code knew "mine" and
+    // "theirs" but had no word for "the one that came with the ground".
+    //
+    // `t.citadel` is the natural fortress and is already correct for razed tiles —
+    // razeCitadelTile() clears the flag and the razings are re-applied on load.
+    const myLv = (owned && G.citadelLevel) ? (G.citadelLevel(id) | 0) : 0;
+    const myCit = myLv > 0;
+    const natCit = !!t.citadel;
+    const anyCit = myCit || natCit || citLv > 0;
+    const attackCit = !owned && (natCit || citLv > 0);
+    return { t, id, owned, rival, rivalName, ally, locked, cd, citLv, myLv, myCit, natCit, anyCit, attackCit,
              rate: t.rate | 0, res: t.resource || '', ring: t.ring | 0, level: t.level | 0 };
   }
   function gxCandidates() {
@@ -1737,7 +1883,7 @@
       // above your level band, and it is not inside a contest lockout. A list
       // that shows a tile you cannot act on is the map's problem repeated.
       case 'free':  return !r.owned && !r.rival && !r.ally && !r.locked && r.cd <= 0;
-      case 'cit':   return r.attackCit || !!r.myCit;
+      case 'cit':   return r.anyCit;
       case 'rival': return r.rival;
       case 'alien': return !!r.t.alien;
       case 'boss':  return !!r.t.boss;
@@ -1771,17 +1917,29 @@
     let rows = page.map((r) => {
       const t = r.t;
       const rd = GM.RES[r.res] || { glyph: '', color: '#8ba0b5', name: '' };
-      const marks = (t.citadel || r.citLv ? '<i class="gxr-m cit" title="Citadel">⛓</i>' : '')
+      // ICONOGRAPHY. ⛓ is a citadel a PLAYER built — gold when it is yours, amber
+      // when it is someone else's and therefore a target — and ⛴ is the natural
+      // fortress that came with the tile. These are the same two glyphs the My
+      // Systems rows use, so there is one vocabulary across both screens rather
+      // than one ⛓ standing for three unrelated things, which is what it did.
+      //
+      // No `title` on any mark: a mark that needs a tooltip to be understood does
+      // not communicate on a phone. The legend under the count carries it instead.
+      const marks = (r.myCit ? '<i class="gxr-m cit mine">⛓</i>' : '')
+        + (r.citLv ? '<i class="gxr-m cit rival">⛓</i>' : '')
+        + (r.natCit ? '<i class="gxr-m nat">⛴</i>' : '')
         + (t.boss ? '<i class="gxr-m boss">☠</i>' : '')
         + (t.alien ? '<i class="gxr-m xen">◈</i>' : '')
         + (t.deep ? '<i class="gxr-m deep">◆</i>' : '');
       // WHO HOLDS IT, and WHAT IS ON IT. A list of anonymous tiles cannot answer
       // "is this one worth attacking" — the holder's name and the fortress rank
-      // are the whole decision.
+      // are the whole decision. YOUR OWN RANK IS PRINTED TOO: it used to say only
+      // "your citadel" while printing a rank for rival ones, so the one citadel
+      // whose rank the pilot actually controls was the one they could not read.
       const bits = ['Lv ' + r.level, t.type];
-      if (r.citLv) bits.push('⛓ rank ' + r.citLv);
-      else if (t.citadel) bits.push('⛓ fortress');
-      if (r.myCit) bits.push('⛓ your citadel');
+      if (r.myCit) bits.push('⛓ your citadel · rank ' + r.myLv);
+      if (r.citLv) bits.push('⛓ rival citadel · rank ' + r.citLv);
+      if (r.natCit) bits.push('⛴ natural fortress');
       if (r.rivalName) bits.push('held by ' + esc(r.rivalName));
       else if (r.ally) bits.push('allied');
       const state = r.owned ? '<em class="gxr-s mine">YOURS</em>'
@@ -1812,7 +1970,7 @@
           + (shield ? ' · ' + G.formatNum(shield) + ' under a contest shield' : '')
           + '.<br><span class="gxl-hint">Level up to widen the band, or take one from a rival.</span>';
       }
-      else if (_gxFilter === 'cit') why = 'No citadels match. They are rare — about one tile in thirty, ring 2 and deeper.';
+      else if (_gxFilter === 'cit') why = 'No citadels in range yet. Natural fortresses are rare — about one tile in thirty, ring 2 and deeper — and you can raise your own on any system you already hold.';
       else if (_gxFilter === 'mine') why = 'You hold nothing yet. Claim a tile from the map or the Available filter.';
       else why = 'Nothing matches this filter.';
       rows = '<div class="gxl-empty">' + why + '</div>';
@@ -1826,6 +1984,15 @@
       + '</div>'
       + `<div class="gxl-chips">${chips}</div>`
       + `<div class="gxl-count">${all.length ? from + '–' + to + ' of ' + G.formatNum(all.length) : '0'} systems</div>`
+      // THE LEGEND, ONLY WHERE THE MARKS ARE THE POINT. Three citadel glyphs need
+      // saying once in words — and this is the filter a pilot opens to compare them,
+      // so it is the one place the key earns its space. It replaces the `title`
+      // tooltip that used to be the only explanation and never reached a phone.
+      + (_gxFilter === 'cit' ? '<div class="gxl-key">'
+          + '<span><i class="gxr-m cit mine">\u26d3</i> yours</span>'
+          + '<span><i class="gxr-m cit rival">\u26d3</i> another pilot\u2019s</span>'
+          + '<span><i class="gxr-m nat">\u26f4</i> natural fortress</span>'
+        + '</div>' : '')
       + `<div class="gxl-rows" id="gxl-rows">${rows}</div>`
       + (pages > 1 ? '<div class="gxl-page">'
           + `<button class="gxl-pg" data-gxp="prev"${_gxPage <= 0 ? ' disabled' : ''}>‹ Prev</button>`
@@ -1876,9 +2043,14 @@
       if (q2) { q2.focus(); try { q2.setSelectionRange(at, at); } catch (e) {} }
     });
   }
+  // THE NUDGE IS A DEVICE FACT, like the view choice itself. Shown until the pilot
+  // uses the control once, then never again — re-offering something someone has
+  // already found is nagging.
+  function gxViewSeen() { try { return localStorage.getItem('lf_gx_viewseen') === '1'; } catch (e) { return true; } }
   function setGxView(v) {
     _gxView = v;
     try { localStorage.setItem('lf_gx_view', v); } catch (e) {}
+    try { localStorage.setItem('lf_gx_viewseen', '1'); } catch (e) {}
     renderGalaxy();
   }
 
@@ -1889,23 +2061,88 @@
   // Colours mirror GALAXYMAP.RES exactly — iron is amber (#d0a060), not the
   // silver-grey it was drawn with here, which read as a different resource.
   const MS_RES = { gold: ['$', '#e6b566'], fuel: ['⬢', '#5bc0ff'], iron: ['◆', '#d0a060'], plasma: ['✦', '#c07bff'] };
+  // SORT + FILTER ARE DEVICE PREFERENCES, not save state — the same reason the
+  // Pilot Tree's map/list toggle lives in localStorage. A phone and a desktop want
+  // different defaults and neither should ride the cloud save onto the other.
+  let _msSort = 'rev', _msCitOnly = false;
+  try { _msSort = localStorage.getItem('lf_ms_sort') || 'rev'; } catch (e) {}
+  try { _msCitOnly = localStorage.getItem('lf_ms_citonly') === '1'; } catch (e) {}
+  const MS_SORTS = { rev: 'Revenue', ring: 'Ring', rank: 'Citadel rank', name: 'Name' };
+  function msArrange(list) {
+    // `rate` is the figure ownedSystemList() already computes for this purpose and
+    // is comparable across resources; the raw `pays` map is not (gold sits on a
+    // ×1000 scale, so summing it would rank every Void tile first by accident).
+    let arr = list.slice();
+    if (_msCitOnly) arr = arr.filter((s) => s.citadelLv > 0 || s.naturalCitadel);
+    if (_msSort === 'ring') arr.sort((a, b) => (a.ring - b.ring) || (b.rate - a.rate));
+    else if (_msSort === 'rank') arr.sort((a, b) => (b.citadelLv - a.citadelLv) || (b.naturalCitadel - a.naturalCitadel) || (b.rate - a.rate));
+    else if (_msSort === 'name') arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    else arr.sort((a, b) => (b.voidTile - a.voidTile) || (b.rate - a.rate));
+    return arr;
+  }
+  // A citadel price is three resources. Rendered as glyph chips that go red when
+  // the wallet is short, so "can I afford this" is answered on the button itself
+  // rather than behind a tap that fails.
+  // Read ONCE per render rather than twice per row — msCostChips and msCanAfford
+  // both need the wallet and there can be 85 rows.
+  let _msRes = null;
+  function msCostChips(cost) {
+    if (!cost) return '';
+    const res = _msRes || (G.getResources && G.getResources()) || {};
+    return ['fuel', 'iron', 'plasma'].filter((k) => (cost[k] | 0) > 0).map((k) => {
+      const short = (Number(res[k]) || 0) < cost[k];
+      return `<i class="ms-cc${short ? ' short' : ''}" style="--pc:${MS_RES[k][1]}">${MS_RES[k][0]} ${G.formatNum(cost[k])}</i>`;
+    }).join('');
+  }
+  function msCanAfford(cost) {
+    if (!cost) return false;
+    const res = _msRes || (G.getResources && G.getResources()) || {};
+    return ['fuel', 'iron', 'plasma'].every((k) => (Number(res[k]) || 0) >= (cost[k] | 0));
+  }
   function mySystemsHtml() {
+    _msRes = (G.getResources && G.getResources()) || {};
     const list = (G.ownedSystemList ? G.ownedSystemList() : []);
     const cap = G.tileCap ? G.tileCap() : 50;
-    const cits = list.filter((s) => s.citadelLv > 0 || s.naturalCitadel).length;
+    // TWO DIFFERENT THINGS GET TWO DIFFERENT NUMBERS. This was ONE figure captioned
+    // "citadels" that counted systems holding a citadel of EITHER kind — while the
+    // rows below have always labelled them apart: ⛓ Rank N for a fortress the pilot
+    // BUILT and paid to rank up, ⛴ Citadel for the NPC one that came with the tile.
+    // So a player adding up the rows could never reproduce the header, and neither
+    // figure was wrong on its own terms. Built and natural are now stated
+    // separately, which is also the only version that answers "how many have I
+    // actually built" — the one a pilot is spending resources against.
+    //
+    // A system can hold both, and is counted in both, exactly as its row reads.
+    // Razed naturals are already excluded upstream: razeCitadelTile() clears the
+    // tile's own `citadel` flag and the razings are re-applied on every load.
+    const built = list.filter((s) => s.citadelLv > 0).length;
+    const natural = list.filter((s) => s.naturalCitadel).length;
     const tot = {};
     list.forEach((s) => { for (const k in s.pays) tot[k] = (tot[k] || 0) + s.pays[k]; });
     const totTxt = Object.keys(MS_RES).filter((k) => tot[k] > 0)
       .map((k) => `<span style="color:${MS_RES[k][1]}">${MS_RES[k][0]} ${G.formatNum(Math.round(tot[k]))}</span>`).join('') || '<span class="ms-none">nothing yet</span>';
 
     let h = `<div class="ms-top"><div class="ms-top-l"><b>${list.length}</b><span>/ ${cap} systems</span></div>`
-      + `<div class="ms-top-l"><b style="color:#ffd24d">${cits}</b><span>citadels</span></div></div>`
+      + `<div class="ms-top-l"><b style="color:#ffd24d">${built}</b><span>built</span></div>`
+      + `<div class="ms-top-l"><b style="color:#9ad4ff">${natural}</b><span>natural</span></div></div>`
       + `<div class="ms-tot"><span class="ms-tot-h">TOTAL PER HOUR</span><div class="ms-tot-v">${totTxt}</div></div>`;
 
     if (!list.length) {
       return h + '<div class="ms-empty">You hold nothing yet.<span>Claim a system in <b>My Galaxy</b> and it starts producing immediately — online or off.</span></div>';
     }
-    h += '<div class="ms-list">' + list.map((s) => {
+    // CONTROL BAR. At 85 holds a flat list is a scroll hunt, so the sheet gets a
+    // sort and a citadels-only filter. Both are one tap and both persist.
+    h += '<div class="ms-bar">'
+      + '<label class="ms-sortw"><span>Sort</span><select id="ms-sort">'
+      + Object.keys(MS_SORTS).map((k) => `<option value="${k}"${k === _msSort ? ' selected' : ''}>${MS_SORTS[k]}</option>`).join('')
+      + '</select></label>'
+      + `<button class="ms-filt${_msCitOnly ? ' on' : ''}" id="ms-citonly">⛓ Citadels only</button>`
+      + '</div>';
+    const shown = msArrange(list);
+    if (!shown.length) {
+      return h + '<div class="ms-empty">No system matches that filter.<span>You hold ' + list.length + ', none of them with a citadel.</span></div>';
+    }
+    h += '<div class="ms-list">' + shown.map((s) => {
       const pay = Object.keys(s.pays).filter((k) => MS_RES[k] && s.pays[k] > 0)
         .map((k) => `<span class="ms-c" style="--pc:${MS_RES[k][1]}">${MS_RES[k][0]} ${G.formatNum(Math.round(s.pays[k]))}</span>`).join('');
       const tags = [];
@@ -1917,35 +2154,124 @@
       const cit = s.citadelLv > 0
         ? `<span class="ms-cit">⛓ Rank ${s.citadelLv}</span>`
         : s.naturalCitadel ? '<span class="ms-cit nat">⛴ Citadel</span>' : '<span class="ms-cit none">No citadel</span>';
+      // ---- ROW ACTIONS -----------------------------------------------------
+      // Everything a pilot used to leave this sheet to do. The citadel button is
+      // the only one that spends, and it states its own price: the label names the
+      // rank it buys and the chips name what it costs, so a one-tap purchase with
+      // no confirm is still a purchase the player agreed to. The list re-renders
+      // after every buy, so a second tap is always against the NEW price.
+      let citBtn = '';
+      if (s.voidTile) citBtn = '<span class="ms-act flat">◇ Void spire — fixed</span>';
+      else if (s.citadelLv > 0) {
+        const c = G.citadelUpgradeCost ? G.citadelUpgradeCost(s.id) : null;
+        citBtn = c
+          ? `<button class="ms-act buy${msCanAfford(c) ? '' : ' poor'}" data-ms-upg="${s.id}">⛓ Rank ${s.citadelLv + 1}<span class="ms-cost">${msCostChips(c)}</span></button>`
+          : '<span class="ms-act flat">⛓ Max rank</span>';
+      } else if (G.canBuildCitadel && G.canBuildCitadel(s.id)) {
+        const c = G.citadelBuildCost ? G.citadelBuildCost(s.id) : null;
+        citBtn = `<button class="ms-act buy${msCanAfford(c) ? '' : ' poor'}" data-ms-build="${s.id}">⛓ Build<span class="ms-cost">${msCostChips(c)}</span></button>`;
+      }
+      const acts = '<div class="ms-acts">' + citBtn
+        + `<button class="ms-act" data-ms-view="${s.id}">◎ View tile</button>`
+        + (s.active ? '<span class="ms-act flat">▸ You are here</span>' : `<button class="ms-act" data-ms-dep="${s.id}">▸ Deploy</button>`)
+        + '</div>';
       return `<div class="ms-row">
         <div class="ms-n">${s.name}</div>
         ${s.home ? '<span class="ms-x lock">—</span>' : `<button class="ms-x" data-ms-ab="${s.id}" aria-label="Abandon ${s.name}">✕</button>`}
         <div class="ms-s"><span>Ring ${s.ring}</span><span>Lv ${s.level}</span>${cit}${tags.join('')}</div>
         <div class="ms-pay">${pay}<span class="ms-per">/hr</span></div>
+        ${acts}
       </div>`;
     }).join('') + '</div>'
+      + (shown.length !== list.length ? `<div class="ms-note">Showing ${shown.length} of ${list.length} systems.</div>` : '')
       + '<div class="ms-note">Abandoning releases the system, its citadel and all of its production. It goes neutral immediately and anyone can take it.</div>';
     return h;
   }
   function openMySystems() {
+    const FOOT = '<div class="sheet-actions"><button class="btn" data-x>Close</button></div>';
     const sheet = showSheet('<div class="sheet-head">◈ MY SYSTEMS</div><div class="sheet-body ms-sheet" id="ms-body">'
-      + mySystemsHtml()
-      + '<div class="sheet-actions"><button class="btn" data-x>Close</button></div></div>');
-    const rewire = () => {
-      sheet.querySelectorAll('[data-ms-ab]').forEach((b) => b.addEventListener('click', () => {
-        const id = b.getAttribute('data-ms-ab');
-        const row = (G.ownedSystemList ? G.ownedSystemList() : []).find((s) => s.id === id);
-        confirmAbandon(id, row ? row.name : id, () => {
-          const body = document.getElementById('ms-body');
-          if (!body) return;
-          body.innerHTML = mySystemsHtml() + '<div class="sheet-actions"><button class="btn" data-x>Close</button></div>';
-          body.querySelector('[data-x]').addEventListener('click', closeSheet);
-          rewire();
-        });
-      }));
+      + mySystemsHtml() + FOOT + '</div>');
+    // REPAINT KEEPS YOUR PLACE. Ranking up the 60th of 85 systems would otherwise
+    // be impossible to do twice — any re-render threw the list back to the top — so
+    // the scroll offset is captured and restored around the swap.
+    const repaint = () => {
+      const body = document.getElementById('ms-body');
+      if (!body) return;
+      const top = body.scrollTop;
+      body.innerHTML = mySystemsHtml() + FOOT;
+      body.scrollTop = top;
+      wire();
     };
-    rewire();
-    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const nameOf = (id) => {
+      const row = (G.ownedSystemList ? G.ownedSystemList() : []).find((s) => s.id === id);
+      return row ? row.name : id;
+    };
+    // ONE TAP IS ONE PURCHASE. The button is disabled synchronously BEFORE the
+    // spend, so a double-tap — or the touch+click pair a phone can fire for a
+    // single press — cannot pay twice for the same rank. The model re-checks
+    // affordability at the moment of the write (upgradeCitadel and buildCitadel
+    // both call canAfford immediately before deducting), so a second tab cannot
+    // overdraw the wallet either, and the repaint re-prices every button: the next
+    // tap is always against the NEW rank's cost, never the one just paid.
+    const spend = (b, fn, okMsg) => {
+      if (b.disabled) return;
+      b.disabled = true;
+      const r = fn() || {};
+      if (r.ok) { toast(okMsg(r), '#ffd24d'); if (screen === 'galaxy') renderGalaxy(); }
+      else toast(r.reason === 'resources' ? 'Not enough Galaxy Resources'
+        : r.reason === 'max' ? 'Already at max rank' : 'Could not build there', '#e23b4e');
+      repaint();
+    };
+    function wire() {
+      const body = document.getElementById('ms-body'); if (!body) return;
+      const x = body.querySelector('[data-x]'); if (x) x.addEventListener('click', closeSheet);
+      const sel = document.getElementById('ms-sort');
+      if (sel) sel.addEventListener('change', () => {
+        _msSort = sel.value;
+        try { localStorage.setItem('lf_ms_sort', _msSort); } catch (e) {}
+        repaint();
+      });
+      const filt = document.getElementById('ms-citonly');
+      if (filt) filt.addEventListener('click', () => {
+        _msCitOnly = !_msCitOnly;
+        try { localStorage.setItem('lf_ms_citonly', _msCitOnly ? '1' : '0'); } catch (e) {}
+        repaint();
+      });
+      body.querySelectorAll('[data-ms-upg]').forEach((b) => b.addEventListener('click', () => {
+        const id = b.dataset.msUpg;
+        spend(b, () => G.upgradeCitadel(id), (r) => '⬆ ' + nameOf(id) + ' — Citadel Rank ' + r.lv);
+      }));
+      body.querySelectorAll('[data-ms-build]').forEach((b) => b.addEventListener('click', () => {
+        const id = b.dataset.msBuild;
+        spend(b, () => G.buildCitadel(id), () => '⛓ Citadel raised on ' + nameOf(id));
+      }));
+      // VIEW TILE — reuses the same glide the mail war reports use, with the tile
+      // panel suppressed: the ask was to land on the map looking at the system, and
+      // the ping is what makes it findable among 1,900 hexes.
+      body.querySelectorAll('[data-ms-view]').forEach((b) => b.addEventListener('click', () => {
+        const id = b.dataset.msView;
+        closeSheet();
+        focusGalaxyTile(id, { open: false });
+      }));
+      body.querySelectorAll('[data-ms-dep]').forEach((b) => b.addEventListener('click', () => {
+        if (b.disabled) return;
+        b.disabled = true;
+        const id = b.dataset.msDep;
+        const r = (G.warp ? G.warp(id) : { ok: false }) || {};
+        if (r.ok) { closeSheet(); toast('▸ Deploying to ' + nameOf(id), '#5b9cff'); showScreen('battle'); return; }
+        toast(r.reason === 'resources' ? 'Not enough Galaxy Resources to warp there'
+          : r.reason === 'locked' ? 'Too high level — max +10 above you'
+          : r.reason === 'cooldown' ? 'That system is on cooldown'
+          : r.reason === 'abandoned' ? '✕ You abandoned this system — re-claim in ' + abandHms(r.secs || 0)
+          : 'Could not deploy there', '#e23b4e');
+        b.disabled = false;
+      }));
+      body.querySelectorAll('[data-ms-ab]').forEach((b) => b.addEventListener('click', () => {
+        const id = b.getAttribute('data-ms-ab');
+        confirmAbandon(id, nameOf(id), true);
+      }));
+    }
+    wire();
   }
   // Short duration label for the abandon lockout — "7h 12m", "41m".
   function abandHms(s) {
@@ -2988,8 +3314,12 @@
         : aql
         ? 'FIVE CANNONS · SEVEN FIGHTER BAYS · 21 FITTED SLOTS'
         : '2× THE DREAD OMEGA · FULL-ZONE RANGE · RAINBOW TRACERS';
+      // EVERY FIGURE HERE COMES OFF fly.need[].want, which canFlyShip reads from
+      // the hull's own flyReq. These were literals ('/ 1,000', '/ 50') and the
+      // star count disagreed with the gate by a factor of two, so the tile told
+      // pilots ★50 while the licence wanted ★100.
       const lic = (etr && owned && !fly.ok)
-        ? '<div class="etr-lic">🔒 LICENCE INCOMPLETE — ' + fly.need.map((n) => n.k === 'cargo' ? (G.formatNum(n.have) + ' / 1,000 cargo runs secured') : n.k === 'missions' ? (G.formatNum(n.have) + ' / 1,000 successful missions') : n.k === 'stars' ? ('★' + n.have + ' / 50') : 'Titan Sina required').join(' · ') + '</div>'
+        ? '<div class="etr-lic">🔒 LICENCE INCOMPLETE — ' + fly.need.map((n) => n.k === 'cargo' ? (G.formatNum(n.have) + ' / ' + G.formatNum(n.want) + ' cargo runs secured') : n.k === 'missions' ? (G.formatNum(n.have) + ' / ' + G.formatNum(n.want) + ' successful missions') : n.k === 'stars' ? ('★' + n.have + ' / ' + n.want) : 'Titan Sina required').join(' · ') + '</div>'
         : (etr && !owned ? '<div class="etr-lic">✦ Recovered only from an OMEGA CARGO V manifest — Cargo Defense</div>' : '');
       return `<button class="ship-tile st-sina ${etr ? 'st-etr ' : ''}${aet ? 'st-aet ' : ''}${aql ? 'st-aql ' : ''}${stateCls}" data-ship-tile="${key}">
         <div class="sts-art">
@@ -3340,6 +3670,19 @@
     rail:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5h15M3 15.5h15"/><rect x="8" y="10.4" width="7" height="3.2" rx="1.6"/><path d="M18.5 12h3"/></svg>',
     plasma:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3M6.2 6.2l2.1 2.1M15.7 15.7l2.1 2.1M17.8 6.2l-2.1 2.1M8.3 15.7l-2.1 2.1"/></svg>',
     support: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8.4v7.2M8.4 12h7.2"/></svg>',
+    // AEGIS FIELD PROJECTORS. These had no entry at all, so they fell through to
+    // the Unicode glyph fallback (☣ ❄ ➤ ☠) — which is the very problem this
+    // table exists to solve: those code points are missing from a lot of device
+    // fonts, so the four rarest hull-locked items in the game showed NO icon on
+    // the chip, the tooltip and the hardpoint.
+    //
+    // All four share a DASHED RING, because what they have in common is the thing
+    // a player needs to read first: this is a field, not a gun. The mark inside
+    // says which field.
+    venom:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" stroke-dasharray="2.4 2.6"/><path d="M8.5 9.5l7 5M15.5 9.5l-7 5"/></svg>',
+    cryo:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><path d="M9.6 5.2L12 7.6l2.4-2.4M9.6 18.8L12 16.4l2.4 2.4"/></svg>',
+    banner:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" stroke-dasharray="2.4 2.6"/><path d="M12 16.4V9.8"/><path d="M9.4 12.4L12 9.6l2.6 2.8"/></svg>',
+    plague:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" stroke-dasharray="2.4 2.6"/><circle cx="12" cy="9.5" r="1.1"/><circle cx="9.5" cy="14" r="1.1"/><circle cx="14.5" cy="14" r="1.1"/></svg>',
   };
   function wclassIcon(wc) { return WCLASS_ICONS[wc.key] || ('<span class="wci">' + wc.glyph + '</span>'); }
   function itemIcon(it) {
@@ -4986,5 +5329,5 @@
     return v + s;
   }
 
-  window.UI = { syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
+  window.UI = { syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
 })();

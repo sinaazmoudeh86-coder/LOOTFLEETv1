@@ -669,7 +669,7 @@
       }
       rows = r.data || [];
     } catch (e) { _claimWarn(e); return 'err'; }
-    if (!rows.length) { reconcileCrowns(); return 'ok'; }
+    if (!rows.length) { reconcileCrowns(); return 'none'; }
     let crowned = 0;
     for (const a of rows) {
       const lc = a.lc | 0; if (!lc) continue;
@@ -721,13 +721,25 @@
     _claimT = 0;
     let r = 'err';
     try { r = await claimPrize(); } catch (e) {}
-    if (r === 'ok') { _claimDone = true; _claimTries = 0; return; }
+    // AN EMPTY LEDGER IS NOT PROOF THERE IS NO CROWN — it may just be early.
+    // koth_close() writes at 00:01 and onDayRollover() asks at +95s, which is the
+    // right order but a thin margin: if the cron has not committed yet, the drain
+    // used to read that empty answer as 'ok', latch _claimDone and stop for the
+    // session. Same fault the daily ladder drain had (see rank-rewards.js), where
+    // the margin was negative and it cost players their awards outright.
+    if (r === 'ok' || (r === 'none' && claimSettled())) { _claimDone = true; _claimTries = 0; return; }
+    if (r === 'none') { _claimTries = 0; scheduleClaim(60000); return; }
     // 'wait' is not a failure — the player may simply not have signed in yet, so
     // it keeps a slow poll alive for the whole session rather than giving up.
     // 'err' backs off: 20s, 40s, 80s… to a 5-minute ceiling.
     _claimTries++;
     const delay = r === 'wait' ? 15000 : Math.min(300000, 20000 * Math.pow(2, Math.min(4, _claimTries - 1)));
     scheduleClaim(delay);
+  }
+  // Has today's close had time to write? koth_close() runs at 00:01 UTC.
+  function claimSettled() {
+    const d = new Date();
+    return (d.getUTCHours() * 60 + d.getUTCMinutes()) >= 4;
   }
   // A NEW DAY MEANS A NEW AWARD MIGHT EXIST. koth_close() runs at 00:01, so ask
   // a little after that rather than the instant the client rolls over.

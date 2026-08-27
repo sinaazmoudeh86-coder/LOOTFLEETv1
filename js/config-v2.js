@@ -950,11 +950,18 @@
     //   • DEATH BEAMS — five continuous lances that lock the five nearest hostiles
     //     and burn them for as long as they stay in range. No cooldown, no aim.
     //   • CELESTIAL AURA — a standing field that cooks everything near the hull.
-    // NEVER SOLD, in any currency. It is the apex prize of Space Cargo Defense —
-    // and it does not fly for anyone who has not put the years in:
-    //   1,000 CARGO RUNS SECURED  AND  Pilot Ascension ★100  AND a
-    //   TITAN SINA in the hangar — the Celestial hull is crewed off a Titan Sina,
-    //   so the Titan line is the licence to fly it.
+    // NEVER SOLD, in any currency. It is the apex prize of Space Cargo Defense.
+    // `flyReq` below is the SINGLE STATEMENT of the licence — read it, never
+    // restate it. It used to be restated in five places and three of them had
+    // drifted: the hangar tile printed ★/50, this desc printed "1,000 successful
+    // MISSIONS, ★50" (wrong unit and wrong number), and cargo-defense held its
+    // own copy of both figures. A pilot could hit the number they were shown and
+    // still be refused.
+    //   • stars 100 → 30 (Aug 2026): ★100 is ~88 weeks of play, so the capstone was
+    //     effectively unreachable and read as decoration rather than a goal.
+    //     NOTE: at 2 runs/day the 1,000-run haulage line is now the binding wall.
+    //   • TITAN SINA in the hangar — the Celestial hull is crewed off a Titan Sina,
+    //     so the Titan line is the licence to fly it.
     // The haulage line counts DELIVERIES (state.cargo.wins). It used to count the
     // general mission tally, so the capstone of an event could be earned without
     // flying the event.
@@ -962,14 +969,14 @@
     { key:'eternum', name:'Eternum', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:192,
       mods:{ hpPct:7920, dmgPct:4455, multiShot:1188, critChance:95, critDamage:3465, moveSpeed:744, atkSpeedPct:1485, rangePct:6000, lifeSteal:43.8 },
       tag:'CELESTIAL CLASS · ETERNUM', celestial:true, sinaTracers:true, deathBeams:5, dpsAura:0.9,
-      flyReq:{ cargo:1000, stars:100, ship:'titansina' },
+      flyReq:{ cargo:1000, stars:30, ship:'titansina' },
       // COMMISSIONING COST. The 2% Omega Cargo V roll recovers an ETERNUM CORE,
       // not the hull — the hull is then built around it, and the yard wants
       // 10 TRILLION gold, and — since the non-gold economy came down 10× — one
       // trillion of each resource and 10,000 LootCoins.
       claimCost:{ gold:1e13, fuel:1e12, iron:1e12, plasma:1e12, credits:10000 },
       motto:'Built not to conquer worlds, but to outlive them.',
-      desc:'The Celestial Class — one and a half times the Titan Sina on every line, wrapped in a standing celestial field that burns anything that drifts near the hull. Five death beams lock the nearest hostiles and never let go. Its core is recovered only from the deepest Space Cargo Defense manifest, commissioned for 10T of every primary and 100,000 LootCoins, and flyable only by a pilot with 1,000 successful missions, ★50 and a Titan Sina behind them.' },
+      desc:'The Celestial Class — one and a half times the Titan Sina on every line, wrapped in a standing celestial field that burns anything that drifts near the hull. Five death beams lock the nearest hostiles and never let go. Its core is recovered only from the deepest Space Cargo Defense manifest; the licence to build and fly it, and the yard’s price, are both listed on its card in Cargo Defense.' },
   ];
   // Economy tuning: hulls cost 3× gold and demand 5× the kills to unlock.
   SHIPS.forEach((s) => {

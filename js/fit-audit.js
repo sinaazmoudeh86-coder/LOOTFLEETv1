@@ -50,7 +50,12 @@
     // picker is a fixed-position sheet outside any .scr-body, and .cmx-list sits
     // inside a flex card. Both overflowed their containers before min-height:0 was
     // set on them, and neither was inside anything this auditor walked.
-    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid, .screen.active .pl-lrows, .cmp-list, .cmx-list').forEach((root) => {
+    // The chat dock's message list is a scroll root of its own (build 728): it is
+    // not a .scr-body — the dock lives outside #screens entirely — so nothing
+    // inside it would ever be inspected. It is also the one place in the game
+    // where the content length is set by OTHER PLAYERS, which is exactly the
+    // case worth auditing.
+    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid, .screen.active .pl-lrows, .cmp-list, .cmx-list, #gc-dock.open .gc-scroll').forEach((root) => {
       if (seen.has(root)) return; seen.add(root);
       const els = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
       for (const el of els) {

@@ -738,10 +738,49 @@ body.gfx-med #game-canvas{ filter:none !important; }
    rings is not something anyone should have to drag a canvas to search, so the
    list is sortable, filterable and paginated — and every row opens the SAME
    tile sheet the map opens, so neither view can grow its own rules. */
-.gx-viewtog{ display:inline-flex; margin:0 0 9px; border:1px solid var(--line-2); border-radius:10px; overflow:hidden; background:#0d141e; }
-.gx-vt{ font-family:var(--font-display); font-size:10.5px; font-weight:800; letter-spacing:.07em; color:#8b9bb0;
-  background:none; border:none; padding:9px 13px; min-height:38px; cursor:pointer; }
-.gx-vt.on{ color:#0b0f18; background:#8fc4ff; }
+/* MAP / LIST SWITCH — both options always visible, and loud enough to find.
+   A single destination-naming button read more clearly word-for-word but hid the
+   fact that two views exist, which is the thing players were missing. So this is
+   a segment again, with the discoverability carried by treatment rather than
+   wording: accent frame, breathing outer glow, a sheen that sweeps across the
+   control, and a pulse on the option you are NOT on. Every effect is gated on
+   .fresh and stops for good once the switch has been used — an effect that never
+   ends is just noise. */
+.gx-viewsw{ position:relative; display:flex; flex-direction:column; gap:6px; margin:0 0 10px; padding:9px 10px;
+  border-radius:12px; overflow:hidden;
+  background:linear-gradient(180deg,rgba(143,196,255,.14),rgba(143,196,255,.035));
+  border:1px solid rgba(143,196,255,.55);
+  box-shadow:0 0 18px -7px rgba(143,196,255,.55), inset 0 0 22px -14px rgba(143,196,255,.9); }
+.gxv-row{ display:flex; gap:6px; }
+.gxv-b{ flex:1 1 0; min-width:0; min-height:42px; padding:9px 12px; cursor:pointer; border-radius:9px;
+  font-family:var(--font-display); font-size:12.5px; font-weight:800; letter-spacing:.08em;
+  color:#bfdcff; background:rgba(8,16,28,.6); border:1px solid rgba(143,196,255,.35); }
+.gxv-b.on{ color:#07101c; background:linear-gradient(180deg,#c6e0ff,#8fc4ff); border-color:#c6e0ff;
+  box-shadow:0 0 15px -3px rgba(143,196,255,.9); }
+.gxv-b:active{ transform:scale(.98); }
+.gxv-s{ font-size:10.5px; font-weight:600; color:#93b0d0; letter-spacing:.02em; }
+.gxv-s b{ color:#cfe4ff; font-weight:800; }
+.gxv-new{ position:absolute; top:7px; right:9px; font-family:var(--font-display); font-size:8.5px; font-weight:800;
+  letter-spacing:.1em; font-style:normal; color:#07101c; background:#8fc4ff; border-radius:5px; padding:3px 5px;
+  box-shadow:0 0 11px -1px rgba(143,196,255,.95); }
+.gx-viewsw.fresh::after{ content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg,transparent 32%,rgba(198,224,255,.24) 49%,transparent 66%);
+  transform:translateX(-120%); animation:gxvSheen 3.6s ease-in-out infinite; }
+@keyframes gxvSheen{ 0%,58%{ transform:translateX(-120%) } 100%{ transform:translateX(120%) } }
+.gx-viewsw.fresh{ animation:gxvBreathe 3.6s ease-in-out infinite; }
+@keyframes gxvBreathe{
+  0%,100%{ box-shadow:0 0 16px -9px rgba(143,196,255,.5), inset 0 0 22px -14px rgba(143,196,255,.9) }
+  50%{ box-shadow:0 0 28px -4px rgba(143,196,255,.85), inset 0 0 22px -11px rgba(143,196,255,1) } }
+/* the option you are NOT on gets the attention — that is the discovery */
+.gx-viewsw.fresh .gxv-b:not(.on){ animation:gxvBeckon 3.6s ease-in-out infinite; }
+@keyframes gxvBeckon{
+  0%,100%{ border-color:rgba(143,196,255,.35); color:#bfdcff }
+  50%{ border-color:rgba(198,224,255,.95); color:#eaf4ff } }
+@media (prefers-reduced-motion: reduce){
+  .gx-viewsw.fresh, .gx-viewsw.fresh .gxv-b:not(.on){ animation:none; }
+  .gx-viewsw.fresh::after{ display:none; }
+  .gx-viewsw.fresh{ box-shadow:0 0 24px -5px rgba(143,196,255,.8), inset 0 0 22px -11px rgba(143,196,255,1); }
+  .gx-viewsw.fresh .gxv-b:not(.on){ border-color:rgba(198,224,255,.9); color:#eaf4ff; } }
 
 .gxlist{ display:flex; flex-direction:column; gap:8px; }
 .gxl-bar{ display:flex; gap:7px; flex-wrap:wrap; align-items:stretch; }
@@ -778,6 +817,17 @@ body.gfx-med #game-canvas{ filter:none !important; }
 .gxr-n{ font-size:12.5px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gxr-m{ font-style:normal; margin-left:5px; font-size:11px; }
 .gxr-m.cit{ color:#ffbe6e; } .gxr-m.boss{ color:#ff8a96; } .gxr-m.xen{ color:#c26bff; } .gxr-m.deep{ color:#5fd1ff; }
+/* THREE KINDS OF CITADEL, THREE MARKS. One ⛓ used to stand for all of them, so a
+   fortress you built, one a rival built and the map's own were indistinguishable.
+   ⛓ is player-built — gold when it is yours, amber when it belongs to someone
+   else and is therefore a target — and ⛴ is natural. Same glyphs the My Systems
+   rows use, so the vocabulary is one across both screens. */
+.gxr-m.cit.mine{ color:#ffd24d; }
+.gxr-m.cit.rival{ color:#ffbe6e; }
+.gxr-m.nat{ color:#9ad4ff; }
+.gxl-key{ display:flex; flex-wrap:wrap; gap:3px 12px; font-size:10px; color:var(--muted-2); letter-spacing:.03em; }
+.gxl-key span{ display:inline-flex; align-items:center; gap:2px; white-space:nowrap; }
+.gxl-key .gxr-m{ margin-left:0; font-size:11.5px; }
 .gxr-sub{ font-size:10px; color:var(--muted-2); text-transform:capitalize; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gxr-rate{ font-family:var(--font-display); font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .gxr-rate i{ font-style:normal; font-size:9px; opacity:.6; }

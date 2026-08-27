@@ -200,7 +200,7 @@
       }
       rows = r.data || [];
     } catch (e) { _warn(e); return 'err'; }
-    if (!rows.length) return 'ok';
+    if (!rows.length) return 'none';
 
     // Group by day so a week away produces seven days of letters, not seventy.
     const byDay = new Map();
@@ -234,6 +234,26 @@
   // in rank_awards undelivered for the rest of the session. daily_ranks_award()
   // writes at 00:05 UTC, so a client left open across midnight had already used
   // its single attempt hours before the row existed.
+  // AN EMPTY LEDGER AND A DELIVERED PRIZE MUST NOT LOOK THE SAME.
+  //
+  // claim() returned 'ok' for both, and run() latches `_day` on 'ok' and stops. So
+  // a client that asked during the five-minute window between the UTC rollover and
+  // daily_ranks_award() WRITING at 00:05 got a truthful empty answer, marked the
+  // new day done, and never asked again — both re-arm paths below then see
+  // dayIdx() === _day and stay quiet for the rest of the session. The award landed
+  // at 00:05 with nobody left to collect it, and the player got it on their next
+  // reload. That is the whole of "daily ranking awards aren't sent until you
+  // relog", and it hit roughly half of all nights: the safety tick is a 10-minute
+  // interval, so its phase decides whether it lands before or after 00:05.
+  //
+  // The retry ladder was never the problem. The DAY was being marked done before
+  // the server had written the thing being asked for. An empty ledger is only
+  // conclusive once today's award run has had time to land.
+  const SETTLE_MIN = 12;   // minutes past 00:00 UTC — daily_ranks_award() writes at 00:05
+  function settled() {
+    const d = new Date();
+    return (d.getUTCHours() * 60 + d.getUTCMinutes()) >= SETTLE_MIN;
+  }
   let _t = 0, _tries = 0, _day = -1;
   const dayIdx = () => Math.floor(Date.now() / 86400000);
   function schedule(delay) { if (_t) clearTimeout(_t); _t = setTimeout(run, Math.max(0, delay | 0)); }
@@ -241,7 +261,12 @@
     _t = 0;
     let r = 'err';
     try { r = await claim(); } catch (e) {}
-    if (r === 'ok') { _tries = 0; _day = dayIdx(); return; }
+    // Something was delivered, or the ledger is empty AND old enough to believe.
+    if (r === 'ok' || (r === 'none' && settled())) { _tries = 0; _day = dayIdx(); return; }
+    // Empty, but too early to conclude anything — the award may not be written yet.
+    // Keep a slow poll alive WITHOUT latching the day. Not a failure, so the
+    // backoff counter is left alone.
+    if (r === 'none') { _tries = 0; schedule(60000); return; }
     _tries++;
     schedule(r === 'wait' ? 15000 : Math.min(300000, 20000 * Math.pow(2, Math.min(4, _tries - 1))));
   }

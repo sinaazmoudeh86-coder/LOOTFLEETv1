@@ -44,7 +44,69 @@
    in CONFIG.FIGHTER or scales off the bay's rarity via ITEMS.fighterSpec().
    ========================================================================== */
 (function () {
-  const IMG = new Image(); IMG.src = 'ships/fighter-heavy.png';
+  // ---- CRAFT AIRFRAMES ------------------------------------------------------
+  // TEN MODELS, ASSIGNED BY MARQUE. Every craft in the game used to be the same
+  // bitmap, so a wing of Mauls and a wing of Talons were indistinguishable in
+  // the arena even though they fly, cycle and hit nothing alike.
+  //
+  // MARQUE IS THE AXIS, because it is already the thing that makes one bay
+  // different from another — it reshapes damage, cadence, speed, reach and orbit
+  // (see FIGHTER_CLASSES in items.js). Tying the silhouette to it means the shape
+  // in front of you is a true statement about what the wing does, and each
+  // model's native palette is picked to sit near its marque's own accent colour.
+  //
+  // Two frames for most marques, chosen by a STABLE HASH OF THE ITEM, so two Maul
+  // bays in one hangar can still look different from each other while any one bay
+  // looks the same on every reload and every device.
+  //
+  // NOTHING MECHANICAL READS THIS TABLE. Damage, rate, range, speed, the rarity
+  // tint and every combat path are exactly as they were — this is the sprite and
+  // the sprite only.
+  const MODELS = {
+    f_talon:  ['ships/fighter-m01.png', 'ships/fighter-m07.png'],
+    f_maul:   ['ships/fighter-m02.png', 'ships/fighter-m08.png'],
+    f_lance:  ['ships/fighter-m04.png', 'ships/fighter-m05.png'],
+    f_reaper: ['ships/fighter-m06.png'],
+    f_swarm:  ['ships/fighter-m03.png', 'ships/fighter-m10.png'],
+    // Bays that dropped before the marques existed.
+    fighter:  ['ships/fighter-m09.png'],
+  };
+  // The original single sprite, kept as the fallback for anything that fails to
+  // resolve a marque — a craft must never draw as nothing.
+  const FALLBACK = 'ships/fighter-heavy.png';
+  // ONE APPARENT SIZE ACROSS TEN AIRFRAMES. CONFIG.FIGHTER.drawSize is a WIDTH,
+  // and the ten frames run 1.40–1.73 tall against the legacy sprite's 1.376 — so
+  // anchoring on width alone would have drawn a Swarm Vector 26% longer than the
+  // craft it replaces and made every marque a different size, which is a balance
+  // signal the art has no business sending.
+  //
+  // Craft are drawn to a constant LENGTH instead — the legacy sprite's, so nothing
+  // changes size from what players fly today — with WINGSPAN following each frame's
+  // own proportions. Same class of craft, ten different airframes.
+  const LEGACY_ASPECT = 128 / 93;
+  const _img = {};
+  function imgFor(src) {
+    let im = _img[src];
+    if (!im) { im = _img[src] = new Image(); im.src = src; }
+    return im;
+  }
+  // Warmed at load rather than on first launch: the arena must not stall mid-fight
+  // waiting on a bitmap, and these are small PNGs fetched once.
+  Object.keys(MODELS).forEach((k) => MODELS[k].forEach(imgFor));
+  imgFor(FALLBACK);
+  function hash32(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; } return h >>> 0; }
+  // Which airframe this bay's craft fly. Stable for the life of the item.
+  function modelOf(item) {
+    if (!item) return FALLBACK;
+    let key = 'fighter';
+    try {
+      const wc = window.ITEMS && window.ITEMS.weaponClassOf && window.ITEMS.weaponClassOf(item);
+      if (wc && wc.key && MODELS[wc.key]) key = wc.key;
+    } catch (e) {}
+    const pool = MODELS[key] || MODELS.fighter;
+    if (pool.length < 2) return pool[0];
+    return pool[hash32(String(item.name || '') + '#' + (item.id | 0)) % pool.length];
+  }
   const DOCKED = 0, LAUNCH = 1, INTERCEPT = 2, ORBIT = 3, RETURN = 4;
 
   function host() { try { return window.GAME && window.GAME._fx ? window.GAME._fx() : null; } catch (e) { return null; } }
@@ -109,6 +171,8 @@
     return { w: s.dmgMul, dmg: baseDmgFrac(F) * s.dmgMul, rate: F.attackRate * s.rateMul,
              range: F.range * s.rangeMul, speed: F.speed * s.speedMul,
              orbit: F.orbitRadius * (s.orbitMul || 1),
+             // THE CRAFT'S AIRFRAME comes from the bay's marque — see MODELS.
+             model: modelOf(item),
              // THE CRAFT WEARS ITS BAY'S RARITY. A wing is the carrier's whole
              // armament and the bays are upgraded one at a time, so "which of my
              // four is the good one" is a question the arena should answer without
@@ -454,33 +518,38 @@
     }
   }
 
-  // One offscreen bitmap per rarity colour, built on first use and kept for the
-  // session. The sprite is the only thing on that surface, so `source-atop`
-  // finally means what it says: paint the colour ONLY where the hull is, leaving
-  // its shading readable underneath rather than flattening it to a silhouette.
+  // One offscreen bitmap per AIRFRAME × rarity colour, built on first use and kept
+  // for the session. The sprite is the only thing on that surface, so
+  // `source-atop` finally means what it says: paint the colour ONLY where the hull
+  // is, leaving its shading readable underneath rather than flattening it to a
+  // silhouette.
+  //
+  // KEYED ON THE MODEL TOO, now that there are ten of them. Keying on colour
+  // alone would have handed a Talon the tinted Maul bitmap for any colour a Maul
+  // happened to reach first.
   const _tintCache = {};
-  function tintedSprite(col) {
-    if (_tintCache[col] !== undefined) return _tintCache[col];
-    if (!(IMG.complete && IMG.naturalWidth)) return null;   // not cached — retry next frame
+  function tintedSprite(src, col) {
+    const k = src + '|' + col;
+    if (_tintCache[k] !== undefined) return _tintCache[k];
+    const im = imgFor(src);
+    if (!(im.complete && im.naturalWidth)) return null;   // not cached — retry next frame
     try {
       const cv = document.createElement('canvas');
-      cv.width = IMG.naturalWidth; cv.height = IMG.naturalHeight;
+      cv.width = im.naturalWidth; cv.height = im.naturalHeight;
       const c = cv.getContext('2d');
-      c.drawImage(IMG, 0, 0);
+      c.drawImage(im, 0, 0);
       c.globalCompositeOperation = 'source-atop';
       c.globalAlpha = 0.62;
       c.fillStyle = col;
       c.fillRect(0, 0, cv.width, cv.height);
-      return (_tintCache[col] = cv);
-    } catch (e) { return (_tintCache[col] = null); }
+      return (_tintCache[k] = cv);
+    } catch (e) { return (_tintCache[k] = null); }
   }
 
   function draw(ctx) {
     const h = host(); if (!h) return;
     const list = h.rt.fighters; if (!list || !list.length) return;
-    const ready = IMG.complete && IMG.naturalWidth;
     const w = h.C.FIGHTER.drawSize;
-    const hh = ready ? w * (IMG.naturalHeight / IMG.naturalWidth) : w;
     // RARITY TINT — PRE-RENDERED, NOT COMPOSITED IN PLACE.
     //
     // The first attempt drew the sprite and then filled a rect over it with
@@ -506,16 +575,25 @@
       const f = list[i];
       if (f.st === DOCKED) continue;
       const col = (f.sp && f.sp.col) || '#c9d2e0';
+      // AIRFRAME PER CRAFT, and therefore ASPECT PER CRAFT. The ten models are not
+      // one shape — they run 1.40 to 1.73 tall — so a single cached ratio would
+      // squash or stretch every frame but the one it was measured from. LENGTH is
+      // pinned to LEGACY_ASPECT; wingspan follows each frame.
+      const src = (f.sp && f.sp.model) || FALLBACK;
+      const im = imgFor(src);
+      const ready = im.complete && im.naturalWidth;
+      const hh = w * LEGACY_ASPECT;
+      const ww = ready ? hh * (im.naturalWidth / im.naturalHeight) : w;
       ctx.save();
       ctx.translate(f.x, f.y);
       ctx.rotate(f.face + Math.PI / 2);            // art is drawn nose-up (-y)
       if (ready) {
-        const art = (tint && col !== '#c9d2e0') ? tintedSprite(col) : null;
-        ctx.drawImage(art || IMG, -w / 2, -hh / 2, w, hh);
+        const art = (tint && col !== '#c9d2e0') ? tintedSprite(src, col) : null;
+        ctx.drawImage(art || im, -ww / 2, -hh / 2, ww, hh);
       }
       else {
         ctx.fillStyle = col;
-        ctx.beginPath(); ctx.moveTo(0, -hh * 0.4); ctx.lineTo(w * 0.3, hh * 0.3); ctx.lineTo(0, hh * 0.15); ctx.lineTo(-w * 0.3, hh * 0.3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, -hh * 0.4); ctx.lineTo(ww * 0.3, hh * 0.3); ctx.lineTo(0, hh * 0.15); ctx.lineTo(-ww * 0.3, hh * 0.3); ctx.closePath(); ctx.fill();
       }
       // muzzle glow as an ADDITIVE DOT. ctx.shadowBlur here cost more than every
       // other thing the wing does put together — it re-rasterises the sprite.

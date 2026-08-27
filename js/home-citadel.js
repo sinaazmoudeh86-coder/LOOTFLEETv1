@@ -8,6 +8,8 @@
    plasma, prism, ◇ cores, real Shipworks parts) — no new economy.
      · Production/hr = wave^1.45 × zone-scale × buildings (×2 past Wave 100)
      · Storage-capped (8h base → 24h) — collect on return, like Moon Colony
+     · Wave clears pay 2.2h of production from a REAL-TIME bank (see PAY_*):
+       8h earned per real hour, 24h banked. Depth is uncapped; the FAUCET is not.
      · Wave strength scales off YOUR fleet DPS: always a fight, never a chore
      · Defense: citadel on the left, raiders stream in; turrets + your fleet
        auto-fire; TAP a raider to call a fleet strike (the active skill).
@@ -28,6 +30,49 @@
   function zScale() { try { return Math.max(1, Math.pow(Math.max(1, G().state.highestUnlocked || 1), 1.12)); } catch (e) { return 1; } }
   function shipName(k) { try { return window.CONFIG.SHIP_BY_KEY[k].name; } catch (e) { return k; } }
 
+  // ---- ACTIVE PAY BUDGET ----------------------------------------------------
+  // WAVE CLEARS ARE CAPPED IN REAL TIME, AND ONLY WAVE CLEARS.
+  //
+  // The passive half of this module was always bounded: storage holds 8-24h and
+  // stops. The wave bonus was not. `grantWaveRewards()` paid 2.2 HOURS of
+  // production per clear with nothing limiting clears per hour — and a wave's HP
+  // is denominated in the pilot's OWN fleet DPS (see rollNext), so fleet power
+  // cancels out and a wave costs a flat 55 + 4.5w SECONDS of fire for everybody.
+  // High-level towers divide that by a hundred or more, battle speed divides the
+  // wall clock again, and the reward grows as wave^1.45 while the cost grows
+  // linearly — so gold per SECOND rose with depth, forever. One account reached
+  // wave 425 and roughly 29 TRILLION gold an hour, which was the whole economy.
+  //
+  // So the bucket is measured in HOURS OF PRODUCTION and refilled by the clock:
+  //   · PAY_COST_H   what one cleared wave draws (the same 2.2 as before)
+  //   · PAY_RATE_H   hours of pay earned per real hour — active play is worth 8x
+  //                  idling, which is the entire point of an active mode
+  //   · PAY_BURST_H  what banks up while away, so coming back and clearing a
+  //                  handful of waves pays EXACTLY what it always did
+  //
+  // A pilot clearing ~11 waves in a session never touches the cap. A pilot
+  // chaining hundreds an hour is paid 8x their mining rate and no more. Nothing
+  // here touches the wave counter, the towers, the structures or any balance:
+  // depth still raises production permanently, which is what the mode promises.
+  const PAY_COST_H = 2.2, PAY_RATE_H = 8, PAY_BURST_H = 24;
+  function payAvail(s) {
+    const p = s.pay || (s.pay = { h: PAY_BURST_H, t: Date.now() });
+    const now = Date.now();
+    const t = Number(p.t) > 0 ? Number(p.t) : now;
+    const have = Number(p.h) >= 0 ? Number(p.h) : PAY_BURST_H;
+    // Math.max(0, …): a device clock set backwards must never mint budget.
+    p.h = Math.min(PAY_BURST_H, have + Math.max(0, (now - t) / 3600e3) * PAY_RATE_H);
+    p.t = now;
+    return p.h;
+  }
+  // returns the FRACTION of `hours` the bank could fund (1 = paid in full)
+  function payDraw(s, hours) {
+    const have = payAvail(s);
+    const take = Math.max(0, Math.min(have, hours));
+    s.pay.h = have - take;
+    return hours > 0 ? take / hours : 1;
+  }
+
   // ---- state ----------------------------------------------------------------
   function hc() {
     const g = G(); if (!g || !g.state) return null;
@@ -35,6 +80,13 @@
     if (!st.homecit) st.homecit = { v: 1, wave: 0, cit: 0, last: Date.now(), b: { mine: 0, silo: 0, turret: 0, repair: 0 }, dmg: 0, seen: 0, tw: [] };
     if (!Array.isArray(st.homecit.tw)) st.homecit.tw = [];
     while (st.homecit.tw.length < 8) st.homecit.tw.push(null);
+    // THE BANK IS SEEDED FULL, DELIBERATELY. An existing pilot's first session
+    // after this ships must not be worse than their last one, and a full bank is
+    // exactly the "came back after a break" case it is designed to pay in full.
+    if (!st.homecit.pay || typeof st.homecit.pay !== 'object') st.homecit.pay = { h: PAY_BURST_H, t: Date.now() };
+    if (!(Number(st.homecit.pay.h) >= 0)) st.homecit.pay.h = PAY_BURST_H;
+    if (!(Number(st.homecit.pay.t) > 0)) st.homecit.pay.t = Date.now();
+    if (!((st.homecit.cq | 0) >= 0)) st.homecit.cq = 0;      // part crates owed
     return st.homecit;
   }
   const damaged = (s) => s && s.dmg > Date.now();
@@ -1071,21 +1123,52 @@
     if (msg) toast('🏰 ' + msg);
     render(); updateHud();
   }
-  // grant the rewards for clearing wave `next` — shared by solo + auto runs
-  function grantWaveRewards(s, next) {
-    s.wave = next;
-    const st = G().state, r = rates(s), lines = [];
-    const gold = Math.max(5000, Math.round(r.gold * 2.2 * (window.VIP ? window.VIP.mult('gold') : 1)));
-    st.gold += gold; lines.push({ t: '$' + fmt(gold) + ' Gold', c: '#e6b566' });
-    if (r.iron > 0) { const a = Math.round(r.iron * 1.5); st.resources.iron += a; lines.push({ t: '+' + fmt(a) + ' Ore', c: '#d0a060' }); }
-    if (r.fuel > 0) { const a = Math.round(r.fuel * 1.5); st.resources.fuel += a; lines.push({ t: '+' + fmt(a) + ' Fuel', c: '#5bc0ff' }); }
-    if (r.plasma > 0) { const a = Math.round(r.plasma * 1.5); st.resources.plasma += a; lines.push({ t: '+' + fmt(a) + ' Plasma', c: '#c07bff' }); }
-    if (next % 10 === 0) {
-      const keys = crateKeys(next), k = keys[(Math.random() * keys.length) | 0];
+  // A PART CRATE IS NEVER LOST, ONLY QUEUED. The crate — and the 2 cores past
+  // wave 50 — is why anyone goes deep, so losing one for clearing waves quickly
+  // would teach the opposite of the lesson. Each costs a full wave's budget.
+  function payCrates(s, wave, lines) {
+    const st = G().state;
+    let guard = 8;                             // never spin on a bad budget value
+    while ((s.cq | 0) > 0 && guard-- > 0 && payAvail(s) >= PAY_COST_H) {
+      s.pay.h = payAvail(s) - PAY_COST_H;
+      s.cq = (s.cq | 0) - 1;
+      const keys = crateKeys(wave), k = keys[(Math.random() * keys.length) | 0];
       if (!st.shipParts) st.shipParts = {};
       st.shipParts[k] = (st.shipParts[k] | 0) + 1;
-      lines.push({ t: '⬡ Part Crate — 1× ' + shipName(k), c: band(next).c, big: 1 });
-      if (next >= 50) { st.dreadCores = (st.dreadCores || 0) + 2; lines.push({ t: '◇ 2 Dread Cores', c: '#ff5a68' }); }
+      lines.push({ t: '⬡ Part Crate — 1× ' + shipName(k), c: band(wave).c, big: 1 });
+      // a wallet is floored, never `| 0` — a career total passes int32 and wraps
+      if (wave >= 50) { st.dreadCores = Math.floor(Number(st.dreadCores) || 0) + 2; lines.push({ t: '◇ 2 Dread Cores', c: '#ff5a68' }); }
+    }
+  }
+  // grant the rewards for clearing wave `next` — shared by solo + auto runs
+  //
+  // Two things here are deliberate beyond the pay bank itself:
+  //  · THE BONUS IS PRICED AT THE RATE THE WAVE WAS FOUGHT AT. This used to set
+  //    `s.wave = next` and THEN read rates(s), so every clear was paid at the
+  //    rate it had just unlocked — the pilot was paid for the next wave, not the
+  //    one they beat.
+  //  · THE THROTTLE STATES ITSELF IN THE BANNER. A rule that decides whether
+  //    progress counts has to be printed where it fires, never hovered.
+  function grantWaveRewards(s, next) {
+    const st = G().state, lines = [];
+    if (!st.resources) st.resources = { fuel: 0, iron: 0, plasma: 0 };
+    const r = rates({ wave: Math.max(1, s.wave | 0), b: s.b });   // pre-clear rate
+    s.wave = next;
+    const frac = payDraw(s, PAY_COST_H);
+    const gold = Math.max(5000, Math.round(r.gold * PAY_COST_H * frac * (window.VIP ? window.VIP.mult('gold') : 1)));
+    st.gold += gold; lines.push({ t: '$' + fmt(gold) + ' Gold', c: '#e6b566' });
+    const res = (key, rate, label, col) => {
+      const a = Math.round(rate * 1.5 * frac);
+      if (a >= 1) { st.resources[key] = (st.resources[key] || 0) + a; lines.push({ t: '+' + fmt(a) + ' ' + label, c: col }); }
+    };
+    res('iron', r.iron, 'Ore', '#d0a060');
+    res('fuel', r.fuel, 'Fuel', '#5bc0ff');
+    res('plasma', r.plasma, 'Plasma', '#c07bff');
+    if (next % 10 === 0) s.cq = (s.cq | 0) + 1;
+    payCrates(s, next, lines);
+    if (frac < 0.999) {
+      const q = s.cq | 0;
+      lines.push({ t: '⚙ Works at ' + Math.round(frac * 100) + '% — refilling 8h of pay per hour' + (q ? ' · ' + q + ' crate' + (q > 1 ? 's' : '') + ' queued' : ''), c: '#9fb0c4' });
     }
     try { G().save(); } catch (e) {}
     return { lines, gold };
@@ -1181,6 +1264,7 @@
       '<div class="hcm-rules">' +
       rule('⚔', 'Waves auto-continue', 'You deploy into a build phase — hit ▶ to launch. From then on every victory rolls straight into the next wave, rewards granted instantly; the fort repairs between waves.') +
       rule('☠', 'DEATH IS REAL', 'Dying out there carries the <b>normal death penalties</b>: you can <b>drop a piece of equipped gear</b> and your <b>hull upgrade level resets</b> — exactly like dying in the zone grind.') +
+      rule('⚙', 'Wave pay is capped by the clock', 'Each cleared wave pays <b>2.2 hours</b> of your base\u2019s production, drawn from a bank that refills at <b>8 hours of pay per real hour</b> and holds <b>24</b>. Arrive after a break and the first dozen waves pay in full; chain for an hour and the works settle to <b>8× what your base mines</b>. Part crates are never lost — they queue and land as the bank refills.') +
       rule('🏰', 'Fort loss = breach', 'If the citadel falls instead, it\u2019s a normal breach — mining offline until repairs, your wave progress stays.') +
       '</div>' +
       '<button class="hcm-ok" id="hca-go">⚔ I understand — engage</button>' +

@@ -45,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 723;
+const FEED_VER = 727;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -53,6 +53,27 @@ const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // Discord allows 10 embeds per message. Anything past this in one tick is
 // rolled into a single summary line rather than spamming the channel.
 const MAX_EMBEDS = 10;
+
+// ---- IS IT STILL NEWS? ------------------------------------------------------
+// `feed_seen` answers "have I announced this?". Nothing answered "is this still
+// news?", and those are different questions. ANY gap in the cursor turns weeks
+// of history into one tick's worth of breaking news:
+//   · a lost feed_seen row (the silent 1000-row PostgREST cap did this once)
+//   · a failed post throwing away the whole tick's cursor write (see post())
+//   · the 24 builds where lbPublish threw and NOBODY's row moved — when it was
+//     fixed at 712 every pilot's ascensions and milestones were suddenly "new"
+// That is the "it posts old stuff" report, and no amount of cursor correctness
+// fixes it, because the cursor was right and the events were simply stale.
+//
+// A row whose own updated_at is older than this window is HISTORY: it is
+// snapshotted silently so the cursor catches up, and never announced. Dated
+// artefacts that name their own day (the daily digest) are exempt.
+const NEWS_WINDOW_MS = 45 * 60 * 1000;
+const isNews = (ts: unknown, windowMs = NEWS_WINDOW_MS): boolean => {
+  if (!ts) return true;                       // column not selected — never block on absence
+  const t = Date.parse(String(ts));
+  return !isFinite(t) || Date.now() - t <= windowMs;
+};
 
 // COLOUR AND PRIORITY NOW LIVE IN catalog.ts. Both were declared here AND
 // there, which is exactly the drift this restructure exists to stop: two
@@ -549,6 +570,10 @@ const card = (a: string, b: string, verdict: string) =>
   `${up(a)}  ⚔  ${up(b)}\u2003— ${verdict}`;
 
 Deno.serve(async (req) => {
+  // PER-TICK POST BUDGET. Deno reuses a warm isolate between invocations, so
+  // module state survives the response — without this reset the budget would be
+  // spent once and the feed would go permanently silent.
+  postsSent = 0; postsFailed = 0; postsSkipped = 0; lastPostAt = 0;
   if (FEED_KEY && req.headers.get('x-feed-key') !== FEED_KEY) {
     return new Response('forbidden', { status: 403 });
   }
@@ -565,11 +590,11 @@ Deno.serve(async (req) => {
   // and no cargo or Nanocore milestone could cross. Degrade a column set at a
   // time so a server that has not run the migrations still gets everything else
   // instead of a 500.
-  const LB_NEW   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier,hcwave,expo,expo_best';
-  const LB_ART   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier';
-  const LB_FULL  = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god';
-  const LB_CARGO = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best';
-  const LB_BASE  = 'user_id,name,power,level,zone,kills,asc_stars';
+  const LB_NEW   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier,hcwave,expo,expo_best,updated_at';
+  const LB_ART   = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,ships,hull_last,nano_last,cargo_tier,updated_at';
+  const LB_FULL  = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,nano_legend,nano_slots,nano_god,updated_at';
+  const LB_CARGO = 'user_id,name,power,level,zone,kills,asc_stars,cargo,cargo_best,updated_at';
+  const LB_BASE  = 'user_id,name,power,level,zone,kills,asc_stars,updated_at';
 
   const [lb, sd, al, seenRows] = await Promise.all([
     (async () => {
@@ -586,9 +611,28 @@ Deno.serve(async (req) => {
   ]);
 
   // war_events arrives with war-events.sql; the feed runs fine without it.
+  //
+  // NEWEST 400, NOT OLDEST 200. This read was `.order('id', ascending).limit(200)`
+  // — the OLDEST two hundred rows in the table, forever. The drain loop skips
+  // anything at or below the cursor, so the moment war_events passed 200 rows the
+  // stream froze permanently: the query could never return row 201, `maxId` never
+  // moved off 200, and the cursor was never rewritten again. The live cursor read
+  // `{"id": 200}` last written FOUR DAYS ago while every other cursor was current
+  // to the minute — the id and the limit being the same number is the signature.
+  //
+  // Everything on this stream was dead for those four days: repelled sieges,
+  // Kaevith hulls, every new hull, and the daily standings digest. The channel
+  // was not silent, which is why it read as "posts old stuff" rather than "is
+  // broken" — KOTH, the throne and the 3-hourly situation report all come from
+  // other sources and kept posting.
+  //
+  // Descending + reverse always includes the newest rows whatever the cursor
+  // says, so it cannot freeze again. The cursor is fetched in the same
+  // Promise.all as this read, which is why it cannot simply filter on `.gt(id)`.
   let war = await db.from('war_events').select('id,kind,tile_id,actor_id,actor_name,target_name,meta,created_at')
-                    .order('id', { ascending: true }).limit(200);
+                    .order('id', { ascending: false }).limit(400);
   if (war.error) war = { data: [], error: null } as typeof war;
+  if (war.data && war.data.length) war.data.reverse();     // oldest-first for the drain
 
   // citadel_lv arrives with territory-citadel-lv.sql; fall back until it is run.
   let terr = await selectAll(db, 'territory', 'tile_id,owner_id,owner_name,citadel,citadel_lv,cooldown_until', ['tile_id']);
@@ -672,6 +716,12 @@ Deno.serve(async (req) => {
     if (bootstrap) continue;
 
     if (!was) {
+      // A pilot with no cursor row is NOT necessarily a new pilot. feed_seen has
+      // lost rows before, and every one of them read as a fresh signup — dozens
+      // of "joined the fleet" cards for accounts months old. With no baseline
+      // there is nothing to diff anyway, so an old row is learned silently and
+      // only a genuinely young row is announced.
+      if (!isNews((p as any).updated_at)) continue;
       events.push({
         kind: 'pilot',
         line: `**${p.name}** joined`,
@@ -1394,6 +1444,16 @@ Deno.serve(async (req) => {
       const id = Number(w.id) || 0;
       if (id > maxId) maxId = id;
       if (bootstrap || id <= seenId) continue;
+      // STALE ROWS ADVANCE THE CURSOR SILENTLY. maxId is already updated above,
+      // so skipping here still moves past them for good. A siege repelled this
+      // morning is not news at four in the afternoon, and a drained backlog must
+      // never arrive as a burst of history — which matters most on the first tick
+      // after the frozen-cursor fix above, when four days of rows arrive at once.
+      //
+      // The daily digest is a dated artefact rather than a live event, so it gets
+      // a day's grace instead of 45 minutes — but not an unlimited exemption, or
+      // that same recovery tick would post four days of standings back to back.
+      if (!isNews((w as any).created_at, w.kind === 'digest' ? 26 * 3600e3 : NEWS_WINDOW_MS)) continue;
 
       // DAILY DIGEST — queued by daily_ranks_award() at 00:05 UTC. One message,
       // all seven ladders, top 5 each.
@@ -2306,6 +2366,9 @@ Deno.serve(async (req) => {
     ok: true, ver: FEED_VER,
     events: events.length + voidEvents.length,
     posted, void: voidEvents.length,
+    // sent/failed/skipped is the only honest statement of what reached Discord.
+    // pg_cron cannot tell you — it logs the request, not the outcome.
+    sent: postsSent, failed: postsFailed, skipped: postsSkipped,
     tiers: { headline: tiers.headline.length, notable: tiers.notable.length, ambient: tiers.ambient.length },
   });
 });
@@ -2344,15 +2407,63 @@ async function saveSeen(db: any, snap: any[]) {
   }
 }
 
-async function post(body: Record<string, unknown>) {
-  const res = await fetch(WEBHOOK, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  // 429 = webhook rate limit; the next cron tick re-sends because the cursor
-  // is only advanced after a successful post path.
-  if (!res.ok) throw new Error(`discord ${res.status}: ${await res.text()}`);
+// ---- POSTING: NEVER LOSE THE CURSOR OVER A FAILED MESSAGE -------------------
+// This used to THROW on any non-2xx, and the cursor is written at the END of the
+// tick — so ONE 429 threw away the whole run's memory and the next tick
+// re-announced everything that had already posted successfully. The old comment
+// here called that a feature ("the next cron tick re-sends"); it re-sent the
+// world, not the failed message. That is the duplicate half of "the bot posts
+// old stuff", and it is a bookkeeping bug, not a detection one.
+//
+// It is also invisible from the database: pg_cron logs `net.http_post` as
+// "completed: 1 row" the moment the REQUEST is queued, whatever the function
+// then returns. A green cron log and a broken channel look identical — read
+// `net._http_response` (see supabase/feed-health.sql), never cron.job_run_details.
+//
+// Now: space every post, retry once on 429 honouring Discord's own retry_after,
+// then give up QUIETLY so the tick finishes and saves its cursor. A missed line
+// in a chat channel is a smaller harm than announcing the whole week twice.
+// Discord's webhook budget is ~5 requests / 2s, and a busy tick can fire a
+// dozen messages, so the per-tick cap is what stops a 429 storm forming at all.
+// Anything over budget still appears in the 3-hour situation report.
+const POST_GAP_MS = 400;
+const POST_BUDGET = 8;
+let postsSent = 0, postsFailed = 0, postsSkipped = 0, lastPostAt = 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function post(body: Record<string, unknown>): Promise<boolean> {
+  if (postsSent >= POST_BUDGET) { postsSkipped++; return false; }
+  const since = Date.now() - lastPostAt;
+  if (lastPostAt && since < POST_GAP_MS) await sleep(POST_GAP_MS - since);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      try { console.error('discord fetch failed: ' + String(e)); } catch (_e) {}
+      postsFailed++; return false;
+    }
+    lastPostAt = Date.now();
+    if (res.ok) { postsSent++; return true; }
+    if (res.status === 429 && attempt === 0) {
+      let wait = 1000;
+      try { const j = await res.json(); wait = Math.min(5000, Math.round((Number(j.retry_after) || 1) * 1000)); } catch (_e) {}
+      await sleep(wait);
+      continue;                                 // one retry, then we move on
+    }
+    // 400 here is almost always a malformed embed (over 6000 chars, over 25
+    // fields, a bad colour). Log the body's shape so it is diagnosable without
+    // guessing, and do NOT take the tick down with it.
+    try { console.error('discord ' + res.status + ': ' + (await res.text()).slice(0, 400)); } catch (_e) {}
+    postsFailed++;
+    return false;
+  }
+  postsFailed++;
+  return false;
 }
 
 function json(o: unknown) {

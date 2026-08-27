@@ -69,6 +69,10 @@
     try { await client.from('saves').delete().eq('user_id', userId); } catch (e) {}
     try { await client.from('save_conflicts').delete().eq('user_id', userId); } catch (e) {}
     try { await client.from('leaderboard').delete().eq('user_id', userId); } catch (e) {}
+    // global chat (build 728). One RPC, because chat_messages has no delete
+    // policy: a policy scoped to the caller would also let any pilot erase their
+    // own words out of the live room. See supabase/global-chat.sql.
+    try { await client.rpc('chat_forget'); } catch (e) {}
     try { await client.from('wallets').delete().eq('user_id', userId); } catch (e) {}
     try { await client.functions.invoke('delete-account'); } catch (e) {}
     return true;
@@ -324,6 +328,27 @@
   async function lbUpsert(p) {
     try {
       if (!enabled || !p) return;
+      // NO SESSION, NO PUBLISH.
+      //
+      // Every lb_upsert overload opens with
+      //   if auth.uid() is null then raise exception 'not authenticated'; end if;
+      // and this function walks a CASCADE of ten rungs looking for a signature
+      // the server accepts. So one publish attempted without a cloud session
+      // does not fail once — it raises P0001 on every rung it tries, and the
+      // heartbeat runs every 90s plus two retries at boot.
+      //
+      // That is the `not authenticated` flood in the Postgres log: ~60 errors
+      // per 30 minutes, arriving in bursts of five to eight seconds apart
+      // (one burst = one publish walking its ladder), from guests and from
+      // sessions whose token has expired. Not one of those calls could ever
+      // have written a row, so the correct number of them is zero.
+      //
+      // Positive determination only: if AUTH is not loaded yet we do NOT block,
+      // because silencing a legitimate publish is worse than a log line.
+      try {
+        const s = window.AUTH && window.AUTH.session && window.AUTH.session();
+        if (window.AUTH && window.AUTH.session && (!s || !s.id || s.method !== 'Supabase')) return;
+      } catch (e) {}
       // LAST-DITCH SORT-KEY GUARD. The row is a full overwrite and `power` orders
       // the whole board, so a zero here does not mean "weak pilot", it means
       // "invisible pilot" — the row sorts below every sim and falls out of the

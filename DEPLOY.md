@@ -1,24 +1,25 @@
-# Loot Fleet — deploy v255 · build 728 · GLOBAL CHAT
+# Loot Fleet — deploy v256 · build 729 · FIGHTER ASCENSION
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
 Supersedes **v253 (build 726), which is what players are running right now.**
-Service worker cache is `lootfleet-v728`. **Login screen reads `BUILD 728`.**
+Service worker cache is `lootfleet-v729`. **Login screen reads `BUILD 729`.**
 The update gate force-reloads every live session within ~90s of the beacon.
 
-> **This release carries TWO builds.** Build 727 (`deploy-v254`) was cut and
-> verified but never pushed, so 726 players have never seen any of it. v255
-> carries 727 **and** 728 together — one eviction instead of two.
+> **This release carries THREE builds.** 727 (`deploy-v254`) and 728
+> (`deploy-v255`) were both cut and verified but never pushed, so 726 players
+> have seen none of it. v256 carries 727, 728 **and** 729 together — one
+> eviction instead of three.
 >
 > **Consequence for the patch card:** `js/patch-notes.js` shows exactly one card
-> per build, keyed on `LF_BUILD` in localStorage. A 726 player jumping to 728
-> would have skipped 727's card entirely — including the **Home Citadel wave-pay
-> cap, which is a nerf**, and CLAUDE.md is explicit that a nerf ships stated out
-> loud or it reads as a bug. The 728 card therefore carries **all 15 rows** from
-> both builds: 2 CHANGED, 3 NEW, 10 FIXED.
+> per build, keyed on `LF_BUILD` in localStorage. A 726 player jumping to 729
+> would have skipped both intermediate cards — including the **Home Citadel
+> wave-pay cap, which is a nerf**, and CLAUDE.md is explicit that a nerf ships
+> stated out loud or it reads as a bug. The 729 card therefore carries **all 23
+> rows** from the three builds: 2 CHANGED, 5 NEW, 16 FIXED.
 >
-> `deploy-v254` is now superseded and should not be pushed. Do not re-seed it
-> from the project root either — root is 728.
+> `deploy-v254` and `deploy-v255` are now superseded and should not be pushed.
+> Do not re-seed either from the project root — root is 729.
 
 ---
 
@@ -90,50 +91,93 @@ player onto code that is not there yet.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 728 |
-| root `version.json` | 728 |
-| `deploy-v255/version.json` | 728 |
-| `deploy-v255/sw.js` `CACHE` | `lootfleet-v728` |
+| root `game.html` `window.LF_BUILD` | 729 |
+| root `version.json` | 729 |
+| `deploy-v256/version.json` | 729 |
+| `deploy-v256/sw.js` `CACHE` | `lootfleet-v729` |
 | `discord-feed` `FEED_VER` | **727** (redeploy required) |
 
 All four agree.
 
 **Verified by script before handover:**
 
-- All **94** `js`/`css` files `game.html` references (75 js, 19 css) diffed
+- All **97** `js`/`css` files `game.html` references (77 js, 20 css) diffed
   byte-for-byte against the project root — **zero stale, zero missing, every ref
   cache-busted**.
-- `?v=` spread: **9 at 728** (this build), **9 at 727** (carried from the
-  unpushed 727), 2 at 726, 74 at 725 — so players keep 76 cached files and
-  re-fetch only what actually changed.
-- `deploy-v255/sw.js` confirmed **not** to be the root kill-switch worker, and
+- `?v=` spread: **13 at 729** (this build), 5 at 728, 5 at 727, 2 at 726, 72 at
+  725 — so players keep 84 cached files and re-fetch only what actually changed.
+- `deploy-v256/sw.js` confirmed **not** to be the root kill-switch worker, and
   root `sw.js` confirmed still unversioned (it is a kill-switch for an old
   poisoned origin — never give it a `CACHE` version).
-- `js/social-upload.js` **excluded** from this folder. It is a local operator
-  tool that reads a service key from localStorage and must never ship. It was
-  present in v254 and earlier folders; that is corrected here.
-- `audit/` excluded (dev harness for the chat fit checks).
-- `js/chat.js` + `css/chat.css` added to the `sw.js` precache list, along with
-  the eight other files changed this build that were being served stale offline.
+- `js/social-upload.js` **excluded** from this folder, and confirmed not
+  referenced by `game.html`. It is a local operator tool that reads a service key
+  from localStorage and must never ship. It was present in v254 and earlier
+  folders; that stays corrected here.
+- `audit/` excluded (dev harness for the chat and fighter fit checks).
+- `js/fighter-ascension.js`, `js/fighter-ascension-ui.js` and
+  `css/fighter-ascension.css` added to the `sw.js` precache list, along with
+  `js/fighters.js` and `js/pilot-ascension.js`, which changed this build and
+  would otherwise be served stale offline.
 
-### Files at `?v=728` (changed this build)
+### Files at `?v=729` (changed this build)
 
 ```
-js/chat.js          NEW  global chat dock
-css/chat.css        NEW  dock styling
-supabase/global-chat.sql  NEW  schema + RPCs (not referenced by game.html)
-js/cloud.js              chat_forget() on account deletion
-js/fit-audit.js          .gc-scroll registered as a clip-audit root
-js/patch-notes.js        merged 727 + 728 card
-js/config-v2.js          Eternum flyReq stars 100 → 30; desc stops restating figures
-js/ui-v94.js             ship-tile licence derives from flyReq; support → Discord
-js/cargo-defense.js      Eternum card + yard bill derive from flyReq / claimCost
-js/redeem.js             stale comment
+js/fighter-ascension.js     NEW  doctrines, ranks, costs — the only statement of them
+js/fighter-ascension-ui.js  NEW  the doctrine screen
+css/fighter-ascension.css   NEW  screen styling
+css/sheet-cta.css           NEW  pinned sheet action rows
+js/fighters.js                   applies doctrines; Wing Tactics; lazy airframe load + retry
+js/game-v93.js                   fasc + autoBeacon in ASC_KEEP; Auto Beacon trigger
+js/account.js                    fasc max-unioned per doctrine in mergeSaves()
+js/ui-v94.js                     Auto Beacon market entry; refusals land in-sheet
+js/pilot-ascension.js            wing disbands on screen; real starter hull named
+js/dreadnaught.js                hunt lockout clocks survive ascension
+js/config-v2.js                  Eternum flyReq cargo 1000 → 300
+js/chat.js                       carried from 728
+js/patch-notes.js                merged 727 + 728 + 729 card
 ```
 
 ---
 
 ## WHAT CHANGED SINCE 726 (what players will notice)
+
+### Build 729
+
+- **Fighter Ascension.** Four permanent wing doctrines — Corona Mantle, Phantom
+  Lattice, Nova Reclamation, Apex Sortie — ten ranks each, gated on **Pilot
+  Ascension ★10**, account-wide across every bay on every carrier. No RNG; each
+  rank costs gold ×5, a galaxy resource ×3 and ◈ prism ingots ×2, so the ladder
+  cannot be walked on one income stream.
+  - `js/fighter-ascension.js` is the **only** statement of what a rank does and
+    what it costs. fighters.js applies it, the screen prints it, nothing
+    restates a figure.
+  - **Save:** `fasc` is in `ASC_KEEP` and **max-unioned per doctrine** in
+    `mergeSaves()` — a rank cannot be spent, refunded or respecced, so the higher
+    copy is always the true one. `sanitizeSave()` clamps ranks and never revokes
+    one, including a rank from a newer build.
+  - **KOTH checked, no change needed.** Corona and Nova are area damage, so the
+    worry is a maxed wing blowing past `koth_max_kps` and having bumps silently
+    clamped. It cannot: kills are bounded by **spawns**, and the arena tops the
+    field up to 26 hostiles at most 6 per 0.25s — a hard **24 kills/second**
+    however fast the wing deletes things. The cap is 60/s sustained + 300 burst,
+    so there is 2.5× headroom. **Do not raise that knob for this feature.** If a
+    future change raises the *spawn* ceiling, redo this arithmetic.
+- **Auto Beacon** — 25,000 LootCoins in Hangar ▸ Market ▸ Operations. Fires the
+  beacon the moment it is charged, asking exactly what the button asks, so never
+  during a boss and never before Lv 30. The sku is a receipt in `purchases`; the
+  armed flag is separate, reads true unless explicitly false, and is in
+  `ASC_KEEP` so a deliberate OFF survives ascension too.
+- **Hunt lockout clocks survive ascension.** `dreadLock`, `dreadProFree` and
+  `dreadRespawn` were not in `ASC_KEEP`, so ascending re-opened the whole
+  Dreadnaught tier ladder — max level, run the hunts, ascend, repeat. The
+  pilot's run resets; the calendar does not.
+- **Fighters draw their own airframes**, loaded lazily per marque with retry. A
+  failed `Image` is `complete` with `naturalWidth === 0` forever, so one dropped
+  fetch used to write that marque off for the whole session and draw a triangle.
+- **Refusals land where the player is looking** — in the sheet, above the pinned
+  action row, instead of under the backdrop that produced them.
+- Auto-sell sells again; ascending disbands the wing on screen; the ascension
+  screens name the real starter hull; the Pilot Tree list is readable on a phone.
 
 ### Build 728
 
@@ -142,9 +186,12 @@ js/redeem.js             stale comment
   doing. The battle keeps running behind it. Tap a name for a pilot card
   (level / zone / power / fleet) and add a friend from it. Mute is server-side so
   it roams; `⚑` reports a message with a frozen snapshot of it.
-  - **Posting unlocks at Level 5**, from the player's *published leaderboard
+  - **Posting unlocks at Level 10**, from the player's *published leaderboard
     row* — a throwaway account has no row and cannot post. Reading is open to any
-    account.
+    account. **The room opens hardened because there is no moderator roster:**
+    `min_level` 10 and `slow_mode_s` 10 are the seeded defaults, and the patch
+    card tells players the room starts strict and will loosen. Relax with one
+    `UPDATE` each once someone is watching the report queue.
   - **Links are stripped**, not rejected. Zero-width and bidi-override
     characters too.
   - Cooldown 4s, burst 5/30s, 60/hr, duplicate suppression, length 180. **Every
@@ -167,9 +214,12 @@ js/redeem.js             stale comment
     LootCoins" for a bill that is 10T gold, 1T each of fuel/iron/plasma and
     10,000 LootCoins. `flyReq` and `claimCost` are now the single statement and
     every printed figure derives from them.
-  - **Not changed, and now the binding wall: `cargo: 1000`.** At 2 runs/day
-    that is ~500 days — longer than ★30. Lowering the star gate alone does not
-    make the Eternum reachable this year. That is a design call, not a bug.
+  - **The binding wall came down too: `cargo` 1000 → 300.** ★30 is ~26 weeks;
+    1,000 cargo runs at 2/day is ~500 days, so lowering the star gate alone left
+    the Eternum just as far away. 300 runs (~150 days) puts the two halves of the
+    licence on the same timescale. Lowering a requirement only ever grants
+    access — no pilot loses anything, and anyone already past 300 qualifies the
+    moment they load in.
 - **Settings → Help & Support now opens Discord** (`discord.gg/4F6cYmP4f`),
   replacing the `support.html` link.
 

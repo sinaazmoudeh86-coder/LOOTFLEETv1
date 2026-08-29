@@ -829,6 +829,23 @@ body.gfx-med #game-canvas{ filter:none !important; }
 .gxl-key span{ display:inline-flex; align-items:center; gap:2px; white-space:nowrap; }
 .gxl-key .gxr-m{ margin-left:0; font-size:11.5px; }
 .gxr-sub{ font-size:10px; color:var(--muted-2); text-transform:capitalize; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* PILLS, NOT A DOT-SEPARATED RUN. Each pill is one labelled fact — the label is
+   the <b>, the value is the text after it — so "which level is this" and "who
+   holds it" are answered by looking rather than by parsing a sentence. They wrap
+   rather than ellipsis: losing the owner off the right edge is exactly the
+   information the row exists to carry. */
+.gxr-pills{ display:flex; flex-wrap:wrap; gap:4px; min-width:0; }
+.gxr-p{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:700; line-height:1;
+  padding:3px 6px; border-radius:5px; white-space:nowrap; color:#c3d2e4;
+  background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.075); }
+.gxr-p b{ font-weight:800; letter-spacing:.07em; font-size:8.5px; opacity:.72; }
+.gxr-p.nat{ color:#ffd9a8; background:rgba(255,190,110,.11); border-color:rgba(255,190,110,.3); }
+.gxr-p.mine{ color:#a8d4ff; background:rgba(45,120,235,.15); border-color:rgba(120,175,255,.32); }
+.gxr-p.rival{ color:#ffb0ba; background:rgba(210,59,78,.14); border-color:rgba(255,138,150,.3); }
+.gxr-p.deep{ color:#9fe2ff; background:rgba(95,209,255,.1); border-color:rgba(95,209,255,.26); }
+.gxr-p.who{ color:#e2caa4; }
+.gxr-p.ally{ color:#7ce0a0; background:rgba(70,210,122,.14); border-color:rgba(124,224,160,.3); }
+.gxr-p.open{ color:#8fa3b8; }
 .gxr-rate{ font-family:var(--font-display); font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .gxr-rate i{ font-style:normal; font-size:9px; opacity:.6; }
 .gxr-s{ font-style:normal; font-size:9px; font-weight:800; letter-spacing:.08em; border-radius:5px; padding:4px 6px; white-space:nowrap; }
@@ -848,7 +865,11 @@ body.gfx-med #game-canvas{ filter:none !important; }
 .gxl-pgn{ font-size:11px; font-weight:700; color:var(--muted-2); font-variant-numeric:tabular-nums; }
 @media (max-width:420px){
   .gxr{ grid-template-columns:30px minmax(0,1fr) auto; gap:7px; padding:8px; }
-  .gxr-rate{ display:none; }
+  /* THE RATE STAYS. It used to be display:none here — but it is the number the
+     row exists to report, and hiding the tile's worth on a phone leaves a list
+     of names. The state tag is what wraps to the pill row instead. */
+  .gxr-rate{ font-size:11px; }
+  .gxr-s{ grid-column:2 / -1; justify-self:start; }
 }
 
 /* per-ship loadout cards — which ship is running which items */

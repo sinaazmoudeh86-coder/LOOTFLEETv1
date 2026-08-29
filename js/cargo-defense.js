@@ -514,6 +514,13 @@
     render();
   }
 
+  // ◇ DREAD CORE SCARCITY (729). Every core faucet in the game reads the one
+  // rate in config-v2 (CONFIG.DREAD_CORE_RATE) so total supply is a single
+  // decision rather than six unrelated ones. A manifest line that promised cores
+  // can now come back empty; the reveal only prints the row when one landed.
+  function coreScale(n) {
+    try { return window.CONFIG.coreYield(n); } catch (e) { return Math.max(0, Math.round(Number(n) || 0)); }
+  }
   function rollManifest(t, integrity) {
     const m = condMult(integrity), L = lvlMul();
     const out = { gold: 0, res: null, lc: 0, cores: 0, missed: [], lvlMul: L };
@@ -528,7 +535,7 @@
       // 0.1 → 0.05: LootCoin manifest lines halved in the Aug 2026 payout pass
       // (build 614). Gold, resources and Dread Cores are unchanged.
       } else if (kind === 'lc') out.lc += Math.round(arg * 0.05 * (0.8 + Math.random() * 0.5) * Math.min(4, L));
-      else if (kind === 'cores') out.cores += Math.max(1, Math.round(arg * 0.1 * (0.7 + Math.random() * 0.7) * Math.min(5, L)));
+      else if (kind === 'cores') out.cores += coreScale(Math.max(1, Math.round(arg * 0.1 * (0.7 + Math.random() * 0.7) * Math.min(5, L))));
     });
     return out;
   }

@@ -969,7 +969,15 @@
     { key:'eternum', name:'Eternum', cls:'Carrier', price:0, reqKills:0, weapons:7, ammo:3, hull:3, drones:192,
       mods:{ hpPct:7920, dmgPct:4455, multiShot:1188, critChance:95, critDamage:3465, moveSpeed:744, atkSpeedPct:1485, rangePct:6000, lifeSteal:43.8 },
       tag:'CELESTIAL CLASS · ETERNUM', celestial:true, sinaTracers:true, deathBeams:5, dpsAura:0.9,
-      flyReq:{ cargo:1000, stars:30, ship:'titansina' },
+      // CARGO 1000 → 300 (Aug 2026). Dropping stars 100 → 30 was supposed to make
+      // the Celestial Class reachable, and it did not: at ~2 runs/day the cargo
+      // line alone was ~500 days, so it simply replaced one wall with another and
+      // ★30 changed nothing. 300 runs is ~150 days, which lands in the same
+      // neighbourhood as ★30 — both lines now finish around the same time instead
+      // of one hiding the other. Nothing else about the licence moved: still a
+      // Titan Sina in the hangar, still an Eternum Core off the deepest Omega
+      // Cargo V roll, still the 10-trillion yard bill in claimCost below.
+      flyReq:{ cargo:300, stars:30, ship:'titansina' },
       // COMMISSIONING COST. The 2% Omega Cargo V roll recovers an ETERNUM CORE,
       // not the hull — the hull is then built around it, and the yard wants
       // 10 TRILLION gold, and — since the non-gold economy came down 10× — one
@@ -1080,6 +1088,42 @@
   };
 
   const FLEET = { slotLevels: [100, 200, 300, 400], maxShips: 5, escortDmgFrac: 0.25, escortFireRate: 1.1, statShare: 0.30 };
+
+  // ---- ◇ DREAD CORE SCARCITY ---------------------------------------------
+  // ONE NUMBER FOR EVERY CORE FAUCET IN THE GAME (build 729). Cores buy Pilot
+  // Tree nodes — the only account-wide permanent buff — and they were arriving
+  // from six unrelated systems, each with its own hand-written rate, so the real
+  // supply was nobody's decision. This is the single statement of it: 0.30 means
+  // every faucet pays 30% of what it used to.
+  //
+  // FAUCETS THAT READ IT: the Dreadnaught Hunt drop chance, Home Citadel wave
+  // crates, Cargo Defense manifests, Fleet Exploration payouts, and the two
+  // client-side Voidmaw stage grants. Move the supply HERE and nowhere else.
+  //
+  // WHAT IT DELIBERATELY DOES NOT TOUCH:
+  //   · Any BALANCE. Nothing already earned is clawed back — a nerf closes a
+  //     faucet, it does not reach into a wallet.
+  //   · SINKS. Node costs and the Shipworks crate price are unchanged; raising a
+  //     price is a different nerf and would compound with this one.
+  //   · SERVER-MAILED awards (ladder placings, Voidmaw claims). The server
+  //     decides those and the mail states what it paid — scaling them on the
+  //     client would print one number and bank another.
+  //   · The FIRST-EVER core from the hunt, which is onboarding, not supply.
+  //   · The `coreLuck` tree node. A player spent cores on "double cores"; the
+  //     rate applies to the base roll and the node still doubles what survives.
+  const DREAD_CORE_RATE = 0.30;
+  // Scale a whole-core payout and keep the EXPECTED VALUE exact. A flat
+  // Math.round would turn every 1-core reward into 0 (round(0.3)) and every
+  // 2-core reward into 1 — a 50% cut, not 70% — so the fraction is paid as a
+  // CHANCE instead: 2 cores → 0.6 → 60% chance of one. Over many payouts this
+  // lands on exactly 30%, and no individual payout can round up to more than it
+  // was worth. Returns 0 freely; every caller is responsible for saying "none
+  // this time" rather than printing ◇ 0.
+  function coreYield(n) {
+    const scaled = Math.max(0, Number(n) || 0) * DREAD_CORE_RATE;
+    const whole = Math.floor(scaled);
+    return whole + (Math.random() < (scaled - whole) ? 1 : 0);
+  }
 
   // The ordered equipment slots a ship exposes. Extra weapon/ammo/hull slots
   // reuse the base item types (a 'bow' item fits bow2/bow3/bow4, etc.).
@@ -1226,6 +1270,7 @@
   window.CONFIG = {
     RARITY, RARITY_BY_KEY, STATS, STAT_KEYS, SLOTS, SLOT_KEYS, ENEMIES,
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
+    DREAD_CORE_RATE, coreYield,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE, liveRarityMax,
     SHIPS, SHIP_BY_KEY, MECHS, MECH_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,

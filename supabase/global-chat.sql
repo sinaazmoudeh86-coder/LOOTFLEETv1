@@ -31,14 +31,25 @@ alter table public.chat_config enable row level security;
 drop policy if exists "cc_read" on public.chat_config;
 create policy "cc_read" on public.chat_config for select using (auth.uid() is not null);
 
+-- LAUNCHING WITHOUT A MODERATION ROSTER — DECIDED, Aug 2026.
+-- Nobody is assigned to read chat_mod_queue(), so the room opens on its
+-- CONSERVATIVE settings rather than its comfortable ones: posting at Level 10
+-- (not 5) and a 10s slow mode on everyone. Reading stays free at any level.
+-- The tools all work; what is missing is a human, so the limits carry the load
+-- instead. Relax it the day someone is watching — one UPDATE each, effective on
+-- the next message, no client push and no eviction:
+--    update chat_config set v = '5'::jsonb  where k = 'min_level';
+--    update chat_config set v = '0'::jsonb  where k = 'slow_mode_s';
+-- The _chat_cfg() fallbacks below match these seeds, so a deleted row behaves
+-- the same way rather than quietly reopening the room.
 insert into public.chat_config(k, v) values
-  ('min_level',  '5'::jsonb),      -- read is always free; POSTING unlocks here
+  ('min_level',  '10'::jsonb),     -- read is always free; POSTING unlocks here
   ('max_len',    '180'::jsonb),
   ('cooldown_s', '4'::jsonb),      -- between one pilot's own messages
   ('burst_n',    '5'::jsonb),      -- ...and no more than burst_n per burst_s
   ('burst_s',    '30'::jsonb),
   ('hourly_n',   '60'::jsonb),
-  ('slow_mode_s','0'::jsonb),      -- operator incident brake, applies to EVERYONE
+  ('slow_mode_s','10'::jsonb),     -- operator incident brake, applies to EVERYONE
   ('keep_days',  '7'::jsonb)
 on conflict (k) do nothing;        -- NEVER clobber a knob the operator has turned
 
@@ -179,9 +190,9 @@ declare me uuid := auth.uid(); minlv int; lv int; b record; lastp timestamptz;
         cd int; slow int; wait numeric := 0; n int;
 begin
   if me is null then return jsonb_build_object('ok', false, 'why', 'signin'); end if;
-  minlv := public._chat_cfg('min_level', 5)::int;
+  minlv := public._chat_cfg('min_level', 10)::int;
   cd    := public._chat_cfg('cooldown_s', 4)::int;
-  slow  := public._chat_cfg('slow_mode_s', 0)::int;
+  slow  := public._chat_cfg('slow_mode_s', 10)::int;
 
   select * into b from public.chat_bans where user_id = me;
   if b.user_id is not null and (b.until is null or b.until > now()) then
@@ -229,7 +240,7 @@ begin
 
   maxlen := public._chat_cfg('max_len', 180)::int;
   cd     := public._chat_cfg('cooldown_s', 4)::int;
-  slow   := public._chat_cfg('slow_mode_s', 0)::int;
+  slow   := public._chat_cfg('slow_mode_s', 10)::int;
   bn     := public._chat_cfg('burst_n', 5)::int;
   bs     := public._chat_cfg('burst_s', 30)::int;
   hn     := public._chat_cfg('hourly_n', 60)::int;
@@ -238,8 +249,8 @@ begin
   -- the caller. A throwaway account has no leaderboard row and cannot post.
   select name, level into nm, lv from public.leaderboard where user_id = me;
   if lv is null then raise exception 'your pilot record has not reached the server yet — finish a battle and try again'; end if;
-  if lv < public._chat_cfg('min_level', 5)::int then
-    raise exception 'global chat unlocks at Level %', public._chat_cfg('min_level', 5)::int;
+  if lv < public._chat_cfg('min_level', 10)::int then
+    raise exception 'global chat unlocks at Level %', public._chat_cfg('min_level', 10)::int;
   end if;
 
   t := public._chat_clean(p_txt, maxlen);

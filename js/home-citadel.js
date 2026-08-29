@@ -1123,7 +1123,7 @@
     if (msg) toast('🏰 ' + msg);
     render(); updateHud();
   }
-  // A PART CRATE IS NEVER LOST, ONLY QUEUED. The crate — and the 2 cores past
+  // A PART CRATE IS NEVER LOST, ONLY QUEUED. The crate — and the cores past
   // wave 50 — is why anyone goes deep, so losing one for clearing waves quickly
   // would teach the opposite of the lesson. Each costs a full wave's budget.
   function payCrates(s, wave, lines) {
@@ -1137,7 +1137,18 @@
       st.shipParts[k] = (st.shipParts[k] | 0) + 1;
       lines.push({ t: '⬡ Part Crate — 1× ' + shipName(k), c: band(wave).c, big: 1 });
       // a wallet is floored, never `| 0` — a career total passes int32 and wraps
-      if (wave >= 50) { st.dreadCores = Math.floor(Number(st.dreadCores) || 0) + 2; lines.push({ t: '◇ 2 Dread Cores', c: '#ff5a68' }); }
+      if (wave >= 50) {
+        // SCARCITY PASS (729): the crate's two cores go through CONFIG.coreYield,
+        // so this pays 0 or 1 where it used to pay a guaranteed 2. The line is
+        // only printed when something actually landed — a reward row reading
+        // "◇ 0 Dread Cores" is worse than no row at all.
+        // a wallet is floored, never `| 0` — a career total passes int32 and wraps
+        const cy = (window.CONFIG && window.CONFIG.coreYield) ? window.CONFIG.coreYield(2) : 2;
+        if (cy > 0) {
+          st.dreadCores = Math.floor(Number(st.dreadCores) || 0) + cy;
+          lines.push({ t: '◇ ' + cy + ' Dread Core' + (cy === 1 ? '' : 's'), c: '#ff5a68' });
+        }
+      }
     }
   }
   // grant the rewards for clearing wave `next` — shared by solo + auto runs

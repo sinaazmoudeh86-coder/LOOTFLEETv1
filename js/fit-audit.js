@@ -55,7 +55,25 @@
     // inside it would ever be inspected. It is also the one place in the game
     // where the content length is set by OTHER PLAYERS, which is exactly the
     // case worth auditing.
-    document.querySelectorAll('.screen.active .scr-body, .sheet-body, .mega.open .mega-grid, .screen.active .pl-lrows, .cmp-list, .cmx-list, #gc-dock.open .gc-scroll').forEach((root) => {
+    // TEN MORE ROOTS ADDED (729 audit). The rule this file states — "the auditor
+    // only sees the roots it is told about" — had drifted again: a sweep of every
+    // `overflow-y:auto` in css/ found ten scroll containers outside the net, and
+    // the list below is that sweep's result rather than the roots anyone happened
+    // to remember. Worth naming why several of them matter:
+    //   .pn-body     the patch-notes card — EVERY player sees it on EVERY new
+    //                build, and its length is set by how much shipped
+    //   .kov-card    the KOTH arena overlay, which now carries the WHEN KILLS
+    //                COUNT card added in 712
+    //   .pa-picks    the perk picker behind an IRREVERSIBLE action
+    //   .tp-*        the season pass — bought with real money
+    //   .gc-cd       the chat pilot card, whose content is another player's name
+    //   .death-body  shown at the player's worst moment, listing what they lost
+    document.querySelectorAll([
+      '.screen.active .scr-body', '.sheet-body', '.mega.open .mega-grid',
+      '.screen.active .pl-lrows', '.cmp-list', '.cmx-list', '#gc-dock.open .gc-scroll',
+      '.pn-body', '.kov-card', '.pa-picks', '.pa-modal', '.tp-ladder.all', '.tp-modal',
+      '.tp-rcpt', '.ex-picklist', '.mn-sheet', '.gc-cd', '.death-body',
+    ].join(', ')).forEach((root) => {
       if (seen.has(root)) return; seen.add(root);
       const els = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
       for (const el of els) {

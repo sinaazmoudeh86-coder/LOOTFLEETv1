@@ -1041,6 +1041,27 @@
         bm.earned = Math.max(Math.floor(Number(bm.earned) || 0), Math.floor(Number(om.earned) || 0));
       }
     }
+    // ---- FIGHTER ASCENSION DOCTRINES. Four permanent wing doctrines, bought at
+    // ★10 for gold + a galaxy resource + prism ingots. Named here for the standing
+    // reason: a system absent from this union is decided wholesale by the base
+    // pick, and the losing copy's version of it is simply gone.
+    //
+    // MAX-WINS PER DOCTRINE IS PROVABLY SAFE HERE, and it is not the `pasc.pts`
+    // case: a rank is not a wallet. It cannot be spent, refunded or respecced —
+    // there is no path in the game that lowers one — so the higher copy is always
+    // the true one. The three CURRENCIES that bought it are untouched by this
+    // block and stay with gold, credits and dreadCores: decided by the base pick.
+    // Two devices buying different doctrines offline therefore keep both ranks and
+    // one device's spend, which is the same trade mechCores documents above.
+    if (other.fasc && other.fasc.ranks) {
+      if (!base.fasc || !base.fasc.ranks) base.fasc = other.fasc;
+      else {
+        const br = base.fasc.ranks, or = other.fasc.ranks;
+        for (const k in or) {
+          br[k] = Math.max(Math.floor(Number(br[k]) || 0), Math.floor(Number(or[k]) || 0));
+        }
+      }
+    }
     // ---- COMMANDERS. The ALBUM is a record: a card cannot be un-found and a pull
     // cannot be un-made, so `own` unions per officer (best rarity ever seen, most
     // duplicates ever counted) and `pulls` max-wins. Absent from this union, a

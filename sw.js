@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v728';
+const CACHE = 'lootfleet-v729';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -60,6 +60,11 @@ const CORE = [
   // for the same reason as the v217 batch above: an offline PWA would otherwise
   // fall back to the network and the chat dock would come up unstyled.
   'js/chat.js', 'css/chat.css',
+  // v256 / build 729 — FIGHTER ASCENSION. Referenced by game.html, so precached
+  // for the same reason as the batches above: an offline PWA would otherwise
+  // fall back to the network and the doctrine screen would come up unstyled.
+  'js/fighter-ascension.js', 'js/fighter-ascension-ui.js', 'css/fighter-ascension.css',
+  'js/fighters.js', 'js/pilot-ascension.js',
   // changed this release and never precached, so offline served a stale copy
   'js/patch-notes.js', 'css/patch-notes.css', 'js/cloud.js', 'js/account.js',
   'js/ui-v94.js', 'js/game-v93.js', 'js/home-citadel.js', 'js/dreadnaught.js',

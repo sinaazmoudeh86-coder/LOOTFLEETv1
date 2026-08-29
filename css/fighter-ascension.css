@@ -1,0 +1,143 @@
+/* =============================================================================
+   fighter-ascension.css — Command ▸ Fighter Ascension
+   -----------------------------------------------------------------------------
+   Same visual grammar as Ship Ascension: a hero, a card grid, one accent colour
+   per card driven by --dc. Nothing here sets a fixed height on a card whose
+   content can grow (see the layout fit contract) — cards are min-height only and
+   the screen body scrolls.
+   ============================================================================= */
+#screen-fasc .scr-title{ color:#ff8a3d; }
+#fasc-body{ padding:12px; display:flex; flex-direction:column; gap:11px; }
+/* NO SECTION MAY BE CRUSHED INTO ITS OWN OVERFLOW. This is the same rule
+   css/fit-guard.css states globally for scrolling bodies — restated locally
+   because this body sets its own flex column: without it, a short window shrinks
+   the card grid instead of scrolling, and the last line of a card is cut off
+   behind the next one. A short window scrolls; nothing here is a fill pane. */
+#fasc-body > *{ flex:0 0 auto; min-height:0; }
+
+/* ---- locked veil: one line, the requirement, a bar ----------------------- */
+.fa-veil{ text-align:center; padding:26px 18px; border:1px solid #223245; border-radius:16px;
+  background:radial-gradient(120% 100% at 50% 0%, rgba(255,138,61,.12), #0b1220 62%); }
+.fa-veil-ic{ font-size:34px; color:#ff8a3d; text-shadow:0 0 22px rgba(255,138,61,.7); }
+.fa-veil-t{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:15px; letter-spacing:.14em; color:#f2f7ff; margin-top:8px; }
+.fa-veil-s{ font-size:12px; line-height:1.6; color:#93a6bd; margin:8px auto 0; max-width:420px; text-wrap:pretty; }
+.fa-veil-s b{ color:#ffcf9a; }
+.fa-veil-bar{ height:6px; border-radius:4px; background:#101a26; overflow:hidden; margin:14px auto 0; max-width:420px; }
+.fa-veil-bar i{ display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,#ff8a3d,#ffd24d); }
+.fa-veil-l{ display:flex; justify-content:space-between; max-width:420px; margin:5px auto 0; font-size:9.5px; font-weight:800; letter-spacing:.08em; color:#71859a; }
+
+/* ---- hero ---------------------------------------------------------------- */
+.fa-hero{ display:flex; gap:14px; align-items:center; flex-wrap:wrap; border:1px solid rgba(255,138,61,.4); border-radius:16px; padding:13px;
+  background:linear-gradient(180deg, rgba(255,138,61,.08), #0a101c); }
+.fa-hero-l{ flex:1 1 260px; min-width:0; }
+.fa-hero-k{ font-size:8.5px; font-weight:800; letter-spacing:.18em; color:#ffb37a; }
+.fa-hero-t{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:14px; color:#f2f7ff; margin-top:5px; letter-spacing:.02em; }
+.fa-hero-s{ font-size:11.5px; line-height:1.6; color:#8ba0b5; margin-top:6px; text-wrap:pretty; }
+.fa-hero-s b{ color:#dbe8f5; }
+.fa-hero-r{ display:flex; gap:8px; flex:0 0 auto; }
+.fa-stat{ text-align:center; border:1px solid #2b4055; border-radius:10px; padding:7px 11px; min-width:76px; background:rgba(255,255,255,.02); }
+.fa-stat b{ display:block; font-family:'Orbitron',sans-serif; font-size:16px; color:#ffcf9a; font-variant-numeric:tabular-nums; }
+.fa-stat b i{ font-style:normal; font-size:11px; color:#71859a; }
+.fa-stat span{ display:block; font-size:8px; font-weight:800; letter-spacing:.1em; color:#7f92a6; margin-top:2px; }
+
+.fa-warn{ font-size:11.5px; line-height:1.55; color:#ffd9c4; background:rgba(255,138,61,.09);
+  border:1px solid rgba(255,138,61,.38); border-left:3px solid #ff8a3d; border-radius:10px; padding:9px 11px; text-wrap:pretty; }
+.fa-warn.dim{ color:#c3d2e4; background:rgba(140,165,200,.07); border-color:rgba(150,175,215,.28); border-left-color:#7f96b5; }
+.fa-warn b{ color:#fff; }
+
+/* ---- what is actually flying --------------------------------------------- */
+/* ONE DOCTRINE AT A TIME, so the screen leads with which one. This band sits
+   above every card because "what am I flying" outranks "what could I buy". */
+.fa-active{ display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:12px;
+  border:1px solid color-mix(in srgb, var(--dc) 46%, #223245); border-left:3px solid var(--dc);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--dc) 12%, #0d1420), #0a0f1a); }
+.fa-active-ic{ width:38px; height:42px; flex:none; display:grid; place-items:center; font-size:18px; color:var(--dc);
+  background:color-mix(in srgb, var(--dc) 15%, #0b1119); clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
+.fa-active-m{ flex:1 1 auto; min-width:0; }
+.fa-active-m b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.06em; color:#eef4fc; }
+.fa-active-m span{ display:block; font-size:10.5px; line-height:1.5; color:#9fb2c6; margin-top:3px; text-wrap:pretty; }
+.fa-active-r{ flex:none; font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; color:var(--dc); font-variant-numeric:tabular-nums; }
+.fa-active-r i{ font-style:normal; font-size:9px; color:#71859a; }
+.fa-active.none{ --dc:#7f96b5; }
+.fa-active.none .fa-active-m b{ color:#c3d2e4; }
+.fa-rule{ font-size:10.5px; line-height:1.55; color:#8ba0b5; padding:0 2px; text-wrap:pretty; }
+.fa-rule b{ color:#dbe8f5; }
+
+/* A STOOD-DOWN DOCTRINE IS DIMMED, NOT HIDDEN — its numbers are how the player
+   decides whether to switch, so contrast stays readable; what goes is the glow
+   and the colour saturation, never the text. These live AFTER the card rules
+   below on purpose: `.fa-card.owned` has identical specificity, so source order
+   is the only thing that decides which border colour wins. */
+.fa-on{ flex:none; font-family:'Orbitron',sans-serif; font-weight:800; font-size:8.5px; letter-spacing:.1em;
+  color:#08131c; background:var(--dc); border-radius:5px; padding:4px 6px; white-space:nowrap; }
+.fa-fly{ margin-top:10px; width:100%; border-radius:11px; padding:10px 12px; cursor:pointer;
+  font-family:'Orbitron',sans-serif; font-weight:800; font-size:10px; letter-spacing:.09em; color:var(--dc);
+  background:color-mix(in srgb, var(--dc) 10%, transparent); border:1px solid color-mix(in srgb, var(--dc) 55%, transparent); }
+.fa-fly:hover{ background:color-mix(in srgb, var(--dc) 20%, transparent); }
+
+/* ---- wallet strip -------------------------------------------------------- */
+.fa-wallet{ display:flex; gap:7px; flex-wrap:wrap; }
+.fa-w{ font-size:11px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--wc); border:1px solid color-mix(in srgb, var(--wc) 40%, #223245);
+  background:color-mix(in srgb, var(--wc) 8%, #0b1220); border-radius:8px; padding:4px 8px; }
+
+/* ---- doctrine cards ------------------------------------------------------ */
+.fa-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(268px,1fr)); gap:11px; }
+.fa-card{ border:1px solid color-mix(in srgb, var(--dc) 34%, #223245); border-radius:14px; padding:12px; min-height:0;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--dc) 7%, #0d1420), #0a0f1a); transition:border-color .2s, box-shadow .2s; }
+.fa-card.owned{ border-color:color-mix(in srgb, var(--dc) 55%, #223245); box-shadow:0 0 18px -12px var(--dc); }
+.fa-card.lit{ box-shadow:0 0 26px -4px var(--dc); border-color:var(--dc); }
+.fa-card.maxed{ background:linear-gradient(180deg, color-mix(in srgb, var(--dc) 13%, #0d1420), #0a0f1a); }
+.fa-card.off{ border-color:#243449; box-shadow:none;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--dc) 3%, #0b111b), #090e17); }
+.fa-card.off .fa-ic{ filter:saturate(.3); opacity:.7; }
+.fa-card.off .fa-rk, .fa-card.off .fa-ct em, .fa-card.off .fa-pips i.on{ filter:saturate(.35); opacity:.8; }
+.fa-card.live{ border-color:var(--dc); box-shadow:0 0 22px -10px var(--dc); }
+.fa-ch{ display:flex; gap:10px; align-items:center; }
+.fa-ic{ width:42px; height:46px; flex:none; display:grid; place-items:center; font-size:19px; color:var(--dc);
+  background:color-mix(in srgb, var(--dc) 13%, #0b1119); clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+  filter:drop-shadow(0 0 6px color-mix(in srgb, var(--dc) 50%, transparent)); }
+.fa-ct{ flex:1; min-width:0; }
+.fa-ct b{ display:block; font-family:'Orbitron',sans-serif; font-weight:800; font-size:11.5px; color:#eef4fc; letter-spacing:.02em; }
+.fa-ct em{ display:block; font-style:normal; font-size:9.5px; font-weight:700; letter-spacing:.06em; color:var(--dc); margin-top:3px; }
+.fa-rk{ flex:none; font-family:'Orbitron',sans-serif; font-weight:800; font-size:14px; color:var(--dc); font-variant-numeric:tabular-nums; }
+.fa-rk i{ font-style:normal; font-size:10px; color:#71859a; }
+.fa-pips{ display:flex; gap:3px; margin-top:9px; }
+.fa-pips i{ flex:1; height:5px; border-radius:3px; background:#16202e; }
+.fa-pips i.on{ background:var(--dc); box-shadow:0 0 6px color-mix(in srgb, var(--dc) 60%, transparent); }
+.fa-now{ margin-top:9px; font-size:11px; line-height:1.5; font-weight:700; color:#dbe8f5; text-wrap:pretty; }
+.fa-now span{ font-size:8px; font-weight:800; letter-spacing:.12em; color:#7f92a6; margin-right:5px; }
+.fa-now b{ color:var(--dc); }
+.fa-arw{ color:#71859a !important; letter-spacing:0 !important; font-size:11px !important; margin:0 2px !important; }
+.fa-d{ margin-top:8px; font-size:10.5px; line-height:1.55; color:#8ba0b5; background:rgba(255,255,255,.03);
+  border:1px dashed #26364c; border-radius:9px; padding:8px 9px; text-wrap:pretty; }
+.fa-buy{ margin-top:10px; width:100%; display:flex; justify-content:space-between; align-items:center; gap:9px; flex-wrap:wrap;
+  border:none; border-radius:11px; padding:11px 12px; cursor:pointer; font-family:'Orbitron',sans-serif; font-weight:800; letter-spacing:.08em; color:#08131c;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--dc) 85%, #fff), var(--dc)); box-shadow:0 6px 18px -9px var(--dc); }
+.fa-buy:active{ transform:scale(.985); }
+.fa-buy-n{ font-size:11px; white-space:nowrap; }
+.fa-buy-c{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; font-family:'Rajdhani',sans-serif; font-size:11.5px; font-weight:800; font-variant-numeric:tabular-nums; }
+.fa-buy-c em{ font-style:normal; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.5); }
+.fa-buy.cant{ color:#9db0c3; background:color-mix(in srgb, var(--dc) 8%, #0b1119); border:1px solid color-mix(in srgb, var(--dc) 32%, #223245); box-shadow:none; }
+.fa-buy.cant .fa-buy-n{ color:var(--dc); opacity:.8; }
+.fa-buy-c em.s{ color:#ff6b78 !important; }
+.fa-shortl{ margin-top:5px; text-align:center; font-size:9.5px; font-weight:800; letter-spacing:.06em; color:#ff8a96; }
+.fa-ladder{ margin-top:6px; font-size:9.5px; line-height:1.5; color:#66798d; text-align:center; text-wrap:pretty; }
+.fa-ladder b{ color:#93a6bd; }
+.fa-max{ margin-top:10px; text-align:center; font-family:'Orbitron',sans-serif; font-size:10px; font-weight:800; letter-spacing:.1em; color:var(--dc);
+  padding:10px; border:1px solid color-mix(in srgb, var(--dc) 55%, transparent); border-radius:11px; }
+
+.fa-live{ font-size:11px; line-height:1.55; color:#e6d6ff; background:rgba(201,140,255,.08);
+  border:1px solid rgba(201,140,255,.35); border-radius:10px; padding:9px 11px; text-wrap:pretty; }
+.fa-live b{ color:#fff; }
+.fa-fx{ display:flex; gap:9px; align-items:flex-start; font-size:10.5px; line-height:1.5; color:#8ba0b5; padding:2px 2px 6px; text-wrap:pretty; }
+.fa-fx input{ margin-top:2px; flex:none; width:16px; height:16px; accent-color:#ff8a3d; }
+.fa-fx b{ color:#c3d2e4; }
+
+/* Command card */
+.mega-card.cmd-fasc .mc-ic{ color:#ff8a3d; border-color:rgba(255,138,61,.5); background:radial-gradient(120% 120% at 50% 0%,#33200f,#0e1420); box-shadow:0 0 14px -3px rgba(255,138,61,.7); }
+.mega-card.cmd-fasc .mc-n{ color:#ffd9bd; }
+.mega-card.cmd-fasc::before{ background:linear-gradient(130deg,#ff8a3d,#ffd24d,#c98cff,#ff8a3d); background-size:250% 250%; }
+
+@media (prefers-reduced-motion: reduce){
+  .fa-card.lit{ transition:none; }
+}

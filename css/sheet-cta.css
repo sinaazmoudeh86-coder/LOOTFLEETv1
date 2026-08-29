@@ -43,6 +43,36 @@
 /* A sheet whose only action is Close keeps it full width. */
 .sheet-body .sheet-actions .btn:only-child{ flex:1; }
 
+/* ---- WHY THAT BUTTON REFUSED ----------------------------------------------
+   Sheet actions used to report failure through the loot-feed toast (z-index 4),
+   which sits UNDER the modal backdrop (z-index 50) — so the reason was painted
+   behind the sheet that produced it and the button looked dead. This is the
+   in-sheet notice that replaces it: pinned directly above the action row, so it
+   is the last thing read before the tap is retried. */
+.sheet-note{
+  margin:10px 0 0; padding:9px 11px; border-radius:10px;
+  font-size:11.5px; line-height:1.5; color:#f2dfe2; text-wrap:pretty;
+  background:color-mix(in srgb, var(--nc,#ff8a96) 12%, rgba(10,14,22,.9));
+  border:1px solid color-mix(in srgb, var(--nc,#ff8a96) 55%, transparent);
+  border-left:3px solid var(--nc,#ff8a96);
+}
+.sheet-note b{ color:#fff; }
+.sheet-note.pulse{ animation:sheetNotePop .34s cubic-bezier(.2,1.3,.4,1); }
+@keyframes sheetNotePop{ from{ opacity:0; transform:translateY(5px) } to{ opacity:1; transform:none } }
+
+/* The level band, stated before it fires — same voice as the shield notice. */
+.gx-lvgate{
+  margin-top:8px; padding:8px 11px; border-radius:10px;
+  font-size:11px; line-height:1.5; color:#c8d3e4; text-wrap:pretty;
+  background:rgba(122,140,180,.09); border:1px solid rgba(150,175,220,.28);
+}
+.gx-lvgate b{ color:#e9f0fb; }
+
+/* A modal must not be able to hide an announcement either: the toast layer now
+   sits ABOVE .backdrop (50) instead of below it, so LEVEL UP, boss calls and
+   capture banners are visible with a sheet open. Still pointer-transparent. */
+#toast-layer{ z-index:55 !important; }
+
 /* ---- galaxy tile sheet: the decision bar ----------------------------------
    The two numbers that decide whether to commit — what the trip costs and how
    hard the garrison hits — sat six rows down. This lifts them directly under the

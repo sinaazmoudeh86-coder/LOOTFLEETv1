@@ -12,8 +12,9 @@
        SHIPYARD built into it: upgrade levels AND each hull's SHIP ASCENSION
        (module tiers + stars). What the pilot was CARRYING — fitted equipment,
        cargo, Starforge tempers — is surrendered. Gold and Galaxy Resources are
-       NOT: the wallet and the territory income ride across (Aug 2026). You pick
-       the flagship you fly out in.
+       NOT: the wallet and the territory income ride across (Aug 2026). You fly
+       out in the STARTER HULL at Level 1 — every hull you own waits in the
+       hangar, fully upgraded, ready the moment you meet its licence again.
      • ASCENSION STARS (one per ascension) sit next to the pilot name and gate
        the three ASCENSION-EXCLUSIVE loot tiers — Ascendant (★1), Celestial
        (★20), Paragon (★50). Those tiers cannot drop for an un-ascended pilot at
@@ -24,8 +25,8 @@
        future run.
 
    Nothing here is reversible, so the confirm gate is deliberately heavy: an
-   itemised keep/lose ledger, the exact point total, the flagship, and a
-   typed-intent button. See ascendFlow().
+   itemised keep/lose ledger, the exact point total, the hull you start the next
+   run in, and a typed-intent button. See ascendFlow().
    ========================================================================== */
 (function () {
   'use strict';
@@ -149,6 +150,17 @@
   const stars = () => { const p = st(); return p ? (p.stars | 0) : 0; };
   const points = () => { const p = st(); return p ? (p.pts | 0) : 0; };
   function fmt(n) { try { return G().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n || 0) + ''; } }
+
+  // THE HULL THE NEXT RUN ACTUALLY STARTS IN. Read from GAME, never restated —
+  // this screen told the player they kept flying their current flagship for
+  // several builds after pilotAscend() started seating them in the frigate.
+  function startHull() {
+    let k = 'frigate';
+    try { k = (G() && G().ASC_START_HULL) || k; } catch (e) {}
+    let s = null;
+    try { s = C().SHIP_BY_KEY[k] || null; } catch (e) {}
+    return { key: k, name: (s && s.name) || 'Frigate' };
+  }
 
   // ---- THE 5-STAR RANK MODEL -------------------------------------------------
   // Same shape as Ship Ascension — five stars fill a tier, then the tier steps
@@ -370,7 +382,7 @@
             '</div>' +
           '</div>' +
           '<button class="pa-go" id="pa-begin">✦ BEGIN ASCENSION</button>' +
-          '<div class="pa-go-note">You pick the hull you fly out in and confirm before anything is reset. Full breakdown below.</div>' +
+          '<div class="pa-go-note">You confirm before anything is reset. Full breakdown below.</div>' +
         '</div>';
 
     return '<div class="pa-hero' + (locked ? ' locked' : '') + '" style="--tc:' + tierDef(Math.max(1, p.stars)).color + '">' +
@@ -453,6 +465,7 @@
             '<li><b>Every item you own</b> — equipped, in the bag, and stowed on escorts</li>' +
             '<li>All Starforge hardpoint tempers &amp; purity</li>' +
             '<li>Your wing — escorts disband (the hulls stay in the hangar, fully upgraded)</li>' +
+            '<li>Your flagship — you fly the next run out in the <b>' + startHull().name + '</b> (every hull stays in the hangar, and you can switch back as soon as you meet its licence)</li>' +
           '</ul></div>' +
           '<div class="pa-led keep"><div class="pa-led-h">✓ CARRIED OVER</div><ul>' +
             '<li><b>The whole Pilot Tree</b> — every node you unlocked, and every ◇ Dread Core you hold</li>' +
@@ -729,8 +742,12 @@
   // This used to be two steps. Step 1 asked you to pick a flagship, which stopped
   // being a decision the moment every hull started coming with you: the picker
   // chose which ship you happen to be sitting in afterwards, and dressed it up as
-  // a choice. It's gone. You fly out in whatever you're flying now, and you can
-  // switch in the Hangar a second later like any other day.
+  // a choice. It's gone — and the reset now seats you in the STARTER HULL either
+  // way (GAME.ASC_START_HULL), with every hull you own waiting in the Hangar. The
+  // three screens here that still said "you fly out in the hull you're flying"
+  // were left behind by that change and are corrected: telling a pilot they keep
+  // their Dread Omega and then seating them in a frigate reads as a broken reset,
+  // which is exactly how it was reported.
   //
   // The copy was also out of date and telling players the opposite of the truth.
   // It read "you lose N claimed systems · all citadels & Void spires". Territory
@@ -782,6 +799,7 @@
       ['\u25b2', '<b>Level ' + fmt(S.level) + ' \u2192 1</b> and Zone ' + fmt(zone) + ' progress'],
       ['\u2756', (hasAxiom ? 'Every other item' : 'Every item') + ' \u2014 equipped, in the bag, and Starforge tempers'],
       ['\u27a4', 'Your wing disbands \u2014 escort slots re-earn with level'],
+      ['\u2708', '<b>Your flagship</b> \u2014 the run restarts in the ' + startHull().name],
     ];
     const row = (a) => a.map((x) => '<li><i>' + x[0] + '</i><span>' + x[1] + '</span></li>').join('');
 
@@ -797,8 +815,10 @@
         '<div class="pa-conf-side keep"><span>YOU KEEP</span><ul>' + row(keep) + '</ul></div>' +
         '<div class="pa-conf-side lose"><span>YOU LOSE</span><ul>' + row(lose) + '</ul></div>' +
       '</div>' +
-      '<div class="pa-flag"><img src="ships/ship-' + key + '.png" alt="">' +
-        '<div><b>' + (sh.name || 'Your flagship') + '</b><em>You warp out in the hull you\u2019re flying \u2014 swap any time in the Hangar</em></div></div>' +
+      '<div class="pa-flag"><img src="ships/ship-' + startHull().key + '.png" alt="">' +
+        '<div><b>' + startHull().name + '</b><em>You warp out at Level 1 in the starter hull. ' +
+          (sh.name ? '<b>' + sh.name + '</b> and every' : 'Every') +
+          ' other hull waits in the Hangar, fully upgraded \u2014 switch back the moment you meet its licence again.</em></div></div>' +
       '<label class="pa-ack"><input type="checkbox" id="pa-ack">' +
         '<span class="pa-ack-t">I understand \u2014 back to <b>Level 1</b>, and I lose <b>every item I am carrying</b>.</span></label>' +
       '<div class="pa-mb"><button class="pa-btn ghost" data-x>Cancel</button>' +
@@ -878,7 +898,7 @@
         '<div class="pa-out-rows">' +
           '<div><b>+' + pv.total + '</b><em>ascension point' + (pv.total === 1 ? '' : 's') + '</em></div>' +
           '<div><b>Lv 1</b><em>a clean record</em></div>' +
-          '<div><b>' + (sh.name || '—') + '</b><em>flagship · fleet fully upgraded</em></div>' +
+          '<div><b>' + startHull().name + '</b><em>your hull · the rest wait in the Hangar</em></div>' +
         '</div>' +
         (unlocked ? '<div class="pa-out-unlock" style="--tc:' + unlocked.color + '">' +
           '<span>NEW LOOT TIER UNLOCKED</span><b>' + unlocked.name.toUpperCase() + '</b>' +

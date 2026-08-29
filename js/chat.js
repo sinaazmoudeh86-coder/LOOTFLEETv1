@@ -251,7 +251,8 @@
       if (document.querySelector('.uv-wrap')) return true;
       // the onboarding coach dims the screen to teach one control at a time
       // (#coach-layer, z-index 320, display:none when idle). A chat chip in the
-      // status bar during it is noise, and posting is gated until Level 5 anyway.
+      // status bar during it is noise, and posting is level-gated anyway (the
+      // gate is a chat_config row — never restate its value here).
       const co = $('coach-layer');
       if (co && getComputedStyle(co).display !== 'none') return true;
     } catch (e) {}

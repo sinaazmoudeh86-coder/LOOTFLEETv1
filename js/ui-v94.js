@@ -69,6 +69,44 @@
     // does not navigate. Only bind real screen buttons here, or showScreen(undefined)
     // would dereference a non-existent #screen-undefined and throw.
     document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => { if (b.dataset.screen) showScreen(b.dataset.screen); }));
+    // GIVE THE TAP A RUNWAY, BEFORE THE CLICK EVEN FIRES.
+    //
+    // The finger going down on a nav control is all the notice we need that a
+    // screen change is coming, and pointerdown lands a good 100ms ahead of the
+    // click on a phone. G.uiYield() spends that head start stepping the sim out
+    // of the way (hard-capped, no sim time lost — see the loop) so the click
+    // handler and the screen's first paint get a clear main thread instead of
+    // queueing behind an update() pass. Capture phase, one listener, everything
+    // that navigates: the bottom nav, the hangar dock, the Command sheet, the
+    // hangar tab strip and any screen header button.
+    //
+    // IT WAS ONLY WATCHING TOP-LEVEL NAVIGATION (729 stability pass), and that is
+    // not where the expensive rebuilds are. Moving BETWEEN screens yielded; doing
+    // anything INSIDE one did not — so a galaxy filter chip, a search keystroke, a
+    // sort change, a page turn, a store card, a Pilot Tree row and every sheet
+    // action all landed their re-render directly on top of an update() pass. Those
+    // are exactly the taps a player describes as menu lag, because they are the
+    // ones that rebuild a list of sixty rows while the sim is mid-frame.
+    //
+    // The rule is now the SURFACE, not a list of ids that has to be maintained:
+    // any control inside a screen body, a sheet, or the galaxy list bar. Two
+    // deliberate exclusions — #battle-controls and the joystick are combat inputs,
+    // and deferring the sim on those would make the fight itself feel late, which
+    // is the opposite trade. The arena canvas is untouched for the same reason.
+    //
+    // uiYield() is hard-capped at 140ms measured from the last frame the sim
+    // actually ran, so widening what triggers it cannot lose sim time or chain
+    // windows — see the ceiling in uiYield().
+    const YIELD_ON = '#nav, #hangar-dock, #mega, .scr-head, [data-hangtab], [data-screen],'
+      + '.scr-body button, .scr-body select, .sheet button, .sheet select,'
+      + '.gxl-bar select, .gxl-q, .gxlf, .mega-card';
+    const YIELD_NEVER = '#battle-controls, #joystick, #battle-canvas, canvas';
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest(YIELD_NEVER)) return;
+      if (t.closest(YIELD_ON)) { try { G.uiYield(120); } catch (x) {} }
+    }, true);
     buildSpeedRow();
     // WHICH SCREEN WAS SHOWING WHEN THE FINGER WENT DOWN.
     //
@@ -180,6 +218,10 @@
   // ==========================================================================
   // SCREENS
   // ==========================================================================
+  // Declared above showScreen, which is the only writer — a builder below its
+  // first reader is the temporal-dead-zone trap that cost us twenty builds of
+  // leaderboard publishes (see cloud.js in CLAUDE.md).
+  let _pendScreen = null, _pendRAF = 0;
   function showScreen(name) {
     // Defense-in-depth: ignore unknown screens (e.g. a nav button with no
     // data-screen) BEFORE mutating any state, so a bad name can never crash.
@@ -210,6 +252,42 @@
     try { const _rt = G.rt; if (_rt) { _rt._avT = 0; _rt._ovT = 0; } } catch (e) {}
     const navName = (name === 'hero' || name === 'social' || name === 'mail') ? 'store' : name;
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navName));
+    // Autopilot and the joystick are STATE, not paint — they resolve on the tap.
+    if (name === 'battle') {
+      try {
+        const rt = G.rt || {};
+        const evt = document.getElementById('app').classList.contains('sd-noauto') ||   // Voidmaw / alliance raid
+                    (rt.cgrun && rt.cgrun.active);                                      // cargo escort
+        if (!evt && !G.state.autoManual && (G.state.currentDungeon | 0) >= 1 && !G.getAuto()) { G.setAuto(true); syncAuto(); }
+      } catch (e) {}
+    }
+    syncJoystickVisible();
+    // ---- PAINT THE SWITCH, THEN BUILD ITS CONTENTS -------------------------
+    //
+    // Everything above is a handful of class flips: by itself it is a complete,
+    // instantly visible screen change. Everything below is the screen BUILDING
+    // itself — hundreds of item cards, forty hull tiles, a canvas re-measure —
+    // and it used to run in the same task, so the browser could not paint the
+    // switch until the contents were finished. On a phone that is the whole of
+    // the reported tap-to-menu delay: the screen was not slow to change, it was
+    // never allowed to change until it was also slow to fill.
+    //
+    // One frame of separation fixes it. The shell appears on the very next
+    // paint; the body fills on the frame after. Coalesced, so a burst of
+    // navigation renders the destination once and never an abandoned screen.
+    _pendScreen = name;
+    if (!_pendRAF) {
+      _pendRAF = requestAnimationFrame(() => {
+        _pendRAF = 0;
+        const n = _pendScreen; _pendScreen = null;
+        if (n != null) renderScreen(n);
+      });
+    }
+  }
+
+  // What a screen has to BUILD. Never call this directly to navigate — go
+  // through showScreen so the shell paints first.
+  function renderScreen(name) {
     if (name === 'hero') renderHero();
     else if (name === 'bag') renderBag();
     else if (name === 'zones') renderZones();
@@ -236,21 +314,13 @@
     else if (name === 'crates') { if (window.CRATES) window.CRATES.render(); }
     else if (name === 'nano') { if (window.NANOUI) window.NANOUI.render(); }
     else if (name === 'ascend') { if (window.ASCEND) window.ASCEND.render(); }
+    else if (name === 'fasc') { if (window.FASCUI) window.FASCUI.render(); }
     else if (name === 'casino') { if (window.CASINO) window.CASINO.render(); }
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
     else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
     else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
     else if (name === 'expo') { if (window.EXPOUI) window.EXPOUI.render(); }
     else if (name === 'koth') { if (window.KOTHUI) window.KOTHUI.render(); }
-    if (name === 'battle') {
-      try {
-        const rt = G.rt || {};
-        const evt = document.getElementById('app').classList.contains('sd-noauto') ||   // Voidmaw / alliance raid
-                    (rt.cgrun && rt.cgrun.active);                                      // cargo escort
-        if (!evt && !G.state.autoManual && (G.state.currentDungeon | 0) >= 1 && !G.getAuto()) { G.setAuto(true); syncAuto(); }
-      } catch (e) {}
-    }
-    syncJoystickVisible();
   }
 
   // ==========================================================================
@@ -1862,8 +1932,17 @@
     const natCit = !!t.citadel;
     const anyCit = myCit || natCit || citLv > 0;
     const attackCit = !owned && (natCit || citLv > 0);
-    return { t, id, owned, rival, rivalName, ally, locked, cd, citLv, myLv, myCit, natCit, anyCit, attackCit,
-             rate: t.rate | 0, res: t.resource || '', ring: t.ring | 0, level: t.level | 0 };
+    // WHAT IT PAYS, FROM THE ONE FUNCTION THAT DECIDES WHAT IT PAYS.
+    // `t.rate | 0` was wrong twice over: it is the tile's RAW generation figure
+    // before the ×25 galaxy yield, deep space and any citadel rank — and `| 0`
+    // wraps signed 32-bit, which a real fortress rate clears easily.
+    const q = G.tileRateOf ? G.tileRateOf(id) : null;
+    // ONE RESOLVER FOR CITADEL RANK. It already knows all three cases (yours, a
+    // rival's, a natural fortress at full strength) — the row must not re-derive.
+    const cr = G.citadelRankOf ? G.citadelRankOf(id) : null;
+    return { t, id, owned, rival, rivalName, ally, locked, cd, citLv, myLv, myCit, natCit, anyCit, attackCit, q, cr,
+             rate: q ? Math.floor(q.perHour) : Math.floor(Number(t.rate) || 0),
+             res: t.resource || '', ring: t.ring | 0, level: t.level | 0 };
   }
   function gxCandidates() {
     const out = [];
@@ -1931,17 +2010,26 @@
         + (t.boss ? '<i class="gxr-m boss">☠</i>' : '')
         + (t.alien ? '<i class="gxr-m xen">◈</i>' : '')
         + (t.deep ? '<i class="gxr-m deep">◆</i>' : '');
-      // WHO HOLDS IT, and WHAT IS ON IT. A list of anonymous tiles cannot answer
-      // "is this one worth attacking" — the holder's name and the fortress rank
-      // are the whole decision. YOUR OWN RANK IS PRINTED TOO: it used to say only
-      // "your citadel" while printing a rank for rival ones, so the one citadel
-      // whose rank the pilot actually controls was the one they could not read.
-      const bits = ['Lv ' + r.level, t.type];
-      if (r.myCit) bits.push('⛓ your citadel · rank ' + r.myLv);
-      if (r.citLv) bits.push('⛓ rival citadel · rank ' + r.citLv);
-      if (r.natCit) bits.push('⛴ natural fortress');
-      if (r.rivalName) bits.push('held by ' + esc(r.rivalName));
-      else if (r.ally) bits.push('allied');
+      // WHO HOLDS IT, WHAT IS ON IT, AND WHAT RANK IT IS — AS PILLS, NOT A RUN OF
+      // DOT-SEPARATED PROSE. The old sub-line said "Lv 390 · Citadel · Natural
+      // Fortress · Held By Alcyone", which buried the two facts that decide
+      // whether to attack, and used the word "Lv" for the SYSTEM's combat level
+      // on a screen where the reader is thinking about citadel RANK. Each fact is
+      // now its own labelled chip and the two levels are named apart.
+      const pills = [];
+      pills.push('<span class="gxr-p sys"><b>SYS</b>' + r.level + '</span>');
+      if (r.cr && r.cr.lv) {
+        const kind = r.cr.kind === 'natural' ? { c: 'nat', g: '⛴', l: 'FORTRESS' }
+                   : r.cr.kind === 'mine'    ? { c: 'mine', g: '⛓', l: 'CITADEL' }
+                   :                           { c: 'rival', g: '⛓', l: 'RIVAL FORT' };
+        pills.push('<span class="gxr-p ' + kind.c + '"><b>' + kind.g + ' ' + kind.l + '</b>R' + r.cr.lv + '/' + (r.cr.max || 5) + '</span>');
+      }
+      if (t.deep) pills.push('<span class="gxr-p deep"><b>☢ DEEP</b>×' + GM.DEEP_MULT.resource + '</span>');
+      // OWNER. "Yours" is already the state tag on the right, so printing it here
+      // twice is noise — every other case names somebody or says nobody.
+      if (r.rivalName) pills.push('<span class="gxr-p who"><b>HELD BY</b>' + esc(r.rivalName) + '</span>');
+      else if (r.ally) pills.push('<span class="gxr-p ally"><b>ALLIED</b></span>');
+      else if (!r.owned) pills.push('<span class="gxr-p open"><b>UNCLAIMED</b></span>');
       const state = r.owned ? '<em class="gxr-s mine">YOURS</em>'
         : r.ally ? '<em class="gxr-s ally">ALLIED</em>'
         : r.cd > 0 ? '<em class="gxr-s cd" title="Contest shield — cannot be attacked yet">▷ ' + fmtLeft(r.cd) + '</em>'
@@ -1951,7 +2039,7 @@
       return `<button class="gxr${r.owned ? ' mine' : ''}${r.attackCit ? ' target' : ''}" data-gxrow="${r.id}">`
         + `<span class="gxr-ring">R${r.ring}</span>`
         + `<span class="gxr-main"><span class="gxr-n">${esc(t.name)}${marks}</span>`
-        + `<span class="gxr-sub">${bits.join(' · ')}</span></span>`
+        + `<span class="gxr-pills">${pills.join('')}</span></span>`
         + `<span class="gxr-rate" style="color:${rd.color}">${rd.glyph} ${G.formatNum(r.rate)}<i>/h</i></span>`
         + state + '</button>';
     }).join('');
@@ -2689,6 +2777,13 @@
     // never capped.
     const atCap = !t.owned && G.atTileCap && G.atTileCap();
     const capNow = G.tileCap ? G.tileCap() : 50;
+    // THE LEVEL BAND, read from the same place warp() reads it. `t.locked` is the
+    // map's colour rule and lets an OWNED tile through; warp() does not. That gap
+    // is exactly what an ascension opens up — Lv 1 pilot, Lv 370 systems still
+    // held — and it was showing a live button that silently refused.
+    const tooHigh = t.deployLocked != null ? !!t.deployLocked : !!t.locked;
+    const needLv = t.deployNeedLv || Math.max(1, t.level - 10);
+    const myLv = (G.state.level | 0) || 1;
     const capBlock = atCap ? `<div class="cap-warn">
       <div class="cw-h"><span>◈</span> EMPIRE AT CAPACITY — ${capNow}/${capNow} SYSTEMS</div>
       <div class="cw-b">You hold every system you have room for, so you can't claim <b>${t.name}</b> yet. This is a hard cap on how many systems one pilot can own — not a cooldown, and not a level gate. It won't clear on its own.</div>
@@ -2841,8 +2936,8 @@
           ? `<div class="tb-cell bad full"><div class="tb-k">BLOCKED</div><div class="tb-v">Empire full — ${capNow}/${capNow} systems</div></div>`
           : blocked
             ? `<div class="tb-cell warn full"><div class="tb-k">SHIELDED</div><div class="tb-v">Opens in ${cdTxt}</div></div>`
-            : t.locked
-              ? `<div class="tb-cell bad full"><div class="tb-k">LOCKED</div><div class="tb-v">Needs Lv ${Math.max(1, t.level - 10)}</div></div>`
+            : tooHigh
+              ? `<div class="tb-cell bad full"><div class="tb-k">${t.owned ? 'OUT OF RANGE' : 'LOCKED'}</div><div class="tb-v">Needs Lv ${needLv}</div></div>`
               : t.alien && !t.void
                 ? `<div class="tb-cell xen full"><div class="tb-k">◈ KAEVITH-HELD</div><div class="tb-v">${xenChance}% chance to earn a hull</div></div>`
                 : ''}
@@ -2857,7 +2952,7 @@
       ${ecRow}
       ${cdTxt && !t.owned ? `<div class="gx-shield">🛡 <b>ATTACK SHIELD</b> — this tile was attacked recently. Nobody can attack it again for <b>${cdTxt}</b>.</div>` : ''}
       ${cdTxt && t.owned ? `<div class="gx-shield mine">🛡 <b>PROTECTED</b> — your tile can't be attacked for <b>${cdTxt}</b>.</div>` : ''}
-      <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Attack shield ') + cdTxt : (t.locked ? '🔒 Lv ' + Math.max(1, t.level - 10) + ' required' : '⚔ Open to attack')}</span></div>
+      <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Attack shield ') + cdTxt : (tooHigh ? '🔒 Lv ' + needLv + ' required' : '⚔ Open to attack')}</span></div>
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
       ${citBlock}
       ${t.citadel && !t.owned ? '<p style="font-size:12px;margin-top:6px;color:#ffb088">⛴ Citadels pay <b>' + GM.CITADEL_RATE_MULT + '×</b> a normal tile — but warping in costs <b>' + GM.CITADEL_COST_MULT + '×</b> and sieges are limited to <b>once per day</b>.</p>' : ''}
@@ -2865,7 +2960,8 @@
       ${!ecAfford ? '<p style="color:var(--bad);font-size:11px;margin-top:6px">Not enough Galaxy Resources to warp this deep — farm or capture closer rings first.</p>' : ''}
       ${t.owned ? '<div style="background:rgba(255,73,95,.05);border:1px solid rgba(255,73,95,.28);border-radius:10px;padding:8px 11px;margin-top:8px"><div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#ff8a96">⏏ ABANDON THIS ZONE</div><div style="font-size:11px;color:#b08f96;line-height:1.45;margin-top:3px">Releases the tile back to neutral — you lose its hourly production' + (t.myCitadel ? ', <b style="color:#ff8a96">and your CITADEL here is scrapped</b> (no refund)' : '') + '. Anyone may claim it again.</div><button class="btn" data-abandon style="width:100%;margin-top:7px;border-color:rgba(255,73,95,.45);color:#ff8a96">⏏ Abandon tile' + (t.myCitadel ? ' + citadel' : '') + '</button></div>' : ''}
       ${capBlock}
-      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || t.locked || !ecAfford || atCap) ? 'disabled' : ''}>${atCap ? '◈ At capacity — ' + capNow + '/' + capNow : blocked ? '◷ ' + cdTxt : actionLabel}</button></div></div>`);
+      ${tooHigh ? `<div class="gx-lvgate">🔒 <b>${t.owned ? 'OUTSIDE YOUR LEVEL BAND' : 'TOO DEEP FOR YOU'}</b> — this system is <b>Lv ${t.level}</b> and you are <b>Lv ${myLv}</b>. A pilot can fly up to <b>10</b> levels above themselves, so it opens again at <b>Lv ${needLv}</b>.${t.owned ? ' You keep it and it keeps paying its hourly production the whole time — nothing is lost by waiting.' : ''}</div>` : ''}
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || tooHigh || !ecAfford || atCap) ? 'disabled' : ''}>${atCap ? '◈ At capacity — ' + capNow + '/' + capNow : blocked ? '◷ ' + cdTxt : tooHigh ? '🔒 Needs Lv ' + needLv : actionLabel}</button></div></div>`);
     const ch = sheet.querySelector('[data-cap-help]');
     if (ch) ch.addEventListener('click', () => { closeSheet(); openTileCapSheet(id); });
     const ab = sheet.querySelector('[data-abandon]');
@@ -2891,7 +2987,18 @@
       const r = G.warp(id);
       if (r.ok) { closeSheet(); toast((t.rival ? 'Attacking ' : t.owned ? 'Deploying to ' : 'Claiming ') + t.name, '#5b9cff'); showScreen('battle'); }
       else if (r.reason === 'tilecap') { closeSheet(); openTileCapSheet(id); }
-      else toast(r.reason === 'ally' ? '⬡ Allied territory — you can\u2019t attack your own alliance' : r.reason === 'abandoned' ? '✕ You abandoned this system — you can re-claim it in ' + abandHms(r.secs || 0) : r.reason === 'cooldown' ? 'Tile on cooldown' : r.reason === 'locked' ? 'Too high level — max +10 above you' : r.reason === 'resources' ? 'Not enough Galaxy Resources to warp here' : 'Cannot deploy', '#e23b4e');
+      // THE REASON GOES IN THE SHEET, NOT INTO A TOAST UNDER IT. This branch used
+      // to toast() — z-index 4, behind a z-index 50 backdrop — so a refused siege
+      // looked like a dead button. Reported as "siege citadel not working", and it
+      // was every action button on every sheet.
+      else sheetNotice(sheet,
+        r.reason === 'ally' ? '⬡ <b>Allied territory</b> — you can’t attack your own alliance.'
+        : r.reason === 'abandoned' ? '✕ <b>You abandoned this system.</b> You can re-claim it in <b>' + abandHms(r.secs || 0) + '</b>.'
+        : r.reason === 'cooldown' ? '🛡 <b>Attack shield</b> — this tile was contested recently. It opens in <b>' + (cdTxt || 'a little while') + '</b>.'
+        : r.reason === 'locked' ? '🔒 <b>Lv ' + t.level + ' system — you are Lv ' + ((G.state.level | 0) || 1) + '.</b> A pilot can fly up to <b>10</b> levels above themselves, so this one opens at <b>Lv ' + needLv + '</b>.' + (t.owned ? ' It stays yours and keeps paying while you climb.' : '')
+        : r.reason === 'resources' ? '⬢ <b>Not enough Galaxy Resources</b> to warp this deep — farm or capture closer rings first.'
+        : r.reason === 'home' ? '⌂ The Home Citadel is neutral ground — there is nothing to fight here.'
+        : '✕ <b>Cannot deploy here.</b>', '#ff8a96');
     });
   }
   // ==========================================================================
@@ -3878,6 +3985,53 @@
         });
         html += '</div>';
       }
+      // —— OPERATIONS · ONE-TIME UNLOCKS ——
+      // ONE CARD, THREE STATES: level-gated, for sale, or owned with its arm /
+      // disarm switch. Price, gate and recharge are all read from GAME, so this
+      // card cannot drift from the purchase it triggers or the beacon it arms.
+      {
+        const bs = G.beaconState ? G.beaconState() : null;
+        const price = G.AUTO_BEACON_LC || 25000;
+        const bal = Math.floor(Number(G.state.credits) || 0);
+        const own = G.hasAutoBeacon ? G.hasAutoBeacon() : false;
+        const armed = G.autoBeaconOn ? G.autoBeaconOn() : false;
+        const needLv = bs ? bs.needLv : 30;
+        const lvOk = (G.state.level | 0) >= needLv;
+        const afford = bal >= price;
+        html += `<div class="store-sec">${storeHead('◉', 'Operations · one-time unlocks', own ? 'AUTO BEACON OWNED' : '')}`;
+        html += `<div class="sec-blurb-anchor"></div><div class="sec-blurb">Permanent account unlocks. Bought once, never again.</div>`;
+        // The three facts this card owes the player are the recharge, where it
+        // applies, and the boss exclusion. They were a 45-word paragraph; they are
+        // chips now, so the state row below is the only prose left to read.
+        const abChip = (l, v, c) => `<div style="flex:1 1 84px;min-width:0;padding:7px 9px;border-radius:7px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)"><div style="font-size:8.5px;font-weight:800;letter-spacing:.1em;color:#7d8a9c">${l}</div><div style="font-size:12px;font-weight:700;color:${c};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v}</div></div>`;
+        const live = own && armed;
+        html += `<div class="store-card" style="display:block;padding:0;overflow:hidden;border-left:3px solid ${live ? '#ff8a3d' : '#4a5666'};background:linear-gradient(180deg,rgba(255,138,61,${live ? '.10' : '.03'}),rgba(10,16,26,.92))">
+          <div style="display:flex;align-items:center;gap:10px;padding:11px 12px 0">
+            <div class="sc-ico" style="border-color:${live ? '#ff8a3d' : '#4a5666'};color:${live ? '#ff8a3d' : '#6d7b8d'};font-size:19px;${live ? 'box-shadow:0 0 0 3px rgba(255,138,61,.12)' : ''}">◉</div>
+            <div class="sc-main" style="min-width:0"><div class="sc-name" style="color:#ffd9bd">Auto Beacon</div>
+              <div class="sc-desc">Your distress beacon pulls its own trigger</div></div>
+            ${own ? '<span class="ic-tag up" style="flex:0 0 auto">OWNED</span>' : ''}
+          </div>
+          <div style="display:flex;gap:6px;padding:10px 12px 0">
+            ${abChip('RECHARGE', bs ? bs.cd + 's' : '—', '#ffd9bd')}
+            ${abChip('FIRES IN', 'Zone grinds', '#dbe8f5')}
+            ${abChip('BOSSES', 'Never', '#8b95a6')}
+          </div>
+          <div style="font-size:11px;line-height:1.5;color:#93a2b4;padding:9px 12px 0;text-wrap:pretty">Nothing else changes — same recharge, same swarm, same kill value.</div>
+          ${own
+            ? `<div style="display:flex;align-items:center;gap:10px;margin-top:11px;padding:10px 12px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.06)">
+                 <span style="font-size:13px;line-height:1;color:${armed ? '#7ce0a0' : '#6d7b8d'}">${armed ? '◉' : '○'}</span>
+                 <div style="min-width:0;flex:1 1 auto">
+                   <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:${armed ? '#7ce0a0' : '#8b95a6'}">${armed ? 'ARMED' : 'DISARMED'}</div>
+                   <div style="font-size:10.5px;color:#7d8a9c;margin-top:1px">${armed ? 'Fires on every recharge' : 'The button is yours again'}</div>
+                 </div>
+                 <button class="sc-buy" data-abtoggle="1" style="flex:0 0 auto;${armed ? 'background:transparent;border:1px solid rgba(255,255,255,.18);color:#a9bacd' : ''}">${armed ? 'DISARM' : 'ARM'}</button>
+               </div>`
+            : `<div style="padding:11px 12px 12px"><button class="sc-buy lc" data-abbuy="1" ${(!lvOk || !afford) ? 'disabled' : ''} style="width:100%">${window._lcIcon()}${G.formatNum(price)}</button>
+               ${!lvOk ? `<div style="font-size:10.5px;color:#ffcf4d;margin-top:7px;text-align:center">Opens at <b>Level ${needLv}</b></div>`
+                       : !afford ? `<div style="font-size:10.5px;color:#ff8a96;margin-top:7px;text-align:center">You hold ◈ ${bal.toLocaleString()} — ${(price - bal).toLocaleString()} short</div>` : ''}</div>`}
+        </div></div>`;
+      }
       const sh = G.getShop(); const tl = G.shopTimeLeft(); const mm = Math.floor(tl/60), ss = tl%60;
       const price = sh.price != null ? sh.price : G.shopItemPrice();
       html += `<div class="store-sec">${storeHead(STORE_ICONS.market, 'Black Market · Gold', `${mm}:${ss<10?'0':''}${ss}`)}`;
@@ -3905,6 +4059,21 @@
     }
     // featured LootCoin ship offer
     el['store-body'].querySelectorAll('[data-lcship]').forEach((b) => b.addEventListener('click', () => openShipLCBuy(b.dataset.lcship, +b.dataset.lcprice)));
+    // AUTO BEACON — buy, then arm / disarm. Both re-render the tab so the card's
+    // state and the wallet chip agree with the write that just happened.
+    el['store-body'].querySelectorAll('[data-abbuy]').forEach((b) => b.addEventListener('click', () => {
+      const r = G.buyAutoBeacon();
+      if (r.ok) { toast('◉ Auto Beacon unlocked — it fires itself from now on', '#ff8a3d'); renderStore(); }
+      else if (r.reason === 'credits') { toast('Need ◈ ' + (r.short || 0).toLocaleString() + ' more LootCoins', '#e23b4e'); openCredits(); }
+      else if (r.reason === 'level') toast('Your beacon opens at Level ' + r.need, '#e23b4e');
+      else renderStore();
+    }));
+    el['store-body'].querySelectorAll('[data-abtoggle]').forEach((b) => b.addEventListener('click', () => {
+      const on = G.autoBeaconOn();
+      G.setAutoBeacon(!on);
+      toast(on ? '○ Auto Beacon disarmed — the button is yours again' : '◉ Auto Beacon armed', on ? '#8b95a6' : '#ff8a3d');
+      renderStore();
+    }));
     // render each card's icon as the ACTUAL battle hull (same renderer as combat)
     el['store-body'].querySelectorAll('canvas[data-shipic]').forEach((cv) => {
       const key = cv.dataset.shipic; if (!C.SHIP_BY_KEY[key]) return;
@@ -4758,6 +4927,33 @@
   }
   function closeSheet() { el['modal-root'].innerHTML = ''; }
 
+  // ---- A REFUSAL MUST LAND WHERE THE PLAYER IS LOOKING ----------------------
+  // Every "you can't do that" in this file went to toast(), which renders into
+  // #loot-feed at z-index 4. A sheet's backdrop is z-index 50 — so the reason a
+  // sheet's own button refused was painted UNDERNEATH the sheet, and the button
+  // read as dead. That is the whole of "siege citadel not working": the siege was
+  // fine, the level-band refusal was invisible.
+  //
+  // The message goes INSIDE the sheet, directly above the pinned action row, and
+  // clears itself so a stale reason can't sit there through the next tap.
+  function sheetNotice(sheet, msg, color) {
+    const host = sheet && sheet.querySelector('.sheet-body');
+    if (!host) return false;
+    let n = host.querySelector('.sheet-note');
+    if (!n) {
+      n = document.createElement('div'); n.className = 'sheet-note';
+      const acts = host.querySelector('.sheet-actions');
+      if (acts) host.insertBefore(n, acts); else host.appendChild(n);
+    }
+    n.style.setProperty('--nc', color || '#ff8a96');
+    n.innerHTML = msg;
+    // restart the attention pulse even when the same message repeats
+    n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse');
+    clearTimeout(n._t); n._t = setTimeout(() => { if (n.parentNode) n.remove(); }, 7000);
+    return true;
+  }
+  function openSheetEl() { try { return el['modal-root'] && el['modal-root'].querySelector('.sheet'); } catch (e) { return null; } }
+
   // ==========================================================================
   // FEEDBACK
   // ==========================================================================
@@ -4824,6 +5020,10 @@
   }
   function toast(text, color) {
     if (!_inited) return;
+    // A SHEET COVERS THE FEED. The backdrop is z-index 50 and #loot-feed is 4, so
+    // anything said while a sheet is open is said behind it. Mirror it into the
+    // sheet so no message can be swallowed by a modal — one place, every caller.
+    { const sh = openSheetEl(); if (sh) sheetNotice(sh, text, color); }
     const t = document.createElement('div'); t.className = 'loot-toast'; t.style.borderLeftColor = color;
     t.innerHTML = `<span style="color:${color}">${text}</span>`;
     el['loot-feed'].appendChild(t); setTimeout(() => t.remove(), 2100);

@@ -152,6 +152,11 @@
   const ASC_KEEP = [
     'pilotName',                                               // a rename is identity, not progress
     'pasc',                                                    // stars, points, perks, history
+    // FIGHTER ASCENSION — four permanent wing doctrines bought at ★10. It is the
+    // WING's progression, not a hull's and not the run's: the craft that fly it
+    // come out of whatever bays are fitted at the time, so a reset that reseats
+    // the pilot in a bayless frigate must not touch it. Same class as `pasc`.
+    'fasc',
     // PAID ENTITLEMENTS — anything real money or LootCoins bought is permanent.
     // `purchases` carries the one-time premium battle-speed unlock (speed4lc,
     // which is 2× since build 712 — the sku is a receipt, not a label) and
@@ -166,6 +171,12 @@
     // here means an ascension (which wipes the fleet to nothing) cannot re-arm
     // the offer and let the same account collect it twice.
     'discordJoin',
+    // AUTO BEACON's ARMED FLAG. The RECEIPT is in `purchases` (already here), but
+    // the toggle is separate state — and without it an ascension would silently
+    // switch a 25,000-LootCoin feature off. It also reads true-unless-false, so
+    // even a save that predates the key arms itself; this line is what preserves
+    // a deliberate OFF.
+    'autoBeacon',
     // GOLD AND GALAXY RESOURCES SURVIVE ASCENSION (Aug 2026). Both used to be
     // zeroed, and both zeroings had stopped making sense:
     //   • GALAXY RESOURCES are produced by TERRITORY, and territory explicitly
@@ -310,12 +321,52 @@
     // watchdog in redeem.js keys off this flag, so wiping it here would quietly
     // switch the mode off on the next ascension.
     'unlimited',
+    // ---- SYSTEMS THAT HAVE A mergeSaves() UNION BLOCK BUT WERE MISSING HERE.
+    // A union block in account.js is a written statement that losing this value
+    // is unrecoverable — that is the whole reason a system earns one. Every key
+    // below had that block and was still absent from this list, so pilotAscend()
+    // deleted it and the merge only ever got it back by accident: on the next
+    // login, from a cloud copy that had not been overwritten yet. A player on one
+    // device, or one who saves twice before relogging, lost it for good.
+    //
+    // ADDING A KEY HERE ONLY EVER PRESERVES MORE. It cannot delete, reset or
+    // revoke anything, which is what makes this the safe half of the fix.
+    //
+    //   invSlotsBought  BOUGHT WITH REAL CURRENCY. "Anything real money or
+    //                   LootCoins bought is permanent" is the first rule of this
+    //                   list, and inventory slots were the one paid thing not on
+    //                   it. An ascension was silently repossessing them.
+    //   blueprints      Recovered schematics, never consumed on use. Also where
+    //                   syncCrownBlueprints() latches the two crown-gated
+    //                   carriers, so losing it un-earns a KOTH reward as well.
+    //   kothCrowns      Lifetime #1 finishes, and the gate on Titan Aquila (25)
+    //                   and Celestial Corvus (100). A crown cannot be re-earned —
+    //                   the race it was won in is over. koth_wins() re-floors it
+    //                   on login, but only for a signed-in player whose RPC
+    //                   answers; nothing recovers it locally.
+    //   casino          Lifetime wins, jackpots and spins — a record, not a purse.
+    //   mergeLog        The merge receipt black box. It was being wiped on the one
+    //                   event most likely to need forensics later.
+    //
+    // `construction` is deliberately NOT added: a hull part-built in a shipyard
+    // the reset dismantles is a real question about what the player is owed, and
+    // that is an operator's call, not this list's.
+    'invSlotsBought', 'blueprints', 'kothCrowns', 'casino', 'mergeLog',
     // FLIGHT WAIVER (FULL FLEET coupon) is an entitlement too — the hulls ride
     // across in the hangar, so the licence that lets you fly them must as well.
     'flightWaiver',
   ];
   // Event / premium hulls are entitlements, not progress — never taken.
   const ASC_KEEP_SHIPS = ['voidmaw', 'titansina', 'sina', 'chromaregent'];
+  // THE HULL A NEW RUN STARTS IN, stated once.
+  //
+  // pilotAscend() restores DEFAULT `equipped`, which is frigate-shaped, so the
+  // flagship it names has to be the frigate or the save's gear slots are out of
+  // step with its hull. That is a real constraint, not a preference — but it was
+  // written as a bare literal here while three screens in pilot-ascension.js
+  // showed the player their CURRENT flagship and promised they kept flying it.
+  // Exported so those screens read the answer instead of restating it.
+  const ASC_START_HULL = 'frigate';
 
   // ---- PILOT ASCENSION -------------------------------------------------------
   // Reset the account to Level 1, carry THE WHOLE HANGAR, bank the points.
@@ -421,7 +472,7 @@
     // its upgrade levels and Ship Ascension intact, and the pilot can switch back
     // the moment they meet that hull's licence again — an ascension resets the RUN,
     // and starting a run means starting in the starter hull.
-    state.ship = 'frigate';
+    state.ship = ASC_START_HULL;
     state.shipLevels = keepLevels;         // hull upgrades KEPT — every level you bought stands
     state.fittings = {};                   // no saved loadouts (there is no gear to load)
     state.fleet = null; state.drones = 0; state.droneBays = {};   // wing disbanded — re-form it as slots unlock
@@ -487,6 +538,12 @@
     rt.tileDensity = rt.tileLoot = rt.tileRespawnMult = 1; rt.deepDeath = false;
     state.dreadRun = null; state.prismRun = null;
     state.fleet = null; state.drones = 0; state.droneBays = {};   // no wing, no drones — re-form as slots unlock
+    // AND THE WING STOPS FLYING THIS INSTANT. rt.escorts is runtime, so clearing
+    // state.fleet above does not by itself remove the escorts already in the air —
+    // that is exactly how a Level 1 pilot ended up flanked by their endgame hulls.
+    // updateEscorts() reconciles anyway, but the draw loop must not get even one
+    // frame in which the old fleet is still on screen.
+    rt.escorts = []; rt.escortsFor = state.ship;
     // Territory is NOT cleared — it rides across in ASC_KEEP. rt.realTiles is the
     // live server mirror and stays as-is so the galaxy map doesn't blank out; the
     // next republish rewrites every held tile with the new (much lower) fleet
@@ -1259,6 +1316,13 @@
   // per-frame: burn the cooldown, and clear the swarm when its window closes
   function beaconTick(dt) {
     rt.beaconT = beaconLeft();      // mirror of the saved clock, for the HUD ring
+    // AUTO BEACON — the purchased trigger, and nothing more than the trigger. It
+    // asks exactly what the BUTTON asks, so every rule the manual press honours
+    // is honoured here: never during a boss, never outside a zone grind, never
+    // before the Lv 30 gate, and never on a live cooldown. fireBeacon() stamps
+    // state.beaconUntil before it returns, so a frame that runs six sub-steps
+    // cannot fire it twice.
+    if (autoBeaconOn() && beaconAllowed() && beaconLeft() <= 0) fireBeacon();
     if (rt.beaconSwarm > 0) {
       rt.beaconSwarm -= dt;
       // while the beacon RUNS it keeps calling: a trickle of reinforcements, so a
@@ -1674,6 +1738,44 @@
   _fxo.hit = function (p) { return resolveHit(p); };
   _fxo.nearby = function (n, primary) { return nearbyEnemies(n, primary); };
   _fxo.fleetShips = function () { return fleetShips(); };
+  // ---- AREA DAMAGE, THE WAY THIS ENGINE ALREADY DOES AREA DAMAGE ------------
+  // The Prism aura is the one AOE the game already had, and it deliberately does
+  // NOT route through resolveHit: it calls takeDamage + onKill and skips the
+  // per-hit proc chain entirely. Fighter Ascension's Corona Mantle and Nova
+  // Reclamation need that same discipline at a far higher tick rate:
+  //
+  //   · A CORONA PULSE IS NOT AN IMPACT. resolveHit emits 10-20 particles, a
+  //     damage float, a crit shake, and rolls cryo, armor corruption, life steal
+  //     and prism splash PER TARGET. A maxed wing pulsing on nine hostiles each
+  //     is ~200 of those a second: it would recurse into prismSplash, hold the
+  //     pilot at full hull off life steal alone, and bury the frame in particles.
+  //     A PHANTOM STRIKE is the opposite case and still goes through resolveHit —
+  //     it is weapon fire, fired at the craft's own cadence.
+  //   · KILLS STILL PAY IN FULL. onKill() is what pays gold, XP, drops, missions
+  //     and the lifetime counters, so an aura kill is worth exactly what a bolt
+  //     kill is worth — and every carve-out (KOTH, cargo, Home Citadel) is
+  //     decided there rather than re-implemented here.
+  //   · THE DPS METER MUST SEE IT. rt.dmgWindow is what the HUD reads.
+  //
+  // Returns how many hostiles were bitten so the caller can pace its own FX.
+  _fxo.area = function (x, y, r, dmg, max, skip) {
+    dmg = Math.floor(Number(dmg) || 0);
+    if (dmg < 1 || !(r > 0)) return 0;
+    const r2 = r * r, cap = Math.max(1, max | 0), en = rt.enemies;
+    let hits = 0;
+    for (let i = 0; i < en.length; i++) {
+      const o = en[i];
+      if (!o || o === skip || o.dead || o.dying) continue;
+      const dx = o.x - x, dy = o.y - y;
+      if (dx * dx + dy * dy > r2) continue;
+      const k = o.takeDamage(dmg);
+      rt.dmgWindow.push({ t: rt.time, dmg });
+      if (o.cloneRegen) o.regenHold = REGEN_SUPPRESS;
+      if (k) onKill(o);
+      if (++hits >= cap) break;
+    }
+    return hits;
+  };
   function resolveHit(p) {
     const e = p.target;
     if (!e || e.dead) return;
@@ -2223,7 +2325,19 @@
   // ---- pickup filter / auto-sell helpers ------------------------------------
   function autoSellTier() { return state.autoSellTier == null ? -1 : state.autoSellTier; }
   // Would this drop upgrade ANY of the flagship's slots for its base type?
-  function isPickupUpgrade(item) {
+  //
+  // `strict` DROPS THE EMPTY-SLOT CLAUSES, and that is what makes auto-sell work
+  // at all. An empty hardpoint answered "yes, an upgrade" for EVERY item of its
+  // base type, not for one — so a single unfitted escort slot vetoed the sale of
+  // an unlimited number of greys, forever. A player with escorts and Always-equip
+  // off has dozens of permanently empty slots, which is the reported "auto-sell
+  // does nothing": the predicate was never wrong about any single item, it was
+  // just being asked a question with no quota attached.
+  //
+  // The pickup path still asks the loose question (an item that could fill an
+  // empty slot is worth carrying home); autoSellSweep() asks the strict one and
+  // hands out the empty slots itself, one item each. See it for the quota.
+  function isPickupUpgrade(item, strict) {
     const targets = slotsForBase(item.slot);
     if (!targets.length) return false;
     // CAN THE HULL BEING FLOWN EVEN MOUNT IT?
@@ -2243,7 +2357,9 @@
     if (flagOk) {
       let weakest = Infinity, empty = false;
       targets.forEach((t) => { const e = state.equipped[t]; if (!e) empty = true; else weakest = Math.min(weakest, I.itemPower(e)); });
-      if (empty || I.itemPower(item) > weakest) return true;
+      // itemPower > Infinity is false, so an all-empty target set correctly
+      // answers "no" under strict rather than falling through to a keep.
+      if ((empty && !strict) || I.itemPower(item) > weakest) return true;
     }
     // FLEET-AWARE (Jul 2026): a drop that upgrades ANY escort's fitting is kept
     // too — auto-sell must never scrap gear the rest of the fleet needs.
@@ -2251,7 +2367,7 @@
       if (!canMountWeapon(item, sh.key)) continue;
       const fit = (state.fittings || {})[sh.key] || {};
       const eT = C.shipSlots(sh.key).filter((sk) => C.slotBase(sk) === item.slot);
-      for (const t of eT) { const e = fit[t]; if (!e || I.itemPower(item) > I.itemPower(e)) return true; }
+      for (const t of eT) { const e = fit[t]; if (e ? I.itemPower(item) > I.itemPower(e) : !strict) return true; }
     }
     // …AND HANGAR-AWARE, for the hull-locked case only.
     //
@@ -2263,18 +2379,37 @@
     //
     // So for an item this flagship cannot mount, ask every OWNED hull that can, on
     // exactly the terms the fleet loop uses: better than what is in its slots, or
-    // filling an empty one. Anything no owned hull can use stays eligible, which is
-    // what makes auto-sell work again.
+    // (loose mode only) filling an empty one. Anything no owned hull can use stays
+    // eligible, which is what makes auto-sell work again.
     if (!flagOk) {
       const owned = state.ownedShips || {};
       for (const k in owned) {
         if (!owned[k] || !C.SHIP_BY_KEY[k] || !canMountWeapon(item, k)) continue;
         const fit = (state.fittings || {})[k] || {};
         const eT = C.shipSlots(k).filter((sk) => C.slotBase(sk) === item.slot);
-        for (const t of eT) { const e = fit[t]; if (!e || I.itemPower(item) > I.itemPower(e)) return true; }
+        for (const t of eT) { const e = fit[t]; if (e ? I.itemPower(item) > I.itemPower(e) : !strict) return true; }
       }
     }
     return false;
+  }
+
+  // EVERY UNFITTED HARDPOINT ON THE ACCOUNT, once — flagship, every escort in
+  // the wing, every hull parked in the hangar. Deduped by hull, because a hull
+  // can legitimately appear in all three lists and its slots must only be
+  // countable once (the flagship reads state.equipped; everything else reads its
+  // own state.fittings entry).
+  function emptyHardpoints() {
+    const out = [], seen = {}, fitAll = state.fittings || {};
+    const add = (hull, fit) => {
+      if (!hull || seen[hull] || !C.SHIP_BY_KEY[hull]) return;
+      seen[hull] = 1;
+      C.shipSlots(hull).forEach((sk) => { if (!fit[sk]) out.push({ hull, base: C.slotBase(sk), taken: 0 }); });
+    };
+    add(state.ship, state.equipped || {});
+    fleetShips().forEach((sh) => add(sh.key, fitAll[sh.key] || {}));
+    const owned = state.ownedShips || {};
+    for (const k in owned) if (owned[k]) add(k, fitAll[k] || {});
+    return out;
   }
 
   function lootBurst(x, y, rarity) {
@@ -2699,6 +2834,40 @@
     // silently, and the breadcrumb + console warning keep the forensics.
     try { console.warn('[LOOTFLEET] recovery engaged: ' + reason + ' ' + sample); } catch (e) {}
   }
+  // ---- INPUT YIELD ---------------------------------------------------------
+  // A TAP MUST NOT QUEUE BEHIND A SIMULATION FRAME.
+  //
+  // The render gate already stops PAINTING the arena behind a menu, but the sim
+  // itself always runs (and must — idle progress is the game). On a phone in a
+  // busy zone one update() pass is comfortably longer than a frame, so a nav tap
+  // landed behind the frame in flight, then the screen's own render competed with
+  // the next one: the reported "big delay from tapping to the menu switching".
+  //
+  // So the UI can buy a short, hard-bounded runway. While it is open the loop
+  // schedules itself and does nothing else — and CRUCIALLY it does not touch
+  // rt.last, so the skipped milliseconds are simulated IN FULL by the next step
+  // (dt's only bound is the 0.25s stall boundary, far above this ceiling). No sim
+  // time is lost, no entity count is touched, nothing about difficulty changes —
+  // the frame is deferred, not deleted. A render that overruns the window is no
+  // worse off than today: it was already a long frame either way.
+  const YIELD_MS = 140;                        // < the 250ms stall boundary, always
+  let _yieldUntil = 0;
+  function uiYield(ms) {
+    const now = performance.now();
+    // NEVER DEFER PAST THE STALL BOUNDARY. rt.last is the last frame the sim
+    // actually ran, so this ceiling is measured from THERE, not from now — a
+    // burst of taps (or a scroll that keeps firing pointerdown) must not be able
+    // to chain windows until dt exceeds the 0.25s clamp, which is the one thing
+    // that would genuinely lose sim time rather than defer it.
+    const t = Math.min((rt.last || now) + YIELD_MS,
+                       now + Math.max(0, Math.min(YIELD_MS, ms == null ? 110 : ms)));
+    if (t > _yieldUntil) _yieldUntil = t;
+  }
+  function yielding(now) {
+    if (!_yieldUntil) return false;
+    if (now < _yieldUntil) return true;
+    _yieldUntil = 0; return false;
+  }
   // THE RAF CHAIN MUST NEVER DIE.
   //
   // This used to read `if (!rt.running) return;` BEFORE re-arming — so the moment
@@ -2731,6 +2900,7 @@
         if (gap > 4000 || _stallN >= 2) engageRecovery(Math.round(gap) + 'ms stall');
       }
     }
+    if (yielding(now)) return;               // rt.last untouched — no sim time lost
     step(now);
   }
   // SESSION KICK — a screen that lost the account lock must stop SIMULATING,
@@ -3078,11 +3248,46 @@
   // must still auto-sell, or the bag floods and auto-sell "stops working".
   // After every pickup's equip pass, benched items at/below the auto-sell tier
   // that no longer upgrade ANY fleet slot convert to gold + salvage.
+  //
+  // AN EMPTY SLOT KEEPS ONE ITEM, NOT EVERY ITEM (Aug 2026). This is the whole
+  // of the reported "auto-sell doesn't sell": the keep test answered yes for
+  // anything that COULD fill an unfitted hardpoint, and an unfitted hardpoint
+  // stays unfitted, so it vetoed the tenth grey cannon exactly as loudly as the
+  // first. A wing of escorts with Always-equip off has dozens of them and the
+  // sweep sold literally nothing, at any tier, forever.
+  //
+  // So the empty slots are handed out here, best gear first, one item per slot.
+  // Anything that beats a FITTED item is still kept unconditionally (strict); a
+  // piece whose only merit was filling a hole keeps its place only until a
+  // better one turns up for that hole. Nothing that the fleet can actually use
+  // is sold, and the hold stops growing without bound.
+  //
+  // Only SELLABLE items compete for the holes. An above-tier piece is kept
+  // whatever happens, so leaving it out of the auction can only reserve a hole
+  // for a grey that a better item will eventually take — one item too many, in
+  // the safe direction. Erring the other way sells gear the fleet wanted.
   function autoSellSweep(g) {
     const tier = autoSellTier(); if (tier < 0) return { n: 0, gold: 0 };
+    const open = emptyHardpoints();
+    // Best first — the item that claims a hole should be the strongest candidate
+    // for it, not whichever happened to be picked up first.
+    const order = state.inventory.slice().sort((a, b) => I.itemPower(b) - I.itemPower(a));
+    const doomed = new Set();
+    for (const it of order) {
+      if (unsellable(it) || it.rarity > tier) continue;
+      if (isPickupUpgrade(it, true)) continue;              // beats something already fitted
+      let claimed = false;
+      for (let i = 0; i < open.length; i++) {
+        const s = open[i];
+        if (s.taken || s.base !== it.slot || !canMountWeapon(it, s.hull)) continue;
+        s.taken = 1; claimed = true; break;
+      }
+      if (!claimed) doomed.add(it);
+    }
+    if (!doomed.size) return { n: 0, gold: 0 };
     let gold = 0, n = 0;
     state.inventory = state.inventory.filter((it) => {
-      if (unsellable(it) || it.rarity > tier || isPickupUpgrade(it)) return true;
+      if (!doomed.has(it)) return true;
       gold += C.sellValue(it); addSalvage(it); n++; return false;
     });
     if (n) {
@@ -4272,6 +4477,37 @@
       ox: ESCORT_OFF[i][0] * sp, oy: ESCORT_OFF[i][1] * sp,
       cd: Math.random(), heal: 0,
     }));
+    // WHAT THIS WING WAS BUILT FOR. The formation offsets above are scaled by the
+    // FLAGSHIP's size, so a hull swap invalidates the geometry as surely as a slot
+    // change invalidates the roster — both are checked by escortsStale().
+    rt.escortsFor = state.ship;
+  }
+
+  // DOES THE FLYING WING STILL MATCH THE SAVE?
+  //
+  // rt.escorts is RUNTIME, rebuilt on demand — and for a long time "on demand"
+  // meant two call sites (setFleetSlot and the drone sync), so every OTHER path
+  // that changes the fleet left the old wing airborne:
+  //
+  //   • pilotAscend() disbands the wing in state and lands the pilot in a frigate,
+  //     but rt.escorts kept the pre-ascension escort objects — so a Level 1 pilot
+  //     flew out of the reset flanked by their endgame hulls, which still drew,
+  //     still fired, and still pulsed Aegis repairs. That is the reported bug.
+  //   • buyShip() frees the new flagship's escort slot in state, so the same hull
+  //     was drawn twice — once as the flagship, once as its own escort.
+  //   • adoptSave() replaces state wholesale on a cloud merge, fleet included.
+  //
+  // Rather than add a third, fourth and fifth call site to remember, the wing
+  // RECONCILES against the save. Cost is a length check plus at most four string
+  // compares per frame, for a system whose ceiling is four escorts.
+  function escortsStale() {
+    const have = rt.escorts;
+    if (!have) return fleetShips().length > 0;
+    if (rt.escortsFor !== state.ship) return true;
+    const want = fleetShips();
+    if (want.length !== have.length) return true;
+    for (let i = 0; i < want.length; i++) if (want[i].key !== have[i].key) return true;
+    return false;
   }
   function updateEscorts(dt) {
     const a = rt.archer, s = rt.stats;
@@ -4280,6 +4516,9 @@
       a.hp = Math.min(s.maxHp, a.hp + s.maxHp * (s.regen / 100) * dt);
       if (Math.random() < dt * 0.5) rt.floats.push(new E.FloatText(a.x, a.y - 22, '✚', { color: '#7ce0a0', size: 13, vy: -34, life: 0.7 }));
     }
+    // BEFORE the early return, so a wing that should now be EMPTY actually
+    // empties. This is the frame a disbanded escort stops existing.
+    if (escortsStale()) rebuildEscorts();
     const list = rt.escorts;
     if (!list || !list.length || !a) return;
     for (const es of list) {
@@ -5715,6 +5954,18 @@
       cit: citadelRankOf(k),
       resMult: (t.deep ? GX.DEEP_MULT.resource : 1),
       locked: t.level > state.level + 10 && !isOwned(k),
+      // THE GATE WARP ACTUALLY USES, PUBLISHED BEFORE IT FIRES.
+      //
+      // `locked` above is the MAP'S COLOUR rule and deliberately excludes tiles
+      // you hold — your own systems stay gold on the map whatever your level.
+      // warp() applies the level band to OWNED tiles too (see the note there: an
+      // ascended pilot keeps a Lv 370 system and comes back at Lv 1, and warping
+      // in would be a free high-level farm). So the two answers differ on exactly
+      // the tiles an ascension creates, and the sheet was printing the map's
+      // answer while the button used warp's — an enabled action that refused.
+      // Anything gating an ACTION reads this one.
+      deployLocked: t.level > state.level + 10,
+      deployNeedLv: Math.max(1, t.level - 10),
     });
   }
   // ---- LIVING GALAXY: simulated rival turf wars (NOT real PvP) -------------
@@ -6893,21 +7144,44 @@
     }
   }
 
+  // WHAT ONE TILE PAYS AN HOUR — THE SINGLE STATEMENT OF IT.
+  //
+  // This used to exist only as the body of resourceRates()'s loop, so every
+  // screen that wanted to show a tile's worth restated the arithmetic and each
+  // one dropped a different term. The galaxy LIST printed a bare `t.rate` — no
+  // ×25 galaxy yield, no deep-space ×25, no player-citadel rank — so a rank-5
+  // fortress on a deep ring read 7.5M/h while it actually banked billions. The
+  // tile sheet carried its own hand-copy annotated "MIRROR resourceRates()",
+  // which is the same bug waiting to happen. There is one function now; anything
+  // that prints a tile's income CALLS IT and never re-derives it.
+  //
+  // The natural-fortress ×1000 is deliberately absent here: galaxy.js bakes it
+  // into t.rate at generation, and applying it again would pay it twice.
+  // `parts` is returned so a screen can EXPLAIN the number without recomputing it.
+  function tileRateOf(id) {
+    const t = sysAt(id); if (!t || !t.rate) return null;
+    const base = Number(t.rate) || 0;
+    if (t.void) {   // VOID ZONE — every tile pays ALL FOUR currencies hourly
+      const vr = base * 25;
+      return { void: true, res: 'all', perHour: vr, gold: vr * 1000,
+               pays: { fuel: vr, iron: vr, plasma: vr, gold: vr * 1000 },
+               parts: { base, deep: 1, cit: 1, galaxy: 25 }, natural: !!t.citadel, citLv: 0 };
+    }
+    const deep = t.deep ? GX.DEEP_MULT.resource : 1;   // deep space ×25 on top
+    const rec = state.citadels && state.citadels[id];
+    const citLv = rec ? (rec.lv || 1) : 0;
+    const cit = citLv ? CITADEL_MULT * citLv : 1;      // PLAYER CITADEL — 10× per rank
+    const perHour = base * deep * cit * 25;            // GALAXY YIELD ×25 — territory is the resource engine
+    const res = t.resource || 'fuel';
+    return { void: false, res, perHour, gold: 0, pays: { [res]: perHour },
+             parts: { base, deep, cit, galaxy: 25 }, natural: !!t.citadel, citLv };
+  }
   function resourceRates() {
     const r = { fuel: 0, iron: 0, plasma: 0 };
     Object.keys(state.ownedSystems).forEach((k) => {
-      const t = sysAt(k); if (!t || !t.rate) return;
-      if (t.void) {   // VOID ZONE — every tile pays ALL FOUR currencies hourly
-        const vr = t.rate * 25;
-        r.fuel += vr; r.iron += vr; r.plasma += vr; r.gold = (r.gold || 0) + vr * 1000;
-        return;
-      }
-      // citadel tiles already carry their ×1000 (CITADEL_RATE_MULT) in t.rate;
-      // deep space adds ×25 on top
-      let rate = t.rate * (t.deep ? GX.DEEP_MULT.resource : 1);
-      if (!t.void && state.citadels && state.citadels[k]) rate *= CITADEL_MULT * (state.citadels[k].lv || 1);   // PLAYER CITADEL — 10× per rank (VOID premium is baked into t.rate)
-      rate *= 25;   // GALAXY YIELD ×25 — holding territory is the resource engine
-      r[t.resource || 'fuel'] += rate;
+      const q = tileRateOf(k); if (!q) return;
+      if (q.void) { r.fuel += q.perHour; r.iron += q.perHour; r.plasma += q.perHour; r.gold = (r.gold || 0) + q.gold; return; }
+      r[q.res] += q.perHour;
     });
     return r;
   }
@@ -7033,6 +7307,57 @@
     if (!state.purchases) state.purchases = {};
     state.purchases.speed4lc = true;
     save();
+    return { ok: true };
+  }
+
+  // ---- AUTO BEACON — a one-time 25,000-LootCoin operations unlock ------------
+  // WHAT IT BUYS: the beacon pulls its own trigger the moment it is charged, for
+  // as long as the account exists. Nothing else changes — not the recharge, not
+  // the swarm size, not the tithe, and not the rule that it never fires during a
+  // boss. It is convenience, not power: an idle game should not require a player
+  // to be present to press one button every few minutes.
+  //
+  // `autobeacon` IS THE SKU AND IT IS A RECEIPT. It rides in `purchases`, which
+  // is an ASC_KEEP entitlement and a unioned field in mergeSaves(), so the unlock
+  // survives ascension, a device swap and any save merge. Never rename it.
+  //
+  // THE ARMED FLAG IS A SETTING, NOT THE RECEIPT. `state.autoBeacon` is the
+  // toggle, and it reads TRUE UNLESS EXPLICITLY FALSE — so a save that has never
+  // seen the key (a fresh purchase, a post-ascension state, an old cloud copy)
+  // arms itself rather than silently switching a paid feature off. It is also in
+  // ASC_KEEP so a deliberate OFF survives too.
+  const AUTO_BEACON_LC = 25000;
+  function hasAutoBeacon() { return !!(state.purchases && state.purchases.autobeacon); }
+  function autoBeaconOn() { return hasAutoBeacon() && state.autoBeacon !== false; }
+  function setAutoBeacon(v) {
+    if (!hasAutoBeacon()) return false;
+    state.autoBeacon = !!v;
+    save();
+    if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    return true;
+  }
+  // GUARDED AGAINST FIRING TWICE, and affordability is re-checked at the moment
+  // of the write — the shop card can sit open while LootCoins are spent
+  // elsewhere. `Math.floor(Number(x) || 0)` on the balance, never `| 0`: a wallet
+  // past 2.1 billion wraps negative through a bitwise coercion and the check
+  // would pass for someone rich rather than poor.
+  let _abBusy = false;
+  function buyAutoBeacon() {
+    if (_abBusy) return { ok: false, reason: 'busy' };
+    if (hasAutoBeacon()) return { ok: false, reason: 'owned' };
+    if ((state.level | 0) < BEACON_LV) return { ok: false, reason: 'level', need: BEACON_LV };
+    const bal = Math.floor(Number(state.credits) || 0);
+    if (bal < AUTO_BEACON_LC) return { ok: false, reason: 'credits', short: AUTO_BEACON_LC - bal };
+    _abBusy = true;
+    try {
+      state.credits = bal - AUTO_BEACON_LC;        // paid…
+      if (!state.purchases) state.purchases = {};
+      state.purchases.autobeacon = true;           // …then delivered, synchronously
+      state.autoBeacon = true;                     // armed on purchase — that is what they bought
+      save();
+      try { if (window.ACCOUNT && window.ACCOUNT.flushNow) window.ACCOUNT.flushNow(); } catch (e) {}
+      if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    } finally { _abBusy = false; }
     return { ok: true };
   }
 
@@ -7448,6 +7773,36 @@
     })(state, 0);
     state.level = Math.max(1, state.level | 0 || 1);
     ensureResources();
+    // FIGHTER ASCENSION ranks are CLAMPED, NEVER REVOKED. A rank was paid for at
+    // a five-figure-multiple price, so an out-of-range value is repaired to the
+    // nearest legal one it is entitled to (0…MAXR) and nothing is ever dropped
+    // for being unrecognised — including a rank from a build newer than this one,
+    // which lands on this build's ceiling rather than at zero. The ★10 gate is
+    // NOT re-checked here: stars only ever climb, and a doctrine already bought
+    // must not be switched off by a load.
+    if (state.fasc && state.fasc.ranks) {
+      const maxr = (window.FASCEND && window.FASCEND.MAXR) || 10, rk = state.fasc.ranks;
+      for (const k in rk) {
+        const n = Math.floor(Number(rk[k]) || 0);
+        rk[k] = n < 0 ? 0 : n > maxr ? maxr : n;
+      }
+      // WHICH DOCTRINE IS FLYING is a preference, not progress, and the only
+      // illegal value is one naming a doctrine the account does not hold a rank
+      // in. That is repaired by DELETING the key, never by writing a different
+      // doctrine in: FASCEND.activeKey() resolves an absent value to the highest
+      // rank held, so removal lands the pilot on their best doctrine rather than
+      // on whichever one this function happened to pick. A value naming a
+      // doctrine THIS build does not know is left alone for the same reason
+      // ranks are — it belongs to a newer build, and clearing it would stand the
+      // wing down on every downgrade.
+      if (typeof state.fasc.active === 'string') {
+        const a = state.fasc.active;
+        const known = !!(window.FASCEND && window.FASCEND.BY_K && window.FASCEND.BY_K[a]);
+        if (known && !(Math.floor(Number(rk[a]) || 0) > 0)) delete state.fasc.active;
+      } else if (state.fasc.active !== undefined) {
+        delete state.fasc.active;                 // a non-string is not a doctrine key
+      }
+    }
     // seed the currency guard from the loaded save, and convert any `null` that
     // a previous corrupt write left behind (the walk above only sees numbers —
     // typeof null is 'object', so a nulled balance slipped straight past it)
@@ -8091,7 +8446,7 @@
     // reports 'first-frame' rather than a false clean bill.
     setTimeout(() => { try { localStorage.setItem('lf_boot', 'alive'); } catch (e) {} }, 5000);
     requestAnimationFrame(loop);
-    setInterval(() => { if (rt.running && !window.__sessionKicked) { const now = performance.now(); if (now - rt.last > 120) step(now); } }, 1000/30);
+    setInterval(() => { if (rt.running && !window.__sessionKicked) { const now = performance.now(); if (now - rt.last > 120) { if (yielding(now)) return; step(now); } } }, 1000/30);
   }
 
   // --------------------------------------------------------------------------
@@ -8351,6 +8706,8 @@
     equip, sell, sellAllBelow, autoEquip, autoSell, autoSellPreview, selectDungeon,
     setAuto, getAuto: () => state.auto, setJoystick,
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
+    // AUTO BEACON — the 25,000-LootCoin operations unlock and its arm/disarm flag
+    AUTO_BEACON_LC, buyAutoBeacon, hasAutoBeacon, autoBeaconOn, setAutoBeacon,
     resizeCanvas: () => { try { rt.portW = 0; rt.portH = 0; resize(); } catch (e) {} },
     buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
@@ -8398,11 +8755,11 @@
     xpFleetInfo,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip, citadelRankOf, tileIdByName,
-    resourceRates, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
+    resourceRates, tileRateOf, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     ownedSystemList,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,
-    getStats: () => rt.stats, getDps: () => rt.dps, score, freeze, adoptSave,
+    getStats: () => rt.stats, getDps: () => rt.dps, score, freeze, adoptSave, uiYield, ASC_START_HULL,
     getHp: () => ({ cur: rt.archer ? rt.archer.hp : 0, max: rt.stats.maxHp, dead: rt.archer && rt.archer.dead, awaiting: rt.awaitingRespawn }),
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,
     buyCosmetic, setCosmetic, addCredits,

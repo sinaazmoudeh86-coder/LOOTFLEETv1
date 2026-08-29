@@ -360,7 +360,14 @@
   // =========================================================================
   function levelForTier(t) { try { return G().dreadLevelFor(t); } catch (e) { return 5 + t * 25; } }
   function maxTier() { return Math.max(0, Math.floor((lvl() - 5) / 25)); }            // tiers unlocked by level
-  function dropChance(t) { return Math.min(0.95, 0.40 + (t - 1) * 0.02); }   // 2× drop rate (40% base, +2%/tier)
+  // CORE SCARCITY IS APPLIED HERE, INSIDE THE ODDS (build 729), not at the grant.
+  // The hunt card prints `dropChance(t) * 100` as the tier's advertised percentage,
+  // so scaling the chance is what keeps the number on the card and the number in
+  // the roll the same statement. Scaling the payout instead would have left every
+  // card advertising the old odds.
+  // 40% base / +2% a tier becomes 12% / +0.6% at CONFIG.DREAD_CORE_RATE 0.30.
+  function coreRate() { try { const r = window.CONFIG.DREAD_CORE_RATE; return r > 0 ? r : 1; } catch (e) { return 1; } }
+  function dropChance(t) { return Math.min(0.95, 0.40 + (t - 1) * 0.02) * coreRate(); }
   // ISO-ish week index (weeks since a fixed Monday epoch, UTC)
   const WEEK_MS = 7 * 864e5;
   const EPOCH = Date.UTC(2024, 0, 1);                                                 // a Monday
@@ -1571,6 +1578,45 @@
     .pl-lrow{ grid-template-columns:30px minmax(0,1fr) auto; gap:8px; padding:8px; }
     .pl-lmeta{ display:none; }
     .pl-lic{ width:30px; height:30px; font-size:12.5px; }
+  }
+
+  /* ===== PHONE / SHORT WINDOW =============================================
+     MEASURED, NOT GUESSED (audit/pilot-frame.html). At 360x640 this screen
+     spent 139px of a 442px body on the tree BAR and handed the list 63px -
+     one row, in a scroll box, inside a body that also scrolls. Three fixes,
+     all of them the same idea: on a phone the PAGE is the scroll surface and
+     the chrome is one row.
+
+     1. ONE ROW OF CHROME. The title is already in the screen header, the four
+        category chips scroll sideways instead of wrapping to a second row,
+        and the Map/List switch collapses from a bordered promo card (two 44px
+        buttons stacked over a sub-line) to the segmented pair it always was.
+        The 44px touch target stays - only the packaging goes.
+     2. ONE SCROLL SURFACE. .pl-lrows stops being a scroll root and flows into
+        #pilot-body, which already scrolls. A list nested inside a scroller
+        inside a scroller is the "display is broken" report: you drag and the
+        wrong thing moves. The search/tabs bar sticks so it stays reachable.
+     3. THE MAP CANNOT FLOW - it is a drag surface - so instead of shrinking
+        to whatever is left it gets a real box and lets the body scroll past
+        it. .pl-treewrap goes flex:none here so its height is its content and
+        nothing can be clipped behind its overflow:hidden. */
+  @media (max-width:620px), (max-height:560px){
+    .pl-treebar{ flex-wrap:nowrap; gap:6px; padding:6px 7px; }
+    .pl-treetitle{ display:none; }
+    .pl-filters{ order:2; flex:1 1 auto; flex-wrap:nowrap; min-width:0; overflow-x:auto; overflow-y:hidden;
+      scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+    .pl-filters::-webkit-scrollbar{ display:none; }
+    .pl-fchip{ flex:none; padding:5px 9px; }
+    .pl-viewsw{ order:1; flex:0 0 auto; flex-direction:row; align-items:center; gap:0; padding:3px; border-radius:10px; }
+    .pl-viewsw .plv-s, .pl-viewsw .plv-new{ display:none; }
+    .plv-row{ gap:3px; }
+    .plv-b{ flex:0 0 auto; padding:6px 11px; white-space:nowrap; }
+
+    .pl-treewrap{ flex:0 0 auto; min-height:0; }
+    .pl-mapwrap{ flex:0 0 auto; height:min(46vh,320px); min-height:190px; }
+    .pl-treewrap.listing .pl-list{ flex:0 0 auto; }
+    .pl-lrows{ flex:0 0 auto; min-height:0; overflow:visible; }
+    .pl-treewrap.listing .pl-lbar{ position:sticky; top:0; z-index:2; background:#0e131d; }
   }
 
   /* RESERVED HEIGHT. Selecting a node swapped a one-line placeholder for a card,

@@ -386,7 +386,15 @@
   // the ore behind, so the half of the payout that is supposed to be the reason
   // to run an expedition was the smaller half of both. Gold keeps its taper; the
   // fuel/iron/plasma manifest is five times what it was. Dread Cores are a
-  // rarity, not a resource, and are untouched.
+  // rarity, not a resource, so RES_MULT has never applied to them \u2014 their own
+  // scarcity rate is applied separately, just below.
+  // ◇ DREAD CORES are a rarity, not a resource, and RES_MULT above never touched
+  // them. The 729 scarcity pass does: every core faucet in the game reads the one
+  // rate in config-v2 (CONFIG.DREAD_CORE_RATE) so the total supply is a single
+  // decision. A 3★+ expedition can now come home without one.
+  function coreScale(n) {
+    try { return window.CONFIG.coreYield(n); } catch (e) { return Math.max(0, Math.round(Number(n) || 0)); }
+  }
   const RES_MULT = 5;
   function payout(m) {
     const j = m.j || 1;
@@ -397,7 +405,7 @@
       fuel: Math.round(res * 0.5), iron: Math.round(res * 0.3), plasma: Math.round(res * 0.2),
       cores: 0, lc: 0,
     };
-    if (m.stars >= 3) p.cores = Math.max(1, Math.min(12, Math.round((m.stars - 2) * (m.hours / 5) * j)));
+    if (m.stars >= 3) p.cores = coreScale(Math.max(1, Math.min(12, Math.round((m.stars - 2) * (m.hours / 5) * j))));
     return p;
   }
 

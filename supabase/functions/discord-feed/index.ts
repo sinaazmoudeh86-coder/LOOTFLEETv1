@@ -45,7 +45,7 @@ const WEBHOOK = Deno.env.get('DISCORD_WEBHOOK_URL') ?? '';
 //   select content from net._http_response order by created desc limit 3;
 // must show {"ok":true,"ver":592,...}. If ver is lower, the old build runs. Keep
 // this number equal to the client build that ships the function.
-const FEED_VER = 727;
+const FEED_VER = 729;
 const FEED_KEY = Deno.env.get('FEED_KEY') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

@@ -186,8 +186,19 @@
       addPart(key, n);
       out.push({ t: '⬡ ' + n + '× ' + band.tier + ' — ' + shipName(key), c: band.cls === 't' ? '#ff5a68' : band.cls === 'l' ? '#ffcf4d' : band.cls === 'e' ? '#c07bff' : '#7db8e8' });
     } else if (r < 0.80 && stage >= 20) {                                    // Dread Core (Pilot Tree)
-      st.dreadCores = (st.dreadCores || 0) + 1;
-      out.push({ t: '◇ 1 Dread Core', c: '#ff3a4a' });
+      // SCARCITY PASS (729) — the core goes through CONFIG.coreYield, so this
+      // band pays a core 30% as often as it did. WHEN IT DOES NOT LAND THE STAGE
+      // STILL PAYS: falling through to the bonus gold keeps the file's own
+      // promise that "every stage cleared grants instant loot", where an empty
+      // branch would have turned 70% of this band into nothing at all.
+      const cy = (window.CONFIG && window.CONFIG.coreYield) ? window.CONFIG.coreYield(1) : 1;
+      if (cy > 0) {
+        st.dreadCores = (st.dreadCores || 0) + cy;
+        out.push({ t: '◇ ' + cy + ' Dread Core' + (cy === 1 ? '' : 's'), c: '#ff3a4a' });
+      } else {
+        const bg = Math.floor(goldFor(stage) * 0.8);
+        st.gold += bg; out.push({ t: '$' + fmt(bg) + ' Bonus Gold', c: '#e6b566' });
+      }
     } else {                                                                 // bonus gold
       const bg = Math.floor(goldFor(stage) * 0.8);
       st.gold += bg; out.push({ t: '$' + fmt(bg) + ' Bonus Gold', c: '#e6b566' });
@@ -642,8 +653,14 @@
         drops.push({ stage: 0, drops: [{ t: '❖ 1× VOIDMAW PART — persistence bonus (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff' }] });
       }
       if (clearedN >= 2 && maxStage >= 20 && !has('Dread Core')) {
-        const st2 = G().state; st2.dreadCores = (st2.dreadCores || 0) + 1;
-        drops.push({ stage: 0, drops: [{ t: '◇ 1 Dread Core — persistence bonus', c: '#ff3a4a' }] });
+        // Scarcity pass (729) — see CONFIG.DREAD_CORE_RATE. Silent when it does
+        // not land: this is a bonus on top of the run's drops, so omitting the
+        // row is honest where printing ◇ 0 would not be.
+        const cy = (window.CONFIG && window.CONFIG.coreYield) ? window.CONFIG.coreYield(1) : 1;
+        if (cy > 0) {
+          const st2 = G().state; st2.dreadCores = (st2.dreadCores || 0) + cy;
+          drops.push({ stage: 0, drops: [{ t: '◇ ' + cy + ' Dread Core' + (cy === 1 ? '' : 's') + ' — persistence bonus', c: '#ff3a4a' }] });
+        }
       }
     }
     const wasBestDay = dealt > (s.bestDay || 0), wasBestEver = dealt > (s.bestEver || 0);

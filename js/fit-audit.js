@@ -73,6 +73,9 @@
       '.screen.active .pl-lrows', '.cmp-list', '.cmx-list', '#gc-dock.open .gc-scroll',
       '.pn-body', '.kov-card', '.pa-picks', '.pa-modal', '.tp-ladder.all', '.tp-modal',
       '.tp-rcpt', '.ex-picklist', '.mn-sheet', '.gc-cd', '.death-body',
+      // THE BRIDGE (731) — the panel scrolls and its fleet rail scrolls sideways.
+      // Both live outside #screens, so nothing in them was inspected before.
+      '#bridge.show', '#bridge.show .br-rail',
     ].join(', ')).forEach((root) => {
       if (seen.has(root)) return; seen.add(root);
       const els = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));

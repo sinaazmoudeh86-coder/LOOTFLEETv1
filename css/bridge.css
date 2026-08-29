@@ -1,0 +1,123 @@
+/* =============================================================================
+   bridge.css — THE BRIDGE · the docked dashboard sheet
+   -----------------------------------------------------------------------------
+   TWO STATES, AND THE DEFAULT ONE HAS NO DOM AT ALL.
+
+     GLANCE — the hangar scene is the screen and FLY NOW is the action, exactly as
+       before. This file contributes nothing: #bridge is display:none and empty.
+       The entry point is a fifth #hangar-dock button that bridge.js injects.
+
+     MANAGE — one tap opens a modal sheet over the arena: what needs doing, the
+       active hull with its real hardpoints, the formation, and the fleet.
+
+   WHY THE DEFAULT STATE IS EMPTY RATHER THAN "A THIN BAR": the pad's hull slots
+   are hit-tested by GEOMETRY against the whole canvas, and the click listener is
+   on #game-canvas itself — so any pointer-events:auto element over the arena does
+   not overlap a hull, it CONSUMES the tap and that hull stops being flyable. Two
+   rounds went into narrowing a chip that had no safe placement. There is no
+   overlay now, so the failure mode is gone rather than smaller.
+   ========================================================================== */
+#bridge{position:absolute;inset:0;z-index:11;display:none;pointer-events:none}
+#bridge.open{display:block}
+
+/* the Bridge dock button — badge follows the Ascend button's .hd-dot precedent */
+#hd-bridge.on{color:var(--gold)}
+#hd-bridge.on svg{filter:drop-shadow(0 0 7px rgba(242,178,75,.55))}
+
+/* ---- what needs doing (first thing in the sheet, omitted when nothing does) ---- */
+.br-att{display:flex;gap:7px;flex-wrap:wrap}
+.br-a{flex:1 1 170px;min-width:0;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;cursor:pointer;
+  border:1px solid var(--ac,var(--line-2));border-left:3px solid var(--ac,var(--line-2));background:linear-gradient(180deg,var(--panel-2),var(--panel))}
+.br-a:active{transform:translateY(1px)}
+.br-a>i{flex:none;font-style:normal;font-size:15px;color:var(--ac)}
+.br-a b{display:block;font:800 8.5px/1 'Orbitron',sans-serif;letter-spacing:.11em;color:var(--ac)}
+.br-a span{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ---- MANAGE: the sheet ---- */
+.br-sheet{pointer-events:auto;position:absolute;inset:0;display:flex;flex-direction:column;
+  background:linear-gradient(180deg,rgba(8,12,19,.95),rgba(8,12,19,.99));backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.br-sh-head{flex:none;display:flex;align-items:baseline;gap:9px;padding:11px 12px;border-bottom:1px solid var(--line)}
+.br-sh-t{font:800 11px/1 'Orbitron',sans-serif;letter-spacing:.15em;color:var(--gold)}
+.br-sh-s{font-size:11px;font-weight:700;color:var(--muted)}
+.br-x{margin-left:auto;width:32px;height:32px;border-radius:8px;border:1px solid var(--line-2);background:rgba(0,0,0,.4);color:var(--muted);cursor:pointer;font-size:13px}
+/* THE SHEET SCROLLS AND ITS CHILDREN NEVER SHRINK — the fit contract. */
+.br-sh-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:9px;padding:10px}
+.br-sh-body>*{flex:none}
+.br-sh-body::-webkit-scrollbar{width:7px}.br-sh-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}
+
+/* ---- active hull ---- */
+.br-hero{border-radius:13px;border:1px solid var(--line-2);background:radial-gradient(115% 130% at 78% 8%,#1d2740 0%,#131a28 52%,#0c1119 100%)}
+.br-hero-in{display:flex;gap:12px;padding:12px}
+.br-art{flex:none;width:112px;display:grid;place-items:center}
+.br-art img{max-width:100%;filter:drop-shadow(0 10px 26px rgba(0,0,0,.7)) drop-shadow(0 0 22px rgba(95,209,255,.22))}
+.br-hm{flex:1 1 auto;min-width:0}
+.br-hk{display:flex;align-items:center;gap:7px;font:800 7.5px/1 'Orbitron',sans-serif;letter-spacing:.16em;color:var(--good)}
+.br-dot{width:5px;height:5px;border-radius:50%;background:var(--good);box-shadow:0 0 8px var(--good)}
+.br-hn{font:800 18px/1.08 'Orbitron',sans-serif;color:#fff;margin-top:7px}
+.br-hc{font-size:11px;font-weight:700;color:var(--muted);margin-top:4px}
+.br-hc em{font-style:normal;color:var(--c-divine,#ffd450)}
+.br-row{display:flex;align-items:center;gap:9px;margin-top:9px;flex-wrap:wrap}
+.br-lab{font:800 7.5px/1.3 'Orbitron',sans-serif;letter-spacing:.13em;color:var(--muted-2)}
+.br-stars{display:flex;gap:2px}
+.br-stars i{font-style:normal;font-size:12px;color:var(--line-2)}
+.br-stars i.on{color:var(--c-divine,#ffd450);text-shadow:0 0 9px rgba(255,212,80,.6)}
+.br-chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:5px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);color:#b9c8dc}
+.br-chip.wing{color:var(--cyan);border-color:rgba(95,209,255,.34);background:rgba(95,209,255,.1)}
+/* hardpoints — the real slot icons from equipLayout(), so a player can tell
+   WHICH bay is empty rather than reading a colliding first letter */
+.br-hp{display:flex;gap:3px;margin-top:10px;flex-wrap:wrap}
+.br-s{width:22px;height:26px;border-radius:4px;border:1px solid var(--line-2);background:#0d131e;display:grid;place-items:center;font-size:11px;line-height:1;color:var(--muted-2)}
+.br-s svg{width:12px;height:12px}
+.br-s.f{border-color:color-mix(in srgb,var(--rc,#5fd1ff) 55%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--rc,#5fd1ff) 16%,transparent),transparent);color:var(--rc,#5fd1ff)}
+.br-s.e{border-style:dashed;border-color:rgba(255,73,95,.5);color:#ff8a96;background:rgba(255,73,95,.07)}
+.br-hpl{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+.br-hpl b{color:#dbe8f5;font-weight:800}
+.br-hpl .bad{color:#ff8a96;font-weight:800}
+
+/* ---- formation (tiles are .fp-* and already styled by the game) ---- */
+.br-form{border-radius:13px;border:1px solid var(--line-2);background:linear-gradient(180deg,var(--panel-2),var(--panel));padding:10px 11px}
+.br-form .fp-head{display:flex;align-items:baseline;gap:9px;margin-bottom:8px}
+.br-form .fp-title{font:800 9px/1 'Orbitron',sans-serif;letter-spacing:.15em;color:var(--gold)}
+.br-form .fp-sub{font-size:10.5px;font-weight:700;color:var(--muted)}
+/* FULL WIDTH, AND ALIGNED WITH THE COMMANDER CELLS BENEATH IT. These were
+   fixed 96px tiles in a flex scroller, so five slots used half a desktop sheet
+   and left the commanders row — a 5-column stretch grid — sitting under empty
+   space. Same reasoning commanders.js already states for its own bench: one
+   footprint, one set of columns. minmax keeps the phone case honest — when the
+   mins no longer fit, this scrolls instead of crushing the tiles. */
+.br-form .fp-slots{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(96px,1fr);gap:9px;overflow-x:auto;padding-bottom:4px}
+.br-form .fp-slots::-webkit-scrollbar{height:6px}
+.br-form .fp-slots::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+.br-form .fp-slot{min-width:0}
+.br-form .fp-slot img{max-width:84px}
+@media (max-width:420px){.br-form .fp-slots{gap:6px}}
+
+/* ---- fleet ---- */
+.br-fl-h{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.br-fl-t{font:800 9px/1 'Orbitron',sans-serif;letter-spacing:.15em;color:var(--muted-2)}
+.br-fl-t b{color:var(--text)}
+/* min-height fits one whole card, so the rail can never be handed a sliver */
+.br-rail{display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding-bottom:5px;min-height:126px;-webkit-overflow-scrolling:touch}
+.br-rail::-webkit-scrollbar{height:6px}.br-rail::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+.br-c{flex:0 0 132px;display:flex;flex-direction:column;padding:9px;border-radius:11px;cursor:pointer;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel-2),#101724)}
+.br-c:active{transform:translateY(1px)}
+.br-c-top{display:flex;align-items:flex-start;gap:6px}
+.br-c-art{flex:none;width:44px;height:34px;display:grid;place-items:center}
+.br-c-art img{max-width:100%;max-height:100%;filter:drop-shadow(0 3px 8px rgba(0,0,0,.6))}
+.br-c-lv{margin-left:auto;text-align:right}
+.br-c-lv b{display:block;font:800 12px/1 'Orbitron',sans-serif;font-variant-numeric:tabular-nums}
+.br-c-lv i{display:block;font-style:normal;font:800 6.5px/1 'Orbitron',sans-serif;letter-spacing:.11em;color:var(--muted-2);margin-top:3px}
+.br-c-n{font:800 10px/1.2 'Orbitron',sans-serif;color:#fff;margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.br-c-m{display:flex;align-items:center;gap:5px;margin-top:6px;font-size:9.5px;font-weight:700;color:var(--muted)}
+.br-c-st{display:flex;gap:1px;margin-left:auto}
+.br-c-st i{font-style:normal;font-size:8px;color:var(--c-divine,#ffd450)}
+.br-c-tag{margin-top:8px;font:800 7px/1 'Orbitron',sans-serif;letter-spacing:.1em;padding:4px 5px;border-radius:4px;text-align:center}
+.br-c-tag.wing{color:var(--cyan);background:rgba(95,209,255,.1);border:1px solid rgba(95,209,255,.32)}
+.br-c-tag.ready{color:#8effc0;background:rgba(63,197,107,.13);border:1px solid rgba(63,197,107,.32)}
+.br-c-tag.unfit{color:#ff8a96;background:rgba(255,73,95,.11);border:1px solid rgba(255,73,95,.34)}
+
+@media (max-width:520px){
+  .br-t em{display:none}
+  .br-art{width:92px}
+  .br-hn{font-size:16px}
+}

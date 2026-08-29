@@ -43,6 +43,23 @@
 /* A sheet whose only action is Close keeps it full width. */
 .sheet-body .sheet-actions .btn:only-child{ flex:1; }
 
+/* A DISABLED PRIMARY ACTION MUST LOOK DISABLED.
+   theme.css forces `.btn.gold` to the bright blue fill with `!important`, and
+   nothing overrode it for the disabled state — so every refusal this sheet can
+   print (at capacity, attack shield, outside your level band, and now a sealed
+   system) rendered as a fully lit, inviting button that does nothing when tapped.
+   That is the same dead-button trap sheetNotice() was built to close, one layer
+   down: the reason was readable, but the control still said "press me".
+   `!important` here is not a preference, it is the only way past theme.css. */
+.sheet-body .sheet-actions .btn:disabled,
+.sheet-body .sheet-actions .btn[disabled]{
+  background:linear-gradient(180deg,#232e3e,#18202c) !important;
+  border:1px solid #37475f !important;
+  color:#8b95a6 !important;
+  box-shadow:none !important;
+  cursor:default; transform:none !important;
+}
+
 /* ---- WHY THAT BUTTON REFUSED ----------------------------------------------
    Sheet actions used to report failure through the loot-feed toast (z-index 4),
    which sits UNDER the modal backdrop (z-index 50) — so the reason was painted

@@ -477,6 +477,10 @@
     a2.className = (safe ? 'safe' : adv.kind) + (show ? ' show' : '');
     // FLY NOW — big deploy CTA while docked in the hangar, straight to the
     // recommended zone (clearly named)
+    // THE BRIDGE — the docked dashboard (js/bridge.js). It is handed the SAME
+    // `safe` flag the zone chip above uses, so the two can never disagree about
+    // whether the pilot is docked. It renders nothing when not docked.
+    try { if (window.BRIDGE) window.BRIDGE.sync(safe && !evRun); } catch (e) {}
     const fn = el['fly-now'] || (el['fly-now'] = document.getElementById('fly-now'));
     if (fn) {
       const rec = Math.max(1, adv.rec || 1);
@@ -1331,16 +1335,14 @@
   // ==========================================================================
   // FLEET PANEL — flagship + escort slots; matches the hangar-bay visual
   // ==========================================================================
-  function renderFleet() {
-    const panel = $('fleet-panel'); if (!panel) return;
-    const lvl = G.state.level, slots = G.fleetSlots();
+  // THE FORMATION STRIP, ONE STATEMENT OF IT. Flagship tile, escort slots, and
+  // locked slots with the level that opens them. Extracted from renderFleet()
+  // (build 731) so the Bridge shows the same strip wired to the SAME pickers —
+  // a formation UI that exists twice drifts twice.
+  function fleetSlotsHTML() {
+    const slots = G.fleetSlots();
     const fleet = G.getFleet();
     const flag = C.SHIP_BY_KEY[G.state.ship];
-    if (lvl < 100) {
-      panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">5 ships max</span></div>
-        <div class="fp-locked">🔒 Fleet command unlocks at <b>Lv 100</b> — then +1 escort slot every 100 levels. Your other hulls fly <b>with</b> you in battle and add their strength to your Fleet Score.</div>`;
-      return;
-    }
     let cells = `<div class="fp-slot flag" data-fpflag="1" title="Tap to change flagship"><img src="ships/ship-${flag.key}.png" alt=""><div class="fps-n">${flag.name}</div><div class="fps-tag star">★ FLAGSHIP · ⇄</div></div>`;
     C.FLEET.slotLevels.forEach((lv, i) => {
       if (i < slots) {
@@ -1355,11 +1357,28 @@
         cells += `<div class="fp-slot locked"><div class="fps-add">🔒</div><div class="fps-n">Lv ${lv}</div><div class="fps-tag">LOCKED</div></div>`;
       }
     });
+    return cells;
+  }
+  function wireFleetSlots(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-fp]').forEach((d) => d.addEventListener('click', () => openFleetPicker(+d.dataset.fp)));
+    const fb = root.querySelector('[data-fpflag]'); if (fb) fb.addEventListener('click', openFlagshipPicker);
+    try { if (window.COMMANDERS) window.COMMANDERS.bindFleetRow(root); } catch (e) {}
+  }
+  function renderFleet() {
+    const panel = $('fleet-panel'); if (!panel) return;
+    const lvl = G.state.level, slots = G.fleetSlots();
+    const fleet = G.getFleet();
+    const flag = C.SHIP_BY_KEY[G.state.ship];
+    if (lvl < 100) {
+      panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">5 ships max</span></div>
+        <div class="fp-locked">🔒 Fleet command unlocks at <b>Lv 100</b> — then +1 escort slot every 100 levels. Your other hulls fly <b>with</b> you in battle and add their strength to your Fleet Score.</div>`;
+      return;
+    }
+    const cells = fleetSlotsHTML();
     const n = G.fleetShips().length;
     panel.innerHTML = `<div class="fp-head"><span class="fp-title">⬡ Fleet</span><span class="fp-sub">${n + 1}/${1 + slots} flying · ${n > 0 ? 'Fleet Score active' : 'deploy escorts to boost your score'}</span></div><div class="fp-slots">${cells}</div>${window.COMMANDERS ? window.COMMANDERS.fleetRowHTML() : ''}${fleetLoadoutsHTML()}`;
-    panel.querySelectorAll('[data-fp]').forEach((d) => d.addEventListener('click', () => openFleetPicker(+d.dataset.fp)));
-    try { if (window.COMMANDERS) window.COMMANDERS.bindFleetRow(panel); } catch (e) {}
-    const fb = panel.querySelector('[data-fpflag]'); if (fb) fb.addEventListener('click', openFlagshipPicker);
+    wireFleetSlots(panel);
     // loadout chips open the item card
     panel.querySelectorAll('[data-fli]').forEach((d) => d.addEventListener('click', () => {
       const [k, sk] = d.dataset.fli.split(':');
@@ -1734,6 +1753,87 @@
     }
     ctx.closePath();
   }
+  // THE CONTIGUITY HERO PILL — sits directly under the ◈ Systems / MANAGE pill.
+  // Every figure comes off G.clusterSummary(); the tier names, thresholds and
+  // percentages are read from CLUSTER_TIERS in game-v93 rather than restated, so
+  // retuning the ladder moves this card with it.
+  function clusterPillHTML() {
+    if (!G.clusterSummary) return '';
+    const s = G.clusterSummary();
+    const tiers = s.tiers || [];
+    const plural = (n) => n === 1 ? '1 system' : n + ' systems';
+    const rungs = tiers.slice().reverse().map((t) => {
+      const on = s.biggest >= t.need;
+      const live = s.tier && s.tier.need === t.need;
+      return `<span class="ctg-r${on ? ' on' : ''}${live ? ' live' : ''}" style="--c:${t.color}">`
+        + `<b>${t.need}+</b><i>+${t.add}%</i></span>`;
+    }).join('');
+    const head = s.tier
+      ? `<span class="ctg-badge" style="--c:${s.tier.color}">${s.tier.name} · +${s.tier.add}%</span>`
+      : '<span class="ctg-badge off">NO BLOCK YET</span>';
+    const lead = s.tier
+      ? `Your largest block is <b>${plural(s.biggest)}</b> touching, and <b>every tile in it</b> pays <b style="color:${s.tier.color}">+${s.tier.add}%</b> an hour.`
+        + (s.blocks > 1 ? ` You hold <b>${s.blocks}</b> qualifying blocks — <b>${plural(s.boosted)}</b> boosted in total.` : '')
+      : s.biggest > 0
+        ? `Your largest block is <b>${plural(s.biggest)}</b> touching. <b>${s.toNext} more</b> joined onto it starts the bonus at <b>+${(tiers[tiers.length - 1] || {}).add}%</b>.`
+        : 'Take systems that <b>share an edge</b> with one you already hold. Four touching starts the bonus.';
+    const next = s.tier && s.next
+      ? `<div class="ctg-next"><b>${s.toNext}</b> more touching → <b style="color:${s.next.color}">+${s.next.add}%</b> (${s.next.name})</div>` : '';
+    return `<div class="ctg" style="--ctg-c:${s.tier ? s.tier.color : '#3c4a60'}">
+      <div class="ctg-h"><span class="ctg-ic">⬡</span><span class="ctg-t">CONTIGUITY BONUS</span>${head}</div>
+      <div class="ctg-lead">${lead}</div>
+      <div class="ctg-rungs">${rungs}</div>
+      ${next}
+      <div class="ctg-foot">Counts systems you fully own that <b>share an edge</b>. Each block is scored on its own size, and the bonus applies per tile — so it multiplies the whole block, not one system.</div>
+      <div class="ctg-foot seal">🛡 A block defends itself too: a system with <b>no exposed border</b> cannot be sieged at all. Enemies have to take the outer ring first.</div>
+    </div>`;
+  }
+  // ONLY THE EDGES THAT FACE OUT. Outlining every tile in a block draws its
+  // internal seams too, which reads as "N outlined tiles"; stroking only the
+  // sides whose neighbour is outside the block draws ONE territory with a hard
+  // border, which is the thing the bonus is actually about.
+  //
+  // Edge i of gxHexPath() runs from vertex (30+60i)° to (90+60i)°, so its midpoint
+  // sits at (60+60i)° — and GM.neighbors() returns that direction at index 5-i.
+  function gxBlockBorder(ctx, cx, cy, q, r, sameBlock, inset) {
+    const rad = GX_HEX - 1.5 - (inset || 0), nb = GM.neighbors(q, r);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const n = nb[(5 - i + 6) % 6];
+      if (sameBlock(GM.tileId(n.q, n.r))) continue;
+      const a0 = Math.PI / 3 * i + Math.PI / 6, a1 = Math.PI / 3 * (i + 1) + Math.PI / 6;
+      ctx.moveTo(cx + Math.cos(a0) * rad, cy + Math.sin(a0) * rad);
+      ctx.lineTo(cx + Math.cos(a1) * rad, cy + Math.sin(a1) * rad);
+    }
+  }
+  // ONE STABLE COLOUR PER FACTION, AND MINE IS ALWAYS THE SAME ONE.
+  //
+  // Every rival first painted the same orange, which merged two neighbouring
+  // empires' walls into one apparent territory — the map said "twenty tiles to
+  // break through" where the truth was two separate blocs with a seam between
+  // them. Rivals now take a hue hashed off their faction id (stable across
+  // sessions because the id is), and MY wall is always the same ice white, so
+  // "is that mine" never depends on remembering a colour.
+  //
+  // The hue avoids two bands on purpose: the blues that already mean YOUR tiles
+  // and deep space, and the greens that mean an ALLY. That leaves purple → red
+  // → orange → yellow → lime, ~220° across roughly a dozen live rival names.
+  const GX_MY_WALL = '215,238,255';
+  const _gxFacCol = {};
+  function factionWallRGB(fac) {
+    if (!fac || fac === 'me') return GX_MY_WALL;
+    const hit = _gxFacCol[fac]; if (hit) return hit;
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < fac.length; i++) { h ^= fac.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    const hue = (240 + (h % 220)) % 360;
+    // HSL → RGB at a fixed saturation/lightness so no faction reads dimmer than
+    // another: the colour carries identity only, never importance.
+    const s = 0.78, l = 0.66;
+    const k = (n) => (n + hue / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(Math.min(k(n) - 3, 9 - k(n)), 1))));
+    return (_gxFacCol[fac] = f(0) + ',' + f(8) + ',' + f(4));
+  }
   // PERF — THE KAEVITH VOID VEIL. Painting the invasion originally built two
   // radial gradients per invaded tile per world bake. At ~20% of the map that is
   // 80–160 gradient objects and fills every rebake (~2/s idle, every zoom step),
@@ -1850,7 +1950,7 @@
       </div>
       <div class="gx-hud" id="gx-ringlab"></div>
     </div>`;
-    html += `<div class="gx-legend"><button class="gxl gxl-cit gxl-btn ${(G.atTileCap && G.atTileCap()) ? 'gxl-full' : ''}" id="gx-mysys" style="font-weight:800"><span class="gxl-glow"></span>◈ <b>${(G.tileCount ? G.tileCount() : 0)}</b>/${(G.tileCap ? G.tileCap() : 50)} Systems${(G.atTileCap && G.atTileCap()) ? '<em class="gxl-warn">FULL</em>' : ''}<em class="gxl-cta">MANAGE <i>›</i></em></button><span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl"><i style="background:#7a2ac4"></i>◈ Kaevith</span><span class="gxl"><i style="background:#ffbe6e"></i>⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
+    html += `<div class="gx-legend"><button class="gxl gxl-cit gxl-btn ${(G.atTileCap && G.atTileCap()) ? 'gxl-full' : ''}" id="gx-mysys" style="font-weight:800"><span class="gxl-glow"></span>◈ <b>${(G.tileCount ? G.tileCount() : 0)}</b>/${(G.tileCap ? G.tileCap() : 50)} Systems${(G.atTileCap && G.atTileCap()) ? '<em class="gxl-warn">FULL</em>' : ''}<em class="gxl-cta">MANAGE <i>›</i></em></button>${clusterPillHTML()}<span class="gxl gxl-cit" style="color:#ffd24d;font-weight:800">⛓ ${(G.citadelCount ? G.citadelCount() : 0)} Citadels</span><span class="gxl"><i style="background:#2d78eb"></i>Yours</span><span class="gxl"><i style="background:#d23b4e"></i>Rival</span><span class="gxl"><i style="background:#6c7e9c"></i>Available</span><span class="gxl"><i style="background:#4a5160"></i>Locked</span><span class="gxl"><i style="background:#7a2ac4"></i>◈ Kaevith</span><span class="gxl"><i style="background:#ffbe6e"></i>⛴ Citadel</span><span class="gxl">☠ Boss</span><span class="gxl">◷ Cooldown</span></div>`;
     el['galaxy-body'].innerHTML = html;
     el['galaxy-body'].querySelectorAll('[data-gxv]').forEach((b) => b.addEventListener('click', () => setGxView(b.dataset.gxv)));
     const xb = document.getElementById('xen-open');
@@ -1941,6 +2041,10 @@
     // rival's, a natural fortress at full strength) — the row must not re-derive.
     const cr = G.citadelRankOf ? G.citadelRankOf(id) : null;
     return { t, id, owned, rival, rivalName, ally, locked, cd, citLv, myLv, myCit, natCit, anyCit, attackCit, q, cr,
+             // NO EXPOSED BORDER, NO SIEGE — the list says SEALED rather than
+             // offering a target the sheet will refuse. One statement of it, in
+             // game-v93; the row never re-derives adjacency.
+             shield: G.tileShield ? G.tileShield(id) : null,
              rate: q ? Math.floor(q.perHour) : Math.floor(Number(t.rate) || 0),
              res: t.resource || '', ring: t.ring | 0, level: t.level | 0 };
   }
@@ -2032,6 +2136,7 @@
       else if (!r.owned) pills.push('<span class="gxr-p open"><b>UNCLAIMED</b></span>');
       const state = r.owned ? '<em class="gxr-s mine">YOURS</em>'
         : r.ally ? '<em class="gxr-s ally">ALLIED</em>'
+        : (r.shield && r.shield.shielded) ? '<em class="gxr-s seal">🛡 SEALED</em>'
         : r.cd > 0 ? '<em class="gxr-s cd" title="Contest shield — cannot be attacked yet">▷ ' + fmtLeft(r.cd) + '</em>'
         : r.rival ? '<em class="gxr-s rival">RIVAL</em>'
         : r.locked ? '<em class="gxr-s lock">Lv ' + r.level + '</em>'
@@ -2239,6 +2344,17 @@
       if (s.xen) tags.push('<em class="ms-tag xen">KAEVITH</em>');
       if (s.deep) tags.push('<em class="ms-tag deep">DEEP</em>');
       if (s.active) tags.push('<em class="ms-tag on">HERE</em>');
+      // WHICH OF MY SYSTEMS ARE SAFE, AND WHICH ARE THE WALL. The map shows the
+      // shape; this list is where a pilot decides what to reinforce next, so it
+      // states the same answer per row. A lone system gets no tag — "6 open" is
+      // not advice until it has a neighbour.
+      {
+        const shd = G.tileShield ? G.tileShield(s.id) : null;
+        if (shd && shd.faction && !s.home) {
+          if (shd.shielded) tags.push('<em class="ms-tag seal">⛨ SEALED</em>');
+          else if (shd.ring.length) tags.push('<em class="ms-tag front">⚔ ' + shd.open + ' OPEN</em>');
+        }
+      }
       const cit = s.citadelLv > 0
         ? `<span class="ms-cit">⛓ Rank ${s.citadelLv}</span>`
         : s.naturalCitadel ? '<span class="ms-cit nat">⛴ Citadel</span>' : '<span class="ms-cit none">No citadel</span>';
@@ -2547,7 +2663,36 @@
         if (t.home) { fill = '#2a2438'; edge = '#f2b24b'; }
         else if (owned) { fill = 'rgba(45,120,235,0.82)'; edge = '#9fccff'; }   // YOURS — solid blue, clearly held
         else if (ally) { fill = 'rgba(46,180,102,0.55)'; edge = '#46d27a'; }     // ALLIED — green, protected
-        else if (rival) { fill = 'rgba(210,59,78,0.42)'; edge = '#ff5468'; }     // rival — red
+        else if (rival) {
+          // A TERRITORY GETS ITS HOLDER'S COLOUR; A STRAY CLAIM STAYS RED.
+          //
+          // Every rival tile used to be the same red, so on a live shared map — 92%
+          // claimed across 85 owners — the galaxy was one undifferentiated red mass
+          // and no amount of boundary line could separate one empire from the next
+          // (a border between two identical reds is a hairline, and at low zoom it
+          // is nothing at all). That is the whole of "I don't see any clusters
+          // besides my own".
+          //
+          // A tile in a bloc of BLOC_MIN+ is now FILLED in its holder's own hue —
+          // the same hue its wall is drawn in — so territories separate at a glance
+          // before a single line is read. Isolated claims and pairs keep the generic
+          // red: 1,065 of the claims on that map were single tiles, and giving each
+          // of those its own colour would be the confetti again.
+          // A TILE'S OWN OUTLINE IS STRUCTURE, NOT A STATEMENT.
+          //
+          // Every rival tile carried a saturated #ff5468 ring, so a screen of them
+          // was a uniform lattice of bright outlines with no hierarchy at all — and
+          // a territory boundary drawn into that field is just one more line. The
+          // per-tile edge is quiet now and OWNERSHIP READS FROM THE FILL, which
+          // leaves the bloc boundary as the loudest thing on the map. That is the
+          // inversion the map needed: tiles are texture, territories are shape.
+          const bl = G.blocOf ? G.blocOf(id) : null;
+          if (bl && bl.size >= (G.BLOC_MIN || 3)) {
+            const frgb = factionWallRGB(G.factionOf ? G.factionOf(id) : null);
+            fill = 'rgba(' + frgb + ',0.34)';
+            edge = 'rgba(' + frgb + ',0.34)';
+          } else { fill = 'rgba(210,59,78,0.30)'; edge = 'rgba(255,84,104,0.34)'; }
+        }
         else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
         else { fill = 'rgba(120,134,158,0.14)'; edge = '#566884'; }              // unclaimed — neutral slate
         // hex path (see gxHexPath — the current path is NOT part of canvas drawing
@@ -2567,7 +2712,9 @@
           ctx.drawImage(veil.core, p.x - veil.cr, p.y - veil.cr, veil.cr * 2, veil.cr * 2);
           ctx.restore();
           xenBloom = veil;                               // blitted below, unclipped
-          edge = '#c26bff';
+          // quiet, for the same reason the ownership edges are: the veil itself
+          // already says "invaded" far louder than an outline can.
+          edge = 'rgba(194,107,255,0.42)';
         }
         // contested lockout — dim the hex so "can't take this yet" reads at a glance.
         // MUST run while the hex path is still current — the bloom blit below is
@@ -2644,6 +2791,126 @@
           ctx.lineWidth = active ? 3 : 1.1;
           ctx.strokeStyle = active ? '#ffffff' : edge;
           ctx.stroke();
+        }
+        // —— CONTIGUITY BORDER —— a qualifying block gets one loud outline around
+        // the WHOLE shape, in its tier's colour, drawn as a wide dark casing plus
+        // a bright core so it reads as a glow without a shadowBlur in the loop.
+        // This is baked world paint, not per-frame paint: it changes only when
+        // ownership does.
+        if (owned && !t.home && G.clusterOf) {
+          const clu = G.clusterOf(id);
+          if (clu && clu.mult > 1) {
+            const same = (nid) => G.isOwned(nid) && G.clusterOf(nid).cid === clu.cid;
+            ctx.save();
+            ctx.lineCap = 'round';
+            gxBlockBorder(ctx, p.x, p.y, c.q, c.r, same);
+            ctx.strokeStyle = 'rgba(4,7,13,.85)'; ctx.lineWidth = 7; ctx.stroke();
+            gxBlockBorder(ctx, p.x, p.y, c.q, c.r, same);
+            ctx.strokeStyle = clu.color; ctx.lineWidth = 3.4; ctx.stroke();
+            gxBlockBorder(ctx, p.x, p.y, c.q, c.r, same);
+            ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.1; ctx.stroke();
+            ctx.restore();
+          }
+        }
+        // —— SIEGE SHIELD —— no exposed border, no siege (G.tileShield).
+        //
+        // Two marks, and between them they draw the whole rule without a word:
+        // a PROTECTED CORE breathes inside its hex, and the SHELL around it — the
+        // exposed tiles of the same faction that an attacker has to break first —
+        // gets a DASHED wall on its outward edges only, so the boundary reads as
+        // one barrier around the territory rather than as N outlined tiles.
+        //
+        // THE WALL IS DASHED FOR A REASON. The contiguity border above is a SOLID
+        // thick line in its tier's colour, and that palette is orange / purple /
+        // cyan / green — so a solid shield line would have been the same colour as
+        // the income border on the same tiles at two of the four tiers, with two
+        // different meanings. Dashes make the two unmistakable at a glance no
+        // matter which hue either lands on: solid = what this block PAYS, dashed =
+        // what an attacker has to BREAK.
+        //
+        // Both read the same function the tile sheet and warp() read, so the map
+        // can never promise a siege the button refuses. The breathing rides the
+        // same Date.now() phase the citadel glow uses and therefore steps at the
+        // world bake's ~2Hz — deliberately: this is baked paint, and a shield that
+        // changes only when ownership does has nothing to gain from 60fps. (The
+        // dash phase is fixed for the same reason — marching dashes at 2Hz read as
+        // a flicker, not as motion.)
+        if (!t.home && G.tileShield) {
+          const shd = G.tileShield(id);
+          if (shd.faction) {
+            const sc = factionWallRGB(shd.faction);
+            const ph = 0.5 + 0.5 * Math.sin(Date.now() / 520 + (c.q * 0.7 + c.r * 1.3));
+            if (shd.shielded) {
+              ctx.save();
+              gxHexPath(ctx, p.x, p.y);
+              ctx.fillStyle = 'rgba(' + sc + ',' + (0.09 + 0.13 * ph).toFixed(3) + ')';
+              ctx.fill();
+              ctx.lineWidth = 1.8 + 1.3 * ph;
+              ctx.strokeStyle = 'rgba(' + sc + ',' + (0.55 + 0.4 * ph).toFixed(3) + ')';
+              ctx.stroke();
+              ctx.restore();
+            } else if (shd.open > 0 && shd.ring.length) {
+              // A TERRITORY IS WORTH DRAWING BECAUSE IT IS A TERRITORY.
+              //
+              // This used to require the bloc to contain a SEALED core before it
+              // drew anything, which on a live shared map meant nothing was ever
+              // outlined: 1,793 claimed tiles across 85 owners produced 531
+              // same-owner adjacencies and zero sealed cores, so another pilot's
+              // holdings were invisible — the reported "I only see my own".
+              //
+              // Any bloc of BLOC_MIN+ touching tiles now gets its boundary. A bloc
+              // that actually holds a protected core gets the heavier, breathing
+              // line, so "somebody holds this ground" and "there is something
+              // sealed inside" stay two different marks.
+              // —— THE TERRITORY BOUNDARY —— the loudest mark on the map.
+              //
+              // Three passes, the same construction the contiguity border uses
+              // because it is the one thing on this canvas that was always legible:
+              // a dark casing so it reads over any fill, the faction's own hue as
+              // the body, and a fine white core so the line has an edge. SOLID, at
+              // the hex radius — this is "whose ground is this".
+              //
+              // A bloc that holds a SEALED CORE gets a second, dashed, breathing
+              // line inset inside it: "and something in here cannot be reached".
+              // Two marks, two facts, and neither is a hairline.
+              //
+              // MY OWN BLOC IS SKIPPED WHEN THE CONTIGUITY BORDER IS ALREADY
+              // DRAWING IT. That border traces the same outward edges of the same
+              // shape, so both would sit on the same pixels — one territory, one
+              // outline.
+              const bl = G.blocOf ? G.blocOf(id) : null;
+              const min = (G.BLOC_MIN || 3);
+              const ownDrawn = shd.mine && owned && G.clusterOf && G.clusterOf(id).mult > 1;
+              if (bl && bl.size >= min && !ownDrawn) {
+                const fac = shd.faction;
+                const sameFac = (nid) => G.factionOf(nid) === fac;
+                // ZOOM COMPENSATION. Widths are WORLD units under ctx.scale(z,z),
+                // so at z=0.4 a 6px casing rendered 2.4px and the body under one
+                // pixel — the boundary vanished at exactly the zoom where a player
+                // is reading the shape of the map.
+                const zw = 1 / Math.max(0.4, Math.min(1.3, z));
+                ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                gxBlockBorder(ctx, p.x, p.y, c.q, c.r, sameFac);
+                ctx.strokeStyle = 'rgba(3,6,11,.92)'; ctx.lineWidth = 7.5 * zw; ctx.stroke();
+                gxBlockBorder(ctx, p.x, p.y, c.q, c.r, sameFac);
+                ctx.strokeStyle = 'rgb(' + sc + ')'; ctx.lineWidth = 3.6 * zw; ctx.stroke();
+                gxBlockBorder(ctx, p.x, p.y, c.q, c.r, sameFac);
+                ctx.strokeStyle = 'rgba(255,255,255,.72)'; ctx.lineWidth = 1.15 * zw; ctx.stroke();
+                ctx.restore();
+                // the sealed-core wall, inside the boundary
+                if (bl.cores > 0) {
+                  ctx.save();
+                  ctx.setLineDash([7 * zw, 4 * zw]); ctx.lineCap = 'butt';
+                  gxBlockBorder(ctx, p.x, p.y, c.q, c.r, sameFac, 6);
+                  ctx.strokeStyle = 'rgba(3,6,11,.8)'; ctx.lineWidth = 4.5 * zw; ctx.stroke();
+                  gxBlockBorder(ctx, p.x, p.y, c.q, c.r, sameFac, 6);
+                  ctx.strokeStyle = 'rgba(' + sc + ',' + (0.6 + 0.4 * ph).toFixed(3) + ')';
+                  ctx.lineWidth = (2 + 0.9 * ph) * zw; ctx.stroke();
+                  ctx.restore();
+                }
+              }
+            }
+          }
         }
         if (t.home) { homeDraw = p; continue; }   // the hub is drawn LAST, on top
         if (!showText) {
@@ -2740,6 +3007,55 @@
       else toast(r.reason === 'locked' ? 'Reach Level ' + (ship.reqLevel || 1) + ' first' : 'Not enough funds for the ' + ship.name, '#e23b4e');
     });
   }
+  // NO EXPOSED BORDER, NO SIEGE — stated on the tile the player is looking at.
+  //
+  // A rule that decides whether an attack is even possible must be readable
+  // BEFORE the button is tapped, and it must not live in a `title` attribute or
+  // a toast. So the sheet says which of the four situations this tile is in, and
+  // — for a sealed enemy core — NAMES THE WAY IN and offers to fly the camera
+  // there, which turns "you can't attack this" into an instruction.
+  //
+  // Every answer comes from G.tileShield()/G.shieldDoors(), the same functions
+  // warp() refuses on and the map paints from. Nothing here re-derives adjacency.
+  function gxShieldCard(t) {
+    const s = t && t.shield;
+    if (!s || !s.faction) return '';          // neutral ground has no border to speak of
+    const doors = t.shieldDoors || [];
+    const who = t.rival || 'the holder';
+    if (s.shielded) {
+      if (s.mine || t.ally) {
+        return '<div class="gx-shield core">🛡 <b>PROTECTED CORE</b> — all six borders face '
+          + (t.ally ? 'allied space' : 'your own space') + '. Nobody can siege this system until one of the border systems around it falls.</div>';
+      }
+      const jump = doors.slice(0, 3).map((nid) => {
+        const nt = G.tileInfo ? G.tileInfo(nid) : null;
+        return '<button class="gxs-door" data-gxdoor="' + nid + '">◎ ' + esc((nt && nt.name) || nid) + '</button>';
+      }).join('');
+      return '<div class="gx-shield core foe">🛡 <b>PROTECTED CORE — CANNOT BE SIEGED</b> — every border of this system faces <b>' + esc(who)
+        + '</b>’s own space, so there is no way in yet. Take one of the outer systems first and the path opens.'
+        + (jump ? '<div class="gxs-doors">' + jump + '</div>' : '') + '</div>';
+    }
+    // EXPOSED. Two things are worth saying, and only when they are actionable.
+    let behind = 0;
+    for (let i = 0; i < s.ring.length; i++) if (G.tileShield(s.ring[i]).shielded) behind++;
+    // WHOSE TERRITORY THIS IS. On a shared map most systems have an owner and few
+    // have a sealed core, so the size of the bloc is the fact that tells a pilot
+    // whether they are looking at somebody's empire or at a stray claim.
+    const bl = t.bloc;
+    const min = (G.BLOC_MIN || 3);
+    const terr = (bl && bl.size >= min && !s.mine && !t.ally)
+      ? '<div class="gx-shield way">◬ <b>' + esc(who.toUpperCase()) + '’S TERRITORY</b> — this system is one of <b>' + bl.size
+        + '</b> touching systems they hold' + (bl.cores ? ', <b>' + bl.cores + '</b> of them sealed behind the border' : ' — none of it sealed, so any of it can be attacked') + '.</div>'
+      : '';
+    if (s.mine || t.ally) {
+      if (!s.ring.length) return '';           // a lone system: "fill the borders" is not yet advice
+      return '<div class="gx-shield">⚠ <b>FRONT LINE</b> — <b>' + s.open + '</b> of six borders face open space, so this system can be attacked. Hold the tiles around it and it seals itself.'
+        + (behind ? ' It is also the shell keeping <b>' + behind + '</b> of your systems sealed.' : '') + '</div>';
+    }
+    if (!behind) return terr;                  // no core behind it — but say whose ground it is
+    return terr + '<div class="gx-shield way">⚔ <b>THE WAY IN</b> — this system’s border is open, and taking it exposes <b>' + behind
+      + '</b> sealed system' + (behind === 1 ? '' : 's') + ' behind it.</div>';
+  }
   function openTileAction(id) {
     const t = G.tileInfo(id); if (!t) return;
     if (t.home) {
@@ -2806,6 +3122,11 @@
     if (ratePerH) ratePerH *= 25;
     const cdTxt = t.cooldown > 0 ? (t.cooldown >= 3600 ? Math.floor(t.cooldown / 3600) + 'h ' + Math.floor((t.cooldown % 3600) / 60) + 'm' : fmtCd(t.cooldown)) : null;
     const blocked = !t.owned && t.cooldown > 0;
+    // NO EXPOSED BORDER, NO SIEGE. An enabled button that always refuses is the
+    // dead-button trap this sheet has been bitten by before, so a sealed system
+    // says so ON the button and does not offer the tap. Allied space is excluded:
+    // it has its own banner and its own reason.
+    const sealed = !t.owned && !t.ally && !!(t.shield && t.shield.shielded);
     const action = t.ally ? '⬡ Allied' : t.owned ? 'Deploy' : t.rival ? (t.citadel ? 'Siege' : 'Attack') : (t.citadel ? 'Siege' : 'Capture');
     const obj = t.ally ? '<b style="color:#7ce0a0">⬡ ALLIED TERRITORY</b> — ' + (t.rival || 'a pilot') + ' is in your alliance. Allied systems can never be attacked.'
       : t.owned ? (t.boss || t.citadel ? 'Farm endless boss waves on your tile' : 'Farm your territory')
@@ -2952,6 +3273,7 @@
       ${ecRow}
       ${cdTxt && !t.owned ? `<div class="gx-shield">🛡 <b>ATTACK SHIELD</b> — this tile was attacked recently. Nobody can attack it again for <b>${cdTxt}</b>.</div>` : ''}
       ${cdTxt && t.owned ? `<div class="gx-shield mine">🛡 <b>PROTECTED</b> — your tile can't be attacked for <b>${cdTxt}</b>.</div>` : ''}
+      ${gxShieldCard(t)}
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Attack shield ') + cdTxt : (tooHigh ? '🔒 Lv ' + needLv + ' required' : '⚔ Open to attack')}</span></div>
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
       ${citBlock}
@@ -2961,7 +3283,7 @@
       ${t.owned ? '<div style="background:rgba(255,73,95,.05);border:1px solid rgba(255,73,95,.28);border-radius:10px;padding:8px 11px;margin-top:8px"><div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#ff8a96">⏏ ABANDON THIS ZONE</div><div style="font-size:11px;color:#b08f96;line-height:1.45;margin-top:3px">Releases the tile back to neutral — you lose its hourly production' + (t.myCitadel ? ', <b style="color:#ff8a96">and your CITADEL here is scrapped</b> (no refund)' : '') + '. Anyone may claim it again.</div><button class="btn" data-abandon style="width:100%;margin-top:7px;border-color:rgba(255,73,95,.45);color:#ff8a96">⏏ Abandon tile' + (t.myCitadel ? ' + citadel' : '') + '</button></div>' : ''}
       ${capBlock}
       ${tooHigh ? `<div class="gx-lvgate">🔒 <b>${t.owned ? 'OUTSIDE YOUR LEVEL BAND' : 'TOO DEEP FOR YOU'}</b> — this system is <b>Lv ${t.level}</b> and you are <b>Lv ${myLv}</b>. A pilot can fly up to <b>10</b> levels above themselves, so it opens again at <b>Lv ${needLv}</b>.${t.owned ? ' You keep it and it keeps paying its hourly production the whole time — nothing is lost by waiting.' : ''}</div>` : ''}
-      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(blocked || tooHigh || !ecAfford || atCap) ? 'disabled' : ''}>${atCap ? '◈ At capacity — ' + capNow + '/' + capNow : blocked ? '◷ ' + cdTxt : tooHigh ? '🔒 Needs Lv ' + needLv : actionLabel}</button></div></div>`);
+      <div class="sheet-actions"><button class="btn" data-x>Close</button><button class="btn ${t.owned ? 'primary' : 'gold'}" data-ok ${(sealed || blocked || tooHigh || !ecAfford || atCap) ? 'disabled' : ''}>${sealed ? '🛡 SEALED' : atCap ? '◈ At capacity — ' + capNow + '/' + capNow : blocked ? '◷ ' + cdTxt : tooHigh ? '🔒 Needs Lv ' + needLv : actionLabel}</button></div></div>`);
     const ch = sheet.querySelector('[data-cap-help]');
     if (ch) ch.addEventListener('click', () => { closeSheet(); openTileCapSheet(id); });
     const ab = sheet.querySelector('[data-abandon]');
@@ -2972,6 +3294,13 @@
       else toast('This zone cannot be abandoned', '#e23b4e');
     });
     sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    // ◎ THE WAY IN — fly the camera to a border system of the sealed core and open
+    // it, so the next tap is the attack that opens the path.
+    sheet.querySelectorAll('[data-gxdoor]').forEach((b) => b.addEventListener('click', () => {
+      const nid = b.dataset.gxdoor;
+      closeSheet();
+      focusGalaxyTile(nid);
+    }));
     sheet.querySelectorAll('[data-build-cit]').forEach((b) => b.addEventListener('click', () => {
       const r = G.buildCitadel(b.dataset.buildCit);
       if (r.ok) { toast('⛓ Citadel raised — this tile now pays 10×!', '#ffd24d'); renderGalaxy(); openTileAction(b.dataset.buildCit); }
@@ -2995,6 +3324,8 @@
         r.reason === 'ally' ? '⬡ <b>Allied territory</b> — you can’t attack your own alliance.'
         : r.reason === 'abandoned' ? '✕ <b>You abandoned this system.</b> You can re-claim it in <b>' + abandHms(r.secs || 0) + '</b>.'
         : r.reason === 'cooldown' ? '🛡 <b>Attack shield</b> — this tile was contested recently. It opens in <b>' + (cdTxt || 'a little while') + '</b>.'
+        : r.reason === 'interior' ? '🛡 <b>Protected core — no exposed border.</b> Every side of this system faces <b>' + esc(t.rival || 'its holder') + '</b>’s own space. Take one of the outer systems first'
+            + ((r.doors && r.doors.length) ? ' — try <b>' + esc(((G.tileInfo(r.doors[0]) || {}).name) || r.doors[0]) + '</b>' : '') + '.'
         : r.reason === 'locked' ? '🔒 <b>Lv ' + t.level + ' system — you are Lv ' + ((G.state.level | 0) || 1) + '.</b> A pilot can fly up to <b>10</b> levels above themselves, so this one opens at <b>Lv ' + needLv + '</b>.' + (t.owned ? ' It stays yours and keeps paying while you climb.' : '')
         : r.reason === 'resources' ? '⬢ <b>Not enough Galaxy Resources</b> to warp this deep — farm or capture closer rings first.'
         : r.reason === 'home' ? '⌂ The Home Citadel is neutral ground — there is nothing to fight here.'
@@ -4003,33 +4334,42 @@
         // The three facts this card owes the player are the recharge, where it
         // applies, and the boss exclusion. They were a 45-word paragraph; they are
         // chips now, so the state row below is the only prose left to read.
-        const abChip = (l, v, c) => `<div style="flex:1 1 84px;min-width:0;padding:7px 9px;border-radius:7px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)"><div style="font-size:8.5px;font-weight:800;letter-spacing:.1em;color:#7d8a9c">${l}</div><div style="font-size:12px;font-weight:700;color:${c};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v}</div></div>`;
+        //
+        // EVERY LOOK IS IN web-v89.css (.ab-*), NOT HERE. The price button used to
+        // be a `.sc-buy` on a plain `.store-card`, and every rule that makes that
+        // element look like a button — fill, border, radius, height, and the one
+        // that sizes the LootCoin mark inside it — is scoped `.shop-card .sc-buy`.
+        // None of them reached this card, so the price rendered as a bare browser
+        // button. The arm row was a corner label and a small text button, which is
+        // why it read as missable; it is a full-width switch band now.
+        const abChip = (l, v, c) => `<div class="ab-chip${c ? ' ' + c : ''}"><i>${l}</i><b>${v}</b></div>`;
         const live = own && armed;
-        html += `<div class="store-card" style="display:block;padding:0;overflow:hidden;border-left:3px solid ${live ? '#ff8a3d' : '#4a5666'};background:linear-gradient(180deg,rgba(255,138,61,${live ? '.10' : '.03'}),rgba(10,16,26,.92))">
-          <div style="display:flex;align-items:center;gap:10px;padding:11px 12px 0">
-            <div class="sc-ico" style="border-color:${live ? '#ff8a3d' : '#4a5666'};color:${live ? '#ff8a3d' : '#6d7b8d'};font-size:19px;${live ? 'box-shadow:0 0 0 3px rgba(255,138,61,.12)' : ''}">◉</div>
-            <div class="sc-main" style="min-width:0"><div class="sc-name" style="color:#ffd9bd">Auto Beacon</div>
+        html += `<div class="store-card ab-card${live ? ' live' : ''}">
+          <div class="ab-top">
+            <div class="sc-ico">◉</div>
+            <div class="sc-main" style="min-width:0"><div class="sc-name">Auto Beacon</div>
               <div class="sc-desc">Your distress beacon pulls its own trigger</div></div>
             ${own ? '<span class="ic-tag up" style="flex:0 0 auto">OWNED</span>' : ''}
           </div>
-          <div style="display:flex;gap:6px;padding:10px 12px 0">
-            ${abChip('RECHARGE', bs ? bs.cd + 's' : '—', '#ffd9bd')}
-            ${abChip('FIRES IN', 'Zone grinds', '#dbe8f5')}
-            ${abChip('BOSSES', 'Never', '#8b95a6')}
+          <div class="ab-chips">
+            ${abChip('RECHARGE', bs ? bs.cd + 's' : '—', 'hot')}
+            ${abChip('FIRES IN', 'Zone grinds')}
+            ${abChip('BOSSES', 'Never', 'off')}
           </div>
-          <div style="font-size:11px;line-height:1.5;color:#93a2b4;padding:9px 12px 0;text-wrap:pretty">Nothing else changes — same recharge, same swarm, same kill value.</div>
+          <div class="ab-note">Nothing else changes — same recharge, same swarm, same kill value.</div>
           ${own
-            ? `<div style="display:flex;align-items:center;gap:10px;margin-top:11px;padding:10px 12px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.06)">
-                 <span style="font-size:13px;line-height:1;color:${armed ? '#7ce0a0' : '#6d7b8d'}">${armed ? '◉' : '○'}</span>
-                 <div style="min-width:0;flex:1 1 auto">
-                   <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:${armed ? '#7ce0a0' : '#8b95a6'}">${armed ? 'ARMED' : 'DISARMED'}</div>
-                   <div style="font-size:10.5px;color:#7d8a9c;margin-top:1px">${armed ? 'Fires on every recharge' : 'The button is yours again'}</div>
-                 </div>
-                 <button class="sc-buy" data-abtoggle="1" style="flex:0 0 auto;${armed ? 'background:transparent;border:1px solid rgba(255,255,255,.18);color:#a9bacd' : ''}">${armed ? 'DISARM' : 'ARM'}</button>
-               </div>`
-            : `<div style="padding:11px 12px 12px"><button class="sc-buy lc" data-abbuy="1" ${(!lvOk || !afford) ? 'disabled' : ''} style="width:100%">${window._lcIcon()}${G.formatNum(price)}</button>
-               ${!lvOk ? `<div style="font-size:10.5px;color:#ffcf4d;margin-top:7px;text-align:center">Opens at <b>Level ${needLv}</b></div>`
-                       : !afford ? `<div style="font-size:10.5px;color:#ff8a96;margin-top:7px;text-align:center">You hold ◈ ${bal.toLocaleString()} — ${(price - bal).toLocaleString()} short</div>` : ''}</div>`}
+            ? `<button class="ab-trig ${armed ? 'on' : 'off'}" data-abtoggle="1" role="switch" aria-checked="${armed ? 'true' : 'false'}">
+                 <span class="ab-led"></span>
+                 <span class="ab-tx">
+                   <span class="ab-tk">TRIGGER</span>
+                   <span class="ab-tv">${armed ? 'ARMED' : 'DISARMED'}</span>
+                   <span class="ab-ts">${armed ? 'Fires on every recharge' : 'The button is yours again'}</span>
+                 </span>
+                 <span class="ab-sw"></span>
+               </button>`
+            : `<div class="ab-pay"><button class="ab-cta" data-abbuy="1" ${(!lvOk || !afford) ? 'disabled' : ''}>${window._lcIcon()}${price.toLocaleString()} · UNLOCK</button>
+               ${!lvOk ? `<div class="ab-short lock">Opens at <b>Level ${needLv}</b></div>`
+                       : !afford ? `<div class="ab-short">You hold ${window._lcIcon()}<b>${bal.toLocaleString()}</b> — ${(price - bal).toLocaleString()} short</div>` : ''}</div>`}
         </div></div>`;
       }
       const sh = G.getShop(); const tl = G.shopTimeLeft(); const mm = Math.floor(tl/60), ss = tl%60;
@@ -5529,5 +5869,5 @@
     return v + s;
   }
 
-  window.UI = { syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
+  window.UI = { fleetSlotsHTML, wireFleetSlots, syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
 })();

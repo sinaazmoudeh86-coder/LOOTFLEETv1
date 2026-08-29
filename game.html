@@ -64,7 +64,7 @@ window.__lfErr=[];
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style-v2.css?v=725">
 <link rel="stylesheet" href="css/theme.css?v=725">
-<link rel="stylesheet" href="css/web-v89.css?v=729">
+<link rel="stylesheet" href="css/web-v89.css?v=733">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=725">
 <link rel="stylesheet" href="css/fx-primordial.css?v=725">
 <link rel="stylesheet" href="css/moon-colony.css?v=725">
@@ -75,13 +75,16 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/kaevith.css?v=725">
 <link rel="stylesheet" href="css/ember-choir.css?v=725">
 <link rel="stylesheet" href="css/hangar-ships.css?v=725">
-<link rel="stylesheet" href="css/sheet-cta.css?v=729">
+<link rel="stylesheet" href="css/sheet-cta.css?v=733">
 <link rel="stylesheet" href="css/fighter-ascension.css?v=729">
+<link rel="stylesheet" href="css/bridge.css?v=732">
 <link rel="stylesheet" href="css/fit-guard.css?v=725">
 <link rel="stylesheet" href="css/patch-notes.css?v=725">
 <link rel="stylesheet" href="css/expedition.css?v=725">
 <link rel="stylesheet" href="css/koth.css?v=725">
 <link rel="stylesheet" href="css/chat.css?v=728">
+<link rel="stylesheet" href="css/shell-fit.css?v=732">
+<link rel="stylesheet" href="css/contiguity.css?v=733">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; align-items:flex-start; }
@@ -595,6 +598,7 @@ window.__lfErr=[];
               <div id="advice" class="ok"></div>
             </div>
             <div id="loot-feed"></div>
+            <div id="bridge"></div>
             <button id="fly-now"><span class="fn-t">⚔ FLY NOW</span><span class="fn-z" id="fly-now-zone"></span></button>
             <div id="cargo-full">⚠ HOLD FULL · loot auto-scrapped<span class="cf-go">tap to manage ›</span></div>
             <div id="toast-layer"></div>
@@ -1155,7 +1159,7 @@ window.__lfErr=[];
 <script src="js/items.js?v=725"></script>
 <script src="js/entities.js?v=725"></script>
 <script src="js/render.js?v=725"></script>
-<script src="js/galaxy.js?v=725"></script>
+<script src="js/galaxy.js?v=732"></script>
 <script src="js/leaderboard.js?v=726"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js?v=725"></script>
@@ -1167,13 +1171,13 @@ window.__lfErr=[];
 <script src="js/vip.js?v=725"></script>
 <script src="js/territory.js?v=725"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=730"></script>
-<script src="js/ui-v94.js?v=729"></script>
+<script src="js/game-v93.js?v=733"></script>
+<script src="js/ui-v94.js?v=733"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
 <script src="js/perf-tier.js?v=725"></script>
-<script src="js/fit-audit.js?v=729"></script>
+<script src="js/fit-audit.js?v=731"></script>
 <script src="js/moon-scene.js?v=725"></script>
 <script src="js/moon-colony.js?v=725"></script>
 <script src="js/expedition.js?v=729"></script>
@@ -1213,6 +1217,7 @@ window.__lfErr=[];
 <script src="js/cargo-defense.js?v=729"></script>
 <script src="js/nanocores.js?v=725"></script>
 <script src="js/fighters.js?v=729"></script>
+<script src="js/bridge.js?v=731"></script>
 <script src="js/fighter-ascension.js?v=729"></script>
 <script src="js/fighter-ascension-ui.js?v=729"></script>
 <script src="js/aegis-auras.js?v=725"></script>
@@ -1227,13 +1232,13 @@ window.__lfErr=[];
 <script src="js/casino-citadels.js?v=725"></script>
 <script src="js/redeem.js?v=728"></script>
 <script src="js/auth.js?v=725"></script>
-<script src="js/patch-notes.js?v=730"></script>
+<script src="js/patch-notes.js?v=733"></script>
 <script src="js/update-gate.js?v=725"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 730;
+  window.LF_BUILD = 733;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){

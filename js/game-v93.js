@@ -2387,6 +2387,15 @@
         if (!owned[k] || !C.SHIP_BY_KEY[k] || !canMountWeapon(item, k)) continue;
         const fit = (state.fittings || {})[k] || {};
         const eT = C.shipSlots(k).filter((sk) => C.slotBase(sk) === item.slot);
+        // A parked hull that can mount something NOTHING ELSE CAN is the whole
+        // point of this branch — the Aegis projectors and the Warden Array, which
+        // `canMountWeapon()` locks to `cls === 'Aegis'`, and fighter bays, which it
+        // locks to a hull with `fighterCapacity`. Only those reach here; anything
+        // the flagship can physically mount was decided above. So the power
+        // comparison stays: an owned Aegis with a weaker projector fitted is a real
+        // home for a better one, and that gear cannot be farmed by flying anything
+        // else. (Tried removing it in the 730 auto-sell pass and reverted — it does
+        // not touch ordinary cannons, so it was never what pinned a full hold.)
         for (const t of eT) { const e = fit[t]; if (e ? I.itemPower(item) > I.itemPower(e) : !strict) return true; }
       }
     }
@@ -3631,7 +3640,11 @@
       const s = C.SHIP_BY_KEY[state.ship] || C.SHIPS[0];
       ships = [{ key: s.key, name: s.name, tier: R.shipVisTier(s.key), equipped: state.equipped }];
     }
-    rt.hangarHits = R.drawHangar(ctx, w, h, rt.time, ships, state.ship);
+    // THE HANGAR SCENE IS THE SCREEN (build 731). An earlier 731 pass replaced it
+      // with a DOM dashboard and that was the wrong trade: the pad is the game's
+      // identity on the one screen a player sits on, and it is free to look at.
+      // The dashboard is a SHEET over it now (js/bridge.js), not a replacement.
+      rt.hangarHits = R.drawHangar(ctx, w, h, rt.time, ships, state.ship);
   }
 
   // ---- CACHED PAINT OBJECTS ------------------------------------------------
@@ -5854,20 +5867,127 @@
   // GLOBAL NPC layer — when the shared turf war is live, simulated rivals are a
   // PURE FUNCTION of (tile, UTC day): every player sees the exact same NPC
   // holdings, which shift a little each day. Real claims always override.
+  // THE RIVAL LAYER: STRONGHOLDS ON A BUDGET, PLUS A SCATTER WITH INFLUENCE.
+  //
+  // This used to hash EVERY TILE INDEPENDENTLY for both the hold roll and the
+  // owner's name, which had two consequences that only became visible once the
+  // siege shield shipped: neighbouring tiles were uncorrelated, and two tiles
+  // that did land side by side almost always belonged to DIFFERENT rivals. The
+  // odds of any rival holding a tile plus all six of its neighbours were about
+  // (0.26/12)^6 — one in ten billion. No rival ever had a bloc, so no rival ever
+  // had a sealed core, and the whole "break the shell to reach the core" half of
+  // the rule was unreachable content. It also made the galaxy read as static
+  // noise rather than as a map somebody was holding.
+  //
+  // A BUDGET, NOT A PROBABILITY — the same lesson the natural citadels taught.
+  // The first fix rolled a per-district chance of being a stronghold, and with
+  // only ~54 districts on the map that sample was tiny: measured density moved
+  // 38% from one day's dice to another's, which is a balance change by accident.
+  // Strongholds are now an EXACT LIST: a fixed count per ring band, each a hex
+  // blob held by one empire. Deterministic, so the count of sealed cores is a
+  // design number (48) rather than an outcome, and the scatter that fills the
+  // rest of the map is normalised against it so TOTAL DENSITY PER RING IS
+  // UNCHANGED. A pilot has the same neutral ground to claim as before; what
+  // changed is the shape of what the rivals hold.
+  //
+  // Scattered tiles still take their owner from a coarse DISTRICT rather than
+  // per tile, so even the thin ground reads as spheres of influence and two
+  // adjacent held tiles usually belong to the same empire.
+  //
+  // Still a pure function of (tile, UTC day): identical on every client, no save
+  // field, nothing stored.
+  //
+  // A TILE YOU OWN PUNCHES A REAL HOLE IN A STRONGHOLD. isOwned() is tested
+  // first, so taking a tile inside an empire's blob breaks their wall exactly as
+  // the rule promises — the shield is derived from ownership, never stamped.
+  function fnvHash(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h >>> 0;
+  }
+  const npcRingP = (ring) => 0.10 + Math.min(0.16, (ring / (GX.RINGS || 25)) * 0.14);
+  // ---- strongholds: the exact list ----------------------------------------
+  // Four bands, three blobs each. Radius 2 (19 tiles) seals its centre AND its
+  // whole first ring — 7 protected cores; radius 1 (7 tiles) seals just the
+  // middle. 6 × 7 + 6 × 1 = 48 sealed cores, every day, by construction.
+  const NPC_SH_BANDS = 4, NPC_SH_PER_BAND = 3;
+  let _npcDay = -1, _npcSH = null, _npcScatter = 1, _npcDistCache = {};
+  function npcLayer() {
+    const day = Math.floor(Date.now() / 864e5);
+    if (day === _npcDay && _npcSH) return _npcSH;
+    _npcDay = day; _npcDistCache = {};
+    const sh = {};
+    const R = GX.RINGS || 25;
+    // STRONGHOLDS START AT RING 6. A blob is a fixed SIZE but the inner bands
+    // have few tiles, so three of them on rings 2–7 made that band 28% rival-held
+    // off the strongholds alone — the beginner frontier is exactly where a pilot
+    // needs open ground. Deep space is the contested half of the map by design,
+    // and that is where the empires with sealed cores now live. The shallowest
+    // band also gets radius-1 blobs only, so it reads as an outpost rather than
+    // as a fortress wall.
+    const lo = 6, span = Math.max(1, Math.ceil((R - lo + 1) / NPC_SH_BANDS));
+    let shTiles = 0;
+    for (let b = 0; b < NPC_SH_BANDS; b++) {
+      for (let i = 0; i < NPC_SH_PER_BAND; i++) {
+        const h = fnvHash('SH' + b + ':' + i + '\u00b7' + day);
+        const rad = (b === 0) ? 1 : ((i % 2 === 0) ? 2 : 1);
+        // keep the blob clear of the band edges so it cannot spill off the map
+        const rMin = lo + b * span + rad, rMax = Math.min(R - rad, lo + (b + 1) * span - 1);
+        if (rMax < rMin) continue;
+        const ring = rMin + (h % (rMax - rMin + 1));
+        const coords = GX.ringCoords(ring);
+        const c = coords[(h >>> 9) % coords.length];
+        const owner = RIVAL_NAMES[(h >>> 17) % RIVAL_NAMES.length];
+        for (let rr = 0; rr <= rad; rr++) {
+          for (const o of GX.ringCoords(rr)) {
+            const q = c.q + o.q, r2 = c.r + o.r;
+            if (GX.ringOf(q, r2) > R || GX.ringOf(q, r2) < 1) continue;
+            const id = GX.tileId(q, r2);
+            if (sh[id]) continue;           // overlap: first blob keeps the tile
+            sh[id] = owner; shTiles++;
+          }
+        }
+      }
+    }
+    // NORMALISE THE SCATTER so the whole map's rival density is what it always
+    // was: the strongholds have already spent part of the budget.
+    let want = 0, restP = 0;
+    for (let ring = 1; ring <= R; ring++) {
+      const p = npcRingP(ring), n = 6 * ring;
+      want += p * n;
+      const held = GX.ringCoords(ring).reduce((s, c) => s + (sh[GX.tileId(c.q, c.r)] ? 1 : 0), 0);
+      restP += p * (n - held);
+    }
+    _npcScatter = restP > 0 ? Math.max(0, Math.min(1, (want - shTiles) / restP)) : 0;
+    _npcSH = sh;
+    return sh;
+  }
+  // ---- who holds this neighbourhood (scattered tiles) ---------------------
+  // DIST 5 cells of ~25 tiles: big enough that a run of held tiles reads as one
+  // empire's edge, small enough that the map still has many players on it.
+  const NPC_DIST = 5;
+  function npcDistrictOwner(q, r) {
+    const dq = Math.floor((q + 90) / NPC_DIST), dr = Math.floor((r + 90) / NPC_DIST);
+    const key = dq + ':' + dr;
+    const hit = _npcDistCache[key];
+    if (hit) return hit;
+    const h = fnvHash('D' + dq + ':' + dr + '\u00b7' + _npcDay);
+    return (_npcDistCache[key] = RIVAL_NAMES[(h >>> 8) % RIVAL_NAMES.length]);
+  }
   function npcOwner(k) {
     if (isOwned(k)) return null;
     // NOTE: a live contest cooldown used to blank the owner here, which meant
     // attacking a held tile and bailing showed it as NEUTRAL — unclaimed for
     // 24 h (and dropped its garrison). Only an actual capture (isOwned) clears
     // the holder now.
-    const day = Math.floor(Date.now() / 864e5);
-    const s = k + '·' + day;
-    let h = 2166136261 >>> 0;
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-    const t = sysAt(k); const ring = t ? t.ring : 8;
-    const p = 0.10 + Math.min(0.16, (ring / (GX.RINGS || 25)) * 0.14);
-    if ((h % 10000) / 10000 >= p) return null;
-    return RIVAL_NAMES[(h >>> 8) % RIVAL_NAMES.length];
+    const sh = npcLayer();
+    const inSh = sh[k];
+    if (inSh) return inSh;
+    const t = sysAt(k); if (!t) return null;
+    const c = GX.parseId(k); if (!c) return null;
+    const p = npcRingP(t.ring) * _npcScatter;
+    if (fnvHash(k + '\u00b7' + _npcDay) % 10000 / 10000 >= p) return null;
+    return npcDistrictOwner(c.q, c.r);
   }
   function rivalOf(k) {
     const real = rt.realTiles && rt.realTiles[k];
@@ -5995,6 +6115,11 @@
       // Anything gating an ACTION reads this one.
       deployLocked: t.level > state.level + 10,
       deployNeedLv: Math.max(1, t.level - 10),
+      // NO EXPOSED BORDER, NO SIEGE — see tileShield(). The sheet prints this
+      // before the button is tapped; warp() refuses on the same answer.
+      shield: tileShield(k),
+      shieldDoors: shieldDoors(k),
+      bloc: blocOf(k),
     });
   }
   // ---- LIVING GALAXY: simulated rival turf wars (NOT real PvP) -------------
@@ -6014,7 +6139,7 @@
     // that takes YOUR tiles honoured it — but the expand and war branches did not,
     // so the sim happily claimed shielded neutral ground the player had just
     // fought over and was waiting out the clock to take.
-    const shielded = (id) => tileCooldownLeft(id) > 0 || simBlocked(id);
+    const shielded = (id) => tileCooldownLeft(id) > 0 || simBlocked(id) || tileShield(id).shielded;
     const neutral = ids.filter((id) => !state.ownedSystems[id] && !state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
     const rivalHeld = ids.filter((id) => state.rivalTiles[id] && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
     const mine = ids.filter((id) => state.ownedSystems[id] && id !== state.currentSystem && !(rt.realTiles && rt.realTiles[id]) && !shielded(id));
@@ -6235,6 +6360,14 @@
     if (!owned) {
       const lock = abandonLockLeft(k);
       if (lock > 0) return { ok: false, reason: 'abandoned', secs: lock };
+    }
+    // NO EXPOSED BORDER, NO SIEGE. A system whose every border faces its own
+    // owner's space cannot be reached until one of those border systems falls.
+    // Refused BEFORE the entry cost below, so a blocked assault never charges a
+    // pilot resources for a trip that does not happen.
+    if (!owned) {
+      const shd = tileShield(k);
+      if (shd.shielded) return { ok: false, reason: 'interior', doors: shieldDoors(k), faction: shd.faction };
     }
     // ENTRY COST — every warp burns resources; deeper rings are punishing
     const cost = entryCostFor(k);
@@ -6660,6 +6793,7 @@
     }
     accrueResources();   // settle earnings BEFORE ownership changes — new rate applies from now
     state.ownedSystems[k] = true;
+    clusterBust();       // the block this tile just joined pays from this moment, not 250ms later
     // THE FORTRESS COMES WITH THE TILE. ONE CHOKE POINT, NO EXCEPTIONS.
     // Every path that flips a tile to you ends here — the ordinary siege, the
     // clone-fleet turf war, the Void citadel assault, a razing claim — so the
@@ -6865,6 +6999,7 @@
     delete state.ownedSystems[id];
     if (state.citadels) delete state.citadels[id];
     if (state.tileCd) delete state.tileCd[id];
+    clusterBust();       // releasing a tile can SPLIT a block — re-derive before anything reads a rate
     if (!state.tileFree) state.tileFree = {};
     state.tileFree[id] = Date.now() + FREE_GRACE_MS;
     // THE 24-HOUR LOCKOUT ON THE PILOT WHO LEFT. Recorded on every abandon, not
@@ -7173,6 +7308,250 @@
     }
   }
 
+  // ---- CONTIGUITY BONUS — a solid block of space beats a sprawl -------------
+  //
+  // Four or more of your systems TOUCHING each other pay a multiplier, on every
+  // tile in the block, and it climbs with the size of the block. Holding ground
+  // together is the whole strategic idea of a hex map and nothing rewarded it
+  // before: a checkerboard of sixty tiles paid exactly what a sixty-tile empire
+  // paid, so there was no reason to ever fight for the tile next to you.
+  //
+  // IT WRITES NOTHING, AND THAT IS THE POINT. Every tier is derived from
+  // `ownedSystems`, which the save already carries — no new key, no migration,
+  // no `mergeSaves()` union block, nothing owed to `ASC_KEEP`. An old save lands
+  // on its correct tier the first time this runs and a newer save is not touched.
+  // It also only ever GRANTS: every multiplier is >= 1, so no holding on any
+  // account can be worth less after this shipped than it was before.
+  //
+  // VOID TILES CANNOT JOIN A BLOCK, and that is not a special case — their ids
+  // ('VZ1'…) do not parse as hex coordinates, so they are not on this graph at
+  // all. The HOME CITADEL is excluded deliberately: it is neutral ground that
+  // every account holds, so counting it would hand everybody a free member and
+  // quietly turn "4 touching" into three.
+  const CLUSTER_TIERS = [
+    { need: 50, mult: 3.0, add: 200, name: 'DOMINION', color: '#ff8a3d' },
+    { need: 30, mult: 2.5, add: 150, name: 'HEGEMONY', color: '#c26bff' },
+    { need: 10, mult: 2.2, add: 120, name: 'COMPACT',  color: '#5fd1ff' },
+    { need: 4,  mult: 2.0, add: 100, name: 'CLUSTER',  color: '#7ce0a0' },
+  ];
+  function clusterTierFor(size) {
+    for (let i = 0; i < CLUSTER_TIERS.length; i++) if (size >= CLUSTER_TIERS[i].need) return CLUSTER_TIERS[i];
+    return null;
+  }
+  // Connected components of owned tiles over the hex grid, memoised.
+  //
+  // WHY THE CACHE IS TIME-GATED RATHER THAN CHECKED EVERY CALL: tileRateOf() is
+  // called once per owned tile by resourceRates(), so validating the cache inside
+  // it would make a 1,000-tile empire hash its own key set a thousand times per
+  // sum. The gate re-validates at most four times a second — a capture shows its
+  // new multiplier within a quarter second, which is under the time it takes the
+  // screen to repaint — and clusterBust() makes it immediate for the write paths
+  // that care. The validity test is the owned COUNT plus an order-independent
+  // checksum of the ids, so swapping one tile for another is caught too.
+  // `_shdMemo` is the SIEGE-SHIELD memo (see tileShield below) and is declared up
+  // here on purpose: clusterBust() clears it, and a `let` is in the temporal dead
+  // zone until its declaration RUNS — declaring it lower down would leave that
+  // reference dependent on call order rather than on scope.
+  let _cluCache = null, _cluAt = 0, _shdMemo = null, _shdAt = 0, _blocMemo = null, _blocAt = 0;
+  function clusterBust() { _cluCache = null; _cluAt = 0; _shdMemo = null; _blocMemo = null; }
+  function clusterSizes() {
+    const now = Date.now();
+    if (_cluCache && now - _cluAt < 250) return _cluCache.map;
+    const owned = state.ownedSystems || {};
+    let n = 0, h = 0;
+    for (const k in owned) {
+      if (!owned[k]) continue;
+      n++;
+      let x = 0;
+      for (let i = 0; i < k.length; i++) x = (x * 31 + k.charCodeAt(i)) | 0;
+      h = (h + x) | 0;
+    }
+    _cluAt = now;
+    if (_cluCache && _cluCache.n === n && _cluCache.h === h) return _cluCache.map;
+    const map = {}, seen = {}, comps = [], cid = {};
+    for (const start in owned) {
+      if (!owned[start] || seen[start] || start === GX.HOME) continue;
+      if (!GX.parseId(start)) continue;                 // void tiles are not on the grid
+      const comp = [], stack = [start];
+      seen[start] = 1;
+      while (stack.length) {
+        const cur = stack.pop();
+        comp.push(cur);
+        const c = GX.parseId(cur); if (!c) continue;
+        const nb = GX.neighbors(c.q, c.r);
+        for (let i = 0; i < nb.length; i++) {
+          const nid = GX.tileId(nb[i].q, nb[i].r);
+          if (owned[nid] && !seen[nid] && nid !== GX.HOME) { seen[nid] = 1; stack.push(nid); }
+        }
+      }
+      comps.push(comp.length);
+      const idx = comps.length - 1;
+      for (let i = 0; i < comp.length; i++) { map[comp[i]] = comp.length; cid[comp[i]] = idx; }
+    }
+    _cluCache = { n, h, map, comps, cid };
+    return map;
+  }
+  // What ONE tile's block is worth. `mult` is 1 for a tile in no qualifying block,
+  // so every caller can multiply by it unconditionally. `cid` identifies WHICH
+  // block — the map border needs "same block", and two separate blocks can be the
+  // same size, so size is not an identity.
+  function clusterOf(id) {
+    const size = clusterSizes()[id] || 0;
+    const tier = clusterTierFor(size);
+    const cid = (_cluCache && _cluCache.cid && _cluCache.cid[id] != null) ? _cluCache.cid[id] : -1;
+    return tier
+      ? { size, cid, mult: tier.mult, add: tier.add, name: tier.name, color: tier.color, need: tier.need }
+      : { size, cid, mult: 1, add: 0, name: '', color: '', need: 0 };
+  }
+  // The empire's blocks, biggest first — backs the hero pill in My Galaxy. Every
+  // figure the pill prints comes from here; it restates none of them.
+  function clusterSummary() {
+    clusterSizes();
+    const comps = ((_cluCache && _cluCache.comps) || []).slice().sort((a, b) => b - a);
+    const biggest = comps.length ? comps[0] : 0;
+    const tier = clusterTierFor(biggest);
+    let boosted = 0, blocks = 0;
+    for (let i = 0; i < comps.length; i++) {
+      if (clusterTierFor(comps[i])) { boosted += comps[i]; blocks++; }
+    }
+    // the next rung up from the biggest block, and how far off it is
+    let next = null;
+    for (let i = CLUSTER_TIERS.length - 1; i >= 0; i--) {
+      if (CLUSTER_TIERS[i].need > biggest) { next = CLUSTER_TIERS[i]; break; }
+    }
+    return { comps, biggest, tier, next, toNext: next ? next.need - biggest : 0,
+             boosted, blocks, tiers: CLUSTER_TIERS };
+  }
+
+  // ===========================================================================
+  // SIEGE SHIELD — NO EXPOSED BORDER, NO SIEGE
+  // ===========================================================================
+  // A system can only be attacked if it TOUCHES something that is not its
+  // owner's. Ring a tile with your own and its core is unreachable: an attacker
+  // has to take one of the border systems first and open a path in. That is the
+  // whole rule, and it lives HERE ONLY — the map paint, the tile sheet, warp()
+  // and the rival sim all read this function, so they cannot disagree about
+  // which tiles are shielded. A rule that decides whether an attack is even
+  // possible has to be stated before it fires, so the sheet prints it (and the
+  // way in) rather than the button simply refusing.
+  //
+  // FACTION, NOT PLAYER. Allied space is one bloc — an ally's tile shields yours
+  // exactly as your own does, which is most of why an alliance is worth holding
+  // ground for. For a rival-held tile the faction is that rival: ALLIANCE.isAlly
+  // answers only about MY alliance, so a rival's allies are not knowable on this
+  // client and are deliberately not guessed at.
+  //
+  // THE GALAXY'S OUTER EDGE IS ALWAYS OPEN. A tile on the last ring has borders
+  // facing off the map; counting those as sealed would mint permanently
+  // untouchable territory out of pure geography. The rim is the frontier, it
+  // stays contestable, and the sheet says so out loud.
+  //
+  // HOME IS NEUTRAL and belongs to no faction, so it neither shields a neighbour
+  // nor is ever shielded itself.
+  function factionOf(k) {
+    if (!k || k === GX.HOME) return null;
+    if (isOwned(k) || isAllyTile(k)) return 'me';
+    const real = rt.realTiles && rt.realTiles[k];
+    if (real && real.ownerId) return 'u:' + real.ownerId;
+    const rv = rivalOf(k);
+    return rv ? 'r:' + rv : null;
+  }
+  // Per-tile memo on the same idiom clusterSizes() uses: the NPC layer is a pure
+  // function of (tile, UTC day) and real claims arrive by sync, so a short-lived
+  // answer is honest and keeps six neighbour lookups per tile off the map's paint
+  // path. clusterBust() drops it the instant ownership changes, so the window is
+  // never what makes a capture show up late. 700ms is chosen against the galaxy
+  // world bake's ~2Hz idle rebake: a shorter window than the gap between bakes
+  // would rebuild the whole map's shields on every one of them.
+  function tileShield(k) {
+    const now = Date.now();
+    if (!_shdMemo || now - _shdAt > 700) { _shdMemo = {}; _shdAt = now; }
+    const hit = _shdMemo[k];
+    if (hit) return hit;
+    const c = GX.parseId(k), fac = factionOf(k);
+    let open = 0, rim = false;
+    const doors = [];
+    if (c && fac) {
+      const nb = GX.neighbors(c.q, c.r);
+      for (let i = 0; i < nb.length; i++) {
+        const n = nb[i];
+        if (GX.ringOf(n.q, n.r) > GX.RINGS) { open++; rim = true; continue; }
+        const nid = GX.tileId(n.q, n.r);
+        if (factionOf(nid) !== fac) open++;
+        else doors.push(nid);          // same faction — a candidate way in, tested below
+      }
+    } else open = 6;                   // neutral ground is open on every side
+    const out = { faction: fac, mine: fac === 'me', open, sides: 6, rim,
+                  shielded: !!(fac && open === 0), ring: doors };
+    _shdMemo[k] = out;
+    return out;
+  }
+  // THE WAY IN. For a shielded tile, the neighbours that are themselves exposed
+  // are the systems an attacker has to break first — naming them turns "you
+  // can't attack this" into an instruction. Computed from tileShield(), never a
+  // second traversal of its own.
+  function shieldDoors(k) {
+    const s = tileShield(k);
+    if (!s.shielded) return [];
+    return s.ring.filter((nid) => {
+      const ns = tileShield(nid);
+      return ns.open > 0 && !isOwned(nid) && !isAllyTile(nid);
+    });
+  }
+  // ---- TERRITORY, NOT JUST SHIELDS ----------------------------------------
+  //
+  // A shared map is nothing like the local sim: measured on a live client, 1,793
+  // of 1,950 tiles carried a real claim across 85 owners, with 531 same-owner
+  // adjacencies and ZERO sealed cores — 85 pilots each holding ~21 scattered
+  // tiles. The map paint gated every boundary on "does this bloc contain a sealed
+  // core", so on that map NOTHING was ever outlined and a player could not see
+  // another pilot's holdings at all. Reported exactly that way.
+  //
+  // A territory is worth drawing because it is a territory. This flood-fills each
+  // faction's touching tiles once per memo window and reports the bloc's SIZE and
+  // how many sealed cores it holds, so the paint can outline any real bloc (3+)
+  // and reserve the heavier treatment for one with a core to protect.
+  //
+  // MIN 3 IS DELIBERATE. Two touching tiles is a coincidence on a map that dense;
+  // three is somebody holding ground. Nothing is stored — same as the shield.
+  const BLOC_MIN = 3;
+  function factionBlocs() {
+    const now = Date.now();
+    if (_blocMemo && now - _blocAt < 700) return _blocMemo;
+    const seen = {}, out = {};
+    const push = (id) => {
+      const fac = factionOf(id);
+      if (!fac || seen[id]) return;
+      const c0 = GX.parseId(id); if (!c0) return;
+      const comp = [], stack = [id];
+      seen[id] = 1;
+      let cores = 0;
+      while (stack.length) {
+        const cur = stack.pop();
+        comp.push(cur);
+        if (tileShield(cur).shielded) cores++;
+        const c = GX.parseId(cur); if (!c) continue;
+        const nb = GX.neighbors(c.q, c.r);
+        for (let i = 0; i < nb.length; i++) {
+          if (GX.ringOf(nb[i].q, nb[i].r) > GX.RINGS) continue;
+          const nid = GX.tileId(nb[i].q, nb[i].r);
+          if (!seen[nid] && factionOf(nid) === fac) { seen[nid] = 1; stack.push(nid); }
+        }
+      }
+      const rec = { size: comp.length, cores, fac };
+      for (let i = 0; i < comp.length; i++) out[comp[i]] = rec;
+    };
+    // every tile anyone holds: my own, the shared map's real claims, the local sim
+    for (const id in (state.ownedSystems || {})) push(id);
+    for (const id in ((rt.realTiles) || {})) push(id);
+    for (const id in (state.rivalTiles || {})) push(id);
+    _blocMemo = out; _blocAt = now;
+    return out;
+  }
+  // One tile's territory: { size, cores, fac } or null. `size >= BLOC_MIN` is the
+  // test the map uses to decide whether a boundary is worth drawing.
+  function blocOf(k) { return factionBlocs()[k] || null; }
+
   // WHAT ONE TILE PAYS AN HOUR — THE SINGLE STATEMENT OF IT.
   //
   // This used to exist only as the body of resourceRates()'s loop, so every
@@ -7194,16 +7573,19 @@
       const vr = base * 25;
       return { void: true, res: 'all', perHour: vr, gold: vr * 1000,
                pays: { fuel: vr, iron: vr, plasma: vr, gold: vr * 1000 },
-               parts: { base, deep: 1, cit: 1, galaxy: 25 }, natural: !!t.citadel, citLv: 0 };
+               parts: { base, deep: 1, cit: 1, galaxy: 25, cluster: 1 },
+               cluster: { size: 0, mult: 1, add: 0, name: '' }, natural: !!t.citadel, citLv: 0 };
     }
     const deep = t.deep ? GX.DEEP_MULT.resource : 1;   // deep space ×25 on top
     const rec = state.citadels && state.citadels[id];
     const citLv = rec ? (rec.lv || 1) : 0;
     const cit = citLv ? CITADEL_MULT * citLv : 1;      // PLAYER CITADEL — 10× per rank
-    const perHour = base * deep * cit * 25;            // GALAXY YIELD ×25 — territory is the resource engine
+    const clu = clusterOf(id);                         // CONTIGUITY — 1 unless the block qualifies
+    const perHour = base * deep * cit * 25 * clu.mult; // GALAXY YIELD ×25 — territory is the resource engine
     const res = t.resource || 'fuel';
     return { void: false, res, perHour, gold: 0, pays: { [res]: perHour },
-             parts: { base, deep, cit, galaxy: 25 }, natural: !!t.citadel, citLv };
+             parts: { base, deep, cit, galaxy: 25, cluster: clu.mult },
+             cluster: clu, natural: !!t.citadel, citLv };
   }
   function resourceRates() {
     const r = { fuel: 0, iron: 0, plasma: 0 };
@@ -7841,6 +8223,25 @@
     // every session now BOOTS in autopilot and the toggle is a per-session
     // choice, the right shape for an idle game.
     state.auto = true;
+    // GRANDFATHER THE FORTRESSES THIS ACCOUNT ALREADY HOLDS. The natural-citadel
+    // budget (5 per 100 levels, galaxy.js) retires 48 of the 73 the old 3% roll
+    // produced. A tile nobody holds simply becomes a boss tile, which is the point
+    // of the pass — but a pilot who already SIEGED one of them would otherwise find
+    // their richest holding demoted to an ordinary hex with no notice and no way
+    // back, which is the one thing a balance change must never do. Read-only: this
+    // asks the save what it owns and tells the map; it writes nothing.
+    try {
+      if (GX && GX.legacyCitadel && GX.grandfather) {
+        const keep = [];
+        for (const id in (state.ownedSystems || {})) {
+          if (!state.ownedSystems[id]) continue;
+          const p = GX.parseId(id); if (!p) continue;              // void tiles are off-map
+          if (GX.legacyCitadel(p.q, p.r)) keep.push(id);
+        }
+        const n = GX.grandfather(keep);
+        if (n) { try { console.info('[LOOTFLEET] kept ' + n + ' held natural citadel(s)'); } catch (e) {} }
+      }
+    } catch (e) { try { console.warn('[LOOTFLEET] citadel grandfather skipped', e); } catch (e2) {} }
     if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
     return fixed;
   }
@@ -8786,6 +9187,12 @@
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip, citadelRankOf, tileIdByName,
     resourceRates, tileRateOf, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     ownedSystemList,
+    // CONTIGUITY — derived from ownedSystems, stored nowhere. clusterBust() is for
+    // any future write path that changes ownership and cannot wait 250ms.
+    clusterOf, clusterSummary, clusterBust, CLUSTER_TIERS,
+    // SIEGE SHIELD — derived from ownership, stored nowhere. One statement of
+    // "no exposed border, no siege", read by the map, the sheet and warp().
+    tileShield, shieldDoors, factionOf, blocOf, BLOC_MIN,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,
     getStats: () => rt.stats, getDps: () => rt.dps, score, freeze, adoptSave, uiYield, ASC_START_HULL,

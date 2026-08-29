@@ -1,0 +1,102 @@
+/* =============================================================================
+   shell-fit.css — the app shell in LANDSCAPE and on short windows.
+
+   THE BUG IS THAT THE PHONE TREATMENT IS KEYED ON WIDTH, AND ROTATING A PHONE
+   MAKES IT WIDE. game.html's inline HUD block carries a full compact treatment
+   under `@media (max-width:560px)`: the two store CTAs collapse into one 28px
+   row with their headline lines hidden, the flagship art drops to 30px, the
+   score to 19px, the level badge to 36px. It is well judged and it never fires
+   in landscape — an 844x390 phone is 844 wide, so a 390px-tall screen gets the
+   DESKTOP HUD. web-v89.css's `(max-height:430px)` rule is the only height-keyed
+   rule in the codebase, and all it does is hide .hud-bars and shrink the nav.
+
+   Measured on audit/shell-fit.html against the real cascade, before this file:
+       390x844 portrait    statusbar 44 + hud 142 + nav 60     arena 598 (71%)
+       844x390 landscape   44 + 108 + 46                       arena 192 (49%)
+       740x450 landscape   44 + 110 + 50                       arena 246 (55%)
+   Half the screen was furniture in landscape, and the half that was furniture
+   was the DESKTOP furniture.
+
+   SO THIS FILE RE-KEYS THE EXISTING DESIGN ON HEIGHT. Almost every declaration
+   below is copied verbatim from that (max-width:560px) block — same numbers,
+   same intent, applied when the viewport is SHORT rather than narrow. It
+   deliberately does NOT copy the block's `flex-wrap:wrap` + `flex:1 1 100%`
+   stacking: that is right on a narrow phone and wrong here, because a landscape
+   window is wide enough to keep the score and the CTAs side by side, and
+   wrapping them would cost more height than it saves.
+
+   WHY #app: game.html's inline <style> blocks come after every <link>, so
+   `#hud .cta-stack` there beats `.cta-stack` here on a specificity tie no matter
+   what order the files load in. `#app #hud` clears it without !important.
+
+   TWO BANDS:
+     <=560px  the landscape / short-window band, described above.
+     <=430px  web-v89.css's own band. Left as written except that THE HP BAR
+              COMES BACK: it hid .hud-bars outright, so a pilot flying in
+              landscape could not see their own hull, in a game that kills you.
+              Height was the right thing to buy; that row was the wrong thing to
+              spend, and the inline rules already lay it out as ONE 20px row
+              with the kills chip beside it.
+
+   Nothing here moves an element between parents, repositions anything, or
+   touches pointer-events. It only ever spends less vertical space on the same
+   furniture, so there is no new hit-testing geometry over the arena canvas.
+   ============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   SHORT VIEWPORT — phones rotated, tablets in landscape, split-screen panes,
+   short desktop windows.
+   --------------------------------------------------------------------------- */
+@media (max-height:560px){
+
+  /* ---- the store CTAs: one compact row, not a stacked pair. The single
+     biggest saving available — 73px to 28px — and no loss of prominence: both
+     buttons keep their full width, gem and star, and their live second line. */
+  #app #hud .cta-stack{flex-direction:row;gap:6px;align-self:center;flex:0 0 auto;max-width:none}
+  #app #hud .cta-stack .lc-cta{flex:0 1 auto;min-width:0;height:28px;min-height:28px;padding:0 10px;justify-content:center;gap:6px;border-radius:9px}
+  #app #hud .cta-stack .lch-gem{width:13px;height:13px;flex:0 0 auto}
+  #app #hud .cta-stack .pro-star{font-size:12px;flex:0 0 auto}
+  #app #hud .cta-stack .lch-t{display:flex;flex-direction:row;align-items:center;gap:5px;min-width:0;overflow:hidden}
+  #app #hud .cta-stack .lch-t .l1{display:none}
+  #app #hud .cta-stack .lch-t .l2{font-size:9.5px;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---- the score block: the phone numbers, verbatim ---- */
+  #app #hud{padding:4px 12px 5px}
+  #app #hud .power-block{gap:9px;padding:7px 10px}
+  #app #hud .pb-fleet{height:30px;gap:0}
+  #app #hud .pb-fleet img{height:30px;max-width:44px}
+  #app #hud .pb-fleet img.esc{display:none}
+  #app #hud .pb-val{font-size:19px}
+  #app #hud .pb-label{font-size:8px;letter-spacing:.14em}
+  #app #hud .pb-asc{font-size:8px;height:14px;padding:0 5px}
+  #app #hud .lvl-badge{height:36px;width:36px}
+  #app #hud .lvl-badge .num{font-size:12.5px}
+  #app #hud .bar-wrap.xpw{height:15px}
+  #app #hud .hud-bars{margin-top:5px}
+
+  /* ---- the wallet row keeps its chips; it only loses the desktop top pad ---- */
+  #app #statusbar{padding-top:2px}
+
+  /* ---- bottom nav: 60 -> 50, icons and labels with it. Still a 50px row, so
+     every tab clears the 44px hit-target floor. ---- */
+  #app #nav{height:calc(50px + env(safe-area-inset-bottom,0px));padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+  #app .nav-btn{gap:2px}
+  #app .nav-btn svg{width:17px;height:17px}
+  #app .nav-btn .nl{font-size:8.5px}
+
+  /* ---- panel screens: the body is what the player opened the screen for ---- */
+  #app .scr-head{padding:8px 14px}
+  #app .scr-title{font-size:14px}
+  #app .scr-body{padding:10px}
+}
+
+/* ---------------------------------------------------------------------------
+   VERY SHORT — web-v89.css's own (max-height:430px) band.
+   --------------------------------------------------------------------------- */
+@media (max-height:430px){
+  /* THE HULL READOUT COMES BACK. One 20px row: HP bar plus the kills chip, laid
+     out by the inline rules that already own it. */
+  #app #hud .hud-bars{display:flex;margin-top:4px}
+  #app #hud{padding:3px 12px 4px}
+  #app #nav{height:calc(46px + env(safe-area-inset-bottom,0px))}
+}

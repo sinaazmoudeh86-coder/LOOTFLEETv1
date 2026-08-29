@@ -131,6 +131,71 @@
     return XEN.minChance + (XEN.maxChance - XEN.minChance) * Math.sqrt(f);
   }
 
+  // ---- NATURAL CITADEL SCARCITY --------------------------------------------
+  // FIVE NATURAL CITADELS PER 100 LEVELS OF TILES, and no more. The old rule was
+  // a per-tile 3% roll, which is a RATE and not a BUDGET: it produced 73 of them,
+  // spread 2 / 12 / 6 / 30 / 23 across the five level bands purely by luck of the
+  // seed. A fortress paying CITADEL_RATE_MULT× a resource field is the single
+  // richest thing on the map, so "how many exist" is an economy decision and it
+  // should not be an accident. Now it is a fixed budget per band: 25 in the
+  // galaxy, evenly available at every depth (the shallow band actually GAINS
+  // three — it had two).
+  //
+  // THE SELECTION IS A BAND-WIDE SORT, NOT A PER-TILE ROLL, because "exactly five"
+  // cannot be decided by a tile looking only at itself. Each candidate is scored
+  // from its own coordinates on a dedicated seed stream, the five lowest scores in
+  // each band win, and ties break on id — so the set is identical for every
+  // account, on every device, forever, with no server round-trip. Built once and
+  // cached; it never changes at runtime.
+  const CIT_BAND = 100;      // levels per band
+  const CIT_PER_BAND = 5;    // natural citadels per band
+  let _citSet = null;
+  function citScore(q, r) {
+    return rngFor(((q * 0x1f123bb5) ^ (r * 0x27d4eb2d) ^ 0x0c17ade1) >>> 0)();
+  }
+  function citadelSet() {
+    if (_citSet) return _citSet;
+    const bands = {};
+    for (let ring = 2; ring <= RINGS; ring++) {          // ring 1 has never held one
+      const b = Math.floor(ringLevel(ring) / CIT_BAND);
+      const list = bands[b] || (bands[b] = []);
+      const coords = ringCoords(ring);
+      for (let i = 0; i < coords.length; i++) {
+        const c = coords[i];
+        list.push({ id: tileId(c.q, c.r), s: citScore(c.q, c.r) });
+      }
+    }
+    const keep = {};
+    for (const b in bands) {
+      bands[b].sort((x, y) => (x.s - y.s) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+      for (let i = 0; i < CIT_PER_BAND && i < bands[b].length; i++) keep[bands[b][i].id] = 1;
+    }
+    return (_citSet = keep);
+  }
+  // THE OLD PREDICATE, KEPT ON PURPOSE. A pilot who already holds one of the 48
+  // fortresses this pass retires must not have it turn into an ordinary tile under
+  // them — they fought a siege for it and it is most of their income. game-v93
+  // asks this for each system the local account owns and hands the answer to
+  // grandfather() before anything reads a tile. Reproduces the FIRST draw of
+  // tileAt()'s own stream exactly; do not re-order either.
+  function legacyCitadel(q, r) {
+    const ring = ringOf(q, r);
+    if (ring < 2 || ring > RINGS) return false;
+    return rngFor((q * 73856093) ^ (r * 19349663) ^ 0x5bd1)() < 0.03;
+  }
+  const _grand = {};
+  function grandfather(ids) {
+    if (!ids || !ids.length) return 0;
+    let n = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!id || _grand[id]) continue;
+      _grand[id] = 1; n++;
+      if (_cache[id]) delete _cache[id];   // regenerate it as the fortress it was
+    }
+    return n;
+  }
+
   // ---- deterministic tile ----------------------------------------------------
   const HOME = tileId(0, 0);
   const _cache = {};
@@ -148,8 +213,16 @@
     }
     const rnd = rngFor((p.q * 73856093) ^ (p.r * 19349663) ^ 0x5bd1);
     const roll = rnd();
-    // CITADEL SIEGE ZONES — rare (~3%), only ring 2+
-    const citadel = ring >= 2 && roll < 0.03;
+    // CITADEL SIEGE ZONES — a fixed budget of 5 per 100 levels (see citadelSet),
+    // plus any fortress this account already holds from the old 3% rule.
+    //
+    // `roll` IS STILL DRAWN, AND THE BRANCHES BELOW ARE UNCHANGED, so that a tile
+    // which stops being a citadel keeps its name, rarity and resource: the old
+    // rule needed roll < 0.03, which is also < 0.11, so such a tile lands on the
+    // BOSS branch — and boss and citadel consume exactly the same number of draws.
+    // Rewriting the type line to always draw would re-roll every boss tile in the
+    // galaxy instead. Leave the draw order alone.
+    const citadel = ring >= 2 && (citadelSet()[id] === 1 || _grand[id] === 1);
     const boss = !citadel && roll < 0.11;                  // ~8% boss tiles
     let type = citadel ? 'citadel' : boss ? 'boss' : (rnd() < 0.5 ? 'resource' : 'combat');
     // rarity: 0 common · 1 uncommon · 2 rare (boosts output)
@@ -204,6 +277,7 @@
 
   window.GALAXYMAP = {
     RES, RES_KEYS, RINGS, DEEP_RING, DEEP_MULT, CITADEL_RATE_MULT, CITADEL_COST_MULT, TILE_VALUE_MULT, HOME,
+    CIT_BAND, CIT_PER_BAND, citadelSet, legacyCitadel, grandfather,
     tileId, parseId, ringOf, neighbors, ringCoords, ringTiles, tileAt, tileCount,
     ringLevel, ringDiff, pixel, unpixel, entryCost, XEN, isInvaded, alienChance,
   };

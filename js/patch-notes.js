@@ -31,17 +31,23 @@
 (function () {
   'use strict';
 
-  const BUILD = 729;
-  // 729 CARRIES 728 AS WELL. 728 was cut but never pushed, so the live build is
-  // still 726 and a player jumping 726 to 729 would never see 728's card at all.
+  const BUILD = 730;
+  // 730 CARRIES 729'S ROWS, AND THAT IS DELIBERATE. 729 shipped only hours before
+  // 730 was cut, so most accounts had not logged into it yet. The card is keyed on
+  // LF_BUILD in localStorage: replacing 729's card with a 730-only card would mean
+  // anyone who missed the 729 login never sees any of those 24 rows. Same rule as
+  // the 727/728 merge, one build later. When 730 has been live long enough that
+  // the population has turned over, the next card may drop these rows.
+  // (Historic note on the merge below.) 728 was cut but never pushed, so the live
+  // build was 726 and a player jumping 726 to 729 would never have seen 728's card.
   // Same rule as the 727/728 merge: a skipped build owes its rows to the next
   // card. 729's own items are folded into the rows they belong to rather than
   // repeated at the bottom — the Eternum row states both halves of that licence
   // change, and the chat row states the launch gate it actually ships on.
   const NOTES = {
-    build: 729,
-    title: 'BUILD 729',
-    sub: 'Fighter Ascension, an auto beacon, and a reachable Eternum.',
+    build: 730,
+    title: 'BUILD 730',
+    sub: 'Auto-sell finally clears a big hold — plus everything from 729.',
     groups: [
       { k: 'CHANGED', c: '#ffcf4d', rows: [
         ['✦', 'The Eternum licence is actually reachable: ★30 and 300 cargo runs', 'It asked for <b>★100</b> and <b>1,000 secured cargo runs</b> — the better part of two years on either line, so the Celestial Class read as decoration rather than something to aim at. It now asks <b>★30</b> and <b>300 runs</b>, which finish in roughly the same season as each other instead of one hiding behind the other. Nothing else moved: still a Titan Sina in the hangar, still commissioned with a core that only the deepest Omega Cargo V manifest gives up, still the same yard bill. If you are already past either number, that line is simply done. And the hangar tile was printing <b>★50</b> while the licence actually wanted ★100 — so if you hit the number you were shown and were still refused, that was our bug, not your progress. Every figure on that card now comes off the licence itself.'],
@@ -64,7 +70,7 @@
         ['\u25c7', 'Aegis field projectors have an icon, and auto-sell again', 'The four projectors and the Warden Array drew no icon at all on devices without those symbols in their fonts. Auto-sell also judged them as if they were cannons, so they could never be cleared out of the hold. They now sell like anything else you cannot use \u2014 and are always kept while you own a hull that can mount one, even if you are not flying it.'],
         ['\u25c8', 'My Systems counts built and natural citadels apart', 'The header printed a single \u201ccitadels\u201d figure that mixed the fortresses you built with the ones that came with the tile, so it never agreed with the rows underneath it. It states both now.'],
         ['\u26a1', 'Menus open straight away on phones', 'Tapping between Battle, Zone Grind and Loot could hang for a moment on a phone while nothing appeared to happen. Three things were in the way: the Loot screen drew a card for every item in your hold, the arena kept painting for a fraction of a second after you left it, and the screen you tapped had to finish building itself before the switch could be drawn at all. A very full hold now shows its top 200 with a button to open the rest, the arena stops the instant a menu opens, and the screen change is drawn first and filled a frame later. The fight itself is untouched \u2014 nothing about the simulation, your progress or your hold changed.'],
-        ['\u25c7', 'Auto-sell sells again', 'If you set <b>Sell on pickup</b> and watched your hold fill up regardless, this is why: one empty weapon mount anywhere in your fleet \u2014 an escort you had never fitted, a hull parked in the hangar \u2014 counted <i>every</i> matching drop as something the fleet could use, so nothing was ever sold, at any rarity. An empty mount now holds <b>one</b> piece, the best one for it. Anything that beats gear you actually have fitted is still kept exactly as before, and nothing equipped or bought is touched. If you have been flying with a full hold, expect it to clear on your next run.'],
+        ['\u25c7', 'Auto-sell sells again', 'If you set <b>Sell on pickup</b> and watched your hold fill up regardless, this is why: one empty weapon mount anywhere in your fleet \u2014 an escort you had never fitted, a hull parked in the hangar \u2014 counted <i>every</i> matching drop as something the fleet could use, so nothing was ever sold, at any rarity. An empty mount now holds <b>one</b> piece, the best one for it \u2014 and only mounts on the hull you are flying and the escorts flying with you. Hulls parked in the hangar no longer reserve gear your active fleet can already use, which is what was still filling holds on big accounts: dozens of owned hulls meant hundreds of permanently reserved slots. Anything only a parked hull can mount \u2014 an Aegis projector while you fly something else \u2014 is still kept. Anything that beats gear you actually have fitted is still kept exactly as before, and nothing equipped or bought is touched. If you have been flying with a full hold, expect it to clear on your next run.'],
         ['\u2708', 'Ascending actually disbands your wing', 'After an ascension your old escorts kept flying alongside you \u2014 endgame hulls in formation around a Level 1 starter frigate, still firing, still pulsing repairs. The wing had been disbanded correctly everywhere except on screen: nothing rebuilt the formation, so the ships already in the air simply stayed there. The wing now clears the instant the reset lands. Nothing about what you keep has changed \u2014 <b>every hull is still yours</b>, upgrade levels and Ship Ascension intact, waiting in the Hangar.'],
         ['\u2756', 'The ascension screens name the hull you really start in', 'The confirm screen showed your current flagship and told you that you warp out in it. You do not \u2014 a new run starts in the starter hull, and has for a while. Those screens now show that hull and say so plainly, and the keep/lose ledger lists the flagship change next to the wing. A wording fix: what ascending does to your account is unchanged.'],
         ['\u2709', 'Daily ladder awards arrive without a reload', 'If you left the game open across midnight UTC, your placings from the day before could sit unsent until you next signed in. The game was asking for them in the few minutes before the server had finished working the day out, treating the empty answer as final, and not asking again. It now keeps asking until they land. Nothing was ever lost \u2014 it was waiting.'],

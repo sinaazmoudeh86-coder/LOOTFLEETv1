@@ -2398,18 +2398,41 @@
   // can legitimately appear in all three lists and its slots must only be
   // countable once (the flagship reads state.equipped; everything else reads its
   // own state.fittings entry).
+  //
+  // A HOLE KNOWS WHETHER ITS HULL IS IN SERVICE (Aug 2026). Every hole used to
+  // count the same, and each one reserves one item from the sweep — so on a
+  // mature account the quota was the sum of every unfitted slot on every hull
+  // ever owned. Hulls ride through every ascension and a parked hull's slots are
+  // never filled, so that is hundreds of permanently reserved holes: bounded in
+  // theory, and indistinguishable from "auto-sell does nothing" for exactly the
+  // players with a fleet big enough to notice. That is the second half of the
+  // same bug the Aug 2026 note in autoSellSweep() describes fixing.
+  //
+  // `service` is the flagship and the escorts actually flying. Parked hulls still
+  // get holes, and autoSellSweep() lets an item claim one ONLY when nothing in
+  // service can mount it — which is precisely the hull-locked case (an Aegis
+  // projector while you fly a Titan) that must never be sold, and nothing else.
   function emptyHardpoints() {
     const out = [], seen = {}, fitAll = state.fittings || {};
-    const add = (hull, fit) => {
+    const add = (hull, fit, service) => {
       if (!hull || seen[hull] || !C.SHIP_BY_KEY[hull]) return;
       seen[hull] = 1;
-      C.shipSlots(hull).forEach((sk) => { if (!fit[sk]) out.push({ hull, base: C.slotBase(sk), taken: 0 }); });
+      C.shipSlots(hull).forEach((sk) => { if (!fit[sk]) out.push({ hull, base: C.slotBase(sk), taken: 0, service: !!service }); });
     };
-    add(state.ship, state.equipped || {});
-    fleetShips().forEach((sh) => add(sh.key, fitAll[sh.key] || {}));
+    add(state.ship, state.equipped || {}, true);
+    fleetShips().forEach((sh) => add(sh.key, fitAll[sh.key] || {}, true));
     const owned = state.ownedShips || {};
-    for (const k in owned) if (owned[k]) add(k, fitAll[k] || {});
+    for (const k in owned) if (owned[k]) add(k, fitAll[k] || {}, false);
     return out;
+  }
+  // Can anything ACTUALLY FLYING mount this? The flagship or an escort in the
+  // wing. Used only to decide whether a parked hull is allowed to reserve a copy.
+  function inServiceCanMount(item) {
+    try {
+      if (canMountWeapon(item, state.ship)) return true;
+      for (const sh of fleetShips()) if (canMountWeapon(item, sh.key)) return true;
+    } catch (e) { return true; }   // on any doubt, behave as before: keep the item
+    return false;
   }
 
   function lootBurst(x, y, rarity) {
@@ -3276,10 +3299,16 @@
     for (const it of order) {
       if (unsellable(it) || it.rarity > tier) continue;
       if (isPickupUpgrade(it, true)) continue;              // beats something already fitted
+      // A PARKED HULL DOES NOT HOARD GEAR THE ACTIVE FLEET COULD USE. It may only
+      // reserve a copy of something nothing in service can mount at all — the
+      // hull-locked case. Ordinary gear therefore competes for the flagship's and
+      // the wing's holes only, which is a couple of dozen, not a few hundred.
+      const svc = inServiceCanMount(it);
       let claimed = false;
       for (let i = 0; i < open.length; i++) {
         const s = open[i];
         if (s.taken || s.base !== it.slot || !canMountWeapon(it, s.hull)) continue;
+        if (!s.service && svc) continue;
         s.taken = 1; claimed = true; break;
       }
       if (!claimed) doomed.add(it);

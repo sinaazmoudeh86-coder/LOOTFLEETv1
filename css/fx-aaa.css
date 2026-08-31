@@ -316,6 +316,21 @@
   text-transform:uppercase; color:#6f84a6;
 }
 
+/* ⏶ EARLIER ZONES — the head of the windowed list. The zone list only renders a
+   window back from your frontier (js/ui-v94.js renderZones), so this is the way
+   back to old ground: it loads one more chunk and holds the scroll position. */
+.zj-earlier{
+  position:relative; z-index:1; display:flex; flex-direction:column; gap:2px; width:100%;
+  margin:2px 0 10px; padding:11px 12px; cursor:pointer; text-align:center;
+  border:1px dashed rgba(120,150,200,.34); border-radius:12px;
+  background:linear-gradient(180deg,rgba(24,34,52,.72),rgba(12,18,30,.72));
+  font-family:'Rajdhani',sans-serif; font-size:11.5px; font-weight:800; letter-spacing:.14em;
+  text-transform:uppercase; color:#9db4d6;
+}
+.zj-earlier i{ font-style:normal; font-size:10px; font-weight:600; letter-spacing:.03em; text-transform:none; color:#748aa8; }
+.zj-earlier:active{ transform:scale(.99); border-color:rgba(150,180,230,.55); color:#cfe0f6; }
+.zj-later{ margin:10px 0 2px; border-style:solid; border-color:rgba(120,150,200,.22); }
+
 /* planet orbs — layered CSS "terrain": specular sun-glint, night-side
    terminator, per-type surface texture (gas bands / rocky mottling / ice caps),
    atmosphere rim. Seeded per zone via --x1/--y1/--x2/--y2/--ba. */

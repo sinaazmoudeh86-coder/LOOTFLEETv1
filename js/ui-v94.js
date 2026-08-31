@@ -290,7 +290,7 @@
   function renderScreen(name) {
     if (name === 'hero') renderHero();
     else if (name === 'bag') renderBag();
-    else if (name === 'zones') renderZones();
+    else if (name === 'zones') { _zWin = 0; renderZones(); }   // a fresh open lands on the anchor window
     else if (name === 'galaxy') renderGalaxy();
     else if (name === 'store') renderStore();
     else if (name === 'board') renderBoard();
@@ -1785,7 +1785,7 @@
       <div class="ctg-rungs">${rungs}</div>
       ${next}
       <div class="ctg-foot">Counts systems you fully own that <b>share an edge</b>. Each block is scored on its own size, and the bonus applies per tile — so it multiplies the whole block, not one system.</div>
-      <div class="ctg-foot seal">🛡 A block defends itself too: a system with <b>no exposed border</b> cannot be sieged at all. Enemies have to take the outer ring first.</div>
+      <div class="ctg-foot seal">🛡 A block defends itself too: a system with <b>no exposed border</b> cannot be sieged at all. Enemies have to take the outer ring first — except on the galaxy's outer rim, where a border faces the edge of the map and can never be closed.</div>
     </div>`;
   }
   // ONLY THE EDGES THAT FACE OUT. Outlining every tile in a block draws its
@@ -3049,8 +3049,18 @@
       : '';
     if (s.mine || t.ally) {
       if (!s.ring.length) return '';           // a lone system: "fill the borders" is not yet advice
-      return '<div class="gx-shield">⚠ <b>FRONT LINE</b> — <b>' + s.open + '</b> of six borders face open space, so this system can be attacked. Hold the tiles around it and it seals itself.'
-        + (behind ? ' It is also the shell keeping <b>' + behind + '</b> of your systems sealed.' : '') + '</div>';
+      const shell = behind ? ' It is also the shell keeping <b>' + behind + '</b> of your systems sealed.' : '';
+      // THE MAP'S EDGE IS AN OPEN BORDER YOU CANNOT CLOSE. Telling a pilot on the
+      // rim to "hold the tiles around it and it seals itself" is advice they can
+      // follow to completion and still be refused — there is no tile out there to
+      // take. So a rim system says what it is instead of what to do.
+      const edge = s.edge | 0;
+      if (edge >= s.open) {
+        return '<div class="gx-shield">⚠ <b>RIM SYSTEM</b> — <b>' + edge + '</b> of six borders face the edge of the galaxy, and there is no ground out there to take. The rim can never be closed, so this system stays open to attack however much space you hold around it.' + shell + '</div>';
+      }
+      return '<div class="gx-shield">⚠ <b>FRONT LINE</b> — <b>' + s.open + '</b> of six borders are open, so this system can be attacked. '
+        + (edge ? '<b>' + edge + '</b> of them face the edge of the galaxy and can never be closed — hold the rest and it is as sealed as the rim allows.' : 'Hold the tiles around it and it seals itself.')
+        + shell + '</div>';
     }
     if (!behind) return terr;                  // no core behind it — but say whose ground it is
     return terr + '<div class="gx-shield way">⚔ <b>THE WAY IN</b> — this system’s border is open, and taking it exposes <b>' + behind
@@ -3380,6 +3390,25 @@
   }
 
   // ---- classic ZONES list (free-play / farming any unlocked zone) ----------
+  //
+  // THIS LIST IS WINDOWED, AND THAT IS THE FIX FOR "the page goes unresponsive".
+  // It used to build one row per zone from 1 to the frontier, in one HTML string,
+  // on every render — and each row is a CSS-painted planet with four gradient
+  // layers, a per-row scan of C.ENEMIES and a zoneBonuses() call. A pilot deep in
+  // the game is at zone 700+, so that is ~750 heavy rows and roughly a megabyte
+  // of markup rebuilt every time the screen is opened or refreshAll() fires while
+  // it is open. The cost grows for ever with progress, which is exactly the shape
+  // of the report: it gets worse the further you get, until the tab stops
+  // answering. Nothing about the list needed all of it on screen at once.
+  //
+  // The window is anchored on where the pilot actually PLAYS (the recommended
+  // zone and the zone they are standing in) and is never larger than Z_WINDOW
+  // rows, whatever the shape of the save — an ascended pilot is Level 1 with a
+  // frontier hundreds of zones deep, and that gap must not turn back into a
+  // thousand-row list. ⏶ EARLIER and DEEPER › page it a chunk at a time, holding
+  // the scroll position, and re-opening the screen lands back on the anchor.
+  const Z_WINDOW = 120;
+  let _zWin = 0, _zAnchor = 0;
   function renderZones() {
     const s = G.state, rec = G.recommendedZone();
     el['zones-sub'].textContent = 'Recommended: Zone ' + rec;
@@ -3396,6 +3425,11 @@
       return { name: GAL_NAMES[i] + (cyc ? ' ' + (ROMAN[cyc - 1] || (cyc + 1)) : ''), hue: GAL_HUES[i] };
     };
     const lyOf = (d) => Math.round(Math.pow(d, 1.6) * 3.2);
+    // the window: anchored where you play, capped at Z_WINDOW rows, paged by hand
+    const lowNeed = Math.min(rec > 0 ? rec : top, (s.currentDungeon | 0) > 0 ? s.currentDungeon : top, top);
+    const autoFrom = Math.max(1, Math.min(lowNeed - 20, top - Z_WINDOW + 1));
+    const from = Math.max(1, Math.min(_zWin || autoFrom, top));
+    const to = Math.min(top, from + Z_WINDOW - 1);
     let html = '<div class="zj">';
     // ✦ THE EMBER CHOIR — event entry point, in the same slot the Kaevith banner
     // occupies on the galaxy map. Always tappable for the full briefing, and it
@@ -3417,11 +3451,14 @@
           <div class="z-sub">Safe harbor · 0 ly · review &amp; refit your ship</div></div>
         <div class="z-go">${safe?'● DOCKED':'RETURN'}</div></div>`;
     let lastBlock = -1;
-    for (let d = 1; d <= top; d++) {
+    if (from > 1) {
+      html += `<button class="zj-earlier" id="z-earlier">⏶ EARLIER ZONES<i>Zones 1–${from - 1} are behind you · load ${Math.min(Z_WINDOW, from - 1)} more</i></button>`;
+    }
+    for (let d = from; d <= to; d++) {
       const gb = Math.floor((d - 1) / 10);
       if (gb !== lastBlock) {
         const gi = galInfo(gb);
-        if (gb > 0) {
+        if (gb > 0 && lastBlock >= 0) {
           const delta = lyOf(gb * 10 + 1) - lyOf(gb * 10);
           html += `<div class="zj-warp">⟱ warp ${G.formatNum(delta)} ly deeper</div>`;
         }
@@ -3468,8 +3505,14 @@
           ${d===rec && !active ? '<span class="z-rec">★ RECOMMENDED</span>' : ''}</div>
         <div class="z-go">${locked ? lockLabel : citCd>0 ? '◷ ' + fmtCd(citCd) : active ? '● HERE' : (cit ? '⛴ BREACH' : wave ? '◎ ENTER' : (d===rec ? '★ DEPLOY' : 'DEPLOY'))}</div></div>`;
     }
+    if (to < top) {
+      const nxt = Math.min(top, to + Z_WINDOW);
+      html += `<button class="zj-earlier zj-later" id="z-deeper">DEEPER ZONES ›<i>Zones ${to + 1}–${nxt}${nxt >= top ? ' · your frontier' : ''}</i></button>`;
+    }
     html += '</div>';
     el['zones-body'].innerHTML = html;
+    { const zb = document.getElementById('z-earlier'); if (zb) zb.addEventListener('click', () => { _zAnchor = from; _zWin = Math.max(1, from - Z_WINDOW); renderZones(); }); }
+    { const zd = document.getElementById('z-deeper'); if (zd) zd.addEventListener('click', () => { _zAnchor = 0; _zWin = Math.min(top, to + 1); renderZones(); }); }
     { const ebtn = document.getElementById('emb-open'); if (ebtn) ebtn.addEventListener('click', () => openEmberBriefing()); }
     el['zones-body'].querySelectorAll('.zone-row:not(.locked)').forEach((row) => row.addEventListener('click', () => {
       const d = +row.dataset.d;
@@ -3490,8 +3533,16 @@
       deploy();
     }));
     const recRow = el['zones-body'].querySelector('.zone-row.rec');
+    // Expanding backwards must not throw the player back to ★ — hold the row that
+    // was at the top of the window before the expansion.
+    let held = null;
+    if (_zAnchor) {
+      held = el['zones-body'].querySelector('.zone-row[data-d="' + _zAnchor + '"]');
+      _zAnchor = 0;
+      if (held) el['zones-body'].scrollTop = Math.max(0, held.offsetTop - 8);
+    }
     // always land CENTERED on the recommended zone, with a brief landing flash
-    if (recRow) {
+    if (recRow && !held) {
       const zb0 = el['zones-body'];
       zb0.scrollTop = Math.max(0, recRow.offsetTop - Math.max(90, zb0.clientHeight * 0.38));
       recRow.classList.add('rec-land');

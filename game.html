@@ -70,7 +70,7 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/moon-colony.css?v=725">
 <link rel="stylesheet" href="css/pilot-ascension.css?v=725">
 <link rel="stylesheet" href="css/season-pass.css?v=725">
-<link rel="stylesheet" href="css/fx-aaa.css?v=725">
+<link rel="stylesheet" href="css/fx-aaa.css?v=734">
 <link rel="stylesheet" href="css/readability.css?v=727">
 <link rel="stylesheet" href="css/kaevith.css?v=725">
 <link rel="stylesheet" href="css/ember-choir.css?v=725">
@@ -320,6 +320,39 @@ window.__lfErr=[];
 </style>
 <style id="mega-css">
 .nav-grouped{display:none!important;}
+/* ===== COMMAND SECTIONS (734) ===============================================
+   Six sticky headers over the SAME grid. The cards are untouched — only their
+   ORDER changes — so every lock, badge and [data-go] handler is the same code
+   it was. Two things this has to defend against:
+   1. .cmd-sdread/.cmd-galaxy pin themselves to `grid-row:1` for the old
+      featured row. Under sections that yanks Voidmaw and My Galaxy out of
+      their group and into the first row of the sheet, so it is released.
+   2. A collapsed card hides by CLASS, never by inline style — the beta gate
+      owns inline display and must keep winning.
+   3. .pa-pill carries `order:-1` to be the hero of the flat menu. Visual order
+      in a grid beats DOM order, so that alone pulled Pilot Ascension out of
+      POWER and back to the top of the sheet. Released with the other two. */
+.mega-grid.secs .mega-card.cmd-sdread,.mega-grid.secs .mega-card.cmd-galaxy{grid-row:auto!important;}
+.mega-grid.secs .mega-card{order:0!important;}
+.mega-card.sec-hid{display:none!important;}
+.mega-sec{grid-column:1/-1;position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;width:100%;
+  margin:0;padding:7px 10px;border-radius:10px;border:1px solid #1e2a41;background:rgba(15,22,35,.96);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);cursor:pointer;font:inherit;color:inherit;text-align:left;
+  -webkit-tap-highlight-color:transparent;}
+.mega-sec:first-child{margin-top:0;}
+.mega-sec + .mega-card,.mega-sec + .pa-pill{margin-top:0;}
+.mega-sec:hover{border-color:#2e405f;}
+.mega-sec .ms-cv{flex:none;width:11px;font-size:12px;line-height:1;color:#7e93b0;transition:transform .18s;}
+.mega-sec.closed .ms-cv{transform:rotate(-90deg);}
+.mega-sec .ms-n{flex:1;min-width:0;font-family:'Orbitron',sans-serif;font-weight:800;font-size:10px;letter-spacing:.13em;
+  color:#c3cede;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mega-sec .ms-b{flex:none;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--hp,#ff495f);color:#fff;
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10px;line-height:16px;text-align:center;
+  font-variant-numeric:tabular-nums;}
+.mega-sec .ms-c{flex:none;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10px;letter-spacing:.06em;color:#5f7da3;
+  font-variant-numeric:tabular-nums;}
+.mega-sec .ms-lk{flex:none;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:9.5px;color:#8a7048;letter-spacing:.04em;}
+@media (max-height:780px){ .mega-sec{padding:6px 9px;} }
 .mega{position:absolute;inset:0;z-index:55;display:none;}
 .mega.open{display:block;}
 .mega-back{position:absolute;inset:0;background:rgba(5,8,14,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:bdIn .2s ease;}
@@ -1171,8 +1204,8 @@ window.__lfErr=[];
 <script src="js/vip.js?v=725"></script>
 <script src="js/territory.js?v=725"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=733"></script>
-<script src="js/ui-v94.js?v=733"></script>
+<script src="js/game-v93.js?v=734"></script>
+<script src="js/ui-v94.js?v=734"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
@@ -1191,7 +1224,7 @@ window.__lfErr=[];
 <script src="js/coach-v89.js?v=725"></script>
 <script src="js/prism-v5.js?v=725"></script>
 <script src="js/prism-fleet.js?v=725"></script>
-<script src="js/dreadnaught.js?v=729"></script>
+<script src="js/dreadnaught.js?v=734"></script>
 <script src="js/server-dreadnaught.js?v=729"></script>
 <script src="js/galaxy-box.js?v=725"></script>
 <script src="js/shipworks.js?v=725"></script>
@@ -1199,7 +1232,7 @@ window.__lfErr=[];
 <script src="js/pilot-ascension.js?v=729"></script>
 <script src="js/season-pass.js?v=725"></script>
 <script src="js/sim-pilots.js?v=725"></script>
-<script src="js/ranks-boards.js?v=726"></script>
+<script src="js/ranks-boards.js?v=734"></script>
 <script src="js/rank-rewards.js?v=727"></script>
 <script src="js/discord-reward.js?v=725"></script>
 <script src="js/onboard.js?v=725"></script>
@@ -1209,13 +1242,13 @@ window.__lfErr=[];
 <script src="js/paragon-cannon.js?v=725"></script>
 <script src="js/social.js?v=725"></script>
 <script src="js/chat.js?v=729"></script>
-<script src="js/mail.js?v=725"></script>
+<script src="js/mail.js?v=734"></script>
 <script src="js/alliance.js?v=725"></script>
 <script src="js/alliance-boss.js?v=725"></script>
 <script src="js/void-zone.js?v=725"></script>
 <script src="js/cargo-run.js?v=725"></script>
-<script src="js/cargo-defense.js?v=729"></script>
-<script src="js/nanocores.js?v=725"></script>
+<script src="js/cargo-defense.js?v=734"></script>
+<script src="js/nanocores.js?v=734"></script>
 <script src="js/fighters.js?v=729"></script>
 <script src="js/bridge.js?v=731"></script>
 <script src="js/fighter-ascension.js?v=729"></script>
@@ -1224,7 +1257,7 @@ window.__lfErr=[];
 <script src="js/mech-corruption.js?v=725"></script>
 <script src="js/mech-foundry.js?v=725"></script>
 <script src="js/commanders.js?v=725"></script>
-<script src="js/nanocores-ui.js?v=725"></script>
+<script src="js/nanocores-ui.js?v=734"></script>
 <script src="js/crates-hub.js?v=725"></script>
 <script src="js/ascension.js?v=725"></script>
 <script src="js/casino.js?v=725"></script>
@@ -1232,13 +1265,13 @@ window.__lfErr=[];
 <script src="js/casino-citadels.js?v=725"></script>
 <script src="js/redeem.js?v=728"></script>
 <script src="js/auth.js?v=725"></script>
-<script src="js/patch-notes.js?v=733"></script>
+<script src="js/patch-notes.js?v=734"></script>
 <script src="js/update-gate.js?v=725"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 733;
+  window.LF_BUILD = 734;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1517,11 +1550,18 @@ window.__lfErr=[];
       });
       // one line at the top of the sheet so the next unlock is never a surprise
       let hint=document.getElementById('mega-hint');
-      if(!hint){ hint=document.createElement('div'); hint.id='mega-hint'; hint.className='mega-hint'; mega.insertBefore(hint,mega.firstChild); }
+      if(!hint){ hint=document.createElement('div'); hint.id='mega-hint'; hint.className='mega-hint';
+        // INTO THE GRID, not into #mega. It was being inserted as the first child
+        // of the overlay — before .mega-back, which is absolutely positioned over
+        // the whole inset — so the one line telling a player what opens next has
+        // been painted underneath the backdrop. .mega-hint already declares
+        // grid-column:1/-1, which is what it was written for.
+        const g=mega.querySelector('.mega-grid'); (g||mega).insertBefore(hint,(g||mega).firstChild); }
       if(lockedN&&isFinite(nextNeed)){ hint.style.display='';
         hint.innerHTML='<b>'+lockedN+'</b> system'+(lockedN===1?'':'s')+' still locked · next opens at <b>Level '+nextNeed+'</b>'; }
       else hint.style.display='none';
       const old=document.getElementById('mega-more'); if(old) old.remove();
+      syncSecs();
       syncPasc(L);
     }
     // PILOT ASCENSION pill — the one card that carries live numbers, so the
@@ -1563,6 +1603,92 @@ window.__lfErr=[];
           '<span class="pa-pill-chip x2">NEXT POINT AT LV <b>'+((Math.floor(L/125)+1)*125)+'</b></span>';
       }
     }
+    /* ===== SECTIONS ==========================================================
+       25 destinations in one flat grid is ~2.6 screens of scroll on a phone, and
+       the handful actually waiting on the player is found by reading all 25.
+       Six groups, each with a sticky header that ROLLS UP its own live badge
+       count, so a folded group still says it wants attention.
+
+       THE CARDS ARE NOT REWRITTEN. Every one keeps its markup, its id, its
+       badge element and its [data-go] listener; this only moves the nodes and
+       inserts headers between them. Moving a node carries its listeners with
+       it, so nothing here can dead-end a card.
+
+       COLLAPSE STATE IS A DEVICE FACT. Which headers you folded on your phone
+       is not an account fact: it lives in localStorage next to lf_gc_open and
+       lf_pltree_view, and touches neither `state`, saveWeight() nor ASC_KEEP.
+       This whole feature has no save footprint. */
+    const SECS=[
+      { k:'events', g:'\u25c8', n:'LIVE & EVENTS', ids:['tour','sdread','cargo','koth','dread','prismfleet','missions'] },
+      { k:'empire', g:'\u2b21', n:'EMPIRE',        ids:['galaxy','voidzone','homecit','moon','expo','prism'] },
+      { k:'power',  g:'\u2726', n:'POWER',         ids:['pasc','ascend','fasc','pilot','skills'] },
+      { k:'shop',   g:'\u2699', n:'WORKSHOP',      ids:['forge','nano','crates','cmdr','mech'] },
+      { k:'more',   g:'\u25a6', n:'MORE',          ids:['casino','discord'] },
+    ];
+    const SEC_LS='lf_cmd_folded';
+    let folded=new Set();
+    try{ const raw=localStorage.getItem(SEC_LS); if(raw) folded=new Set(JSON.parse(raw)||[]); }catch(e){}
+    const saveFolded=()=>{ try{ localStorage.setItem(SEC_LS,JSON.stringify([...folded])); }catch(e){} };
+    // 'discord' is an <a> with no data-go; everything else is addressed by it.
+    const cardById=(id)=> id==='discord' ? document.getElementById('cmd-discord')
+                                         : mega.querySelector('.mega-grid [data-go="'+id+'"]');
+    function buildSecs(){
+      const grid=mega.querySelector('.mega-grid'); if(!grid||grid.classList.contains('secs')) return;
+      const placed=new Set(), frag=document.createDocumentFragment();
+      SECS.forEach(s=>{
+        const cards=[];
+        s.ids.forEach(id=>{ const c=cardById(id); if(c&&!placed.has(c)){ placed.add(c); cards.push(c); } });
+        s._cards=cards;
+        if(!cards.length) return;                       // never print an empty group
+        const h=document.createElement('button');
+        h.type='button'; h.className='mega-sec'; h.dataset.sec=s.k;
+        h.setAttribute('aria-expanded', folded.has(s.k)?'false':'true');
+        h.innerHTML='<span class="ms-cv">\u25be</span><span class="ms-n">'+s.g+' '+s.n+'</span>'+
+          '<span class="ms-b" style="display:none">0</span><span class="ms-lk"></span><span class="ms-c"></span>';
+        s._h=h; frag.appendChild(h); cards.forEach(c=>frag.appendChild(c));
+      });
+      // ANY CARD NOT NAMED ABOVE STILL SHIPS. A destination added later that
+      // nobody remembered to categorise must not silently vanish from the menu —
+      // it lands in MORE rather than being dropped on the floor.
+      const rest=[...grid.querySelectorAll('.mega-card[data-go],a.mega-card')].filter(c=>!placed.has(c));
+      if(rest.length){
+        const last=SECS[SECS.length-1];
+        rest.forEach(c=>{ placed.add(c); last._cards.push(c); frag.appendChild(c); });
+      }
+      grid.appendChild(frag);
+      grid.classList.add('secs');
+      SECS.forEach(s=>{ if(s._h) s._h.addEventListener('click',()=>{
+        folded.has(s.k)?folded.delete(s.k):folded.add(s.k); saveFolded(); syncSecs();
+      }); });
+      syncSecs();
+    }
+    // Roll-up reads the LIVE badge elements rather than recomputing any of them:
+    // the card is the single statement of its own count, and a header that did
+    // its own arithmetic would be free to disagree with the cards under it.
+    function syncSecs(){
+      SECS.forEach(s=>{
+        if(!s._h||!s._cards) return;
+        const shut=folded.has(s.k);
+        let n=0, shown=0, lockedN=0;
+        s._cards.forEach(c=>{
+          c.classList.toggle('sec-hid',shut);
+          if(c.style.display==='none') return;              // beta-gated: not here yet
+          shown++;
+          if(c.classList.contains('locked')){ lockedN++; return; }  // its badges are hidden too
+          c.querySelectorAll('.badge,.cmd-cardbadge').forEach(b=>{
+            if(b.style.display==='none') return;
+            const t=(b.textContent||'').trim(); if(!t) return;
+            const v=parseInt(t,10); n+=isNaN(v)?1:v;         // '!' and '\u26cf' are one thing each
+          });
+        });
+        s._h.classList.toggle('closed',shut);
+        s._h.setAttribute('aria-expanded',shut?'false':'true');
+        const b=s._h.querySelector('.ms-b'); if(b){ b.textContent=n>99?'99+':n; b.style.display=n?'':'none'; }
+        const lk=s._h.querySelector('.ms-lk'); if(lk) lk.textContent=lockedN?('\ud83d\udd12 '+lockedN):'';
+        const ct=s._h.querySelector('.ms-c'); if(ct) ct.textContent=shut?shown:'';
+      });
+    }
+    buildSecs();
     function open(){ sync(); mega.classList.add('open'); }
     function close(){ mega.classList.remove('open'); }
     cmd.addEventListener('click',()=>{ mega.classList.contains('open')?close():open(); });

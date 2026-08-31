@@ -1,22 +1,28 @@
-# Loot Fleet — deploy v257 · build 730 · AUTO-SELL
+# Loot Fleet — deploy v259 · build 734 · PLAYER BUG PASS + COMMAND SECTIONS
 
 Push the **contents of this folder** to the repo root Vercel serves.
 
-Supersedes **v256 (build 729), which is what players are running right now.**
-Service worker cache is `lootfleet-v730`. **Login screen reads `BUILD 730`.**
+Service worker cache is `lootfleet-v734`. **Login screen reads `BUILD 734`.**
 The update gate force-reloads every live session within ~90s of the beacon.
 
-> **One fix, and no server work.** No SQL, no Edge Function, no migration. 730
-> changes two files and touches nothing that can reach a save.
+> **`deploy-v256` / build 729 is STILL WHAT PLAYERS ARE RUNNING.** 730, 731, 732,
+> 733 and 734 were each cut and verified without ever being pushed. This folder
+> therefore carries **five builds** to the population at once, and its patch card
+> carries all five builds' rows for that reason — see below.
+
+> **Client-only.** No SQL, no Edge Function, no new save field, no migration.
+> Nothing in 734 changes the shape of anything already stored.
+
+**Superseded — do not push, and do not re-seed from root:** `deploy-v256` (729),
+`deploy-v257` (730), `deploy-v258` (733). Root is 734.
 
 ---
 
 ## 1. NO SQL, NO EDGE FUNCTION
 
-Nothing to run. All three of 729's outstanding server items were completed and
-confirmed before that push: `global-chat.sql` (installed and `chat_post()`
-smoke-tested), `temple-retire.sql` (run once), and the `discord-feed` redeploy at
-`FEED_VER 727`.
+Nothing to run. All three of 729's server items were completed and confirmed
+before that push: `global-chat.sql` (installed and `chat_post()` smoke-tested),
+`temple-retire.sql` (run once), and the `discord-feed` redeploy at `FEED_VER 727`.
 
 **Do not re-run any of them as routine.** None touches `lb_upsert`, so none is
 *dangerous* to repeat, but the standing hazard list is unchanged: re-running
@@ -42,118 +48,160 @@ player onto code that is not there yet.
 
 | stamp | value |
 |---|---|
-| root `game.html` `window.LF_BUILD` | 730 |
-| root `version.json` | 730 |
-| `deploy-v257/version.json` | 730 |
-| `deploy-v257/sw.js` `CACHE` | `lootfleet-v730` |
+| root `game.html` `window.LF_BUILD` | 734 |
+| root `version.json` | 734 |
+| `deploy-v259/version.json` | 734 |
+| `deploy-v259/sw.js` `CACHE` | `lootfleet-v734` |
 | `discord-feed` `FEED_VER` | 727 (deployed — nothing to do) |
 
 All four agree.
 
 **Verified by script before handover:**
 
-- All **97** `js`/`css` files `game.html` references diffed byte-for-byte against
-  the project root — **zero stale, zero missing, every ref cache-busted**.
-- Folder built by the procedure: `deploy-v256` copied first, then `js/`, `css/`,
-  `guides/` and `supabase/` deleted and re-copied fresh from root as separate
-  operations, then the html files. This is the v216 guard — a bulk copy in the
-  same call as the patched directories is how v216 shipped v215 code stamped as a
-  new build.
-- `js/social-upload.js` **excluded** from this folder and confirmed not
-  referenced by `game.html`. Local operator tool; reads a service key from
-  localStorage; must never ship.
-- root `sw.js` confirmed still **unversioned** — it is a deliberate kill-switch
-  worker for an old poisoned origin and must never be given a `CACHE` version.
+- All **101** `js`/`css` files `game.html` references diffed byte-for-byte
+  against the project root — **101/101 identical, zero stale, zero missing,
+  every ref cache-busted.**
+- Every file whose content actually differs from `deploy-v258` (build 733) was
+  checked against its `?v=` token: **10 changed, 10 bumped, none missed and none
+  bumped needlessly.** `js/config-v2.js` did **not** change since 733 and
+  correctly keeps `?v=733`.
+- Folder seeded from `deploy-v258` **first**, then every referenced text file
+  re-synced from root. That order is deliberate: the copy brings the art and the
+  operator docs, the sync guarantees the code matches root.
+- **Root `sw.js` was NOT copied.** Root's is the 945-byte self-retiring
+  kill-switch for an old poisoned origin; this folder's is the real 9,116-byte
+  caching worker, and only its `CACHE` token was stamped. Confirmed by size and
+  by the presence of `caches.open` in the folder copy. A blind root→folder text
+  sync replaces the worker with the kill-switch and every cached client
+  unregisters itself.
+- `js/social-upload.js` **excluded** and confirmed not referenced by `game.html`.
+  Local operator tool; reads a service key from localStorage; must never ship.
 - `audit/` excluded (dev harnesses).
 
-### Files at `?v=730` (changed this build)
+### Files at `?v=734` (changed this build)
 
 ```
-js/game-v93.js       auto-sell: an unfitted hardpoint only reserves gear for a hull IN SERVICE
-js/patch-notes.js    730 card — carries 729's rows (see below)
+css/fx-aaa.css          disabled sheet-CTA / feed paint fixes
+js/game-v93.js          Aegis auto-sell holes, rim-tile sealing, void spires vs citadels
+js/ui-v94.js            Zone Grind paging, Pilot Tree chips, Command-adjacent UI
+js/dreadnaught.js       dread core payout figures
+js/ranks-boards.js      board fixes
+js/mail.js              stale war-report suppression
+js/cargo-defense.js     gold + dread core payout corrections
+js/nanocores.js         crate price ×2 · legendary dupe 5:1 conversion
+js/nanocores-ui.js      exchange row for the legendary trade
+js/patch-notes.js       734 card — carries 730–733's rows (see below)
 ```
 
-Everything else keeps its existing `?v=`, so a player on 729 re-fetches two
-files and nothing more.
+`game.html` also changed (Command sections; it is the page, so it carries no
+`?v=` — the service worker's new `CACHE` token is what re-fetches it).
+
+**A player on 733 re-fetches 10 files. A player on 729 — which is everyone —
+re-fetches 18**, being everything whose token moved after 729.
 
 ---
 
-## THE PATCH CARD CARRIES 729's ROWS, DELIBERATELY
+## THE PATCH CARD CARRIES 730–733's ROWS, DELIBERATELY
 
 `js/patch-notes.js` shows exactly one card, keyed on `LF_BUILD` in localStorage.
-729 shipped only hours before 730 was cut, so **most accounts had not logged into
-729 yet.** Replacing its card with a 730-only card would mean anyone who missed
-that login never sees any of those 24 rows — including the Home Citadel wave-pay
-**nerf** and the ◇ Dread Core **scarcity pass**, both of which CLAUDE.md requires
-be stated out loud or they read as bugs.
+730, 731, 732 and 733 were each cut without being pushed, so **no live account
+has ever seen any of their cards.** A 734-only card would mean the population
+jumps 729 → 734 and never sees the Home Citadel wave-pay **nerf**, the ◇ Dread
+Core **scarcity pass**, the contiguity bonus or the siege shield — and CLAUDE.md
+requires a nerf be stated out loud or it reads as a bug.
 
-So the 730 card is the 729 card plus this build's change, folded into the row it
-belongs to rather than repeated at the bottom. Once 730 has been live long enough
-for the population to turn over, the next card may drop these rows.
+Drop the older rows only once 734 has been live long enough for the population to
+turn over.
 
 ---
 
-## WHAT CHANGED SINCE 729
+## WHAT CHANGED SINCE 733
 
-### Auto-sell clears a big hold again
+### The player bug pass
 
-The 727 pass replaced "every empty slot vetoes every item" with "every empty slot
-reserves **one** item" — correct in shape, and still useless on a mature account.
+Nine reports, all client-side:
 
-`emptyHardpoints()` walked **every hull the account owns**, hangar included, and
-every unfitted slot reserved one item from the sweep. Hulls ride through every
-ascension and a parked hull's slots are never filled, so a large fleet meant
-**hundreds of permanently reserved holes**: bounded in theory, indistinguishable
-from "auto-sell does nothing" for exactly the players with enough ships to
-notice. Reported against a 1.09T fleet score.
+- **Stale war mail.** A report is only filed if it can be dated within 36h or was
+  confirmed yours this session; the mailbox record itself blocks duplicates.
+- **Zone Grind froze the tab.** The list drew every zone ever unlocked — ~750
+  planets and labels rebuilt on each open. Now pages 120 rows at a time
+  (330KB → 54KB per page) with your recommended and current zone always in view.
+- **Aegis auto-sell.** Fitted Aegis mounts are treated as holes, so a parked hull
+  can give up a worse item.
+- **AUTO toggling back on.** The choice is session-only and cleared at boot.
+- **Cargo Defense** gold and ◇ core payouts corrected; core figures are no longer
+  scaled twice by the scarcity rate.
+- **Rim tiles** acknowledge the map edge instead of asking you to fill borders
+  that do not exist.
+- **Void spires** no longer count toward the citadel total.
+- **Legendary nanocore dupes** convert 5:1 into a Legendary for a hull you are
+  missing.
+- **Pilot Tree** ◇1 chips kept only on ◇3 nodes and the selected node.
 
-The fix is not to stop counting parked hulls — that protection is deliberate, and
-it is what stops a Venom Lattice being sold because you happened to be flying a
-Titan. Instead **a hole now knows whether its hull is in service:**
+### Nanocore Crates cost twice what they did
 
-- **Flagship and the escorts actually flying** — holes behave exactly as before.
-- **Parked hulls** — may only reserve an item that *nothing in service can mount
-  at all*. That is precisely the hull-locked case (an Aegis projector while you
-  fly something else) and nothing else.
+`CFG.crate` only: single `30,000 → 60,000`, ten `270,000 → 540,000`, list price
+`300,000 → 600,000`. The 10% bundle discount is preserved. Balance lives in `CFG`
+and the UI quotes it directly, so no screen restates the figure. **Nothing is
+taken off an account** — a price rise cannot revoke a core or an ingot already
+held.
 
-Reserved holes drop from ~320 to ~40 on a 40-hull account, and stay at ~40
-however many hulls are owned. Anything that beats a **fitted** item is still kept
-unconditionally, as before.
+### Command is grouped into six foldable sections
 
-`inServiceCanMount()` returns `true` on any thrown error. This path destroys
-items, so every doubt keeps the gear.
+25 destinations in one flat grid was ~2.6 screens of scroll on a phone with every
+card weighing the same. They now sit under **Live & Events · Empire · Power ·
+Workshop · More**, each with a sticky header that rolls up the live badge count
+of the cards beneath it.
 
-**No save impact.** Nothing here writes to `state`, changes a stored shape, or
-touches `ASC_KEEP` / `mergeSaves()` / `sanitizeSave()`.
+**The 25 cards were not rewritten.** They keep their markup, ids, badge elements
+and `[data-go]` handlers; the script only reorders the nodes and inserts headers,
+so `sync()`, the beta gate, the star-locks, the lock chips and the click dispatch
+are all the same code. Three CSS pins had to be released — `.cmd-sdread` and
+`.cmd-galaxy` were nailed to `grid-row:1` and `.pa-pill` carries `order:-1`, and
+visual order beats DOM order in a grid, so all three were escaping their group.
+
+Also fixed in passing: `#mega-hint` (the "next system unlocks at Level N" line)
+was being inserted as the first child of `#mega`, **before** `.mega-back`, which
+is absolutely positioned over the whole inset — so it has been painting
+underneath the backdrop. It now goes into the grid, which is what its
+`grid-column:1/-1` was written for.
+
+**No save footprint.** Fold state is a device fact in
+`localStorage.lf_cmd_folded`, next to `lf_gc_open` and `lf_pltree_view`. Nothing
+in `state`, no `saveWeight()` term, no `mergeSaves()` union block, nothing in
+`ASC_KEEP`. Default is all-open, so an existing player sees the same 25 cards.
+
+Harness: `audit/command-sections.html` (not shipped) drives the real `game.html`
+in iframes at 360×640, 740×450 and 1100×700 — **48/48**, including "no card sits
+above the first header", "no card escapes its group via order/grid-row" and
+"nothing written into state".
 
 ---
 
 ## POST-PUSH CHECKS
 
-1. **Login screen reads `BUILD 730`.** If it reads 729 the html did not land.
+1. **Login screen reads `BUILD 734`.** If it reads 729 the html did not land.
 2. **A live session force-reloads within ~90s** of `version.json` going up.
-3. **Auto-sell:** on an account with a full hold and several owned hulls, set
-   *Sell on pickup* to a tier at or above the junk you are carrying. The hold
-   should clear on the spot — `setAutoSellTier()` sweeps immediately rather than
-   waiting for the next pickup.
-4. **The Aegis case still holds:** own an Aegis hull, park it, fly something
-   else, and confirm a field projector at or below the auto-sell tier is **not**
-   sold. This is the regression to watch; everything else about the change only
-   sells more.
-5. **Patch card:** a player coming from 729 sees one card reading `BUILD 730`
-   with the full row set. A player who never logged into 729 sees the same card —
-   that is the point.
+3. **Command opens on five headers, all expanded**, with all 25 systems present
+   and Pilot Ascension sitting inside **POWER** — not pinned to the top row. If
+   it is at the top, `.pa-pill{order:-1}` is winning and the html is stale.
+4. **Fold a header, reload.** It should still be folded, and its header should
+   still show the count and any badge total from inside it.
+5. **Nanocore crate reads ◈ 60,000 / ◈ 540,000** in Crates ▸ Nanocore Crate, and
+   the "not enough ingots" copy quotes the same number.
+6. **Patch card:** a player coming from 729 sees one card reading `BUILD 734`
+   carrying every row from 730 through 734.
 
 ---
 
 ## ROLLBACK
 
-Re-push the contents of `deploy-v256` (build 729) and set `version.json` back to
-`{"build":729,"label":"V3.0 BETA"}`.
+Re-push the contents of `deploy-v256` (build 729 — the current live build) and
+set `version.json` back to `{"build":729,"label":"V3.0 BETA"}`.
 
 **Caveat: the update gate only forces players FORWARD** — it triggers on
-`version.json build > LF_BUILD`. Sessions already on 730 stay on 730 until they
+`version.json build > LF_BUILD`. Sessions already on 734 stay on 734 until they
 reload of their own accord. Rolling back the site does not recall them.
 
-Nothing server-side to roll back, and nothing in this build can have altered a
-save, so a rollback cannot cost player progress.
+Nothing server-side to roll back, and nothing in this build changes the shape of
+a save, so a rollback cannot cost player progress.

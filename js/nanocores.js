@@ -83,10 +83,10 @@
     // Drop table keeps the spec's shape across the five-tier scale: the floor
     // dominates, the ceiling is genuinely rare.
     crate: {
-      single: 30000, ten: 270000, tenList: 300000,   // tenList = pre-discount
+      single: 60000, ten: 540000, tenList: 600000,   // tenList = pre-discount
       drops: [['common', 70], ['uncommon', 17], ['rare', 8], ['epic', 3.5], ['legendary', 1.5]],
     },
-    exchange: { ratio: 10 },
+    exchange: { ratio: 10, same: 5 },
   };
 
   const RAR = CFG.rarities, BY_R = {}; RAR.forEach((r, i) => { BY_R[r.k] = r; r.i = i; });
@@ -346,23 +346,47 @@
     return { cost, results: out };
   }
 
-  // ---- duplicate exchange, 10 : 1 -----------------------------------------
+  // ---- duplicate exchange, 10 : 1 (and 5 : 1 at the top of the scale) -------
   // Eligible duplicates are counted automatically — a dupe is any core the
   // crate handed you that you already owned, so there is nothing to select.
+  //
+  // THE TOP RARITY HAD NO EXCHANGE AT ALL, and that is the reported "still no way
+  // to turn legendary dupes into another legendary core". `nextRarity('legendary')`
+  // is null, so canExchange() refused it and the UI did not even draw the row:
+  // the rarest thing in the crate table was the only one whose duplicates were
+  // worth nothing. At the top of the scale the trade is a SIDEGRADE — dupes of
+  // hulls you have buy the legendary of a hull you do not — which is not a tier
+  // jump, so it is priced at 5 rather than 10. It can only ever hand over a core
+  // for a MISSING hull: once the tier is complete there is nothing to buy and the
+  // trade is refused out loud instead of eating five dupes for another dupe.
   function nextRarity(r) { const i = BY_R[r].i; return RAR[i + 1] ? RAR[i + 1].k : null; }
+  const topTier = (r) => !nextRarity(r);
+  const exRatio = (r) => (topTier(r) ? CFG.exchange.same : CFG.exchange.ratio);
+  function exTarget(r) {
+    // the tier this trade pays out in, and the hulls still missing a core there
+    const up = nextRarity(r) || r;
+    const missing = ships().map((s) => s.key).filter((k) => !has(k, up));
+    return { up, missing };
+  }
   function canExchange(r) {
     const n = ensure(); if (!n) return false;
-    return !!nextRarity(r) && n.dupes[r] >= CFG.exchange.ratio;
+    if ((n.dupes[r] || 0) < exRatio(r)) return false;
+    if (!topTier(r)) return true;
+    return exTarget(r).missing.length > 0;   // nothing left to buy at the top
   }
   function exchange(r) {
-    const n = ensure(); const up = nextRarity(r);
-    if (!up || !canExchange(r)) return null;
-    n.dupes[r] -= CFG.exchange.ratio;
-    // Prefer a core you do NOT own yet; if the whole rarity is complete the
-    // exchange banks a duplicate at the higher tier instead of being refused.
+    const n = ensure();
+    if (!canExchange(r)) return null;
+    const { up, missing } = exTarget(r);
+    // Prefer a core you do NOT own yet; below the top tier, a complete rarity
+    // banks a duplicate at the higher tier instead of being refused.
     const list = ships().map((s) => s.key);
-    const missing = list.filter((k) => !has(k, up));
-    const pick = (missing.length ? missing : list)[(Math.random() * (missing.length ? missing.length : list.length)) | 0];
+    const pool = missing.length ? missing : list;
+    const pick = pool[(Math.random() * pool.length) | 0];
+    if (!pick) return null;
+    // PAY, THEN DELIVER, synchronously — the target is chosen before a single
+    // dupe is spent, so nothing can throw between the debit and the grant.
+    n.dupes[r] = Math.max(0, (n.dupes[r] | 0) - exRatio(r));
     const res = grant(pick, up);
     dirty(); restat();
     return res;
@@ -443,7 +467,7 @@
     ensure, idOf, coreAt, has, coreName, shipName, ships, ownsHull, prism, unlocked, fmt,
     upCost, upChance, rollCost, lockedCount, workSlot,
     upgrade, roll, toggleLock, equip, equipped,
-    openCrates, exchange, canExchange, nextRarity,
+    openCrates, exchange, canExchange, nextRarity, exRatio, exTarget, topTier,
     combatMods, fleetMods, fleetKeys, share, mult, tally, bag,
     bumpLife, peakLife, lifeOf, isGod, grade, rollPos, feedFields,
   };

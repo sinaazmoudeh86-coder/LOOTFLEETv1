@@ -125,19 +125,31 @@
       '</button>';
   }
 
+  // EVERY RARITY GETS A ROW, INCLUDING THE TOP ONE. The list used to filter on
+  // `nextRarity`, so Legendary — the rarity whose duplicates are hardest to get —
+  // was the only one with nowhere to spend them and no row to say so. At the top
+  // the trade is a sidegrade into a hull you are missing, so the row says which
+  // tier it pays out in and goes quiet once the tier is complete.
   function exchangeHtml() {
     const n = N(), s = n.ensure(); if (!s) return '';
-    const rows = n.RAR.filter((r) => n.nextRarity(r.k)).map((r) => {
-      const have = s.dupes[r.k] || 0, need = n.CFG.exchange.ratio, up = n.BY_R[n.nextRarity(r.k)];
-      const ok = have >= need;
+    const rows = n.RAR.map((r) => {
+      const top = n.topTier(r.k);
+      const have = s.dupes[r.k] || 0, need = n.exRatio(r.k);
+      const up = n.BY_R[n.nextRarity(r.k) || r.k];
+      const tgt = n.exTarget(r.k);
+      const done = top && !tgt.missing.length;
+      const ok = n.canExchange(r.k);
+      const label = done
+        ? 'Every ' + up.name.toUpperCase() + ' core recovered — nothing left to trade for'
+        : need + ' ' + r.name.toUpperCase() + ' dupes → 1 ' + up.name.toUpperCase() + (top ? ' for a hull you are missing' : '');
       return '<div class="nc-ex-row' + (ok ? ' ok' : '') + '">' +
         '<span class="nc-dot" style="background:' + r.col + '"></span>' +
-        '<span class="nc-ex-t">' + need + ' ' + r.name.toUpperCase() + ' dupes → 1 ' + up.name.toUpperCase() + '</span>' +
-        '<span class="nc-ex-n" style="color:' + (ok ? r.col : '#6f7f99') + '">' + have + ' / ' + need + '</span>' +
+        '<span class="nc-ex-t">' + label + '</span>' +
+        '<span class="nc-ex-n" style="color:' + (ok ? r.col : '#6f7f99') + '">' + (done ? '—' : have + ' / ' + need) + '</span>' +
         '<button class="nc-ex-b" data-nex="' + r.k + '"' + (ok ? '' : ' disabled') + '>TRADE</button></div>';
     }).join('');
     return '<div class="nc-panel"><div class="nc-panel-h">⇄ DUPLICATE EXCHANGE</div>' +
-      '<p class="nc-dim">A core you already own arrives as a duplicate. Trade ' + n.CFG.exchange.ratio + ' of a rarity for one random core of the rarity above — eligible dupes are counted for you.</p>' +
+      '<p class="nc-dim">A core you already own arrives as a duplicate. Trade ' + n.CFG.exchange.ratio + ' of a rarity for one random core of the rarity above — or ' + n.CFG.exchange.same + ' <b>' + n.RAR[n.RAR.length - 1].name.toUpperCase() + '</b> dupes for a Legendary core of a hull you have not recovered yet. Eligible dupes are counted for you.</p>' +
       rows + '</div>';
   }
 
@@ -165,7 +177,7 @@
     if (!r.slots) {
       return head + '<div class="nc-panel"><div class="nc-panel-h">EXTRA BUFFS</div>' +
         '<p class="nc-dim">' + r.name.toUpperCase() + ' cores have no extra buff slots and cannot be upgraded. Trade ' +
-        n.CFG.exchange.ratio + ' duplicates for the rarity above to start rolling buffs.</p></div>';
+        n.exRatio(rk) + ' duplicates ' + (n.nextRarity(rk) ? 'for the rarity above' : 'for a core of a hull you are missing') + ' to start rolling buffs.</p></div>';
     }
     return head + upgradeHtml(ship, rk, c, r) + buffsHtml(ship, rk, c, r);
   }

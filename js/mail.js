@@ -94,9 +94,22 @@
   // ---- galaxy war reports ------------------------------------------------------
   // opts.id carries the TILE ID so the report can offer a jump to that hex on
   // the galaxy map — a report you can act on beats one you have to go hunting for.
+  // ONE REPORT PER SYSTEM PER CONQUEROR. The loss path can fire again for a tile
+  // it has already reported — a save merge restores the local mirror, a second
+  // device pulls the same row, the shared map re-converges — and a war report the
+  // player has already read is indistinguishable from a fresh attack. The mailbox
+  // IS the record of what was reported, so it is also the guard: no new state, no
+  // migration, nothing to lose. One place, every caller.
+  function alreadyReported(tileId, who) {
+    if (!tileId) return false;
+    try {
+      return box().list.some((m) => m.meta && m.meta.kind === 'loss' && m.meta.tileId === tileId && (m.meta.from || '') === who);
+    } catch (e) { return false; }
+  }
   function tileLost(tileName, info, opts) {
     info = info || {}; opts = opts || {};
     const who = info.ownerName || 'An unknown raider';
+    if (alreadyReported(opts.id, who)) return;
     push({
       ic: '⚔',
       title: (opts.offline ? 'While you were away — ' : '') + tileName + ' has fallen',

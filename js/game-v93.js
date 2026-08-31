@@ -2337,7 +2337,7 @@
   // The pickup path still asks the loose question (an item that could fill an
   // empty slot is worth carrying home); autoSellSweep() asks the strict one and
   // hands out the empty slots itself, one item each. See it for the quota.
-  function isPickupUpgrade(item, strict) {
+  function isPickupUpgrade(item, strict, skipHangar) {
     const targets = slotsForBase(item.slot);
     if (!targets.length) return false;
     // CAN THE HULL BEING FLOWN EVEN MOUNT IT?
@@ -2381,7 +2381,14 @@
     // exactly the terms the fleet loop uses: better than what is in its slots, or
     // (loose mode only) filling an empty one. Anything no owned hull can use stays
     // eligible, which is what makes auto-sell work again.
-    if (!flagOk) {
+    // `skipHangar` — ONLY autoSellSweep() passes it, because the sweep hands the
+    // parked hulls' slots out itself, one item each. Without a quota this branch
+    // was an UNBOUNDED keep: an owned Aegis with a Rare projector fitted kept
+    // every better projector that ever dropped, for ever, because a parked hull is
+    // never auto-equipped so the fitted item never improves. That is the reported
+    // "Aegis items still don't auto sell" — the 730 pass bounded the EMPTY-slot
+    // case and left this one open. The pickup path still asks the loose question.
+    if (!flagOk && !skipHangar) {
       const owned = state.ownedShips || {};
       for (const k in owned) {
         if (!owned[k] || !C.SHIP_BY_KEY[k] || !canMountWeapon(item, k)) continue;
@@ -2426,7 +2433,16 @@
     const add = (hull, fit, service) => {
       if (!hull || seen[hull] || !C.SHIP_BY_KEY[hull]) return;
       seen[hull] = 1;
-      C.shipSlots(hull).forEach((sk) => { if (!fit[sk]) out.push({ hull, base: C.slotBase(sk), taken: 0, service: !!service }); });
+      // A PARKED HULL'S FITTED SLOTS ARE HOLES TOO — carrying what sits in them.
+      // Only ONE better item can claim each, which is what gives the hull-locked
+      // upgrade case (an Aegis in the hangar with a weak projector in it) the same
+      // quota the empty-slot case already had. In service, a fitted slot is not a
+      // hole at all: autoEquip keeps those current, and isPickupUpgrade() vetoes
+      // anything that beats them before the auction is reached.
+      C.shipSlots(hull).forEach((sk) => {
+        if (fit[sk] && service) return;
+        out.push({ hull, base: C.slotBase(sk), taken: 0, service: !!service, cur: (!service && fit[sk]) || null });
+      });
     };
     add(state.ship, state.equipped || {}, true);
     fleetShips().forEach((sh) => add(sh.key, fitAll[sh.key] || {}, true));
@@ -3307,7 +3323,7 @@
     const doomed = new Set();
     for (const it of order) {
       if (unsellable(it) || it.rarity > tier) continue;
-      if (isPickupUpgrade(it, true)) continue;              // beats something already fitted
+      if (isPickupUpgrade(it, true, true)) continue;        // beats something FITTED AND FLYING — parked hulls are quota'd in the auction below
       // A PARKED HULL DOES NOT HOARD GEAR THE ACTIVE FLEET COULD USE. It may only
       // reserve a copy of something nothing in service can mount at all — the
       // hull-locked case. Ordinary gear therefore competes for the flagship's and
@@ -3318,6 +3334,9 @@
         const s = open[i];
         if (s.taken || s.base !== it.slot || !canMountWeapon(it, s.hull)) continue;
         if (!s.service && svc) continue;
+        // a parked hull's FITTED slot is only a home for something better than
+        // what is already in it — otherwise this piece has no home at all
+        if (s.cur && I.itemPower(it) <= I.itemPower(s.cur)) continue;
         s.taken = 1; claimed = true; break;
       }
       if (!claimed) doomed.add(it);
@@ -4827,13 +4846,18 @@
     // changed the default for good.
     //
     // Manual flight is a choice about the fight you are IN, not an account
-    // setting. Clearing it here scopes it to the visit: tap auto off and it stays
-    // off for this deployment; deploy again and you are back on autopilot.
-    state.autoManual = false;
-    // IDEMPOTENT, NOT EARLY-RETURNING. This used to bail the instant state.auto
-    // was already true, which skipped the stick reset below — so a deploy that
-    // began mid-drag carried a live joystick vector into the new zone.
-    state.auto = true;
+    // setting — but it is not a choice about one DEPLOYMENT either. Clearing the
+    // latch here re-armed autopilot on every warp, so a pilot who switched auto
+    // off and moved to another zone got it switched back on under them, every
+    // time: "auto still turns back on after turning it off and switching zone".
+    //
+    // The latch is now scoped to the SESSION. It is cleared once at boot (see
+    // load(), beside `state.auto = true`), which is what undoes the historic
+    // for-ever latch this line was added to fix, and respected for the rest of
+    // the session — a deploy no longer overrides the pilot's own hand.
+    // IDEMPOTENT, NOT EARLY-RETURNING: the stick is reset either way, so a deploy
+    // that began mid-drag cannot carry a live joystick vector into the new zone.
+    if (!state.autoManual) state.auto = true;
     rt.joy.x = rt.joy.y = 0; rt.joy.active = false;
     try { save(); } catch (e) {}   // persist NOW — a reload must not resurrect stale manual
     try { if (window.UI && window.UI.refreshAll) window.UI.refreshAll(); } catch (e) {}
@@ -6215,6 +6239,33 @@
   // pilot had deliberately given up. abandonLockLeft() is the 24-hour record of
   // that decision, so it answers both halves: never re-adopt, never file a report.
   function abandonedByMe(id) { try { return abandonLockLeft(id) > 0; } catch (e) { return false; } }
+  // A LOSS IS ONLY NEWS IF IT CAN BE DATED (Aug 2026).
+  //
+  // `state.ownedSystems` is a MIRROR, and a stale entry in it survives for
+  // reasons that have nothing to do with a battle: a capture from the months
+  // `claim_tile` refused every write, a loss already processed on another device,
+  // a merge that brought an older copy of the map back. The 60s convergence pull
+  // could not tell any of those from a conquest that happened overnight, so it
+  // filed "While you were away — X has fallen" for systems the pilot last held
+  // weeks ago, in the low rings everybody passes through early. That is the whole
+  // of "I'm getting mail that I've lost a system in ring 1/2".
+  //
+  // Every claim stamps `cooldown_until` (15 min normal, 24 h for a citadel), so
+  // the row DATES the last time that tile changed hands — no new save field, no
+  // migration. Inside the window the report is real news and is filed; outside it
+  // the local mirror is simply wrong, and it is corrected in silence: the console
+  // gets the fact, the player does not get a war report about a month-old system.
+  // A tile the shared map confirmed as MINE earlier in this session is always
+  // news whatever the clock says, which is the case the window exists to keep.
+  const LOSS_NEWS_MS = 36 * 3600 * 1000;
+  function lossIsNews(id, r) {
+    if (rt._terrMine && rt._terrMine[id]) return true;
+    const raw = r && r.cooldownUntil;
+    const cu = typeof raw === 'number' ? raw : (raw ? Date.parse(raw) : 0);
+    if (!cu) return false;                     // undatable row — correct the mirror quietly
+    return (Date.now() - cu) <= LOSS_NEWS_MS;
+  }
+  function markRealMine(id) { if (!rt._terrMine) rt._terrMine = {}; rt._terrMine[id] = 1; }
   function syncRealTiles(map) {
     rt.realTiles = map || {};
     accrueResources();   // settle at PRE-sync ownership — you earn for what you actually held until now
@@ -6230,11 +6281,17 @@
           return;
         }
         state.ownedSystems[id] = true;
+        markRealMine(id);
       } else if (state.ownedSystems[id]) {
         delete state.ownedSystems[id];
-        // lost while away — file a war report with the conqueror's fleet intel
+        // lost while away — file a war report with the conqueror's fleet intel,
+        // but only for a loss that can be dated as recent (see lossIsNews)
         if (!abandonedByMe(id)) {
-          try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]), id: id }); } catch (e) {}   // sysAt: void tiles mail with real names too
+          if (lossIsNews(id, r)) {
+            try { if (window.MAIL) window.MAIL.tileLost((sysAt(id) || {}).name || id, r, { offline: true, razed: !!(state.citadels && state.citadels[id]), id: id }); } catch (e) {}   // sysAt: void tiles mail with real names too
+          } else {
+            try { console.info('[galaxy] stale local claim dropped, no war report (undatable loss):', id, r && r.ownerName); } catch (e) {}
+          }
         }
         if (state.citadels && state.citadels[id]) delete state.citadels[id];
       }
@@ -6257,6 +6314,7 @@
           return;
         }
         state.ownedSystems[ev.tileId] = true;
+        markRealMine(ev.tileId);
       }
       else if (state.ownedSystems[ev.tileId]) {
         delete state.ownedSystems[ev.tileId];
@@ -7013,7 +7071,23 @@
     save(); if (window.UI) window.UI.galaxyChanged();
     return { ok: true, hadCit, lockH: Math.round(ABANDON_LOCK_MS / 3600000) };
   }
-  function citadelCount() { return Object.keys(state.citadels || {}).length; }
+  // GALAXY CITADELS ONLY. Void spires and the casino House Citadels are `void`
+  // holdings stored in the same map (`VZ1`…, `CC1`…, ids that do not parse as hex
+  // coordinates), and inheritCitadel() writes a citadel record for every one of
+  // them — so the fortress count on the build sheet and the Ranks board counted
+  // the Void as galaxy ground. It is a different feature with its own screen:
+  // "Void zone shouldn't count towards your citadels". Derived, so nothing is
+  // written and no save changes shape.
+  function citadelCount() {
+    const c = state.citadels || {};
+    let n = 0;
+    for (const id in c) {
+      if (!c[id]) continue;
+      if (c[id].void || !GX.parseId(id)) continue;   // off-map: Void spire / House Citadel
+      n++;
+    }
+    return n;
+  }
   function hasMyCitadel(id) { return !!(state.citadels && state.citadels[id]); }
   // Citadel RANK (1..5). Each rank multiplies output (10× per rank), raises the
   // published defending fleet score (+25%/rank), and hardens it vs the rival sim.
@@ -7469,19 +7543,25 @@
     const hit = _shdMemo[k];
     if (hit) return hit;
     const c = GX.parseId(k), fac = factionOf(k);
-    let open = 0, rim = false;
+    let open = 0, edge = 0, rim = false;
     const doors = [];
     if (c && fac) {
       const nb = GX.neighbors(c.q, c.r);
       for (let i = 0; i < nb.length; i++) {
         const n = nb[i];
-        if (GX.ringOf(n.q, n.r) > GX.RINGS) { open++; rim = true; continue; }
+        // OFF THE MAP. Counted as open (the rim is the frontier and stays
+        // contestable) but counted SEPARATELY, because it is the one kind of open
+        // border a pilot cannot close by taking ground. The sheet needs to be able
+        // to say that instead of telling them to fill a border that does not exist:
+        // "a corner tile that's technically surrounded still says 3 of 6 borders
+        // face open space". One statement of the geometry, here.
+        if (GX.ringOf(n.q, n.r) > GX.RINGS) { open++; edge++; rim = true; continue; }
         const nid = GX.tileId(n.q, n.r);
         if (factionOf(nid) !== fac) open++;
         else doors.push(nid);          // same faction — a candidate way in, tested below
       }
-    } else open = 6;                   // neutral ground is open on every side
-    const out = { faction: fac, mine: fac === 'me', open, sides: 6, rim,
+    } else { open = 6; }               // neutral ground is open on every side
+    const out = { faction: fac, mine: fac === 'me', open, edge, sides: 6, rim,
                   shielded: !!(fac && open === 0), ring: doors };
     _shdMemo[k] = out;
     return out;
@@ -8223,6 +8303,11 @@
     // every session now BOOTS in autopilot and the toggle is a per-session
     // choice, the right shape for an idle game.
     state.auto = true;
+    // …AND THE MANUAL LATCH IS A SESSION FLAG, cleared on the same beat. This is
+    // the one place it is dropped: armAuto() used to clear it on every deploy,
+    // which took the choice away from a pilot who had just made it. Clearing it
+    // here still means no historic latch can outlive a reload.
+    state.autoManual = false;
     // GRANDFATHER THE FORTRESSES THIS ACCOUNT ALREADY HOLDS. The natural-citadel
     // budget (5 per 100 levels, galaxy.js) retires 48 of the 73 the old 3% roll
     // produced. A tile nobody holds simply becomes a boss tile, which is the point

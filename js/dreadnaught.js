@@ -1109,24 +1109,38 @@
       ctx.fillText(glyph, 0, 0.5);
       ctx.restore();
     }
-    // WHAT IT IS AND WHAT IT COSTS, ON THE MAP ITSELF. Every hex was a bare glyph,
-    // so the only way to learn a node was to tap it one at a time — and a node you
-    // could afford looked exactly like one you could not. Available nodes now
-    // carry their cost, tinted by affordability, and their name when there is room.
-    // Bounded by design: only AVAILABLE nodes, only on screen, only when legible.
+    // WHAT IT IS, ON THE MAP ITSELF — BUT ONLY WHERE IT SAYS SOMETHING.
+    //
+    // Every available node used to carry a ◇ cost pill. Almost every node in the
+    // tree costs exactly 1, so on a real save that is a field of forty identical
+    // amber ◇ 1 chips ringing the unlocked area — the same number, repeated, on
+    // the only hexes it could ever appear on. It read as decoration nobody could
+    // explain: "what are these for, they only show up when you're far away from
+    // the middle". A label that is the same everywhere carries no information.
+    //
+    // The pill is kept exactly where it is NEWS: a node that costs more than the
+    // base 1 (the ◇ 3 legendaries), and the node currently selected. Cost is
+    // otherwise on the detail card and on every row of the list view, both of
+    // which state it once, next to the button that spends it. The NAME is the
+    // half of the old label that told the player something they could not read
+    // off the hex, so it still comes in for every available node once there is
+    // room for it.
     if (onAvail.length && onAvail.length <= 60 && z >= 0.62 && !moving) {
       const showName = z >= 1.02 && onAvail.length <= 30;
       ctx.font = '700 ' + Math.max(9, Math.round(10.5 * Math.min(1.35, z))) + 'px Rajdhani, sans-serif';
       for (let i = 0; i < onAvail.length; i++) {
         const a = onAvail[i], py = a.y + rad + 10;
-        const label = '◇ ' + a.d.cost;
-        const w = ctx.measureText(label).width + 12;
-        ctx.fillStyle = a.afford ? 'rgba(255,207,77,0.18)' : 'rgba(16,22,32,0.88)';
-        roundRect(ctx, a.x - w / 2, py - 8, w, 16, 8); ctx.fill();
-        ctx.lineWidth = 1; ctx.strokeStyle = a.afford ? 'rgba(255,207,77,0.8)' : 'rgba(120,135,160,0.38)'; ctx.stroke();
-        ctx.fillStyle = a.afford ? '#ffe08a' : 'rgba(168,183,203,0.8)';
-        ctx.fillText(label, a.x, py + 0.5);
-        if (showName) { ctx.fillStyle = 'rgba(202,216,235,0.92)'; ctx.fillText(a.d.label, a.x, py + 18); }
+        const pill = a.d.cost > 1 || _selected === key(a.d.q, a.d.r);
+        if (pill) {
+          const label = '◇ ' + a.d.cost;
+          const w = ctx.measureText(label).width + 12;
+          ctx.fillStyle = a.afford ? 'rgba(255,207,77,0.18)' : 'rgba(16,22,32,0.88)';
+          roundRect(ctx, a.x - w / 2, py - 8, w, 16, 8); ctx.fill();
+          ctx.lineWidth = 1; ctx.strokeStyle = a.afford ? 'rgba(255,207,77,0.8)' : 'rgba(120,135,160,0.38)'; ctx.stroke();
+          ctx.fillStyle = a.afford ? '#ffe08a' : 'rgba(168,183,203,0.8)';
+          ctx.fillText(label, a.x, py + 0.5);
+        }
+        if (showName) { ctx.fillStyle = 'rgba(202,216,235,0.92)'; ctx.fillText(a.d.label, a.x, py + (pill ? 18 : 2)); }
       }
     }
     // OFF-SCREEN ORIENTATION. Two cues, each only when it is needed: which way

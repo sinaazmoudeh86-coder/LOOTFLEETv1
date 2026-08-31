@@ -551,8 +551,20 @@
     const L = lvlMul();
     if (kind === 'gold') return [t.cost * t.gold[0] * L, t.cost * t.gold[1] * L];
     if (kind === 'res')  { const b = t.cost * 0.000045 * L; return [b * 0.8, b * 1.4]; }
-    if (kind === 'lc')   return [arg * 0.1 * 0.8 * Math.min(4, L), arg * 0.1 * 1.3 * Math.min(4, L)];
-    if (kind === 'cores')return [Math.max(1, arg * 0.1 * 0.7 * Math.min(5, L)), Math.max(1, arg * 0.1 * 1.4 * Math.min(5, L))];
+    // 0.05, NOT 0.1 — the roll was halved in build 614 and this quote was not,
+    // so the sheet advertised twice the LootCoins the manifest pays.
+    if (kind === 'lc')   return [arg * 0.05 * 0.8 * Math.min(4, L), arg * 0.05 * 1.3 * Math.min(4, L)];
+    // ◇ AND THE SCARCITY RATE APPLIES TO THE QUOTE TOO. rollManifest() puts every
+    // core through coreScale(); this line did not, so the card promised ~3× the
+    // cores a run actually pays — the reported "dread core drop numbers are still
+    // wrong in cargo defence". coreYield() keeps the expected value exact, so the
+    // honest low end of the range is zero: a manifest line can come back empty.
+    if (kind === 'cores') {
+      let rate = 1; try { rate = window.CONFIG.DREAD_CORE_RATE > 0 ? window.CONFIG.DREAD_CORE_RATE : 1; } catch (e) {}
+      const lo = Math.max(1, arg * 0.1 * 0.7 * Math.min(5, L)) * rate;
+      const hi = Math.max(1, arg * 0.1 * 1.4 * Math.min(5, L)) * rate;
+      return [Math.floor(lo), Math.max(1, Math.round(hi))];
+    }
     return null;
   }
   const amtTxt = (lo, hi) => fmt(lo) + ' – ' + fmt(hi);
@@ -740,8 +752,11 @@
   .cd-s-cost b{ color:#f2b24b; font-size:15px; }
   .cd-s-cost.bad{ box-shadow:inset 3px 0 0 #ff6a78; }
   .cd-s-cost.bad b{ color:#ff6a78; }
-  .cd-s-pay{ box-shadow:inset 3px 0 0 #7ce0a0; padding-left:12px; }
-  .cd-s-pay b{ color:#7ce0a0; font-size:15px; }
+  /* GOLD IS PRINTED GOLD. This row states a gold payout and was painted in the
+     green the event uses for "good news", so the one currency with its own colour
+     everywhere else in the game read as something else here. */
+  .cd-s-pay{ box-shadow:inset 3px 0 0 #f2b24b; padding-left:12px; }
+  .cd-s-pay b{ color:#f2b24b; font-size:15px; }
   /* Narrow phones: two tidy rows — the money on top, the threat underneath —
      still on a fixed grid, so the cards go on lining up with each other. */
   @media (max-width:600px){

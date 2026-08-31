@@ -806,7 +806,11 @@
         // citadel count from derive(), so the Territory board showed fortresses for
         // bots and none for humans, on the one board where a citadel is the whole
         // point. Your own row looked right because mineInto reads the live save.
-        citadels: Object.keys(s.citadels || {}).length,
+        // …and it is READ THROUGH THE GAME, never recounted here. `state.citadels`
+        // also holds Void spires and the casino House Citadels, which are not
+        // galaxy fortresses — G.citadelCount() is the single statement of what
+        // counts, so this board and the build sheet cannot disagree about a total.
+        citadels: (G().citadelCount ? G().citadelCount() : Object.keys(s.citadels || {}).length),
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,

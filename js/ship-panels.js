@@ -243,10 +243,17 @@
     // HOME CITADEL — wave-defense infrastructure; produces hourly into its silo.
     const hcit = safe(() => (window.HOMECIT && HOMECIT.totalRates ? HOMECIT.totalRates() : null), null);
     if (hcit && hcit.rates && CUR.some((c) => (hcit.rates[c.k] || 0) > 0)) {
+      // A PAUSED SOURCE PAYS NOTHING, AND THE HEADLINE HAS TO AGREE WITH THE ROW.
+      // The row already said "⚠ damaged — production paused" while its figures
+      // were still being summed into the EMPIRE INCOME totals above it, under a
+      // header that promises "every hour, whether you play or not". A damaged
+      // base mines nothing until repairs finish (see accrued() in
+      // home-citadel.js), so the row stays — the player needs to know the
+      // citadel is there and why it is quiet — and its numbers go to zero.
       src.push({
         n: 'Home Citadel',
-        sub: 'Wave ' + hcit.wave + ' defended · ' + (hcit.damaged ? '⚠ damaged — production paused' : 'stores at the citadel, collect there'),
-        ic: '🏰', c: '#ffd24d', r: hcit.rates,
+        sub: 'Wave ' + hcit.wave + ' defended · ' + (hcit.damaged ? '⚠ damaged — production paused until repairs finish' : 'stores at the citadel, collect there'),
+        ic: '🏰', c: '#ffd24d', r: hcit.damaged ? {} : hcit.rates,
       });
     }
     return src;

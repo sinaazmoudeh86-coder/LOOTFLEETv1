@@ -10,7 +10,8 @@
      · Storage-capped (8h base → 24h) — collect on return, like Moon Colony
      · Wave clears pay 2.2h of production from a REAL-TIME bank (see PAY_*):
        8h earned per real hour, 24h banked. Depth is uncapped; the FAUCET is not.
-     · Wave strength scales off YOUR fleet DPS: always a fight, never a chore
+     · Wave strength is WAVE-denominated, clamped to the old fleet-DPS figure
+       (build 735, see refDps) — get ahead of the curve and raiders die faster
      · Defense: citadel on the left, raiders stream in; turrets + your fleet
        auto-fire; TAP a raider to call a fleet strike (the active skill).
    Wiring: #screen-homecit / #homecit-body · showScreen('homecit') ·
@@ -55,6 +56,33 @@
   // here touches the wave counter, the towers, the structures or any balance:
   // depth still raises production permanently, which is what the mode promises.
   const PAY_COST_H = 2.2, PAY_RATE_H = 8, PAY_BURST_H = 24;
+  // ---- WAVE STRENGTH — A CEILING ON HOW MUCH YOUR OWN POWER ARMS THE RAIDERS --
+  //
+  // A raider's HP is `your fleet DPS × (55 + 4.5w) / N`, so fleet power CANCELS
+  // OUT of the fight entirely: a wave costs the same 55 + 4.5w seconds of fire
+  // whether you fly a starter hull or a maxed Oblivion Spear, and every upgrade
+  // you buy is handed straight to the enemy. That is the whole of "the health of
+  // enemies is based on your power when it should be based on your wave so you
+  // actually progress in home citadel as you progress as a player".
+  //
+  // REF_DPS(w) is the fleet a wave is BUILT FOR, denominated in the wave alone.
+  // Once your fleet is past it, the wave stops scaling with you and starts
+  // dying faster — which is the progression the mode always claimed to have.
+  //
+  // IT IS A min(), SO NOTHING CAN EVER GET HARDER. Every pilot deep in this mode
+  // got there by beating DPS-denominated waves; an absolute curve that came out
+  // HIGHER than the old figure would strand somebody on a wave they had already
+  // been clearing, which is the one thing a balance change must not do. Below
+  // the reference the fight is exactly what it was today, to the decimal.
+  //
+  // THE ANCHOR IS DELIBERATELY SET HIGH FOR THIS BUILD and wants a calibration
+  // pass against live saves: depth permanently raises PASSIVE production
+  // (rates() is w^1.45), so a curve set too low lets a strong fleet blitz depth
+  // and mint production, which the PAY_* bucket does NOT bound. Starting high
+  // means the clamp binds only for fleets genuinely far ahead of their wave;
+  // lower HP_REF_BASE to widen it. Two numbers, one place, no save impact.
+  const HP_REF_BASE = 2e6, HP_REF_POW = 3.0;
+  function refDps(w) { return HP_REF_BASE * Math.pow(Math.max(1, w), HP_REF_POW); }
   function payAvail(s) {
     const p = s.pay || (s.pay = { h: PAY_BURST_H, t: Date.now() });
     const now = Date.now();
@@ -1193,7 +1221,9 @@
     run.next = next;
     run.N = Math.min(40, 10 + Math.ceil(next * 1.6));
     run.spawned = 0; run.refs = []; run.spawnT = 1.8; run.spawnIv = Math.max(0.55, 42 / run.N);
-    run.unitHp = ps.dps * (1 + turretPct) * (55 + next * 4.5) / run.N;
+    // WAVE-DENOMINATED, CLAMPED TO THE OLD FLEET-DENOMINATED FIGURE (see refDps).
+    const hpDps = Math.min(ps.dps, refDps(next));
+    run.unitHp = hpDps * (1 + turretPct) * (55 + next * 4.5) / run.N;
     run.dps = ps.dps; run.turretDps = ps.dps * turretPct * (window.PASCEND ? window.PASCEND.mult('tower') : 1);   // ASCENSION: Bastion Command
     run.fort.max = ps.maxHp * 12 * (1 + (s.b.turret | 0) * 0.05);
     run.fort.hp = run.fort.max;                       // field crews repair between waves
@@ -1306,7 +1336,8 @@
       '<div class="hcm-title">YOUR INDUSTRIAL EMPIRE</div>' +
       '<div class="hcm-rules">' +
       rule('⛏', 'It mines while you play', 'Gold, ore, fuel, plasma — even ◈ prism at high waves. Storage caps at ' + capHours(hc() || { b: { silo: 0 } }) + 'h; return and COLLECT.') +
-      rule('⚔', 'Waves make it richer, forever', 'Each defended wave permanently raises production and unlocks better tables. Wave strength scales with YOUR fleet.') +
+      rule('⚔', 'Waves make it richer, forever', 'Each defended wave permanently raises production and unlocks better tables.') +
+      rule('↗', 'Getting stronger actually pays here', 'A wave is built for the fleet that wave expects. Once yours is past it the raiders stop keeping up and start dying faster — so pushing deeper is something your fleet does, not just the clock.') +
       rule('⚔', 'Real battles, in your zone', 'Waves deploy you into the live arena. Raiders besiege the FORT — your fleet, guns and Defense Grid turrets must cut them down first.') +
       rule('🔨', 'Build INSIDE the fight', 'Every deploy opens in a BUILD PHASE: raise laser, cryo, missile and rail towers on the 8 pads around your citadel, upgrade structures, then launch the wave. Towers are pricey — and permanent.') +
       rule('🔧', 'Failing costs time, not progress', 'A breach knocks mining offline until repairs — your wave and everything earned stay yours.') +
@@ -1355,13 +1386,13 @@
       (dmg
         ? '<div class="hc-dmg"><b>⚠ STRUCTURES DAMAGED — MINING OFFLINE</b><span>Auto-repair in <b data-hc-rep>' + repLeft(s) + '</b></span>' +
           '<button class="hc-repair" id="hc-repair">🔧 Repair now · $' + fmt(repairCost(s)) + '</button></div>'
-        : '<div class="hc-collect' + (fullPct >= 100 ? ' full' : '') + '" id="hc-collect" title="Your empire produces while you play anything else — up to ' + capH + 'h of storage (Deep Silo extends it). Tap to collect.">' +
+        : '<div class="hc-collect' + (fullPct >= 100 ? ' full' : '') + '" id="hc-collect" title="Tap to collect — the bar below is your storage.">' +
           '<div class="hc-c-l"><div class="hc-c-t">' + (fullPct >= 100 ? '⚠ STORAGE FULL — COLLECT' : 'STORED PRODUCTION') + '</div>' +
           '<div class="hc-c-v">' + (s.wave ? '$' + fmt(a.out.gold) + (a.out.iron >= 1 ? ' · ◆' + fmt(a.out.iron) + ' · ⬢' + fmt(a.out.fuel) : '') + (a.out.plasma >= 1 ? ' · ✦' + fmt(a.out.plasma) : '') + (a.out.prism >= 1 ? ' · ◈' + fmt(a.out.prism) : '') : 'Mines offline — defend Wave 1') + '</div>' +
           '<div class="hc-c-bar"><i style="width:' + fullPct + '%"></i><span>' + a.h.toFixed(1) + 'h / ' + capH + 'h</span></div></div>' +
           '<button class="hc-c-btn"' + (a.tot >= 1 ? '' : ' disabled') + '>COLLECT</button></div>') +
-      '<button class="hc-fight" id="hc-fight" title="Deploys your fleet to the citadel grounds in a safe BUILD PHASE — place towers, upgrade structures, then launch the wave. Raider strength scales to YOUR fleet."' + (dmg ? ' disabled' : '') + '>⚔ DEPLOY — WAVE ' + ((s.wave | 0) + 1) +
-        '<span>' + band((s.wave | 0) + 1).name + ' raiders · build phase first — fortify, then launch</span></button>' +
+      '<button class="hc-fight" id="hc-fight" title="Deploys your fleet to the citadel grounds in a safe BUILD PHASE — place towers, upgrade structures, then launch the wave."' + (dmg ? ' disabled' : '') + '>⚔ DEPLOY — WAVE ' + ((s.wave | 0) + 1) +
+        '<span>' + band((s.wave | 0) + 1).name + ' raiders · build phase first — fortify, then launch<br><b>If the fort breaches: mining pauses until repairs. Your wave, gear and hull are safe.</b></span></button>' +
       '<button class="hc-fight auto" id="hc-auto" title="Chains waves back-to-back until you fall. The fort repairs between waves — but dying carries NORMAL death penalties (gear drop, hull reset)."' + (dmg ? ' disabled' : '') + '>⚔∞ AUTO-DEFENSE<span>chain waves till you fall · <b>dying drops gear and resets your hull</b></span></button>' +
       '<div class="hc-cit-card" title="Citadel Level ' + (s.cit | 0) + ' — each ASCEND permanently adds +10 max levels to EVERY structure and tower. Bought inside the defense (🔨 BUILD)."><div class="hc-cit-l"><b>🏰 CITADEL LEVEL ' + (s.cit | 0) + '</b><span>Each level unlocks <b>+10 levels on every structure & tower</b> — ascend from inside the defense.</span><span class="hc-cit-cost">' + costTxt(citCost(s)) + '</span></div></div>' +
       '<div class="hc-twsum">' + twSumTxt(s) + '</div>' +

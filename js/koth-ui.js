@@ -46,7 +46,7 @@
   function locked() {
     return '<div class="koth-empty"><div class="koth-empty-ic">👑</div><h3>King of the Hill</h3>'
       + '<p>Unlocks at <b>Level ' + K().GATE_LV + '</b>. A 24-hour kill race in a private arena of Level 200 hostiles — '
-      + 'no XP, no loot, no resources. Most kills at the reset takes <b>10,000 LootCoins</b>.</p></div>';
+      + 'no XP, no loot, no resources. Most kills at the reset takes <b>' + num(K().PRIZE_LC) + ' LootCoins</b>.</p></div>';
   }
   function head() {
     const sub = $('koth-sub'); if (!sub) return;
@@ -71,7 +71,7 @@
         + '<span><i>YOUR RANK</i><b>' + (r ? '#' + r : '—') + '</b><u>' + num(k) + ' kills</u></span>'
         + '<span><i>YOUR TIER</i><b>LV ' + num(t.level) + '</b><u>' + fmtMult(t.hp, t.capped) + ' HP</u></span>'
       + '</div>'
-      + '<div class="koth-prize">🪙 PRIZE: <b>10,000 LOOT COINS</b></div>'
+      + '<div class="koth-prize">🪙 PRIZE: <b>' + num(K().PRIZE_LC) + ' LOOT COINS</b></div>'
       + (signed
         ? '<button class="koth-go' + (live ? ' in' : '') + '" id="koth-enter">' + (live ? 'RETURN TO THE ARENA' : 'ENTER KING OF THE HILL') + '</button>'
         : '<div class="koth-warn signin">⚠ <b>You are not signed in — these kills are not being scored.</b><br>The ladder is server-side. Sign in before you race, or the run does not count.</div>')

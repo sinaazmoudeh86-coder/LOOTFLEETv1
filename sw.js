@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v734';
+const CACHE = 'lootfleet-v736';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -17,7 +17,11 @@ const CORE = [
   'js/config-v2.js', 'js/items.js', 'js/entities.js', 'js/render.js',
   'js/galaxy.js', 'js/leaderboard.js', 'js/config.live.js',
   'js/cloud.js', 'js/account.js', 'js/territory.js', 'js/payments-v91.js', 'js/game-v93.js', 'js/ui-v94.js', 'js/fx-cinematic.js', 'js/fx-primordial.js', 'js/coach-v89.js', 'js/auth.js', 'js/prism-v5.js', 'js/prism-fleet.js', 'js/dreadnaught.js', 'js/galaxy-box.js',
-  'js/showcase.js', 'js/ships-inline.js',
+  // js/ships-inline.js was precached here but loaded by NO page — it is the
+  // data-URI ship art for the standalone feature sims, and features.html loads
+  // the bundled copy (js/lf-ships.b6.js) instead. Every install was paying 683KB
+  // for a file nothing ever requested. Removed in 736.
+  'js/showcase.js',
   'js/missions.js', 'js/moon-colony.js', 'js/moon-scene.js', 'js/fx-aaa.js',
   'js/shipworks.js', 'js/ascension.js', 'js/casino.js', 'js/casino2.js', 'js/social.js', 'js/alliance.js', 'js/alliance-boss.js', 'js/mail.js', 'js/redeem.js',
   'js/dreadnaught.js', 'js/server-dreadnaught.js',

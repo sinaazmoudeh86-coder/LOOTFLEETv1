@@ -2137,7 +2137,7 @@
       const state = r.owned ? '<em class="gxr-s mine">YOURS</em>'
         : r.ally ? '<em class="gxr-s ally">ALLIED</em>'
         : (r.shield && r.shield.shielded) ? '<em class="gxr-s seal">🛡 SEALED</em>'
-        : r.cd > 0 ? '<em class="gxr-s cd" title="Contest shield — cannot be attacked yet">▷ ' + fmtLeft(r.cd) + '</em>'
+        : r.cd > 0 ? '<em class="gxr-s cd" title="Contest shield — cannot be attacked yet">▷ SHIELDED ' + fmtLeft(r.cd) + '</em>'
         : r.rival ? '<em class="gxr-s rival">RIVAL</em>'
         : r.locked ? '<em class="gxr-s lock">Lv ' + r.level + '</em>'
         : '<em class="gxr-s open">OPEN</em>';
@@ -4216,7 +4216,18 @@
     let html = hangarTabsHTML(storeCat);
     // ALWAYS-VISIBLE LootCoins storefront entry (App Review 2.1(b): IAPs must be
     // locatable in-app — Hangar ▸ top banner ▸ pack sheet).
-    html += `<button class="lc-store-cta" data-getlc>${window._lcIcon()}<span><b>Get LootCoins</b><i>Packs: 25,000 · 50,000 · 75,000 · 100,000</i></span><em>SHOP ›</em></button>`;
+    // PACK SIZES ARE READ FROM PAYMENTS.PACKS, NEVER RESTATED. payments-v91's own
+    // header says the amounts must stay in step with the App Store products, and a
+    // fourth hand-typed copy in a UI string is exactly what nobody editing PACKS
+    // would think to grep for.
+    const packTxt = (() => {
+      try {
+        const p = (window.PAYMENTS && window.PAYMENTS.PACKS) || [];
+        if (p.length) return 'Packs: ' + p.map((x) => Number(x.credits || 0).toLocaleString('en-US')).join(' · ');
+      } catch (e) {}
+      return 'Top up your balance';
+    })();
+    html += `<button class="lc-store-cta" data-getlc>${window._lcIcon()}<span><b>Get LootCoins</b><i>${packTxt}</i></span><em>SHOP ›</em></button>`;
     const cur = C.SHIP_BY_KEY[G.state.ship];
 
     if (storeCat === 'ships') {

@@ -783,7 +783,7 @@
       fightBtn +
       '<div class="sd-attrow"><span class="sd-att-l">Attempts</span><span class="sd-pips">' + pips + '</span>' +
         (isPro() ? '<b class="pro">PRO +1</b>' : '') +
-        (over ? '' : '<button class="sd-buyatt" id="sd-buyatt" title="Price triples with each purchase · resets daily">⚡ +1 attempt · <b>◈ ' + fmt(attCost()) + '</b></button>') +
+        (over ? '' : '<button class="sd-buyatt" id="sd-buyatt" title="Price triples with each purchase · resets daily">⚡ +1 attempt · <b>◈ ' + fmt(attCost()) + '</b><i>price triples each buy · resets daily</i></button>') +
       '</div>' +
       '<div class="sd-stats three">' +
         statCard('Season Damage', fmt(s.total), 'all runs added up') +

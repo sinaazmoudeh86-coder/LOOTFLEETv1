@@ -500,6 +500,22 @@
     base.totalKills = Math.max(base.totalKills || 0, other.totalKills || 0);
     base.playTime = Math.max(base.playTime || 0, other.playTime || 0);
     base.itemsFound = Math.max(base.itemsFound || 0, other.itemsFound || 0);
+    // …AND ITS SIBLING, which was simply missed (build 736). Both are lifetime
+    // counters feeding badge chains; maxing one and not the other is how a chain
+    // reads honestly on one device and regresses on the next.
+    base.itemsLost = Math.max(base.itemsLost || 0, other.itemsLost || 0);
+    // CAREER COUNTERS — `stats` is monotonic (bossKills and anything later added
+    // beside it) and feeds mission credit and badge chains. Merged per numeric
+    // field so a new counter is covered the day it ships without touching this
+    // line; non-numeric values are left to the base copy rather than guessed at.
+    if (other.stats && typeof other.stats === 'object') {
+      base.stats = base.stats || {};
+      for (const k in other.stats) {
+        const o = Number(other.stats[k]);
+        if (!isFinite(o)) continue;
+        base.stats[k] = Math.max(Number(base.stats[k]) || 0, o);
+      }
+    }
     base.lifetimeLooted = Math.max(base.lifetimeLooted || 0, other.lifetimeLooted || 0);
     base.highestDungeonReached = Math.max(base.highestDungeonReached || 1, other.highestDungeonReached || 1);
     base.highestUnlocked = Math.max(base.highestUnlocked || 1, other.highestUnlocked || 1);
@@ -1230,6 +1246,170 @@
         }
       }
     }
+    // =========================================================================
+    // UN-UNIONED PERSISTENT SYSTEMS (build 736). Everything below is in ASC_KEEP
+    // — it survives an ascension — but was absent from this function entirely, so
+    // it was decided WHOLESALE by the base pick and the losing copy's version was
+    // gone. That is the exact shape of the nanocore wipe ("all my nanocores are
+    // gone, complete wipe"): the rest of the account looks right, because only the
+    // system nobody unioned was lost. None of these is epoch-guarded — they all
+    // survive the reset, so a pre-reset copy's version is still legitimately the
+    // player's.
+    //
+    // RAZED FORTRESSES. Build 735 made sanitizeSave() replay razings on every load
+    // path; the RECORD of them still rode the base pick. A copy missing an entry
+    // won the pick, reapplyRazings() replayed an empty set, and the tile
+    // regenerated at the full ×1000 fortress rate — the 735 income leak arriving
+    // through the one door that fix does not cover. A razing is irreversible, so
+    // this is a plain key union: if either timeline razed it, it stays razed. It
+    // can only ever bring a rate DOWN to what the player earned.
+    if (other.razedCitadels) {
+      base.razedCitadels = base.razedCitadels || {};
+      for (const id in other.razedCitadels) if (other.razedCitadels[id]) base.razedCitadels[id] = true;
+    }
+    // DREADNAUGHT HUNT LOCKOUTS. Build 712 put all three in ASC_KEEP to close
+    // "max the level, run the tier ladder, ascend, run it again". The merge door
+    // was left open and is cheaper to walk through: run the hunt, don't sync, open
+    // a device whose copy predates the run. A SPENT ATTEMPT STAYS SPENT — every
+    // rule here resolves toward the more restrictive copy.
+    if (other.dreadLock) {
+      base.dreadLock = base.dreadLock || {};
+      for (const t in other.dreadLock) {
+        base.dreadLock[t] = Math.max(base.dreadLock[t] | 0, other.dreadLock[t] | 0);   // later week = still locked
+      }
+    }
+    // Both of these are week-scoped objects: the later week owns them outright,
+    // and within the SAME week the consumed set is unioned.
+    if (other.dreadProFree) {
+      const b = base.dreadProFree, o = other.dreadProFree;
+      if (!b || (o.week | 0) > (b.week | 0)) base.dreadProFree = o;
+      else if ((o.week | 0) === (b.week | 0)) {
+        b.used = b.used || {};
+        for (const t in (o.used || {})) if (o.used[t]) b.used[t] = o.used[t];
+      }
+    }
+    if (other.dreadRespawn) {
+      const b = base.dreadRespawn, o = other.dreadRespawn;
+      if (!b || (o.week | 0) > (b.week | 0)) base.dreadRespawn = o;
+      else if ((o.week | 0) === (b.week | 0)) {
+        b.n = b.n || {};
+        for (const t in (o.n || {})) b.n[t] = Math.max(b.n[t] | 0, o.n[t] | 0);   // paid respawns never un-pay
+      }
+    }
+    // SPACE CARGO DEFENSE. Two losses in one object: the lifetime record
+    // (deliveries, best condition, Eternums recovered) could be replaced wholesale
+    // by a thinner copy, and today's consumed runs could be handed back by a stale
+    // one. Lifetime figures take max; the day-scoped pair follows the later day.
+    if (other.cargo && base.cargo) {
+      const b = base.cargo, o = other.cargo;
+      b.runs   = Math.max(b.runs | 0, o.runs | 0);
+      b.wins   = Math.max(b.wins | 0, o.wins | 0);
+      b.losses = Math.max(b.losses | 0, o.losses | 0);
+      b.best   = Math.max(Number(b.best) || 0, Number(o.best) || 0);
+      b.hulls  = Math.max(b.hulls | 0, o.hulls | 0);
+      if ((o.day | 0) > (b.day | 0)) { b.day = o.day | 0; b.used = o.used | 0; b.extra = o.extra | 0; }
+      else if ((o.day | 0) === (b.day | 0)) {
+        b.used  = Math.max(b.used | 0, o.used | 0);      // a run spent stays spent
+        b.extra = Math.max(b.extra | 0, o.extra | 0);    // …and a bought run stays bought
+      }
+      if ((o.hist || []).length > (b.hist || []).length) b.hist = o.hist;
+    } else if (other.cargo && !base.cargo) base.cargo = other.cargo;
+    // PRISM FLEET + HULL AURAS. `prism` (ingots, refinery, core level) was already
+    // unioned; its two most expensive downstream products were not. A Prism Core
+    // takes a full facet set collected across weekly runs, and spending one
+    // permanently auras a hull — deep, slow, unrepeatable progression riding
+    // entirely on the base pick.
+    if (other.shipAura) {   // pure entitlement set — union the keys, never remove
+      base.shipAura = base.shipAura || {};
+      for (const k in other.shipAura) if (other.shipAura[k]) base.shipAura[k] = true;
+    }
+    if (other.prismFleet) {
+      const o = other.prismFleet;
+      if (!base.prismFleet) base.prismFleet = o;
+      else {
+        const b = base.prismFleet;
+        // A forged core is a wallet, so max it and accept the same bounded
+        // double-spend the nano.dupes block already reasons about: eating a core
+        // a player forged is far worse than the edge case.
+        b.cores = Math.max(b.cores | 0, o.cores | 0);
+        // facets/stage belong to ONE weekly run — the later week owns them.
+        if ((o.weekKey | 0) > (b.weekKey | 0)) { b.weekKey = o.weekKey | 0; b.facets = o.facets || {}; b.stage = o.stage | 0; }
+        else if ((o.weekKey | 0) === (b.weekKey | 0)) {
+          b.stage = Math.max(b.stage | 0, o.stage | 0);
+          b.facets = b.facets || {};
+          for (const k in (o.facets || {})) if (o.facets[k]) b.facets[k] = true;
+        }
+      }
+    }
+    // MISSION BOARDS. These hold the period key AND the claim map, so a stale copy
+    // winning the pick either re-arms orders already claimed (a LootCoin payout
+    // exploit on the daily board) or discards a completed weekly.
+    //
+    // ONLY MERGED WHEN THE PERIOD KEYS AGREE. The keys are strings shaped per
+    // board ('2026-8-31', 'w1788…', 'm2026-8') and are NOT ordinally comparable —
+    // '2026-12-1' sorts BEFORE '2026-8-31'. Inventing an ordering here would be
+    // guessing at which copy is newer, and it is not needed: ensure() already
+    // rebuilds any board whose key is not the current period, so a stale board
+    // self-heals. The only divergence that can actually lose work is two devices
+    // inside the SAME period, and that is exactly what this covers.
+    ['missions', 'missionsW', 'missionsM'].forEach((k) => {
+      const o = other[k], b = base[k];
+      if (!o) return;
+      if (!b) { base[k] = o; return; }
+      if (b.day !== o.day) return;                       // different period — leave the base pick alone
+      b.tier = Math.max(b.tier | 0, o.tier | 0);
+      b.allClaimed = !!(b.allClaimed || o.allClaimed);
+      if (Array.isArray(b.list) && Array.isArray(o.list)) {
+        const byId = {};
+        o.list.forEach((e) => { if (e && e.id != null) byId[e.id] = e; });
+        b.list.forEach((e) => {
+          const q = e && byId[e.id]; if (!q) return;
+          e.done = Math.max(Number(e.done) || 0, Number(q.done) || 0);
+          e.claimed = !!(e.claimed || q.claimed);        // a claim never un-claims
+        });
+      } else if (!b.list && o.list) b.list = o.list;
+      if (o.seen) { b.seen = b.seen || {}; for (const id in o.seen) if (o.seen[id]) b.seen[id] = o.seen[id]; }
+    });
+    // THE ACCOUNT'S START WEEK IS THE EARLIER ONE. It is an anchor, not progress:
+    // a later value would make the account look newer than it is and shorten
+    // whatever it measures. Guarded on > 0 so an unset copy cannot win.
+    if ((other.startWeek | 0) > 0) {
+      base.startWeek = (base.startWeek | 0) > 0 ? Math.min(base.startWeek | 0, other.startWeek | 0) : (other.startWeek | 0);
+    }
+    // NOTE `season` is in ASC_KEEP but is never assigned anywhere in the client —
+    // a legacy key. It is deliberately NOT unioned here: nothing is known about
+    // its shape, and inventing a rule for a key no code writes would be guessing.
+    // It is also not deleted; an unrecognised key belongs to a system not read yet.
+    // THE FRIENDSHIP AND ALLIANCE SHOPS ARE CLIENT-CAPPED, SO THE MERGE IS THE
+    // CAP (build 736). `social_spend` debits the FP/AC balance server-side but
+    // takes only a kind and an amount — the PER-ITEM WEEKLY LIMIT is enforced
+    // entirely in buyFP()/buyAC() against `so.fpShop.n[id]`. So a stale copy
+    // winning the base pick re-arms every weekly purchase: the points are still
+    // real, but a player with banked FP could convert past the cap the limit
+    // exists to set (Dread Cores and prism ingots are on that list).
+    //
+    // SAME-WEEK ONLY, for the same reason as the mission boards above: weekKey()
+    // is '2026-35', which is NOT ordinally comparable ('2026-35' sorts before
+    // '2026-9'). ensure() already rebuilds a shop whose key is not the current
+    // week, so a stale one self-heals; the divergence that can actually be
+    // exploited is two devices inside the same week, which is what this covers.
+    if (other.social && typeof other.social === 'object') {
+      base.social = base.social || {};
+      ['fpShop', 'acShop'].forEach((shop) => {
+        const o = other.social[shop], b = base.social[shop];
+        if (!o || typeof o !== 'object') return;
+        if (!b || typeof b !== 'object') { base.social[shop] = o; return; }
+        if (b.wk !== o.wk) return;                       // different week — leave the base pick alone
+        b.n = b.n || {};
+        for (const id in (o.n || {})) b.n[id] = Math.max(b.n[id] | 0, o.n[id] | 0);   // a purchase made stays made
+      });
+    }
+    // NOTE `friends`, `alliance` and `allianceId` are in ASC_KEEP but NOTHING in
+    // the client ever writes them — the friends list lives in social.js's local
+    // `_friends` off friend_list(), and the alliance record in alliance.js's `_st`,
+    // both re-pulled from the server on load. They are vestigial keys, kept in the
+    // save because an unrecognised key is not ours to delete, and there is nothing
+    // to merge. Same status as `season`, `achv`, `achClaimed` and `badgeRanks`.
     // =========================================================================
     if (other.cosmetics && other.cosmetics.owned) {
       base.cosmetics = base.cosmetics || { owned: { stock: 1, none: 1 }, skin: 'stock', aura: 'none' };

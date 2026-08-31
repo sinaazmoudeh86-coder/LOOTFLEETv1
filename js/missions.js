@@ -587,7 +587,19 @@
     });
   }
   // ===========================================================================
-  // ⌘ VERIDIAN — the 1,000-lifetime-missions reward hull (daily tab hero)
+  // ⌘ VERIDIAN — the 1,000-MISSION-CREDIT reward hull (daily tab hero)
+  //
+  // A NUMBER THE PLAYER CAN COUNT MUST BE THE NUMBER YOU PRINT. The counter this
+  // gates on is WEIGHTED (msnCredit: daily 1, weekly 3, monthly 5), so it is not
+  // a count of missions and never was — 600 daily + 80 weekly + 20 monthly is 700
+  // orders completed and reads 940 here. The old copy said "1,000 lifetime
+  // missions (any board)", and the parenthetical made it worse: it told the
+  // player boards were interchangeable at exactly the point where they are worth
+  // 1:3:5. The weighting is good design; it just has to be stated.
+  //
+  // The STORED counter is untouched — `lifetimeMissions` is in ASC_KEEP and
+  // recomputing it would be a data change for no gain. Only the label moves, and
+  // the per-board figures are read from BOARDS so this cannot drift again.
   // ===========================================================================
   const VERIDIAN_NEED = 1000;
   function veridianBanner() {
@@ -598,13 +610,15 @@
     let right;
     if (owned) right = '<div class="vrd-owned">✓ IN YOUR HANGAR</div>';
     else if (ready) right = '<button class="msn-claim gold vrd-accept" data-veridian-accept="1">⌘ ACCEPT SHIP</button>';
-    else right = '<div class="vrd-count"><b>' + left.toLocaleString() + '</b><span>missions to go</span></div>';
+    else right = '<div class="vrd-count"><b>' + left.toLocaleString() + '</b><span>credit to go</span></div>';
     return '<div class="vrd-hero' + (ready ? ' ready' : '') + (owned ? ' owned' : '') + '">' +
       '<div class="vrd-art"><img src="ships/ship-veridian.png" alt="Veridian" decoding="async"></div>' +
       '<div class="vrd-mid">' +
         '<div class="vrd-t">THE VERIDIAN <em>MISSION REWARD</em></div>' +
-        '<div class="vrd-s">Complete <b>1,000 lifetime missions</b> (any board) to earn this Battleship-grade hull. Its verdant <b>resonance aura</b> constantly damages everything within a few tiles — scaling with your fleet\u2019s DPS.</div>' +
-        '<div class="vrd-bar"><i style="width:' + (have / VERIDIAN_NEED * 100) + '%"></i><span>⌘ ' + have.toLocaleString() + ' / ' + VERIDIAN_NEED.toLocaleString() + ' lifetime missions</span></div>' +
+        '<div class="vrd-s">Earn <b>' + VERIDIAN_NEED.toLocaleString() + ' mission credit</b> to claim this Battleship-grade hull — a daily order pays <b>'
+          + msnCredit(boardCfg('d')) + '</b>, a weekly <b>' + msnCredit(boardCfg('w')) + '</b>, a monthly <b>' + msnCredit(boardCfg('m'))
+          + '</b>. Its verdant <b>resonance aura</b> constantly damages everything within a few tiles — scaling with your fleet\u2019s DPS.</div>' +
+        '<div class="vrd-bar"><i style="width:' + (have / VERIDIAN_NEED * 100) + '%"></i><span>⌘ ' + have.toLocaleString() + ' / ' + VERIDIAN_NEED.toLocaleString() + ' mission credit</span></div>' +
       '</div>' + right + '</div>';
   }
   function acceptVeridian() {

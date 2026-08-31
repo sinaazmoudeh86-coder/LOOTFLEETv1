@@ -355,6 +355,19 @@ window.__lfErr=[];
 @media (max-height:780px){ .mega-sec{padding:6px 9px;} }
 .mega{position:absolute;inset:0;z-index:55;display:none;}
 .mega.open{display:block;}
+/* DESKTOP: THE SHEET STOPS ABOVE THE NAV, IT DOES NOT BURY IT.
+   .mega is inset:0 over #app, so the backdrop and the sheet both covered the
+   bottom nav and the only way out was the ✕. On a phone that is right — the
+   sheet needs the height. On a desktop window there is room to spare, so the
+   overlay's bottom edge is lifted clear of #nav: the tabs stay visible, stay
+   clickable, and tapping one closes Command on the way through.
+   --mega-nav is MEASURED on open (#nav's height is 60/50/48/46px across four
+   breakpoints plus a safe-area inset, so it is not a constant), and it falls
+   back to 0 — an unmeasured sheet behaves exactly as it did before. */
+@media (min-width:820px) and (min-height:600px){
+.mega{bottom:var(--mega-nav,0px);}
+.mega-sheet{max-height:100%;}
+}
 .mega-back{position:absolute;inset:0;background:rgba(5,8,14,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:bdIn .2s ease;}
 .mega-sheet{position:absolute;left:0;right:0;bottom:0;max-height:calc(100% - env(safe-area-inset-top,0px) - 24px);display:flex;flex-direction:column;background:linear-gradient(180deg,#172031,#0e1421);border-top:1px solid #2a3650;border-radius:20px 20px 0 0;padding:8px 14px calc(78px + env(safe-area-inset-bottom,0px));box-shadow:0 -22px 54px rgba(0,0,0,.65);animation:megaUp .28s cubic-bezier(.22,1,.36,1);overflow:hidden;}
 .mega-sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#5fd1ff,#b87bff,#ff5168,#ffd450,#46d27a,#5fd1ff);background-size:300% 100%;animation:prismShift 5s linear infinite;}
@@ -1199,13 +1212,13 @@ window.__lfErr=[];
 <script src="js/servertime.js?v=725"></script>
 <script src="js/analytics.js?v=725"></script>
 <script src="js/cloud.js?v=728"></script>
-<script src="js/account.js?v=729"></script>
+<script src="js/account.js?v=736"></script>
 <script src="js/session-lock.js?v=725"></script>
 <script src="js/vip.js?v=725"></script>
 <script src="js/territory.js?v=725"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=734"></script>
-<script src="js/ui-v94.js?v=734"></script>
+<script src="js/game-v93.js?v=736"></script>
+<script src="js/ui-v94.js?v=736"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
@@ -1216,31 +1229,31 @@ window.__lfErr=[];
 <script src="js/expedition.js?v=729"></script>
 <script src="js/expedition-ui.js?v=725"></script>
 <script src="js/koth.js?v=727"></script>
-<script src="js/koth-ui.js?v=725"></script>
+<script src="js/koth-ui.js?v=736"></script>
 <script src="js/return-brief.js?v=725"></script>
-<script src="js/home-citadel.js?v=729"></script>
-<script src="js/missions.js?v=725"></script>
+<script src="js/home-citadel.js?v=736"></script>
+<script src="js/missions.js?v=736"></script>
 <script src="js/achievements.js?v=725"></script>
 <script src="js/coach-v89.js?v=725"></script>
 <script src="js/prism-v5.js?v=725"></script>
 <script src="js/prism-fleet.js?v=725"></script>
 <script src="js/dreadnaught.js?v=734"></script>
-<script src="js/server-dreadnaught.js?v=729"></script>
+<script src="js/server-dreadnaught.js?v=736"></script>
 <script src="js/galaxy-box.js?v=725"></script>
 <script src="js/shipworks.js?v=725"></script>
 <script src="js/starforge.js?v=725"></script>
 <script src="js/pilot-ascension.js?v=729"></script>
 <script src="js/season-pass.js?v=725"></script>
 <script src="js/sim-pilots.js?v=725"></script>
-<script src="js/ranks-boards.js?v=734"></script>
+<script src="js/ranks-boards.js?v=735"></script>
 <script src="js/rank-rewards.js?v=727"></script>
 <script src="js/discord-reward.js?v=725"></script>
 <script src="js/onboard.js?v=725"></script>
 <script src="js/pro-offer.js?v=725"></script>
-<script src="js/ship-panels.js?v=725"></script>
+<script src="js/ship-panels.js?v=735"></script>
 <script src="js/fleet-deep.js?v=725"></script>
 <script src="js/paragon-cannon.js?v=725"></script>
-<script src="js/social.js?v=725"></script>
+<script src="js/social.js?v=736"></script>
 <script src="js/chat.js?v=729"></script>
 <script src="js/mail.js?v=734"></script>
 <script src="js/alliance.js?v=725"></script>
@@ -1265,13 +1278,13 @@ window.__lfErr=[];
 <script src="js/casino-citadels.js?v=725"></script>
 <script src="js/redeem.js?v=728"></script>
 <script src="js/auth.js?v=725"></script>
-<script src="js/patch-notes.js?v=734"></script>
+<script src="js/patch-notes.js?v=736"></script>
 <script src="js/update-gate.js?v=725"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 734;
+  window.LF_BUILD = 736;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1689,8 +1702,19 @@ window.__lfErr=[];
       });
     }
     buildSecs();
-    function open(){ sync(); mega.classList.add('open'); }
+    function open(){ sync(); fitNav(); mega.classList.add('open'); }
     function close(){ mega.classList.remove('open'); }
+    // Measure the nav rather than restate its height — see the --mega-nav note in
+    // #mega-css. Re-measured on resize/orientation while open, because the nav
+    // changes height at four breakpoints and the safe-area inset moves with it.
+    function fitNav(){ try{ const n=document.getElementById('nav');
+      mega.style.setProperty('--mega-nav', (n&&n.offsetHeight?n.offsetHeight:0)+'px'); }catch(e){} }
+    window.addEventListener('resize',()=>{ if(mega.classList.contains('open')) fitNav(); });
+    // With the nav uncovered on desktop it is reachable mid-sheet; going anywhere
+    // from it should take the sheet down with you.
+    { const nv=document.getElementById('nav'); if(nv) nv.addEventListener('click',(e)=>{
+      if(e.target&&e.target.closest&&e.target.closest('#nav-command')) return;   // that button toggles
+      if(mega.classList.contains('open')) close(); }); }
     cmd.addEventListener('click',()=>{ mega.classList.contains('open')?close():open(); });
     mega.querySelector('.mega-back').addEventListener('click',close);
     { const x=document.getElementById('mega-x'); if(x) x.addEventListener('click',(e)=>{ e.stopPropagation(); close(); }); }

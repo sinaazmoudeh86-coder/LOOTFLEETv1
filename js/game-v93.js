@@ -291,6 +291,18 @@
     // republish, and it gave away holds the pilot never lost in a fight.
     // The fleet resets. The map you conquered does not.
     'ownedSystems', 'citadels', 'rivalCitadels', 'tileCd',
+    // …AND THE TWO TILE CLOCKS THAT GO WITH THEM (build 736). `tileAband` is the
+    // 24-hour bar on re-taking a system you walked away from; `tileFree` is the
+    // neutral grace on the tile itself. Both were missed, and the doctrine is
+    // flat: ANY LOCKOUT CLOCK GOES IN ASC_KEEP THE DAY IT SHIPS. Territory
+    // survives an ascension (four lines above) but the abandon record did not, so
+    // ascending after releasing a tile threw away the guard abandonLockLeft()
+    // exists to provide — the next convergence pull re-adopted a system the pilot
+    // deliberately gave up, and the loss path mailed a war report for it. Both are
+    // already unioned in mergeSaves(); this is the other half.
+    // Keeping a clock can only ever WITHHOLD a re-claim the pilot chose to give
+    // up. It cannot cost anyone a holding.
+    'tileAband', 'tileFree',
     // …AND THE MIGRATION FLAG THAT PROTECTS THEM. `galaxyVer` is what tells the
     // loader the save has already moved to the v3 hex grid. Without it here, a
     // post-ascension state arrives with galaxyVer undefined, the v3 migration
@@ -420,14 +432,29 @@
       L.iron   = Math.max(L.iron || 0, r0.iron || 0);
       L.plasma = Math.max(L.plasma || 0, r0.plasma || 0);
       L.res    = Math.max(L.res || 0, (r0.fuel || 0) + (r0.iron || 0) + (r0.plasma || 0));
-      L.tiles  = Math.max(L.tiles || 0, Object.keys(state.ownedSystems || {}).length);
+      // GALAXY GROUND ONLY — THESE TWO CHAINS SAY SO ON THE TIN (build 736).
+      // Both were raw key counts of maps that also hold OFF-MAP holdings, so
+      // "Galactic Conqueror · galaxy tiles captured" counted the neutral Home
+      // Citadel every account is given, the seven Void spires and the three
+      // casino House Citadels — and the spires were counted TWICE, because
+      // "Warden of the Void · Void spires taken" sits directly beneath it and
+      // exists to count them. `citadels` had the same fault: Void and House
+      // Citadels write into state.citadels carrying a `void:true` marker
+      // precisely so they can be told apart, and citadelCount() already honours
+      // it. Same family as the warp cap and the Territory board, both fixed in
+      // 735 — when you fix a count, look at the ones beside it.
+      //
+      // SAFE BECAUSE THESE ARE Math.max ACCUMULATORS: the inflated historical
+      // figure stays banked as a floor, so no progress bar moves backwards and no
+      // claimed badge rank is revoked. Every NEW maximum from here is honest.
+      try { L.tiles = Math.max(L.tiles || 0, tileCount()); } catch (e) {}
       let hulls = 0; const sl0 = state.shipLevels || {}; for (const k in sl0) hulls += sl0[k] || 0;
       L.hullLv = Math.max(L.hullLv || 0, hulls);
       // moon / colony are wiped by the reset — freeze their career sums so the
       // Lunar Baron and Master Builder chains don't fall back to zero
       try { const lt = (state.moon && state.moon.lifetime) || {}; let mt = 0; for (const k in lt) mt += lt[k] || 0; L.moonRes = Math.max(L.moonRes || 0, mt); } catch (e) {}
       try { let ct = 0; const mr = state.moon; if (mr && mr.moons) mr.moons.forEach((mm) => { const b = mm.b || {}; for (const k in b) ct += (b[k] && b[k].lv) || 0; }); L.colony = Math.max(L.colony || 0, ct); } catch (e) {}
-      L.cits   = Math.max(L.cits || 0, Object.keys(state.citadels || {}).length);
+      try { L.cits = Math.max(L.cits || 0, citadelCount()); } catch (e) {}
       L.ascend = (L.ascend || 0) + 1;
     } catch (e) {}
 
@@ -6403,7 +6430,11 @@
     if (tile.void && state.level < tile.vtier) return { ok: false, reason: 'locked', ownGate: owned };
     // EMPIRE AT CAPACITY — refuse the trip rather than let a pilot fight a siege
     // they can't be paid for. Entering a tile you already hold is always fine.
-    if (!owned && atTileCap()) { try { window.PROOFFER && PROOFFER.maybe('tilecap'); } catch (e) {} return { ok: false, reason: 'tilecap', cap: tileCap() }; }
+    // …AND IT DOES NOT GATE OFF-MAP HOLDS. A Void spire or House Citadel is not
+    // galaxy ground, does not count toward the cap (tileCount) and therefore
+    // cannot be refused by it either. Gating them here is what made a full
+    // galaxy empire unable to warp into the Void at all.
+    if (!owned && isGalaxyTile(k) && atTileCap()) { try { window.PROOFFER && PROOFFER.maybe('tilecap'); } catch (e) {} return { ok: false, reason: 'tilecap', cap: tileCap() }; }
     // …AND THE SAME GATE ON ORDINARY TILES. This used to be `!owned &&`, which
     // left the exact hole the Void comment above describes: ascension keeps your
     // territory but resets your level, so an owned Lv-300 system and a fresh Lv-5
@@ -6842,7 +6873,7 @@
     // BACKSTOP — warp() gates this, but a VIP level can lapse (or another claim can
     // land) mid-siege. Never silently exceed the cap: the win stands, the tile just
     // isn't annexed until room is made.
-    if (!isOwned(k) && atTileCap()) {
+    if (!isOwned(k) && isGalaxyTile(k) && atTileCap()) {
       pushFeed('Empire at capacity (' + tileCap() + ' systems) — ' + (tile.name || k) + ' was not claimed. Abandon a system to make room.', true);
       rt.razingClaim = false;
       respawnAt(0);
@@ -6939,8 +6970,35 @@
   // tile you hold, because holding the tile is itself the scarce thing.
   const TILE_MAX = 50;
   function tileCap() { return TILE_MAX + (window.VIP ? window.VIP.level() * 5 : 0) + proMods().tiles; }
+  // GALAXY GROUND ONLY — THE CAP IS A GALAXY MAP RULE.
+  //
+  // Void spires ('VZ…') and the casino House Citadels ('CC…') are stored in
+  // `ownedSystems` alongside real hexes, so each one was burning a slot out of
+  // the 50. Worse than the arithmetic: once the total reached the cap, warp()
+  // refused EVERY trip — including the trip into a Void spire, which is not
+  // galaxy ground and was never meant to be capped. That is the reported "can't
+  // attack any void zones, just says Warp Failed for all of them even tho they
+  // have no shield": the refusal was the tile cap wearing the wrong label.
+  //
+  // The test is the one citadelCount() already uses — an off-map id does not
+  // parse as hex coordinates — so the cap, the fortress total and the build
+  // sheet cannot disagree about what counts as a system. Home is neutral ground
+  // and has never counted. Derived, so no save changes shape, and it only ever
+  // FREES capacity: no pilot loses a holding and anyone who was wedged at the
+  // cap gets their real headroom back on next load.
+  function isGalaxyTile(k) {
+    if (!k || k === GX.HOME || !GX.parseId(k)) return false;
+    const t = sysAt(k);
+    return !(t && t.home);
+  }
   function tileCount() {
-    return Object.keys(state.ownedSystems || {}).filter((k) => { const t = sysAt(k); return !(t && t.home); }).length;
+    let n = 0;
+    for (const k in (state.ownedSystems || {})) {
+      if (!state.ownedSystems[k]) continue;
+      if (!isGalaxyTile(k)) continue;
+      n++;
+    }
+    return n;
   }
   function tilesLeft() { return Math.max(0, tileCap() - tileCount()); }
   function atTileCap() { return tileCount() >= tileCap(); }
@@ -7381,6 +7439,28 @@
       if (typeof t.name === 'string') t.name = t.name.replace(/^Citadel\s+/, '');
     }
   }
+  // RE-APPLY EVERY RAZING THIS ACCOUNT HAS ALREADY DONE.
+  //
+  // The tile cache is generated, not stored, so a razing has to be replayed onto
+  // it whenever that cache is (re)built. It used to be replayed in exactly one
+  // place — init() — while GX.grandfather() in sanitizeSave() DELETES cache
+  // entries so they regenerate as the fortresses they were. adoptSave() (a cloud
+  // CAS conflict folding another device's save into the live session) calls
+  // sanitizeSave() and NOT init(), so a merged save that owns a razed natural
+  // citadel had that tile regenerated at its full CITADEL_RATE_MULT (×1000) and
+  // nothing ever demoted it again. accrueResources() then banked the inflated
+  // rate for the rest of the session — a razed fortress still paying fortress
+  // income, which is the reported "old citadels are still giving resources".
+  //
+  // It lives next to the razing itself now and runs from BOTH paths.
+  // razeCitadelTile() is guarded on `t.citadel`, so replaying it is a no-op once
+  // the tile is already demoted — calling it more often can only ever bring a
+  // rate back DOWN to what the player actually earned, never take a holding away.
+  function reapplyRazings() {
+    const r = state.razedCitadels;
+    if (!r) return;
+    for (const id in r) { if (r[id]) razeCitadelTile(id, true); }
+  }
 
   // ---- CONTIGUITY BONUS — a solid block of space beats a sprawl -------------
   //
@@ -7669,7 +7749,14 @@
   }
   function resourceRates() {
     const r = { fuel: 0, iron: 0, plasma: 0 };
-    Object.keys(state.ownedSystems).forEach((k) => {
+    // GUARDED AND TRUTHINESS-TESTED, like every sibling (build 736). This was the
+    // only ownedSystems iteration in the file without `|| {}` — and it is the one
+    // accrueResources() calls, so a save arriving before sanitizeSave() created
+    // the key threw inside income accrual and lost that session's settlement.
+    // The falsy skip matches tileCount()/citadelCount(): a tile that does not
+    // COUNT must not PAY either, or the two disagree the way section B did.
+    Object.keys(state.ownedSystems || {}).forEach((k) => {
+      if (!state.ownedSystems[k]) return;
       const q = tileRateOf(k); if (!q) return;
       if (q.void) { r.fuel += q.perHour; r.iron += q.perHour; r.plasma += q.perHour; r.gold = (r.gold || 0) + q.gold; return; }
       r[q.res] += q.perHour;
@@ -8327,6 +8414,10 @@
         if (n) { try { console.info('[LOOTFLEET] kept ' + n + ' held natural citadel(s)'); } catch (e) {} }
       }
     } catch (e) { try { console.warn('[LOOTFLEET] citadel grandfather skipped', e); } catch (e2) {} }
+    // …AND IMMEDIATELY AFTER IT, because grandfather() regenerates tiles as full
+    // fortresses and this is the only thing that puts a razed one back down. Must
+    // stay below the grandfather block: the order is the whole fix.
+    try { reapplyRazings(); } catch (e) { try { console.warn('[LOOTFLEET] razing replay skipped', e); } catch (e2) {} }
     if (fixed) { try { console.warn('[LOOTFLEET] save repair: reset ' + fixed + ' non-finite field(s) — report this count if a crash follows'); } catch (e) {} }
     return fixed;
   }
@@ -8665,7 +8756,8 @@
     if (!state.razedCitadels) state.razedCitadels = {}; // natural citadel tiles you've razed → now plain tiles { tileId:true }
     // Re-apply razings to the (regenerated) tile cache so a razed citadel stays a
     // plain, buildable tile across reloads — no more permanent siege zone.
-    Object.keys(state.razedCitadels).forEach((id) => razeCitadelTile(id, true));
+    // sanitizeSave() runs this too; see reapplyRazings().
+    reapplyRazings();
     // ---- ZONE-CAP: keep exactly 10 zones unlocked beyond the pilot's level (and
     // within the current 100-block). This both GRANTS the level+10 runway to fresh
     // pilots and CORRECTS saves from the old, looser unlock curve. Since pilot

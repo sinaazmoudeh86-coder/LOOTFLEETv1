@@ -798,7 +798,15 @@
     try {
       const s = G().state || {};
       const out = {
-        tiles: Object.keys(s.ownedSystems || {}).length,
+        // GALAXY SYSTEMS ONLY, AND READ THROUGH THE GAME — same reasoning as
+        // `citadels` below, which was fixed for this and left its neighbour
+        // wrong. The raw key count included the neutral Home Citadel that EVERY
+        // account holds, plus the Void spires and the casino House Citadels
+        // (off-map ids living in the same map). So the Territory board ranked
+        // pilots on up to eleven systems nobody had to take, it rewarded holding
+        // the Void on the board about galaxy ground, and it disagreed with the
+        // tile cap, My Galaxy and the tile pill — all of which read tileCount().
+        tiles: (G().tileCount ? G().tileCount() : Object.keys(s.ownedSystems || {}).length),
         // CITADELS WAS MISSING FROM THIS OBJECT AND NOWHERE ELSE.
         // `mineInto()` set it, cloud.js sent `p_citadels`, lb_upsert declared it
         // and the column existed — but the value originates HERE, and it was never

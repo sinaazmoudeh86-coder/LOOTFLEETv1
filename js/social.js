@@ -33,7 +33,11 @@
     return so;
   }
   let _wallet = { fp: 0, ac: 0 };
-  async function refreshWallet() { try { const w = await rpc('social_wallet'); if (w) _wallet = { fp: w.fp | 0, ac: w.ac | 0 }; } catch (e) {} }
+  // NEVER `| 0` A BALANCE \u2014 these two are the last in the game that were. Fleet
+  // Points and Alliance Coins cannot realistically reach 2.1 billion at current
+  // earn rates, but the value arrives from the SERVER, where a future grant or
+  // migration decides its magnitude rather than this file.
+  async function refreshWallet() { try { const w = await rpc('social_wallet'); if (w) _wallet = { fp: Math.floor(Number(w.fp) || 0), ac: Math.floor(Number(w.ac) || 0) }; } catch (e) {} }
   function wallet() { return _wallet; }
 
   // ---- FRIENDSHIP STORE — server debits FP, goods land in the save -----------

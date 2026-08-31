@@ -183,18 +183,10 @@
     if (ring < 2 || ring > RINGS) return false;
     return rngFor((q * 73856093) ^ (r * 19349663) ^ 0x5bd1)() < 0.03;
   }
+  // RETIRED (737) — see the note in tileAt(). Kept as a no-op so an older caller
+  // cannot throw, and because the export is part of the module's contract.
   const _grand = {};
-  function grandfather(ids) {
-    if (!ids || !ids.length) return 0;
-    let n = 0;
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i];
-      if (!id || _grand[id]) continue;
-      _grand[id] = 1; n++;
-      if (_cache[id]) delete _cache[id];   // regenerate it as the fortress it was
-    }
-    return n;
-  }
+  function grandfather() { return 0; }
 
   // ---- deterministic tile ----------------------------------------------------
   const HOME = tileId(0, 0);
@@ -222,7 +214,20 @@
     // BOSS branch — and boss and citadel consume exactly the same number of draws.
     // Rewriting the type line to always draw would re-roll every boss tile in the
     // galaxy instead. Leave the draw order alone.
-    const citadel = ring >= 2 && (citadelSet()[id] === 1 || _grand[id] === 1);
+  // GRANDFATHERING IS RETIRED (737). The scarcity pass cut the galaxy from the old
+  // 3% roll's 73 natural citadels to a fixed budget of 25, and `_grand` kept the
+  // other 48 alive for whoever already held them. That kindness produced a tile
+  // the game cannot otherwise make: a fortress got RETIRED, the pilot built a
+  // player citadel on it while it was an ordinary hex (legal — canBuildCitadel
+  // gates on `!t.citadel`), and then grandfather() handed the fortress back
+  // UNDERNEATH the citadel. The tile then paid ×1000 for being natural AND ×10/rank
+  // for the citadel, ~×25 more than either alone. One account was carrying 31 of
+  // them. The same collision runs the other way for the CURRENT 25: a tile that was
+  // ordinary when the citadel went up became a fortress when the pass landed.
+  //
+  // The retired 48 are ordinary tiles now, which is what the scarcity pass decided.
+  // A citadel already standing on one keeps paying as a citadel — see tileRateOf().
+  const citadel = ring >= 2 && citadelSet()[id] === 1;
     const boss = !citadel && roll < 0.11;                  // ~8% boss tiles
     let type = citadel ? 'citadel' : boss ? 'boss' : (rnd() < 0.5 ? 'resource' : 'combat');
     // rarity: 0 common · 1 uncommon · 2 rare (boosts output)

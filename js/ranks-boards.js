@@ -77,14 +77,38 @@
       empty: 'Nobody has ascended yet. The first pilot to reset a run takes this board outright.',
     },
     {
-      id: 'tiles', ic: '\u2691', col: '#5fa8ff', label: 'TERRITORY', sub: 'Galaxy Tiles',
-      info: 'Ranked by hourly revenue from held systems — not tile count. A few fortified systems beat a wide, undefended sprawl.',
+      // THE BOARD IS ABOUT MY GALAXY, AND NOW IT SAYS SO (737). It was called
+      // TERRITORY while ranking on galaxy ground only — Void spires and House
+      // Citadels are territory in every ordinary sense of the word and are
+      // deliberately excluded, so the old name promised something the board does
+      // not measure. `id: 'tiles'` and the `tile_rev` column are UNCHANGED: they
+      // are stored identifiers, and renaming one to make a label read better
+      // revokes what it proved.
+      //
+      // `sub` was 'Galaxy Tiles', which named the wrong quantity — the board has
+      // ranked on hourly revenue, not tile count, since it shipped.
+      id: 'tiles', ic: '\u2691', col: '#5fa8ff', label: 'MY GALAXY', sub: 'Hourly Revenue',
+      // WHAT DRIVES THIS BOARD IS TILE QUALITY, AND THE ROW HAS TO SAY SO.
+      // Four multipliers stack on a tile's base yield: deep space ×25, a NATURAL
+      // fortress ×1000, a built citadel ×10 per rank, and contiguity. Best against
+      // worst is ~1,875,000× on the SAME base rate, so two pilots holding the same
+      // number of systems and citadels can differ by a factor of thirty — and the
+      // old meta line printed only the counts, which explain none of it. A #1 at
+      // 1.38T beside a #3 at 48B with MORE citadels reads as broken arithmetic; it
+      // is not, and the row now shows the figure that makes it legible.
+      info: 'Ranked by hourly revenue from the galaxy ground you hold — not tile count. Void spires and House Citadels are income, but they are not My Galaxy and do not count here. What a system pays depends far more on WHERE it is than on how many you hold: deep space pays ×25, a natural fortress ×1000, and each citadel rank another ×10. A few deep fortresses will out-earn a wide, shallow sprawl many times over.',
       unit: '/HR',
       metric: (p) => p.tile_rev || 0,
       fmt: (v) => fmt(v),
-      meta: (p) => (p.tiles | 0) + ' system' + ((p.tiles | 0) === 1 ? '' : 's') +
-                   ((p.citadels | 0) ? ' · ' + (p.citadels | 0) + ' citadel' + ((p.citadels | 0) === 1 ? '' : 's') : '') +
-                   ' · Lv ' + (p.level | 0),
+      meta: (p) => {
+        const cits = p.citadels | 0, rev = p.tile_rev || 0;
+        return (p.tiles | 0) + ' system' + ((p.tiles | 0) === 1 ? '' : 's') +
+          (cits ? ' · ' + cits + ' citadel' + (cits === 1 ? '' : 's') : '') +
+          // The per-citadel average is the number that explains the ranking, and it
+          // is DERIVED from two fields already published — no new column, no SQL.
+          (cits && rev ? ' · ' + fmt(Math.round(rev / cits)) + '/ea' : '') +
+          ' · Lv ' + (p.level | 0);
+      },
       empty: 'No systems claimed yet. Take one in My Galaxy and it starts paying immediately.',
     },
     {
@@ -771,18 +795,47 @@
     return q;
   }
 
-  // Total hourly output of everything you hold. Delegates to the SAME function
-  // the Galaxy screen and Empire Income use (GAME.resourceRates), so the board
-  // can never disagree with them. The old inline copy multiplied citadels by
-  // 1000×lv (real: 10×lv) and skipped the ×25 galaxy yield, deep-space and Void
-  // handling — fortress players ranked on numbers ~100× their real income.
-  // Gold (Void spires pay it at 1000× resource scale) is normalised back to
-  // resource units so one spire doesn't swamp the whole figure.
+  // Total hourly output of the GALAXY GROUND you hold — the thing this board
+  // ranks. Per-tile figures come from GAME.tileRateOf, the same function the
+  // Galaxy screen and Empire Income use, so the board can never disagree with
+  // them about what a tile is worth.
+  //
+  // GALAXY ONLY, BECAUSE THE COUNTS BESIDE IT ARE. `tiles` and `citadels` were
+  // fixed in 735/736 to exclude the neutral Home Citadel, the seven Void spires
+  // and the three casino House Citadels — but this figure still summed
+  // resourceRates(), which walks EVERY entry in ownedSystems. So a row read
+  // "84 systems · 49 citadels" while its revenue also counted up to eleven
+  // holdings those two numbers deliberately leave out, and a Void spire pays on
+  // a different scale entirely (all four currencies, gold at ×1000). The row
+  // could not explain its own number, and a spire-heavy account outranked a
+  // larger empire on territory it did not hold.
+  //
+  // Empire Income is UNCHANGED and still counts everything — a spire really is
+  // your income. It just is not territory.
+  //
+  // The old inline copy multiplied citadels by 1000×lv (real: 10×lv) and skipped
+  // the ×25 galaxy yield, deep-space and Void handling — fortress players ranked
+  // on numbers ~100× their real income. Gold is still normalised back to resource
+  // units so a tile that ever pays it cannot swamp the figure.
   function tileRevenue() {
     try {
-      const g = G(), r = g.resourceRates ? g.resourceRates() : null;
-      if (!r) return 0;
-      return Math.round((r.fuel || 0) + (r.iron || 0) + (r.plasma || 0) + (r.gold || 0) / 1000);
+      const g = G();
+      const own = (g.state && g.state.ownedSystems) || null;
+      if (!own || !g.tileRateOf || !g.isGalaxyTile) {
+        // Older client / helpers absent — fall back to the previous behaviour
+        // rather than publishing a 0 that would drop the pilot off the board.
+        const r = g.resourceRates ? g.resourceRates() : null;
+        if (!r) return 0;
+        return Math.round((r.fuel || 0) + (r.iron || 0) + (r.plasma || 0) + (r.gold || 0) / 1000);
+      }
+      let sum = 0;
+      for (const id in own) {
+        if (!own[id]) continue;
+        if (!g.isGalaxyTile(id)) continue;          // no Void spires, no House Citadels, no Home
+        const q = g.tileRateOf(id); if (!q) continue;
+        sum += (q.perHour || 0) + (q.gold || 0) / 1000;
+      }
+      return Math.round(sum);
     } catch (e) { return 0; }
   }
 

@@ -53,8 +53,8 @@
       win: 'More completed lifetimes than any other pilot on record.',
     },
     tiles: {
-      ic: '\u2691', name: 'Territory', unit: 'per hour', col: '#5fa8ff',
-      what: 'Hourly revenue from the systems you hold — not how many tiles, but how much they earn.',
+      ic: '\u2691', name: 'My Galaxy', unit: 'per hour', col: '#5fa8ff',
+      what: 'Hourly revenue from the galaxy systems you hold — not how many, but how much they earn. Void spires and House Citadels do not count.',
       win: 'The richest holdings in the galaxy, and you kept them through the night.',
     },
     voidmaw: {

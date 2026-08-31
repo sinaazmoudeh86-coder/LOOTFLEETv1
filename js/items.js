@@ -418,7 +418,7 @@ const WCLASS_WEIGHTS = { laser: 1, gatling: 1, missile: 1, rail: 1, plasma: 0.75
     // ending the session.
     const buckets = WCLASS_NAMES[wkey];
     if (!buckets || !buckets.length) {
-      try { console.warn('[LOOTFLEET] no name pool for weapon class "' + wkey + '" — add one to WCLASS_NAMES in js/items.js'); } catch (e) {}
+      try { console.warn('[LOOTFLEET] no name pool for weapon class "' + wkey + '" — add one to WCLASS_NAMES in js/lib/items.js'); } catch (e) {}
       const wc = WEAPON_CLASSES.find((w) => w.key === wkey);
       return (wc && wc.name) || 'Hardpoint';
     }

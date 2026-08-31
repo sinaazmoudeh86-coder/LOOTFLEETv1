@@ -87,7 +87,13 @@
       } catch (e) { ok = false; }
       if (ok) return map;   // this column set worked — older schemas fall through
     }
-    return {};
+    // NULL MEANS "THE PULL FAILED", NOT "THE GALAXY IS EMPTY" (736).
+    // Every column set errored. This used to return {}, which is indistinguishable
+    // from a complete map of an empty table — harmless while callers only ever
+    // ITERATED the map, but syncRealTiles() now also reconciles tiles ABSENT from
+    // it, and an empty map would read as "you own nothing" and delete the lot.
+    // Callers still do `map || {}`, so a failed pull is a no-op exactly as before.
+    return null;
   }
 
   // Claim/contest a tile through the server-authoritative RPC. Atomic: when

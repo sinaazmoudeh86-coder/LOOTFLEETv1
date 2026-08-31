@@ -6324,6 +6324,61 @@
       }
       if (state.rivalTiles) delete state.rivalTiles[id]; // a real owner overrides any simulated one
     });
+    reconcilePhantoms(map);
+  }
+  // A TILE THE SERVER HAS NO ROW FOR IS NOT YOURS — BUT ONLY IF WE CAN PROVE IT (736).
+  //
+  // syncRealTiles() can only ever remove a tile it SEES: it walks the rows the pull
+  // returned, so its removal branch fires only when the server says someone else
+  // owns the tile. When a row is DELETED outright — released, or swept — the tile is
+  // absent from the map entirely, the loop never visits it, and a stale
+  // `ownedSystems[id] = true` survives forever. It keeps counting toward
+  // tileCount(), which is how a pilot ends up 79-against-a-75-cap and frozen out of
+  // new captures with nothing on screen to explain it.
+  //
+  // THIS IS THE MOST DESTRUCTIVE THING IN THIS FILE IF IT IS WRONG, so it refuses to
+  // act unless every one of these holds:
+  //   1. the pull SUCCEEDED. loadAll() returns null on failure now, precisely so
+  //      this can tell "failed" from "empty" — an empty map would otherwise read as
+  //      "you own nothing".
+  //   2. the map is non-empty. A complete map of a genuinely empty table means no
+  //      pilot in the game holds anything; treat it as untrustworthy either way.
+  //   3. the tile is GALAXY GROUND with NO CITADEL. A phantom fortress is a far
+  //      bigger claim to drop than a phantom field, and getting it wrong destroys a
+  //      Rank 5 someone sieged for. Void spires and House Citadels are left alone
+  //      as well — same rule as the cap and the boards.
+  //   4. it was not claimed in the last 90s. The map is a SNAPSHOT: a tile taken
+  //      while the pull was in flight is legitimately absent from it.
+  //   5. the phantoms are a MINORITY of the empire. If a quarter or more of what
+  //      you hold looks absent, the map is wrong rather than the save — log it and
+  //      touch nothing. This is the guard that makes a bad pull survivable.
+  //
+  // It only ever drops a flag the server already disagrees with, so it cannot cost
+  // a pilot anything the server still credits them for.
+  const PHANTOM_GRACE_MS = 90000, PHANTOM_MAX_SHARE = 0.25;
+  function reconcilePhantoms(map) {
+    if (!map || typeof map !== 'object') return;                 // 1 — pull failed
+    if (!Object.keys(map).length) return;                        // 2 — nothing to trust
+    const own = state.ownedSystems || {}, now = Date.now(), claimed = rt._claimAt || {};
+    const held = Object.keys(own).filter((id) => own[id]);
+    const gone = held.filter((id) => {
+      if (map[id]) return false;
+      if (id === GX.HOME || !isGalaxyTile(id)) return false;      // 3 — galaxy ground only
+      if (state.citadels && state.citadels[id]) return false;     // 3 — never a fortress
+      if (now - (claimed[id] || 0) < PHANTOM_GRACE_MS) return false; // 4 — just taken
+      return true;
+    });
+    if (!gone.length) return;
+    if (gone.length > Math.max(4, held.length * PHANTOM_MAX_SHARE)) {  // 5 — refuse
+      try { console.warn('[galaxy] phantom sweep declined — ' + gone.length + ' of ' + held.length
+        + ' holdings absent from the map; treating the pull as unreliable'); } catch (e) {}
+      return;
+    }
+    accrueResources();   // settle at pre-sweep ownership, same as every other flip
+    gone.forEach((id) => { delete own[id]; });
+    clusterBust();
+    try { console.info('[galaxy] dropped ' + gone.length + ' phantom tile(s) the server has no row for:', gone.join(' ')); } catch (e) {}
+    save();
   }
   function onRealtimeTile(ev) {
     if (!rt.realTiles) rt.realTiles = {};
@@ -6362,7 +6417,7 @@
   function initTerritory() {
     if (!(window.TERRITORY && window.TERRITORY.enabled())) return;
     rt._terrSync = Date.now();
-    window.TERRITORY.loadAll().then((map) => { syncRealTiles(map); if (window.UI) window.UI.galaxyChanged(); republishOwnedTiles(map); });
+    window.TERRITORY.loadAll().then((map) => { syncRealTiles(map); if (window.UI) window.UI.galaxyChanged(); });
     window.TERRITORY.subscribe(onRealtimeTile);
     // CONVERGENCE: realtime alone can miss (publication gaps, device sleep) —
     // re-pull the whole shared map every 60s so all players see the SAME galaxy
@@ -6370,18 +6425,21 @@
       try { window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } catch (e) {}
     }, 60000);
   }
-  // ONE-TIME REPAIR: conquests that never reached the server (the half-migrated
-  // claim_tile rejected every write for months) get republished, spaced out.
-  function republishOwnedTiles(map) {
-    if (state._turfRepub2) return;
-    state._turfRepub2 = 1; save();
-    const mine = Object.keys(state.ownedSystems || {}).filter((id) => !(map && map[id]) && !abandonedByMe(id));
-    mine.slice(0, 40).forEach((id, i) => {
-      setTimeout(() => {
-        try { window.TERRITORY.claim(id, window.TERRITORY.myName(), 15, { citadel: !!hasMyCitadel(id), citadelLv: citadelLevel(id), fleetScore: Math.round(score()), defense: defenseSnapshot() }); } catch (e) {}
-      }, 800 + i * 400);
-    });
-  }
+  // RETIRED (736). republishOwnedTiles() re-claimed every locally-held tile that
+  // was missing from the server map — a one-time repair for the half-migrated
+  // claim_tile that rejected writes for months. That migration landed long ago,
+  // and the path had become the thing MANUFACTURING the bug it was written to fix:
+  // it re-asserted stale local flags onto the server with no cap check and no test
+  // that the pilot still held the tile. FrostSkull's 79-against-a-75-cap was four
+  // plain tiles it re-claimed in one 1.2s burst (800 + i*400 — the timestamps are
+  // 371/415/397ms apart), long since lost to other pilots, which then counted
+  // toward tileCount() and froze him out of new captures.
+  //
+  // A phantom is now RESOLVED rather than re-published — see the reconciliation
+  // pass in syncRealTiles(). `state._turfRepub2` is left in the save: it is read at
+  // ascension (see the truncation guard) and an unrecognised key is never ours to
+  // delete.
+  function republishOwnedTiles() { /* retired — see above */ }
   // Tap a tile: own → deploy/farm; neutral → capture siege; rival → contest
   // (starts a 15-min region cooldown). Returns {ok} / {ok:false, reason}.
   // Effective entry cost for a tile (your own territory warps at half price).
@@ -6882,6 +6940,10 @@
     }
     accrueResources();   // settle earnings BEFORE ownership changes — new rate applies from now
     state.ownedSystems[k] = true;
+    // Runtime-only claim stamp — reconcilePhantoms() needs to know this tile was
+    // taken AFTER the in-flight pull was snapshotted. Never persisted: it is a
+    // fact about this session, not about the account.
+    (rt._claimAt || (rt._claimAt = {}))[k] = Date.now();
     clusterBust();       // the block this tile just joined pays from this moment, not 250ms later
     // THE FORTRESS COMES WITH THE TILE. ONE CHOKE POINT, NO EXCEPTIONS.
     // Every path that flips a tile to you ends here — the ordinary siege, the
@@ -7728,24 +7790,37 @@
   // `parts` is returned so a screen can EXPLAIN the number without recomputing it.
   function tileRateOf(id) {
     const t = sysAt(id); if (!t || !t.rate) return null;
-    const base = Number(t.rate) || 0;
+    const base0 = Number(t.rate) || 0;
     if (t.void) {   // VOID ZONE — every tile pays ALL FOUR currencies hourly
-      const vr = base * 25;
+      const vr = base0 * 25;
       return { void: true, res: 'all', perHour: vr, gold: vr * 1000,
                pays: { fuel: vr, iron: vr, plasma: vr, gold: vr * 1000 },
-               parts: { base, deep: 1, cit: 1, galaxy: 25, cluster: 1 },
+               parts: { base: base0, deep: 1, cit: 1, galaxy: 25, cluster: 1 },
                cluster: { size: 0, mult: 1, add: 0, name: '' }, natural: !!t.citadel, citLv: 0 };
     }
     const deep = t.deep ? GX.DEEP_MULT.resource : 1;   // deep space ×25 on top
     const rec = state.citadels && state.citadels[id];
     const citLv = rec ? (rec.lv || 1) : 0;
     const cit = citLv ? CITADEL_MULT * citLv : 1;      // PLAYER CITADEL — 10× per rank
+    // A TILE IS EITHER A NATURAL FORTRESS OR A BUILT ONE, NEVER BOTH (737).
+    // The two bonuses are alternatives — ×1000 for what the tile IS, or ×10/rank for
+    // what the pilot BUILT — and nothing is supposed to carry both: canBuildCitadel()
+    // refuses a natural fortress and inheritCitadel() returns early on one. The
+    // stack only exists because the scarcity pass and a player's build crossed in
+    // time (a fortress retired, then built on; or an ordinary tile built on, then
+    // promoted). Where they HAVE crossed, the citadel wins and the natural bonus is
+    // taken back out: t.rate for a fortress is exactly its resource-grade rate ×
+    // CITADEL_RATE_MULT, so dividing recovers the ordinary tile underneath exactly.
+    // The pilot keeps the citadel they paid for, on a normal tile, which is what
+    // they would have had if the two passes had not overlapped.
+    const natural = !!t.citadel;
+    const base = (natural && citLv) ? Math.round(base0 / GX.CITADEL_RATE_MULT) : base0;
     const clu = clusterOf(id);                         // CONTIGUITY — 1 unless the block qualifies
     const perHour = base * deep * cit * 25 * clu.mult; // GALAXY YIELD ×25 — territory is the resource engine
     const res = t.resource || 'fuel';
     return { void: false, res, perHour, gold: 0, pays: { [res]: perHour },
              parts: { base, deep, cit, galaxy: 25, cluster: clu.mult },
-             cluster: clu, natural: !!t.citadel, citLv };
+             cluster: clu, natural, citLv };
   }
   function resourceRates() {
     const r = { fuel: 0, iron: 0, plasma: 0 };
@@ -8402,18 +8477,9 @@
     // their richest holding demoted to an ordinary hex with no notice and no way
     // back, which is the one thing a balance change must never do. Read-only: this
     // asks the save what it owns and tells the map; it writes nothing.
-    try {
-      if (GX && GX.legacyCitadel && GX.grandfather) {
-        const keep = [];
-        for (const id in (state.ownedSystems || {})) {
-          if (!state.ownedSystems[id]) continue;
-          const p = GX.parseId(id); if (!p) continue;              // void tiles are off-map
-          if (GX.legacyCitadel(p.q, p.r)) keep.push(id);
-        }
-        const n = GX.grandfather(keep);
-        if (n) { try { console.info('[LOOTFLEET] kept ' + n + ' held natural citadel(s)'); } catch (e) {} }
-      }
-    } catch (e) { try { console.warn('[LOOTFLEET] citadel grandfather skipped', e); } catch (e2) {} }
+    // GRANDFATHERING RETIRED (737) — GX.grandfather() is a no-op and the retired 48
+    // generate as ordinary tiles. A citadel already standing on one keeps paying as
+    // a citadel; see the alternatives note in tileRateOf(). Nothing to replay here.
     // …AND IMMEDIATELY AFTER IT, because grandfather() regenerates tiles as full
     // fortresses and this is the only thing that puts a razed one back down. Must
     // stay below the grandfather block: the order is the whole fix.
@@ -9362,7 +9428,7 @@
     xpFleetInfo,
     buildCitadel, canBuildCitadel, citadelBuildCost, citadelCount, citadelCap, tileCap, tileCount, tilesLeft, atTileCap, abandonTile, hasMyCitadel, rivalCitadelScore, rivalDefense,
     citadelLevel, citadelUpgradeCost, upgradeCitadel, unequip, citadelRankOf, tileIdByName,
-    resourceRates, tileRateOf, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
+    resourceRates, tileRateOf, isGalaxyTile, getResources: () => state.resources, getSiege: () => rt.siege, getWaves: () => rt.waves,
     ownedSystemList,
     // CONTIGUITY — derived from ownedSystems, stored nowhere. clusterBust() is for
     // any future write path that changes ownership and cannot wait 250ms.

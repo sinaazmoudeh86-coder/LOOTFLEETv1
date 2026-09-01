@@ -61,7 +61,18 @@
   // engine's own non-finite guard would rewrite it to 1 the first time it touched
   // a stat. 1e15 is an order of magnitude under MAX_SAFE_INTEGER, so it still
   // adds, subtracts and formats like an ordinary number.
-  const UNL_TOP = 1e15, UNL_FLOOR = 1e14;
+  //
+  // THE CEILING WAS BELOW THE PRICE LIST (Sep 2026). A deep hull's last upgrade
+  // is 3000 × 1.8^tier × (1.95+0.06·tier)^19 gold, which passes 1e15 on the top
+  // hulls — so "unlimited" could not afford ONE upgrade, and because the watchdog
+  // only re-tops a wallet that has fallen BELOW the floor, a pilot sitting on the
+  // full 1e15 was stuck there permanently with nothing to spend it on. That is
+  // the reported "the unlimited currency code doesn't give enough gold".
+  // 4e15 clears the most expensive purchase in the game by ~3× and is still well
+  // inside MAX_SAFE_INTEGER (9.007e15), so it adds, subtracts and formats exactly.
+  // The floor moves with it — a floor below the biggest single price would let the
+  // wallet drain to a point it can no longer buy anything and never trigger.
+  const UNL_TOP = 4e15, UNL_FLOOR = 2e15;
   function topUpWallets(g) {
     const st = g.state; let changed = false;
     const set = (obj, k) => { if (!obj) return; if (!((obj[k] || 0) >= UNL_FLOOR)) { obj[k] = UNL_TOP; changed = true; } };

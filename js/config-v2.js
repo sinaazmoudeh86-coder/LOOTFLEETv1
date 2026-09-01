@@ -28,9 +28,29 @@
     { key: 'cosmic',    name: 'Cosmic',    color: '#ff6ad5', glow: 'rgba(255,106,213,1)',   minStats: 6, maxStats: 6, mult: 11.5, weight: 0.017,   particles: 10 },
     { key: 'void',      name: 'Void',      color: '#9a5bff', glow: 'rgba(154,91,255,1)',    minStats: 6, maxStats: 6, mult: 15.5, weight: 0.003,   particles: 12 },
     { key: 'eternal',   name: 'Eternal',   color: '#eae6ff', glow: 'rgba(234,230,255,1)',   minStats: 6, maxStats: 6, mult: 21.0, weight: 0.0005,  particles: 16 },
-    { key: 'primordial',name: 'Primordial',color: '#ffe6a8', glow: 'rgba(255,230,168,1)',   minStats: 6, maxStats: 6, mult: 28.5, weight: 0.0040, particles: 22 },
-    { key: 'relic',     name: 'Relic',     color: '#c061ff', glow: 'rgba(192,97,255,1)',    minStats: 6, maxStats: 6, mult: 38.0, weight: 0.00075,  particles: 26 },
-    { key: 'artifact',  name: 'Artifact',  color: '#ff2330', glow: 'rgba(255,35,48,1)',     minStats: 6, maxStats: 6, mult: 50.0, weight: 0.00013, particles: 30 },
+    // THE LADDER MUST DESCEND, AND FOR THREE TIERS IT CLIMBED (Sep 2026).
+    // Reported by a player doing the arithmetic the Bag prints: "eternal says
+    // 1 in 131k but artifact is 1 in 20k". He was reading it correctly.
+    //
+    // Primordial shipped at 0.0040 — EIGHT TIMES Eternal's 0.0005, one tier
+    // BELOW it, and more common than Void two tiers below that. Relic (0.00075)
+    // also outweighed Eternal. Every ratio in this column is a smooth 2.5 → 6.0
+    // slide except that one step, which is what a dropped decimal place looks
+    // like; the Relic and Artifact figures were then authored against the wrong
+    // Primordial and inherited the error. With the ×0.1 post-multiplier and the
+    // ascension top-boost (tier 11+, up to ×5) applied on top, Artifact came out
+    // commoner than Eternal three tiers under it, which is the reported symptom
+    // and the reason top-tier "god rolls" have been piling up on active accounts.
+    //
+    // Restored to the ladder's own curve — ÷5.0, ÷5.0, ÷4.8 — which now joins the
+    // ascension tiers below it smoothly (÷5.25, ÷6.7, ÷6.0) instead of falling
+    // off a 162× cliff. NOTHING IS CLAWED BACK: a weight only affects future
+    // rolls, `tier` and the array INDEX are untouched, so every item already in
+    // every hold keeps exactly the grade it was earned at. It is still a nerf to
+    // future drops and it is in the patch card.
+    { key: 'primordial',name: 'Primordial',color: '#ffe6a8', glow: 'rgba(255,230,168,1)',   minStats: 6, maxStats: 6, mult: 28.5, weight: 0.00010, particles: 22 },
+    { key: 'relic',     name: 'Relic',     color: '#c061ff', glow: 'rgba(192,97,255,1)',    minStats: 6, maxStats: 6, mult: 38.0, weight: 0.000020, particles: 26 },
+    { key: 'artifact',  name: 'Artifact',  color: '#ff2330', glow: 'rgba(255,35,48,1)',     minStats: 6, maxStats: 6, mult: 50.0, weight: 0.0000042, particles: 30 },
     // ---- ASCENSION-EXCLUSIVE TIERS ----------------------------------------
     // These three CANNOT drop until the pilot has ascended. No zone, boss or
     // crate produces them below the required star count — the gate is the

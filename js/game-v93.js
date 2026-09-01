@@ -706,15 +706,24 @@
     // SHIP HULL UPGRADES — per-ship levels bought with Galaxy Resources (+dmg/+hp/+fire rate)
     const _hl = ((state.shipLevels && state.shipLevels[state.ship]) || 1) - 1;
     const hlDmg = _hl * 10, hlHp = _hl * 12, hlAtk = _hl * 5;
-    s.attackDamage *= (1 + (m.dmgPct + (sm.dmgPct||0) + fs.dmgPct + hlDmg + (nc.dmgPct||0)) / 100);
+    // EVERY FLEET PERCENTAGE IS ADDITIVE INTO ONE POOL PER STAT, and nothing was
+    // publishing the pool — so a Commander card advertising "+273% Fire Rate" on
+    // top of a ~4,700% pool reads as ×3.7 and delivers ×1.06. The sums are lifted
+    // into named consts here, arithmetic UNCHANGED, purely so a card can state
+    // what it is actually worth. Runtime only: stashed on rt.stats, never saved.
+    const poolDmg = m.dmgPct + (sm.dmgPct||0) + fs.dmgPct + hlDmg + (nc.dmgPct||0);
+    const poolAtk = s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0) + (nc.atkSpeedPct||0);
+    s.attackDamage *= (1 + poolDmg / 100);
     s.health *= (1 + (m.hpPct + (sm.hpPct||0) + fs.hpPct + hlHp + (am.hpPct || 0) + (nc.hpPct||0)) / 100);
     s.critChance += m.critChance + (sm.critChance||0) + fs.critChance + (nc.critChance||0);
     s.critDamage += m.critDamage + (sm.critDamage||0) + fs.critDamage + (nc.critDamage||0);
     s.moveSpeed += m.moveSpeed + (sm.moveSpeed||0) + fs.moveSpeed + (nc.moveSpeed||0);
     s.lifeSteal += m.lifeSteal + (sm.lifeSteal||0) + fs.lifeSteal;
     s.multiShot += m.multiShot + (sm.multiShot||0) + fs.multiShot + (nc.multiShot||0);
-    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + (s.attackSpeed + m.atkSpeedPct + (sm.atkSpeedPct||0) + fs.atkSpeedPct + hlAtk + (am.atkSpeedPct || 0) + (nc.atkSpeedPct||0)) / 100);
+    s.attacksPerSec = C.PLAYER_BASE.attackSpeed * (1 + poolAtk / 100);
     s.shipLevel = _hl + 1;
+    // PRE-CLAMP totals, read by COMMANDERS.realGain() to price one card honestly.
+    s.pool = { dmgPct: poolDmg, atkSpeedPct: poolAtk, critChance: s.critChance, critDamage: s.critDamage, multiShot: s.multiShot };
     s.critChance = Math.min(100, s.critChance);
     // MEATY FIRE (Jul 2026): past 2.2 shots/s and 100% multishot, extra rate
     // FOLDS INTO DAMAGE — identical DPS, a fraction of the projectiles. At
@@ -5011,6 +5020,12 @@
     const cx = rt.worldW / 2, cy = rt.worldH * 0.24;
     const b = new E.Enemy(type, state.currentDungeon, cx, cy);
     b.isBoss = true; b.isSuper = true; b.isServerDread = true;
+    // NEVER A KILL TARGET. The whole event is an unlimited damage score — push
+    // stages, bank damage, the mark stays standing. Enforced in Enemy.takeDamage()
+    // so it holds for every weapon, not just the ones that route through onKill()
+    // politely. (The Alliance Armada mark below is deliberately NOT a score target:
+    // that one carries a real shared pool and dropping it to 0 is the win.)
+    b.scoreTarget = true;
     // effectively unlimited HP — anchored to ~an hour of the player's own DPS so
     // the bar barely moves in a 2:30 run; the module tops it back up besides.
     const dps = Math.max(1, (rt.stats && rt.stats.theoryDps) || 1);

@@ -301,6 +301,29 @@
       { const _gs = (window.GAME && window.GAME.state && window.GAME.state.gameSpeed) || 1;
         this.hitFlash = (_gs > 2 && this.hitFlash > 0.15) ? Math.max(this.hitFlash, 0.5) : 1; }
       if (this.hp <= 0 && !this.dying) {
+        // A SCORE TARGET IS NOT A KILL TARGET.
+        // The world-boss arena is a DAMAGE LADDER: you push stages and bank an
+        // unlimited score, and the mark is never meant to fall. That promise used
+        // to live only in SDREAD.engineTick, which repairs the bar ONCE A FRAME,
+        // after every weapon has already resolved — so any weapon that took the
+        // bar to zero inside a frame called onKill() first, and the repair arrived
+        // to a corpse: it reset `hp` and `dying` but never `dead`, leaving a
+        // 96%-health body and an ended run.
+        //
+        // The Aeternum's Event Horizon lance, its fracture lanes, the Eternum's
+        // death beams and the harvesters all run `takeDamage() → onKill()`
+        // directly with no boss guard, which is why the big special effects were
+        // the ones seen killing an event boss that ordinary gunfire never could.
+        //
+        // So the guard goes at the ONE point that decides a death, and every
+        // weapon in the game — and every weapon added after this — is correct by
+        // construction. The damage is NOT discarded: whatever spilled past zero is
+        // banked so the run's score still counts it before the bar is floored.
+        if (this.scoreTarget) {
+          this.overkill = (this.overkill || 0) - this.hp;   // hp is ≤ 0 here
+          this.hp = 1;
+          return false;
+        }
         this.dying = true;
         return true; // signals death this frame
       }

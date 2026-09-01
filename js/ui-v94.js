@@ -649,7 +649,9 @@
       <div class="ip-stat"><span class="ip-sname">Account</span><span class="v">${cloud ? (s.email || 'Cloud') : (s.method || 'Local')}</span></div>
       <div class="lo-sect" style="margin-top:11px">Profile</div>
       <div class="acct-row"><input id="ac-name" class="acct-in" maxlength="18" placeholder="New pilot name"><button class="btn" id="ac-rename">Rename</button></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center;letter-spacing:.08em">LOOT FLEET V1.0 BETA</div>
+      <div class="acct-build"><button type="button" id="ac-build" class="acct-build-pill" title="What’s new in this build">
+        <span class="abp-n">BUILD ${(window.LF_BUILD | 0) || '—'}</span><span class="abp-a">PATCH NOTES ›</span>
+      </button><div class="acct-build-s">LOOT FLEET V1.0 BETA</div></div>
       <div class="lo-sect" style="margin-top:11px">★ LootFleet Pro</div>
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v" style="color:${pro ? '#7ce0a0' : 'var(--muted)'}">${pro ? 'ACTIVE · renews ' + new Date(G.state.proUntil).toLocaleDateString() : 'Not subscribed'}</span></div>
       <div class="acct-row">${pro ? '<button class="btn" id="ac-manage">Manage / cancel subscription</button>' : '<button class="btn gold" id="ac-gopro">★ Go Pro — $19.99/mo</button>'}</div>
@@ -686,6 +688,18 @@
     const $s = (id) => sheet.querySelector('#' + id);
     wireGfx(sheet);
     const rn = $s('ac-rename');
+    // THE BUILD PILL READS window.LF_BUILD, never a literal — the same rule the
+    // login stamp follows, so the number on screen can never drift from the code
+    // that is running. It opens the patch card in FORCED mode: show(true) bypasses
+    // the once-per-build seen check, so a player can re-read the notes whenever
+    // they like instead of only in the first seconds after an update.
+    const bp = $s('ac-build');
+    if (bp) bp.addEventListener('click', () => {
+      try {
+        if (window.PATCHNOTES && window.PATCHNOTES.show) window.PATCHNOTES.show(true);
+        else toast('Patch notes unavailable');
+      } catch (e) { toast('Patch notes unavailable'); }
+    });
     if (rn) rn.addEventListener('click', () => {
       const v = ($s('ac-name').value || '').trim();
       if (v.length < 3) { toast('Name needs 3+ characters', '#e23b4e'); return; }

@@ -651,6 +651,24 @@ svg.lc{ width:15px; height:15px; vertical-align:-3px; display:inline-block; marg
 .acct-in:focus{ border-color:#5b9cff; }
 .acct-hint{ font-size:10px; color:var(--muted); line-height:1.5; }
 
+/* ---- build stamp ----------------------------------------------------------
+   The version line under Profile used to be dead text. It is the one place a
+   player can find out what they are running, so it is a control now: the pill
+   opens the patch card on demand instead of it being a thing you get four
+   seconds of after an update and can never see again.
+   The NUMBER is written by ui-v94 from window.LF_BUILD, never a literal. */
+.acct-build{ margin-top:9px; display:flex; flex-direction:column; align-items:center; gap:5px; }
+.acct-build-pill{ display:inline-flex; align-items:center; gap:9px; min-height:34px; padding:0 6px 0 13px;
+  border-radius:999px; background:#0e1521; border:1px solid var(--line-2); cursor:pointer;
+  font-family:'Rajdhani',sans-serif; letter-spacing:.1em; transition:border-color .16s, background .16s; }
+.acct-build-pill:hover{ background:#132033; border-color:#2f4a68; }
+.acct-build-pill:active{ transform:scale(.98); }
+.acct-build-pill:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(91,156,255,.3); }
+.abp-n{ font-size:11.5px; font-weight:800; color:var(--text); }
+.abp-a{ font-size:9.5px; font-weight:800; color:#8fc4ff; background:rgba(91,156,255,.13);
+  border-radius:999px; padding:5px 10px; white-space:nowrap; }
+.acct-build-s{ font-size:10px; color:var(--muted); letter-spacing:.08em; }
+
 /* ===== first-time COACH marks ===== */
 #coach-layer{ position:fixed; inset:0; z-index:320; display:none; pointer-events:none; }
 .co-ring{ position:fixed; left:0; top:0; border:2px solid #ffd24d; border-radius:13px; pointer-events:none;

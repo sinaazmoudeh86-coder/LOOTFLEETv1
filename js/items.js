@@ -30,7 +30,7 @@
     const TT = C.TOP_TIER == null ? 11 : C.TOP_TIER;
     // FORTUNE LATTICE perk: lifts every above-common weight
     const perk = (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('rare') : 1;
-    return C.RARITY.map((r) =>
+    const out = C.RARITY.map((r) =>
       // A DORMANT TIER NEVER ENTERS THE ROLL. Reserved entries are defined so the
       // ladder has somewhere to grow and so a save written against one later
       // still lines up — they are not obtainable until they are switched on.
@@ -39,6 +39,27 @@
         : r.tier === 0 ? r.weight
         : r.weight * Math.pow(luck, r.tier) / Math.pow(TIER_DAMPEN, r.tier) * perk * (r.tier >= TT ? top : 1)
     );
+    // STRUCTURAL GUARD — THE LADDER CAN ONLY EVER DESCEND (Sep 2026).
+    //
+    // This curve has TWO authors and they disagreed twice. A dropped decimal put
+    // Primordial's weight 8× ABOVE Eternal's one tier below it; and ascTopBoost
+    // steps hard at TOP_TIER, handing Primordial up to ×5 and Eternal nothing, so
+    // even with the weights corrected a fully-ascended pilot's ladder inverted at
+    // that boundary. Both produced the same player-visible nonsense — a rarer tier
+    // quoted at better odds than the tier under it — which is exactly what gets
+    // reported, because players read the Bag's odds and do the arithmetic.
+    //
+    // So the roll refuses it structurally instead of relying on the numbers being
+    // hand-tuned: no live tier may out-weigh the last live tier below it. This
+    // clamps DOWN only, so it can never mint a rarity, and it self-heals any
+    // future retune of the weights, the zone caps, the perk or the boost.
+    let prev = Infinity;
+    for (let i = 0; i < out.length; i++) {
+      if (!(out[i] > 0)) continue;                 // skip dormant / above-cap / zero
+      if (out[i] > prev * 0.9) out[i] = prev * 0.9;
+      prev = out[i];
+    }
+    return out;
   }
   function rollRarity(dungeon) {
     const weights = rarityWeights(dungeon);

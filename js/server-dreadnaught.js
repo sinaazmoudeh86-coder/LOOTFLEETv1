@@ -800,10 +800,19 @@
     // run's damage alone. Season total still accumulates for the season board.
     const before = stageInfo(run.dealt).stage;
     // damage dealt = boss HP delta (the engine resolved the real hits)
-    const delta = Math.max(0, run.lastHp - b.hp);
+    // THE SCORE IS THE DAMAGE, so it is banked BEFORE the bar is topped back up —
+    // and the overkill Enemy.takeDamage() set aside is counted with it. A hit that
+    // spills past zero is still damage the pilot dealt and still belongs on the board.
+    const spill = Math.max(0, Number(b.overkill) || 0); b.overkill = 0;
+    const delta = Math.max(0, run.lastHp - b.hp) + spill;
     if (delta > 0) { run.dealt += delta; s.total += delta; }
+    // THE TOP-UP IS A BACKSTOP, NOT THE GUARD. It runs once a frame, after every
+    // weapon has resolved, so it can repair a bar but could never stop a weapon
+    // that had already called onKill() and taken the mark off the field — it reset
+    // hp and dying and left `dead` set. `scoreTarget` is what actually makes the
+    // mark unkillable now; this keeps the bar where the fight wants it.
     if (b.hp < b.maxHp * 0.5) b.hp = b.maxHp * 0.96;         // unlimited HP — it never dies
-    if (b.hp <= 0 || b.dying) { b.hp = b.maxHp * 0.96; b.dying = false; }
+    if (b.hp <= 0 || b.dying || b.dead) { b.hp = b.maxHp * 0.96; b.dying = false; b.dead = false; }
     run.lastHp = b.hp;
     // stage crossings → instant loot; the boss evolves & hits harder
     const info = stageInfo(run.dealt);

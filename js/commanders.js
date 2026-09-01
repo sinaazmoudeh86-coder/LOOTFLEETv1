@@ -682,6 +682,59 @@
     return out;
   }
 
+  // ---- WHAT THE CARD IS ACTUALLY WORTH, RIGHT NOW ---------------------------
+  // Reported: "I have Juno that supposedly gives +273% fire rate and 123% fleet
+  // damage but it increases my damage by like 6%." The maths was right and the
+  // CARD was wrong to imply otherwise.
+  //
+  // Every fleet percentage in this game lands in ONE ADDITIVE POOL per stat —
+  // gear, hull mods, hull levels, skill tree, pilot tree, nanocores, auras and
+  // the officer all sum before anything multiplies. At endgame that pool is
+  // thousands of percent, so a 273 on top of 4,700 is +5.7% DPS. The number on
+  // the card was true and useless; a card that states a stat a player cannot
+  // convert into an outcome is decoration.
+  //
+  // So the card now prints the DELTA as well: the same DPS model computeStats()
+  // uses, run with this officer's lines and again without them. Fire rate folds
+  // into damage above the 2.2/s cap and multishot above 100% folds too, so both
+  // are DPS-preserving and drop out of the ratio — which is exactly why the
+  // honest figure is the one worth showing.
+  function dpsModel(p) {
+    const cc = Math.min(100, Math.max(0, p.critChance || 0));
+    const ms = Math.min(100, Math.max(0, p.multiShot || 0));
+    return Math.max(1, 100 + (p.dmgPct || 0)) * Math.max(1, 100 + (p.atkSpeedPct || 0))
+         * (1 + (cc / 100) * Math.max(0, (p.critDamage || 0)) / 100) * (1 + ms / 100 * 0.6);
+  }
+  // null whenever the answer would be a guess: not seated, seat requirement
+  // unmet, or the stats have not been built yet. A blank line is honest; a
+  // fabricated one is not.
+  function realGain(id) {
+    let base = null;
+    try { base = (G().getStats() || {}).pool; } catch (e) { return null; }
+    if (!base) return null;
+    const c = rec().own[id], who = BY_ID[id];
+    if (!c || !who || !isEquipped(id) || !specOk(who)) return null;
+    const b = bonusFor(c.r, who.t, who);
+    const mine = {};
+    if (who.t !== 'fighterDmg') mine[who.t] = b;      // the wing rides fighterMult()
+    const s2 = secondOf(who, c.r);
+    if (s2) mine[s2] = (mine[s2] || 0) + Math.max(1, Math.round(b * 0.45));
+    const without = {};
+    ['dmgPct', 'atkSpeedPct', 'critChance', 'critDamage', 'multiShot'].forEach((k) => {
+      without[k] = (base[k] || 0) - (mine[k] || 0);
+    });
+    const now = dpsModel(base), off = dpsModel(without);
+    if (!(off > 0) || !isFinite(now) || !isFinite(off)) return null;
+    return now / off - 1;
+  }
+  function gainLine(id) {
+    const g = realGain(id);
+    if (g == null) return '';
+    const txt = g >= 0.001 ? '+' + (g * 100).toFixed(1) + '% fleet DPS' : 'under +0.1% fleet DPS';
+    return '<span class="cmr-gain" style="display:block;font-size:9.5px;font-weight:800;letter-spacing:.04em;'
+      + 'color:' + (g >= 0.05 ? '#7ce0a0' : '#f0b45c') + ';margin-top:3px">▲ ' + txt + '</span>';
+  }
+
   // ---- COMMAND SCORE ----------------------------------------------------------
   // One number for a whole roster, so Commanders can be ranked the way fleet
   // power ranks hulls.
@@ -1090,6 +1143,7 @@
         + (ok
           ? '<span class="cmr-line"><b>+' + b + u + '</b><i>' + esc(STAT_LABEL[w.t] || w.t) + '</i></span>'
             + (s2k ? '<span class="cmr-line sm"><b>+' + s2v + (s2k === 'multiShot' ? '' : '%') + '</b><i>' + esc(STAT_LABEL[s2k] || s2k) + '</i></span>' : '')
+            + gainLine(w.id)
           : '<span class="cmr-unmet">\u25cb ' + esc(specLabel(w)) + '</span>'
             + '<span class="cmr-line sm dim"><b>+' + b + u + '</b><i>' + esc(STAT_LABEL[w.t] || w.t) + '</i></span>')
         + '</span>'
@@ -1645,7 +1699,7 @@
         + '<span class="cmp-x">'
         + '<span class="cmp-n">' + esc(w.name) + '<em style="color:' + R.color + '">' + esc(R.name) + '</em></span>'
         + '<span class="cmp-big' + (ok ? '' : ' off') + '"><b>+' + b + u + '</b> ' + esc(STAT_LABEL[w.t] || w.t)
-        + (s2k ? '<i>+' + s2v + (s2k === 'multiShot' ? '' : '%') + ' ' + esc(STAT_LABEL[s2k] || s2k) + '</i>' : '') + '</span>'
+        + (s2k ? '<i>+' + s2v + (s2k === 'multiShot' ? '' : '%') + ' ' + esc(STAT_LABEL[s2k] || s2k) + '</i>' : '') + gainLine(w.id) + '</span>'
         + '<span class="cmp-s' + (ok ? ' ok' : '') + '">'
         + (specKind(w) === 'none' ? '\u25c9 Works in any fleet'
            : ok ? '\u25c9 ' + esc(specLabel(w)) + ' \u2014 requirement met'

@@ -31,7 +31,7 @@
 (function () {
   'use strict';
 
-  const BUILD = 737;
+  const BUILD = 738;
   // 736 CARRIES 730–735'S ROWS TOO. 729 is still what the population is running:
   // every build from 730 up was cut and verified without being pushed, and the card
   // is keyed on LF_BUILD in localStorage, so a 736-only card would mean nobody who
@@ -51,9 +51,9 @@
   // repeated at the bottom — the Eternum row states both halves of that licence
   // change, and the chat row states the launch gate it actually ships on.
   const NOTES = {
-    build: 737,
-    title: 'BUILD 737',
-    sub: 'THE MOTHERSHIP has arrived — plus everything from 730 to 736.',
+    build: 738,
+    title: 'BUILD 738',
+    sub: 'THE MOTHERSHIP has arrived — plus everything from 730 to 738.',
     groups: [
       { k: 'NEW', c: '#7ce0a0', rows: [
         ['☄', 'THE MOTHERSHIP — a new Voidmaw season', 'The Voidmaw was never alone. Its <b>mothership</b> has come to recover it, and it fights nothing like the old boss. Same event, same two runs a day, same instant stage loot — <b>a brand new season board, starting at zero for everyone</b>, and no end date. Your <b>previous season prize is waiting to be collected</b> in the event and in your mail; coins, parts and the Voidmaw hull you were building all carry across untouched.<br><br>It brings three new weapons. <b>Two harvester drones</b> launch at the start and hunt you for the entire run — slow, relentless, and <b>they cannot be killed</b>. Let one touch you and it latches on: engines to 45% and <b>40% of your hull every second</b>, which is about two and a half seconds from full no matter what you fly. They also leave a <b>burning wake</b> behind them that lingers for a few seconds — crossing one costs hull and <b>slows you down</b>, so it costs more than it looks, and over a long run the wakes turn the arena into a maze. And the mothership fires <b>rocket volleys</b> from long range: each one takes <b>a fifth of your maximum hull</b>, but they fly to where you <i>were</i>, so keep moving and they miss. The collapsing red zones are still here but come <b>noticeably less often</b> — the harvesters are the pressure now.<br><br><b>A new grand prize: THE PROGENITOR.</b> Collect <b>1,000 parts</b> and you fly the mothership yourself — five cannon hardpoints, six fighter bays, and its own harvester drones that latch onto your enemies instead of you. <b>The Voidmaw is retired as a prize</b> — it belonged to the season that just closed. <b>Nothing has been taken:</b> every part you have banked is kept and now counts toward the Progenitor instead, so if you were close to the old 150 you are already a long way into the new one. Anyone who assembled a Voidmaw keeps it in their Hangar.'],

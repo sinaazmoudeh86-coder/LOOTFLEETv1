@@ -339,7 +339,18 @@
   // never regress (Pro time, purchases, owned ships, blueprints, cosmetics)
   // are UNIONED in from the older copy. Fixes "Pro/credits gone the next day"
   // — a stale cloud copy can no longer erase a newer local save, and vice versa.
-  function mergeSaves(local, cloud) {
+  // A POOL CAN BUY A HULL WHOSE KEY IS NOT THE POOL'S OWN. `voidmaw` paid for the
+// Voidmaw in season 1 and is the pool the 1,000-part Progenitor is priced against
+// in season 2, so any ownership guard that only tests the POOL key hands the
+// mothership's whole price back to a pilot who never finished season 1.
+//
+// THIS IS THE ONE PLACE THE PAIRING IS DECLARED. `shipworks.js` reads it off the
+// ACCOUNT export for its snapshot-restore guard rather than keeping a second copy —
+// a hand-maintained duplicate of a dependency rule is how `sw.js CORE` shipped a
+// half-applied path split. A season-3 prize on this pool belongs on this list.
+const POOL_BUYS = { voidmaw: ['voidmaw', 'progenitor'] };
+
+function mergeSaves(local, cloud) {
     if (!cloud) return local || null;
     if (!local) return cloud;
     // BASE PICK — PROGRESSION FIRST (Jul 2026, the SinaNoCheats incident): the
@@ -573,6 +584,24 @@
       b.runs = Math.max(b.runs || 0, o.runs || 0);
       b.partDay = Math.max(b.partDay | 0, o.partDay | 0);   // first-fight bonus never pays twice
       if (o.vmGranted) b.vmGranted = true;
+      // `progGranted` IS THE ONLY MARKER THE PROGENITOR REPAIR CAN KEY ON, so the
+      // merge must never destroy it. It unions exactly like vmGranted above and is
+      // cleared by progUnwind() alone: a rule that deleted it here handed a stale
+      // 738 copy's hull to an already-stamped save with no evidence left to act on,
+      // and the pilot kept the mothership AND a full parts pool.
+      if (o.progGranted) b.progGranted = true;
+      // THE PROGENITOR UNWIND IS A ONE-TIME REFUND, so its stamp has to union. A
+      // second device whose copy still carries the mistaken grant would otherwise
+      // win the base pick and pay the 1,000 parts back a second time — the
+      // ascension-points refund loop, exactly. If either side has run it, the
+      // merged save has run it.
+      if (o.progUnwind && !b.progUnwind) b.progUnwind = o.progUnwind;
+      if (o.progUnwindMailed) b.progUnwindMailed = 1;   // never apologise twice
+      // `progClaim` IS A DELIBERATE-CLAIM RECEIPT and must union, earliest wins. It
+      // is the one thing that stops the repair pass revoking a hull the pilot chose:
+      // lose it to a stale base pick and the next load strips a legitimately
+      // claimed mothership back off the account.
+      if (o.progClaim) b.progClaim = b.progClaim ? Math.min(b.progClaim, o.progClaim) : o.progClaim;
       const bd = b.day | 0, od = o.day | 0;
       if (od > bd) {
         b.day = od; b.bestDay = o.bestDay || 0;
@@ -725,11 +754,13 @@
     // owned hull's balance against a copy that had not assembled yet hands back the
     // whole price of a ship that is already in the hangar \u2014 the same duplication
     // trap the `pasc.pts` wallet block above exists to avoid.
+    // POOL_BUYS is declared at module scope and exported — see its header there.
     if (other.shipParts) {
       base.shipParts = base.shipParts || {};
       const own = base.ownedShips || {};
+      const bought = (k) => (POOL_BUYS[k] || [k]).some((h) => own[h]);
       for (const k in other.shipParts) {
-        if (own[k]) continue;
+        if (bought(k)) continue;
         base.shipParts[k] = Math.max(base.shipParts[k] | 0, other.shipParts[k] | 0);
       }
     }
@@ -1540,5 +1571,5 @@
     refreshBar();
     return true;
   }
-  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, publishNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, clearCogDot, casOn: () => _casOn };
+  window.ACCOUNT = { key, current, session, repin, uid, load, save: saveLocal, push, pull, flushNow, publishNow, refreshBar, cloudOn, setName, saveWeight, mergeSaves, POOL_BUYS, clearCogDot, casOn: () => _casOn };
 })();

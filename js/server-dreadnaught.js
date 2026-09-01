@@ -50,7 +50,7 @@
   // moving to 2 opens a clean board with NO SQL and no migration, and every
   // season-1 row stays exactly where it is as the historical record.
   const SEASON = { num: 2, boss: 'THE PROGENITOR', label: 'The Progenitor', end: Infinity };
-  const PREV_SEASON = { num: 1, label: 'Voidmaw' };   // settled on first load of this build
+  const PREV_SEASON = { num: 1, label: 'Voidmaw', boss: 'THE VOIDMAW' };   // settled on first load of this build
   const UNLOCK = 50;                 // minimum level to join
   const BASE_ATTEMPTS = 2;           // daily attempts
   const PRO_ATTEMPTS = 1;            // +1 for LootFleet Pro
@@ -160,6 +160,11 @@
     // the 456 rebalance did above. A pilot logs in owning everything they earned,
     // with last season's trophy waiting to be collected.
     if (!s.s2) { s.s2 = 1; rolloverSeason2(s); }
+    // REVERSE THE ACCIDENTAL GRAND-PRIZE GRANTS. Lives here, in the single state
+    // accessor, so it runs on EVERY load path — load(), init(), adoptSave() after
+    // a cloud conflict, an account switch — rather than the one path that was
+    // being looked at. See the razed-citadel replay for the same lesson.
+    progUnwind(s);
     if (s.day !== dayIdx()) {                                    // daily reset
       settleLeaderboard(s);                                       // grant yesterday's placement first
       s.day = dayIdx(); s.att = 0; s.bestDay = 0; s.buys = 0;
@@ -235,13 +240,50 @@
   const PROG_KEY = 'progenitor', PROG_NEED = 1000;
   function progGranted() { try { const s = sd(); return !!(s && s.progGranted); } catch (e) { return false; } }
   function progOwned() { try { return progGranted() || !!G().state.ownedShips[PROG_KEY]; } catch (e) { return false; } }
+  // ⚠ THIS FUNCTION HAS EXACTLY ONE CALLER: progClaimPress(), a button tap. It used
+  // to fire from updateHud() the instant the pool crossed PROG_NEED, so the first
+  // time a season-1 veteran opened the event the mothership was assembled for them
+  // out of parts banked against a season whose own grand prize cost 150 — no button
+  // pressed, no fight, no choice. progUnwind() reverses the grants that made.
+  //
+  // THE ROUTE IS 1,000 PARTS AND IT UNLOCKS (operator, Aug 2026). The difference
+  // that matters is consent: the bar fills, the strip offers it, the player taps.
+  // DO NOT re-wire this to a render path.
+  //
+  // THE WRITE ORDER IS HALF THE FIX. The old body deducted the parts and set
+  // progGranted BEFORE delivering the hull — and progOwned() is true on that flag
+  // alone. So any throw or lost write between the two left the pilot charged, the
+  // hull absent, every part faucet gated off and the store hiding parts: paid up
+  // and permanently locked out, with no route back. Nothing is taken now until the
+  // hull is actually in ownedShips.
   function progAssemble() {
-    if (progOwned() || vmParts() < PROG_NEED) return;
+    if (progOwned() || vmParts() < PROG_NEED) return false;
     const g = G();
-    g.state.shipParts[VM_KEY] -= PROG_NEED;
-    try { sd().progGranted = true; } catch (e) {}
-    if (!g.grantShip || !g.grantShip(PROG_KEY)) { g.state.ownedShips[PROG_KEY] = true; }
-    sd().hist.unshift({ d: Date.now(), s: -1, txt: '❖ THE PROGENITOR ASSEMBLED — the mothership is yours. Switch to it in the Hangar.' });
+    if (!g || !g.state) return false;
+    // TAKE THE EVENT RECORD ONCE, UP FRONT, AND NEVER RE-ENTER sd() BELOW.
+    // sd() runs progUnwind(), so re-reading it after the grant flag was set let the
+    // repair pass reverse the assembly this function was in the middle of making:
+    // it returned true, showed the ASSEMBLED modal, delivered no hull and queued an
+    // "awarded by mistake" apology to a pilot who had legitimately claimed.
+    const s = sd(); if (!s) return false;
+    // NO CONFIG ENTRY MEANS AN INVISIBLE HULL. Every hangar, fleet picker and
+    // expedition list filters on SHIP_BY_KEY, so granting a key CONFIG does not
+    // know is indistinguishable from granting nothing — while still charging.
+    try { if (!window.CONFIG || !window.CONFIG.SHIP_BY_KEY || !window.CONFIG.SHIP_BY_KEY[PROG_KEY]) return false; } catch (e) { return false; }
+    // 1 — DELIVER, and confirm delivery landed.
+    if (g.grantShip) { try { g.grantShip(PROG_KEY); } catch (e) {} }
+    if (!g.state.ownedShips) g.state.ownedShips = {};
+    if (!g.state.ownedShips[PROG_KEY]) g.state.ownedShips[PROG_KEY] = true;
+    if (!g.state.ownedShips[PROG_KEY]) return false;
+    // 2 — only now charge for it. Floor/Number, never `| 0`: a balance must not wrap.
+    if (!g.state.shipParts) g.state.shipParts = {};
+    g.state.shipParts[VM_KEY] = Math.max(0, Math.floor(Number(g.state.shipParts[VM_KEY]) || 0) - PROG_NEED);
+    // 3 — stamp the receipt. `progClaim` is the DELIBERATE-CLAIM marker and it
+    // outranks progUnwind() forever: it is what tells the repair pass that this
+    // hull was chosen, not handed over by the 738 HUD tick.
+    s.progGranted = true;
+    s.progClaim = Date.now();
+    s.hist.unshift({ d: Date.now(), s: -1, txt: '❖ THE PROGENITOR ASSEMBLED — the mothership is yours. Switch to it in the Hangar.' });
     try { g.save(); } catch (e) {}
     if (window.UI) window.UI.refreshAll();
     sheet(
@@ -252,6 +294,129 @@
       '<button class="sdm-ok" id="sdm-ok">Magnificent</button>'
     );
     _modal.querySelector('#sdm-ok').addEventListener('click', () => { closeModal(); render(); });
+    return true;
+  }
+
+  // ONE CALLER, AND IT IS A BUTTON PRESS. progAssemble() spends 1,000 parts and is
+  // irreversible, so it hangs off a deliberate tap and nothing else — never a
+  // render, never a HUD tick. `_claiming` closes the double-tap window: the whole
+  // spend is synchronous, so a re-entrant second press is the only way to pay twice.
+  let _claiming = false;
+  function progClaimPress() {
+    if (_claiming) return;
+    _claiming = true;
+    try {
+      // RE-CHECK AT THE MOMENT OF THE WRITE, not when the button was drawn — the
+      // strip can sit on screen while a run or another tab moves the pool.
+      if (progOwned()) { toast('❖ The Progenitor is already in your Hangar'); return; }
+      const short = PROG_NEED - vmParts();
+      if (short > 0) { toast('❖ Need ' + short.toLocaleString() + ' more Progenitor Parts'); return; }
+      if (!progAssemble()) toast('Could not assemble — refresh the game', '#e23b4e');
+    } finally { _claiming = false; }
+  }
+  // ---- UNWIND THE ACCIDENTAL PROGENITOR GRANTS ----------------------------
+  // `progGranted` IS THE DISCRIMINATOR, and exactly one function ever wrote it
+  // (progAssemble). A Progenitor from the full-fleet coupon, the secret fleet tap
+  // or a season-pass crate never sets it — so those hulls are left alone. This
+  // pass reverses only what the event itself did to an account.
+  //
+  // THE PARTS COME BACK IN FULL, and that is the point: the player earned them,
+  // the spend was never asked for, and a withdrawal that keeps the price is theft.
+  // The refund is derived from the flag rather than a tally — the flag is written
+  // only AFTER the deduction succeeds, so it can never claim a charge that did not
+  // happen — and it is stamped so it cannot pay twice.
+  //
+  // THE HULL REMOVAL IS RE-APPLIED ON EVERY LOAD, not just the one that refunded.
+  // `ownedShips` is a UNIONED entitlement in mergeSaves(), so a second device that
+  // still holds the mistaken grant puts the hull straight back at the next merge.
+  // Refund once; enforce forever. Removing a hull the pilot never owned cannot
+  // cost them anything, so the repeat is safe where a repeat refund would not be.
+  function progUnwind(s) {
+    if (!s) return;
+    const g = G(); if (!g || !g.state) return;   // retry next load rather than bank "nothing to do"
+    const st = g.state;
+    // A DELIBERATE CLAIM OUTRANKS THIS PASS, FOREVER. Without this the repair would
+    // revoke every hull a future claim route ever hands over — including one claimed
+    // by a pilot whose 738 grant was already reversed.
+    if (s.progClaim) return;
+    const hull = !!(st.ownedShips && st.ownedShips[PROG_KEY]);
+    const flag = !!s.progGranted;
+    if (!s.progUnwind) {
+      // FIRST 739 LOAD — STAMP EVERY ACCOUNT, INCLUDING THE ONES WITH NOTHING TO
+      // REVERSE. "Flag set and no stamp" cannot tell a 738 grant from a grant made
+      // a microsecond ago, so recording n:0 here closes that window permanently:
+      // after this load, a set flag with no stamp is not a reachable state.
+      if (!flag) { s.progUnwind = { at: Date.now(), n: 0, had: 0 }; try { g.save(); } catch (e) {} return; }
+      // CHARGED AND NOT YET REFUNDED — the 738 grant, on the save that paid for it.
+      if (!st.shipParts) st.shipParts = {};
+      st.shipParts[VM_KEY] = Math.floor(Number(st.shipParts[VM_KEY]) || 0) + PROG_NEED;
+      s.progUnwind = { at: Date.now(), n: PROG_NEED, had: hull ? 1 : 0 };
+      if (!s.hist) s.hist = [];
+      s.hist.unshift({ d: Date.now(), s: -1, txt: '❖ ' + PROG_NEED.toLocaleString() + ' Progenitor Parts returned — the mothership was awarded by mistake and withdrawn. Your parts are back in full.' });
+      if (s.hist.length > 40) s.hist.length = 40;
+    }
+    // ENFORCEMENT — A MISTAKEN HULL IS REMOVED WHENEVER IT IS PRESENT, HOWEVER IT
+    // ARRIVED. It is NOT gated on this lineage having paid: `ownedShips` unions, so
+    // a stale 738 copy merging into an already-stamped save walks the hull straight
+    // back in, and gating on `n > 0` let that account keep the mothership AND a
+    // full pool. `progGranted` is the discriminator either way, so a coupon,
+    // secret-tap or season-pass Progenitor is still never touched.
+    //
+    // NO REFUND HERE. A stamp already exists, so this lineage's pool was either
+    // already repaid or never debited — the pool max-unions, and the uncharged copy
+    // is the higher one, so it always survives. Paying again would mint parts.
+    let removed = false;
+    if (hull && (flag || s.progUnwind.n > 0)) {
+      // NEVER STRAND THE PILOT ON A HULL THEY NO LONGER OWN. Hand back their best
+      // remaining hull, not the frigate — they were flying an apex ship a moment
+      // ago, and dropping them to the starter would be a punishment for our bug.
+      if (st.ship === PROG_KEY) {
+        let target = '';
+        try {
+          const roster = (window.CONFIG && window.CONFIG.SHIPS) || [];
+          for (let i = roster.length - 1; i >= 0; i--) {
+            const k = roster[i].key;
+            if (k !== PROG_KEY && st.ownedShips[k]) { target = k; break; }
+          }
+        } catch (e) {}
+        // AND NEVER LEAVE AN EMPTY HANGAR. If the mistaken hull is somehow the only
+        // one on the account, hand the starter back rather than deleting the last
+        // ship the pilot has — a grant, never a loss.
+        if (!target) { target = 'frigate'; st.ownedShips[target] = true; }
+        if (g.switchShip) { try { g.switchShip(target); } catch (e) {} }
+        if (st.ship === PROG_KEY) st.ship = target;
+      }
+      delete st.ownedShips[PROG_KEY];
+      s.progUnwind.rm = 1;
+      removed = true;
+    }
+    delete s.progGranted;
+    if ((removed || s.progUnwind.n > 0) && !s.progUnwindMailed) s.progUnwindMail = 1;
+    try { g.save(); } catch (e) {}
+  }
+  // The letter is retried until MAIL is actually up — an account owed an apology
+  // must not depend on the player happening to reload at the right moment.
+  function progUnwindMail(s) {
+    if (!s || !s.progUnwindMail || !window.MAIL) return;
+    // THE LETTER MUST MATCH WHAT ACTUALLY HAPPENED TO THIS ACCOUNT. Where the
+    // charge landed on a copy that lost a merge, no parts were taken from the save
+    // that survived — promising a refund that is not in the pool would read as a
+    // second bug.
+    const paid = (s.progUnwind && s.progUnwind.n > 0);
+    try {
+      window.MAIL.push({ ic: '❖', title: 'The Progenitor was awarded by mistake',
+        body: 'When the new season opened, the event assembled <b>The Progenitor</b> for you automatically, because you were holding '
+          + PROG_NEED.toLocaleString() + '+ parts banked from last season. That was a bug. The mothership was never meant to be handed out for a carried-over balance, and it has been withdrawn.'
+          + (paid
+              ? '<br><br><b>Your ' + PROG_NEED.toLocaleString() + ' parts are back in full</b> and every part faucet in the event is open to you again.'
+              : '<br><br><b>No parts were taken from your account</b>, and every part faucet in the event is open to you again.')
+          + ' Nothing else on your account was touched.'
+          + '<br><br>The mothership is still yours to take: hold <b>' + PROG_NEED.toLocaleString() + ' parts</b> and it unlocks in the event — this time by your choice, with a button you press.'
+          + '<br><br>You did nothing wrong here, and we are sorry for the whiplash.' });
+      delete s.progUnwindMail;
+      s.progUnwindMailed = 1;
+      try { G().save(); } catch (e) {}
+    } catch (e) {}
   }
   // RETIRED (season 2). The Voidmaw is no longer assembled from parts — the
   // Progenitor replaced it as the event's grand prize. Kept as a no-op rather
@@ -373,7 +538,7 @@
     const rank = knownSeasonRank(s);
     const idx = rank ? SEASON_TIERS.findIndex((x) => rank <= x.max) : SEASON_TIERS.length - 1;
     if (!s.claims) s.claims = [];
-    s.claims.push({ t: 's', rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
+    s.claims.push({ t: 's', boss: SEASON.boss, season: SEASON.label, rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
     s.pendingToast = rank
       ? '🏆 ' + SEASON.boss + ' final standings — you placed #' + rank + '. Collect your rewards in the event.'
       : '🏆 ' + SEASON.boss + ' standings settled — your prize is waiting in the event.';
@@ -395,7 +560,9 @@
       const idx = rank ? Math.max(0, SEASON_TIERS.findIndex((x) => rank <= x.max)) : SEASON_TIERS.length - 1;
       const t = SEASON_TIERS[idx < 0 ? SEASON_TIERS.length - 1 : idx];
       if (!s.claims) s.claims = [];
-      s.claims.push({ t: 's', rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
+      // STAMP THE CLAIM WITH THE SEASON THAT STAGED IT. Without this, claimAll()
+      // labelled the payout with whatever season was current when it was collected.
+      s.claims.push({ t: 's', boss: PREV_SEASON.boss, season: PREV_SEASON.label, rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
       s.pendingToast = rank
         ? '🏆 ' + PREV_SEASON.label + ' season settled — you placed #' + rank + '. Collect your prize in the event.'
         : '🏆 ' + PREV_SEASON.label + ' season settled — your prize is waiting in the event.';
@@ -405,8 +572,8 @@
           body: 'The <b>' + PREV_SEASON.label + '</b> season is closed. '
             + (rank ? 'Your total damage placed you <b>#' + rank + '</b> (' + t.name + ')'
                     : 'Your final placing never reached this device, so you are paid as <b>' + t.name + '</b>')
-            + ' — your prize is waiting: <b>' + tierTxt(t) + '</b>.<br><br>'
-            + 'A new season has begun. <b>' + SEASON.label + '</b> has arrived to recover the Voidmaw, and the board is back to zero for everyone.',
+            + ' — your season payout is waiting: <b>' + tierTxt(t) + '</b>, and that is the whole prize.<br><br>'
+            + 'A new season has also begun: <b>' + SEASON.label + '</b> has arrived to recover the Voidmaw. Its hull is <b>not part of this payout</b> — the board is back to zero for everyone, and the mothership is fought for from here.',
           meta: { kind: 'prize', cta: { label: '🏆 Collect season prize', screen: 'sdread' } } });
       } catch (e) {}
     }
@@ -466,8 +633,19 @@
         s.coins = coinsOf(s) + t.coins;
         g.state.credits = (g.state.credits || 0) + t.lc;
         const vps = c.rank === 1 ? 500 : c.rank === 2 ? 250 : c.rank === 3 ? 125 : 50;
-        try { if (window.VIP) window.VIP.grant(vps, c.rank ? SEASON.boss + ' rank #' + c.rank : SEASON.boss + ' placement'); } catch (e) {}
-        txt = '🏆 ' + SEASON.boss + ' FINAL — ' + (c.rank ? 'rank #' + c.rank + ' (' + t.name + ')' : t.name) + ': ⚜' + vps + ' · ' + tierTxt(t);
+        // A CLAIM IS LABELLED WITH THE SEASON THAT STAGED IT, NEVER THE CURRENT ONE.
+        // This read SEASON.boss, so a season-1 Voidmaw prize collected after the
+        // rollover was headed "THE PROGENITOR FINAL — rank #N" — which reads as
+        // "you won The Progenitor". That is the reported "the mail said I won the new
+        // ship, but it wasn't there": the payout was always Event Coins and
+        // LootCoins and was paid correctly; only the name on the receipt was wrong.
+        //
+        // An unstamped claim can only be a Voidmaw one. SEASON.end is Infinity, so
+        // settleSeason() cannot have staged a season-2 claim, which means every
+        // season claim sitting in a save today came from the season-1 rollover.
+        const boss = c.boss || PREV_SEASON.boss;
+        try { if (window.VIP) window.VIP.grant(vps, c.rank ? boss + ' rank #' + c.rank : boss + ' placement'); } catch (e) {}
+        txt = '🏆 ' + boss + ' FINAL — ' + (c.rank ? 'rank #' + c.rank + ' (' + t.name + ')' : t.name) + ': ⚜' + vps + ' · ' + tierTxt(t);
       }
       s.hist.unshift({ d: Date.now(), s: 0, txt }); lines.push(txt);
     });
@@ -1123,10 +1301,15 @@
             ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
             : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / need * 100) + '%"></i><span>❖ ' + parts.toLocaleString() + ' / ' + need.toLocaleString() + ' parts</span></div>') +
         '</div></div>';
+    // THE GRAND PRIZE IS OFFERED, NEVER TAKEN. A full bar puts the claim in front
+    // of the player rather than assembling behind their back.
+    const ready = !progOwned() && parts >= PROG_NEED;
     return '<div class="sd-prizes" id="sd-vmstrip">' +
       tier('prog', 'ships/vm2-mothership.png', 'GRAND PRIZE — THE PROGENITOR', PROG_NEED, progOwned(),
         'Collect <b>' + PROG_NEED.toLocaleString() + ' parts</b> to fly the mothership itself — five cannons, six fighter bays, and its <b>harvesters</b> hunt for you.') +
-      '<div class="sd-prize-foot">Parts drop from stage 5+, your first fight each day, and the ✦ Event Store.</div>' +
+      (ready
+        ? '<button class="sd-claims" id="sd-progclaim">❖ UNLOCK THE PROGENITOR<span>' + PROG_NEED.toLocaleString() + ' parts ready — spends them and the mothership is yours</span></button>'
+        : '<div class="sd-prize-foot">Parts drop from stage 5+, your first fight each day, and the ✦ Event Store.</div>') +
       '</div>';
   }
 
@@ -1532,6 +1715,7 @@
     const on = (id, fn) => { const e = body.querySelector('#' + id); if (e) e.addEventListener('click', fn); };
     on('sd-fight', startRun);
     on('sd-claims', claimAll);
+    on('sd-progclaim', progClaimPress);
     on('sd-buyatt', buyAttempt);
     on('sd-return', () => { const b = document.querySelector('.nav-btn[data-screen="battle"]'); if (b) b.click(); });
     on('sd-lb', openLB);
@@ -1551,14 +1735,12 @@
     // keep the live board ranks fresh (throttled internally) so settlements
     // and the run summary use REAL standings
     if (lvl() >= UNLOCK && !ended()) ensureCloud();
-    // GRAND PRIZE — auto-assemble the moment the final part lands (never mid-run)
-    // THE VOIDMAW IS RETIRED AS A PRIZE (season 2). vmAssemble() is deliberately
-    // no longer called: the hull is season 1's and the Progenitor replaces it.
-    // NOTHING IS TAKEN — every banked part is kept and now counts toward a
-    // strictly better hull, and anyone who already assembled the Voidmaw keeps it
-    // in their Hangar. Parts are never spent on it again, so a pilot sitting on
-    // 150+ is closer to the Progenitor rather than poorer.
-    if (!run && lvl() >= UNLOCK && !progOwned() && vmParts() >= PROG_NEED) progAssemble();
+    // NO AUTO-ASSEMBLE. This line used to read:
+    //   if (!run && lvl() >= UNLOCK && !progOwned() && vmParts() >= PROG_NEED) progAssemble();
+    // and it is what handed the mothership to season-1 veterans the moment they
+    // opened the event — a 1,000-part spend and a grand prize as a side effect of
+    // a HUD tick. The grand prize is not automatic; see progAssemble()'s header.
+    progUnwindMail(s);
     // command-card badge = attempts remaining (only once unlocked & live)
     const b = $('cmd-sdread-badge');
     if (b) {
@@ -1630,7 +1812,11 @@
   }
   // partsNeed is exported so the SHIP CARD can print the real requirement instead
   // of a hardcoded copy of it — that card said 100 while this said 150.
-  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, partsNeed: PROG_NEED, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
+  // partsKey is exported for the same reason: the ship card was reading
+  // shipParts['progenitor'], a pool nothing writes, so the Progenitor's bar sat at
+  // 0 / 1,000 no matter how many parts the pilot held. The pool is the SEASON-1
+  // key and always will be — it is the receipt every banked part was written under.
+  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, partsNeed: PROG_NEED, partsKey: VM_KEY, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun, progAssemble, progUnwind, claimAll } };
 
   // =========================================================================
   // CSS

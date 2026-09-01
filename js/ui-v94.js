@@ -4033,8 +4033,14 @@
       // READ OFF THE EVENT, never restated: this card printed a hardcoded 100
       // while server-dreadnaught.js has required 150 since July, so a player could
       // fill the bar and still not own the hull.
-      const need = (window.SDREAD && window.SDREAD.partsNeed) || 500;
-      const have = Math.min(need, (G.state.shipParts && G.state.shipParts[key]) | 0);
+      const need = (window.SDREAD && window.SDREAD.partsNeed) || 1000;
+      // THE POOL KEY IS NOT THE HULL KEY. This read `shipParts[key]` — i.e.
+      // shipParts['progenitor'], a pool nothing has ever written — so the card sat
+      // at 0 / 1,000 no matter how many parts the pilot was actually holding. The
+      // pool is the season-1 key, because that is the receipt every banked part
+      // was written under. Requirement AND pool both come off the event now.
+      const pk = (window.SDREAD && window.SDREAD.partsKey) || key;
+      const have = Math.min(need, Math.floor(Number(G.state.shipParts && G.state.shipParts[pk]) || 0));
       action = `<button class="ship-btn buy" data-go-sdread="1">❖ Earn</button>`;
       lock = `<div class="ship-lock ready"><span class="lk-ic">❖</span><span>Event exclusive — <b>${have} / ${need}</b> Progenitor Parts, earned in the <b>Progenitor</b> world-boss event</span>
         <div class="lk-bar"><div class="lk-fill" style="width:${have / need * 100}%"></div></div></div>`;

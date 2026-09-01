@@ -627,10 +627,23 @@
       if (!sp) return;
       for (const k in sp) { const n = sp[k] | 0; if (n > (best[k] | 0)) best[k] = n; }
     });
+    // A POOL CAN BUY A HULL WHOSE KEY IS NOT THE POOL'S OWN, so the "already
+    // assembled" guard cannot just test `k`. `voidmaw` is the pool the 1,000-part
+    // Progenitor is priced against, and `owned('voidmaw')` is false for a pilot who
+    // never built the season-1 hull — so once a claim route exists, this pass would
+    // max a spent pool back to its pre-purchase high and MINT the mothership's whole
+    // price. The pairing is declared once, in account.js, and read from there.
+    //
+    // NO TABLE MEANS NO RESTORE. Returning false retries (boot gives up after 12
+    // tries) rather than restoring on a rule we cannot prove — a deferred
+    // restitution costs the player nothing; an unprovable one mints currency.
+    const POOL_BUYS = (window.ACCOUNT && window.ACCOUNT.POOL_BUYS) || null;
+    if (!POOL_BUYS) return false;
+    const poolSpent = (k) => (POOL_BUYS[k] || [k]).some(owned);
     const restored = [];
     for (const k in best) {
       if (PARTS_NEED[k] != null) continue;          // never swept — balance is current
-      if (owned(k)) continue;                      // already assembled: spending it was legitimate
+      if (poolSpent(k)) continue;                  // a hull this pool buys is owned: the spend was legitimate
       const have = partsOf(k), want = best[k] | 0;
       if (want <= have) continue;
       addParts(k, want - have);

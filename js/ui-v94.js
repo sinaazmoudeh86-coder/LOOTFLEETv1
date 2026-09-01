@@ -465,7 +465,7 @@
     // EVENT DEPLOYMENTS — the zone chip + advice + boss meter belong to the zone
     // grind; Home Citadel / Voidmaw runs own the arena and show their own HUD.
     const evRun = G.rt && (G.rt.hcrun || G.rt.sdrun);
-    el['zb-name'].textContent = evRun ? (G.rt.hcrun ? '🏰 Home Zone' : '❖ Voidmaw') : (safe ? '⌂ Hangar' : sysName);
+    el['zb-name'].textContent = evRun ? (G.rt.hcrun ? '🏰 Home Zone' : '❖ Progenitor') : (safe ? '⌂ Hangar' : sysName);
     el['zb-sub'].textContent = evRun ? (G.rt.hcrun ? 'Citadel defense' : 'World boss') : (safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : '')));
     const adv = G.zoneAdvice();
     // advice shows only when it adds info: deploy prompt in safe zone, or a
@@ -489,6 +489,13 @@
         const fz = document.getElementById('fly-now-zone');
         if (fz) fz.textContent = 'ZONE ' + rec + ' — ' + zoneName(rec).toUpperCase();
         fn.dataset.rec = rec;
+        // Measure the nav rather than restate its height — the button docks above
+        // it while the Bridge is open (see the #fly-now rule in game.html), and
+        // #nav changes height at four breakpoints plus the safe-area inset.
+        try {
+          const nv = document.getElementById('nav');
+          fn.style.setProperty('--fly-nav', ((nv && nv.offsetHeight) || 60) + 'px');
+        } catch (e) {}
       }
     }
     // siege/wave bar takes priority over the boss meter while a gauntlet is active
@@ -3749,7 +3756,8 @@
     // otherwise be described by whichever generic flag came first.
     if (ship.tour) return '✦ Tour of Duty';
     if (ship.event === 'mech') return '⚙ Mech Foundry';
-    if (ship.event) return '❖ Voidmaw';
+    if (ship.retired) return '◈ RETIRED';
+    if (ship.event) return '❖ Progenitor';
     if (ship.celestial) return '✦ Cargo Defense';
     if (ship.alienTech) return '◈ Kaevith';
     if (ship.emberTech) return '✦ Choir';
@@ -4013,15 +4021,22 @@
         ? 'Blueprint recovered — assemble it in the <b>Mech Foundry</b>.'
         : `Mech Foundry — the blueprint is yours on your <b>first clear</b> of the <b>${src ? src.name : 'top tier'}</b>${src ? ` (T${src.t}, Level ${src.lv})` : ''}.`}</span>${chips}</div>`;
     }
+    else if (ship.retired) {
+      // A CLOSED SEASON IS NOT A LOCKED ONE. Never show a part bar for a hull
+      // that can no longer be assembled — the bar is a promise the event cannot
+      // keep. Owners keep it; everyone else is told plainly that it is gone.
+      action = '<span class="ship-badge locked">◈</span>';
+      lock = '<div class="ship-lock"><span class="lk-ic">◈</span><span><b>Retired.</b> This hull was the grand prize of a closed season and can no longer be earned. Pilots who assembled one keep it.</span></div>';
+    }
     else if (ship.event === 'sdread') {
-      // THE VOIDMAW — assembled from event parts, never sold. The part count is
+      // THE PROGENITOR — assembled from event parts, never sold. The part count is
       // READ OFF THE EVENT, never restated: this card printed a hardcoded 100
       // while server-dreadnaught.js has required 150 since July, so a player could
       // fill the bar and still not own the hull.
-      const need = (window.SDREAD && window.SDREAD.partsNeed) || 150;
+      const need = (window.SDREAD && window.SDREAD.partsNeed) || 500;
       const have = Math.min(need, (G.state.shipParts && G.state.shipParts[key]) | 0);
       action = `<button class="ship-btn buy" data-go-sdread="1">❖ Earn</button>`;
-      lock = `<div class="ship-lock ready"><span class="lk-ic">❖</span><span>Event exclusive — <b>${have} / ${need}</b> Voidmaw Parts, earned in the <b>Voidmaw</b> world-boss event</span>
+      lock = `<div class="ship-lock ready"><span class="lk-ic">❖</span><span>Event exclusive — <b>${have} / ${need}</b> Progenitor Parts, earned in the <b>Progenitor</b> world-boss event</span>
         <div class="lk-bar"><div class="lk-fill" style="width:${have / need * 100}%"></div></div></div>`;
     }
     else if (ship.event) {
@@ -4101,7 +4116,7 @@
     }
     const bpChip = st.active ? ''
       : ship.event === 'mech' ? `<span class="bp-chip have" style="border-color:#ff4d5e88;color:#ffb0ba">⚙ FOUNDRY</span>`
-      : ship.event ? `<span class="bp-chip have" style="border-color:#b04dff88;color:#d9a0ff">❖ VOIDMAW</span>`
+      : ship.event ? `<span class="bp-chip have" style="border-color:#b04dff88;color:#d9a0ff">❖ PROGENITOR</span>`
       : ship.missionShip ? `<span class="bp-chip have" style="border-color:#59d98c88;color:#a5f2c4">⌘ MISSIONS</span>`
       : ship.purchase ? `<span class="bp-chip have" style="border-color:#f2a93c88;color:#ffd9a0">◈ LOOTCOIN</span>`
       : ship.megaCost ? `<span class="bp-chip have" style="border-color:#ff5a6888;color:#ff9aa6">◇ DREAD</span>`

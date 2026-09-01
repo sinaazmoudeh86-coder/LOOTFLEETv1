@@ -375,6 +375,43 @@
       base[k] = base[k] || {};
       for (const id in other[k]) if (other[k][id] && !base[k][id]) base[k][id] = other[k][id];
     });
+    // …AND THE FLAGSHIP FOLLOWS THE LATER SAVE (737).
+    //
+    // `ownedShips` unions, so a newly earned hull always survives — but `ship`,
+    // the hull you are actually FLYING, was in neither the union, saveWeight nor
+    // ASC_KEEP, so it was decided wholesale by the base pick. Switch flagship on
+    // one device, have an older copy win the pick, and the hull stays in your
+    // hangar while the game quietly puts you back in the previous one. That is
+    // the reported "it keeps reverting and I have to re-select it".
+    //
+    // Most-recent-wins is the right rule here: this is a CHOICE, not an
+    // entitlement, so there is no "higher" copy to prefer — only a later one.
+    // Guarded on ownership in the MERGED result, because the union above may have
+    // just added the hull the later copy was flying.
+    //
+    // NOTE this key is not in ASC_KEEP (ascension resets you to the start hull),
+    // which is exactly why the 736 structural check never looked at it. A key can
+    // need the union without needing to survive a reset.
+    // THE HULL YOU ARE FLYING IS NEVER CHANGED BY A REMOTE SAVE.
+    //
+    // `local` is the LIVE SESSION — a pilot sitting in a run right now — and
+    // `cloud` is the copy that beat us to the write. adoptSave() folds the result
+    // straight back into that live session, so anything this function decides
+    // about `ship` happens UNDER THE PLAYER'S HANDS, mid-flight.
+    //
+    // "Later save wins" is wrong here and was the first fix's mistake: on a CAS
+    // conflict the cloud copy is later BY DEFINITION — that is what a conflict
+    // is — so it always won, and the pilot got yanked into whatever hull another
+    // tab or device last flew. That is the reported "it randomly switched me to
+    // the mothership mid-flight".
+    //
+    // A flagship is a CHOICE being actively exercised, not an entitlement to
+    // reconcile. The session that is flying keeps it; the other device asserts its
+    // own the next time it pushes. Guarded on ownership in the merged result,
+    // because the union above may have just added the hull.
+    if (local.ship && local.ship !== base.ship && base.ownedShips && base.ownedShips[local.ship]) {
+      base.ship = local.ship;
+    }
     // PERMANENT PROGRESSION — monotonic counters can never regress through a
     // stale copy: Home Citadel wave + buildings, lifetime missions, season damage.
     if (other.homecit) {

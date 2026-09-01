@@ -234,6 +234,18 @@ window.__lfErr=[];
   background:linear-gradient(180deg,#ffd24d,#e8960f); border:none; border-radius:16px; padding:13px 30px; cursor:pointer;
   box-shadow:0 8px 30px -8px rgba(242,178,75,.85), inset 0 1px 0 rgba(255,255,255,.45); animation:flyPulse 2.2s ease-in-out infinite; }
 #fly-now.show{ display:flex; }
+/* DOCK IT WHILE THE BRIDGE IS OPEN, DO NOT FLOAT IT OVER THE CONTENT.
+   #fly-now is a sibling of #bridge at z-index 12, pinned to top:152px of #app,
+   while the bridge's own body (.br-sh-body) is the thing that scrolls. So the
+   button sat still at 152px and the formation cards and commander rail slid
+   underneath it — it covered the third hull slot outright. Docked to the bottom
+   it stays the one loud action, reachable at any scroll position, over dead
+   space instead of over content.
+   --fly-nav is MEASURED (#nav is 60/50/48/46px across four breakpoints plus a
+   safe-area inset) and falls back to the common 60px. */
+#bridge.open ~ #fly-now{ top:auto; bottom:calc(var(--fly-nav, 60px) + 12px); }
+/* …and the last card must clear the docked button rather than hide behind it. */
+#bridge.open .br-sh-body{ padding-bottom:96px; }
 #fly-now:active{ transform:translateX(-50%) scale(.96); }
 #fly-now .fn-t{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:16px; letter-spacing:.1em; color:#0b1220; }
 #fly-now .fn-z{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:11px; letter-spacing:.08em; color:#4a2f08; }
@@ -325,7 +337,7 @@ window.__lfErr=[];
    ORDER changes — so every lock, badge and [data-go] handler is the same code
    it was. Two things this has to defend against:
    1. .cmd-sdread/.cmd-galaxy pin themselves to `grid-row:1` for the old
-      featured row. Under sections that yanks Voidmaw and My Galaxy out of
+      featured row. Under sections that yanks the world-boss event and My Galaxy out of
       their group and into the first row of the sheet, so it is released.
    2. A collapsed card hides by CLASS, never by inline style — the beta gate
       owns inline display and must keep winning.
@@ -386,7 +398,7 @@ window.__lfErr=[];
 .mega-card .mc-n{font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .mega-card .mc-s{display:none !important;}
 .mega-card .mc-ic{flex:none;width:36px;height:36px;}
-/* featured first row: Voidmaw + My Galaxy side by side, always */
+/* featured first row: the world-boss event + My Galaxy side by side, always */
 .mega-card.cmd-sdread,.mega-card.cmd-galaxy{grid-row:1;grid-column:auto !important;min-height:64px;}
 .mega-card.cmd-sdread .mc-s,.mega-card.cmd-galaxy .mc-s{display:block !important;font-size:10px !important;line-height:1.35 !important;overflow:hidden;text-overflow:ellipsis;display:-webkit-box !important;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .mega-card.cmd-sdread .mc-ic{width:44px;height:40px;}
@@ -1009,8 +1021,8 @@ window.__lfErr=[];
               <span class="mc-lock"></span><span class="badge" id="cmd-tour-badge" style="display:none">0</span>
             </div>
             <div class="mega-card cmd-sdread" data-go="sdread">
-              <div class="mc-ic mc-vm"><img src="ships/ship-voidmaw.png" alt="Voidmaw"></div>
-              <div><div class="mc-n">Voidmaw <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Ends Aug 31 · <b id="cmd-sdread-cd">—</b></div></div>
+              <div class="mc-ic mc-vm"><img src="ships/vm2-mothership.png" alt="The Progenitor"></div>
+              <div><div class="mc-n">The Progenitor <em class="sd-live-tag">LIVE EVENT</em></div><div class="mc-s">Server Dreadnaught · world boss — every commander, one boss, endless stages</div><div class="sd-card-cd">Daily board resets in <b id="cmd-sdread-cd">—</b></div></div>
               <span class="mc-lock"></span><span class="badge" id="cmd-sdread-badge" style="display:none">0</span>
             </div>
             <div class="mega-card cmd-cargo" data-go="cargo">
@@ -1201,10 +1213,10 @@ window.__lfErr=[];
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=729"></script>
+<script src="js/config-v2.js?v=737"></script>
 <script src="js/items.js?v=725"></script>
 <script src="js/entities.js?v=725"></script>
-<script src="js/render.js?v=725"></script>
+<script src="js/render.js?v=737"></script>
 <script src="js/galaxy.js?v=737"></script>
 <script src="js/leaderboard.js?v=726"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1212,13 +1224,13 @@ window.__lfErr=[];
 <script src="js/servertime.js?v=725"></script>
 <script src="js/analytics.js?v=725"></script>
 <script src="js/cloud.js?v=728"></script>
-<script src="js/account.js?v=736"></script>
+<script src="js/account.js?v=737"></script>
 <script src="js/session-lock.js?v=725"></script>
 <script src="js/vip.js?v=725"></script>
 <script src="js/territory.js?v=737"></script>
 <script src="js/payments-v91.js?v=725"></script>
 <script src="js/game-v93.js?v=737"></script>
-<script src="js/ui-v94.js?v=736"></script>
+<script src="js/ui-v94.js?v=737"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
@@ -1238,7 +1250,7 @@ window.__lfErr=[];
 <script src="js/prism-v5.js?v=725"></script>
 <script src="js/prism-fleet.js?v=725"></script>
 <script src="js/dreadnaught.js?v=734"></script>
-<script src="js/server-dreadnaught.js?v=736"></script>
+<script src="js/server-dreadnaught.js?v=737"></script>
 <script src="js/galaxy-box.js?v=725"></script>
 <script src="js/shipworks.js?v=725"></script>
 <script src="js/starforge.js?v=725"></script>

@@ -10,11 +10,11 @@
        the equipped fleet, simulated from the player's real combat stats.
      • Stages scale forever (10M → 25M → 50M → …). Every stage cleared grants
        instant loot: gold, resources, REAL ship parts (state.shipParts — same
-       inventory Shipworks builds from), ◇ Dread Cores, ❖ Voidmaw Parts, and
+       inventory Shipworks builds from), ◇ Dread Cores, ❖ Progenitor Parts, and
        an aspirational Titan Sina part chance at very high stages.
      • The boss deals a % of the player's MAX HP per hit and evolves visually
        every 10 stages — everyone eventually falls; better fleets fall later.
-     • DAILY leaderboard (best single run → ❖ Voidmaw Parts) · SEASON
+     • DAILY leaderboard (best single run → ❖ Progenitor Parts) · SEASON
        leaderboard (total damage → ★ Titan Sina Parts at season end).
      • No end date. It was a limited season once; it is a fixture now, so no
        screen prints a deadline. `SEASON.num` survives only as a wire key.
@@ -37,13 +37,80 @@
   // written to the boards carries season=1, and sdUpsert/sdDaily/sdSeason all
   // query on it. Renaming it to read better would orphan every score on the
   // server. A stored identifier is a receipt.
-  const SEASON = { num: 1, boss: 'VOIDMAW', label: 'Voidmaw', end: Infinity };
+  // SEASON 2 — THE MOTHERSHIP. The Voidmaw was never alone: its mothership has
+  // arrived to recover it. Same event, same cadence, same boards — a new season
+  // key and a new set of guns.
+  //
+  // STILL NO END DATE. A deadline printed on screen is a promise, and the one
+  // thing worse than removing an event is announcing its death and then keeping
+  // it. `end: Infinity` and ended() returns false, exactly as before.
+  //
+  // `num` IS A WIRE KEY, NOT A LABEL — and this is the one legitimate reason to
+  // change it. sdUpsert/sdDaily/sdSeason all take `p_season` and filter on it, so
+  // moving to 2 opens a clean board with NO SQL and no migration, and every
+  // season-1 row stays exactly where it is as the historical record.
+  const SEASON = { num: 2, boss: 'THE PROGENITOR', label: 'The Progenitor', end: Infinity };
+  const PREV_SEASON = { num: 1, label: 'Voidmaw' };   // settled on first load of this build
   const UNLOCK = 50;                 // minimum level to join
   const BASE_ATTEMPTS = 2;           // daily attempts
   const PRO_ATTEMPTS = 1;            // +1 for LootFleet Pro
   const RUN_SECS = 150;              // 2:30 per attempt
   const ACCENT = '#b04dff';          // void violet
   const SHARD = '❖';                 // Voidmaw glyph
+
+  // ---- THE MOTHERSHIP'S ARMAMENT --------------------------------------------
+  // Three systems, answered three different ways.
+  //
+  //  · CANNONS    — the boss's own shots. Unchanged: a % of your max hull, so
+  //                 the fight scales to any fleet.
+  //  · HARVESTERS — two drones. Very slow, never stop, cannot be killed. They
+  //                 cannot be outfought, only outrun — and because they never
+  //                 rest they slowly eat the arena while the collapse zones take
+  //                 the rest of it. Touch one and it LATCHES: engines to 45% and
+  //                 40% of your max hull stripped every second, so a full hull is
+  //                 gone in about two and a half seconds whatever you fly. That
+  //                 is the point — no hull tanks a harvester. It is a positioning
+  //                 check, and it is survivable only if you break away at once.
+  //  · ROCKETS    — long range, slow, each a flat 20% of max hull. Five hits kill
+  //                 anyone. They fly to where you WERE, so they are always
+  //                 dodgeable, and they punish standing still while you kite.
+  //
+  // Percentages of MAX HULL throughout, never flat numbers — a bigger fleet lasts
+  // longer and is never immune.
+  const DRONE = {
+    n: 2, speedFrac: 0.24, gainPerStage: 0.0013, speedCapFrac: 0.45,
+    latchR: 52, hullPerSec: 0.30, slow: 0.45, spawnAt: 6,
+  };
+  const ROCKET = {
+    hullFrac: 0.20, speed: 200, r: 16,
+    volley: 2, volleyPerStage: 22, volleyMax: 5,
+    cd: 5.5, cdMin: 2.6, life: 9,
+  };
+  // VOID WAKE — the trail a harvester leaves behind it.
+  //
+  // This is what turns the drones from "do not touch" into a genuine spatial
+  // problem: they are slow, so over two and a half minutes they PAINT the arena,
+  // and the safe ground shrinks even when they are nowhere near you. Crossing a
+  // wake is meant to be a real cost but a survivable one — the trap is that it
+  // SLOWS you the moment you touch it, so you spend longer inside than you
+  // planned, and the burn compounds. Cross it fast and clean and you pay a few
+  // percent; hesitate in one and it kills you.
+  //
+  // The wake fades on its own so the arena can always be recovered.
+  // TUNED (737): the harvesters are SLOWER and hit softer, and the wake is twice
+  // as long. That trade is deliberate — the threat moves from the drone itself to
+  // the ground it has already covered, so the fight is read ahead rather than
+  // reacted to, and a slower drone laying a longer tail still closes the arena
+  // down at the same rate. Segment spacing is unchanged, so a 12s wake simply
+  // holds twice as many segments.
+  const TRAIL = {
+    every: 0.22,        // seconds between dropped segments
+    life: 12,           // segment lifetime — 2× longer tail
+    r: 26,              // narrower than the latch radius — you can thread between
+    hullPerSec: 0.12,   // 12% of max hull per second while inside
+    slow: 0.55,         // engines to 55%…
+    slowFor: 0.9,       // …for this long after the last touch
+  };
 
   // ---- utils ----------------------------------------------------------------
   function fmt(n) { try { return G().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n) + ''; } }
@@ -83,6 +150,16 @@
       s.hist.unshift({ d: Date.now(), s: 0, txt: '⚖ SEASON REBALANCED — damage and HP were scaled down galaxy-wide, so the season board restarted for everyone on the new numbers. Coins, parts and prizes already paid are untouched.' });
       try { g.save(); } catch (e) {}
     }
+    // SEASON 1 → 2 ROLLOVER. Runs once, on the first load of the build that
+    // brought the Mothership. It SETTLES the Voidmaw season the player actually
+    // played — stages their final prize as a claim and mails it — and only then
+    // zeroes the season figures so the new board starts level.
+    //
+    // It wipes PROGRESS and nothing else: coins, ship parts, unclaimed prizes,
+    // reward history and the assembled-Voidmaw flag all carry across, exactly as
+    // the 456 rebalance did above. A pilot logs in owning everything they earned,
+    // with last season's trophy waiting to be collected.
+    if (!s.s2) { s.s2 = 1; rolloverSeason2(s); }
     if (s.day !== dayIdx()) {                                    // daily reset
       settleLeaderboard(s);                                       // grant yesterday's placement first
       s.day = dayIdx(); s.att = 0; s.bestDay = 0; s.buys = 0;
@@ -127,34 +204,60 @@
   }
   function bossInterval(stage) { return Math.max(0.75, 1.5 - stage * 0.006); }
   function bossEra(stage) { return Math.floor((stage - 1) / 10); }           // visual evolution step
-  function bossSprite() { return 'ships/ship-voidmaw.png'; }                 // the Voidmaw itself
+  function bossSprite() { return 'ships/vm2-mothership.png'; }               // the Mothership
 
   // ---- THE VOIDMAW — the event's grand-prize hull -------------------------
-  const VM_KEY = 'voidmaw', VM_NEED = 150;   // Jul 2026: 100 → 150 — the Voidmaw is the apex hull now (Singularity proc), so the season grind matches
+  // VM_KEY IS THE STORED PART POOL and never changes — it is the receipt every
+  // banked part was written under. VM_NEED is season 1's assemble cost, kept only
+  // so an old history line still reads correctly; nothing assembles at it now.
+  const VM_KEY = 'voidmaw', VM_NEED = 150;
   function vmParts() { try { return (G().state.shipParts && G().state.shipParts[VM_KEY]) | 0; } catch (e) { return 0; } }
   // PERMANENT GRANT GUARD — the flag lives on the season record, not on hangar
   // ownership. Ascension keeps every hull now, but a sold or salvaged Voidmaw must
   // not be re-assembled for free either, so the record stays the gate.
   function vmGranted() { try { const s = sd(); return !!(s && s.vmGranted); } catch (e) { return false; } }
+  // OWNERSHIP OF THE RETIRED HULL. Currently has NO callers — every part faucet
+  // that used to gate on it now gates on progOwned(), because parts buy the
+  // Progenitor and gating a drop on the old hull paid nothing to exactly the
+  // pilots who finished season 1. Kept because it is the readable form of the
+  // season-1 receipt (vmGranted() + ownedShips), and a future screen that wants
+  // to say "you flew the Voidmaw" should ask this rather than re-derive it.
   function vmOwned() { try { return vmGranted() || !!G().state.ownedShips[VM_KEY]; } catch (e) { return false; } }
-  function vmAssemble() {
-    if (vmOwned() || vmParts() < VM_NEED) return;
+  // ---- THE PROGENITOR — season 2's grand prize ----------------------------
+  // THE VOIDMAW STAYS CLAIMABLE AT 150. Moving that goalpost to 500 would strand
+  // every pilot mid-grind on a hull they were days from finishing, which is the
+  // one thing a prize change must never do. Season 2 adds a DEEPER prize on the
+  // same part pool instead, and the Voidmaw is retired as a prize (see the
+  // render hook). Every part already banked carries over to the mothership.
+  //
+  // The pool key stays `voidmaw` — it is the receipt every stored part was
+  // written under, and renaming it to read better would revoke what it proved.
+  const PROG_KEY = 'progenitor', PROG_NEED = 1000;
+  function progGranted() { try { const s = sd(); return !!(s && s.progGranted); } catch (e) { return false; } }
+  function progOwned() { try { return progGranted() || !!G().state.ownedShips[PROG_KEY]; } catch (e) { return false; } }
+  function progAssemble() {
+    if (progOwned() || vmParts() < PROG_NEED) return;
     const g = G();
-    g.state.shipParts[VM_KEY] -= VM_NEED;
-    try { sd().vmGranted = true; } catch (e) {}
-    if (!g.grantShip || !g.grantShip(VM_KEY)) { g.state.ownedShips[VM_KEY] = true; }
-    sd().hist.unshift({ d: Date.now(), s: -1, txt: '❖ VOIDMAW ASSEMBLED — the apex hull is yours. Switch to it in the Hangar.' });
+    g.state.shipParts[VM_KEY] -= PROG_NEED;
+    try { sd().progGranted = true; } catch (e) {}
+    if (!g.grantShip || !g.grantShip(PROG_KEY)) { g.state.ownedShips[PROG_KEY] = true; }
+    sd().hist.unshift({ d: Date.now(), s: -1, txt: '❖ THE PROGENITOR ASSEMBLED — the mothership is yours. Switch to it in the Hangar.' });
     try { g.save(); } catch (e) {}
     if (window.UI) window.UI.refreshAll();
     sheet(
-      '<div class="sdm-kicker">VOIDMAW · GRAND PRIZE</div>' +
-      '<div class="sdm-title">VOIDMAW ASSEMBLED</div>' +
-      '<div class="sdm-art"><img src="ships/ship-voidmaw.png" alt=""></div>' +
-      '<div class="sdm-cd">' + VM_NEED + ' parts forged into the apex hull.<br>Its cannons open <b>singularities</b> — switch to it in the <b>Hangar ▸ Ships</b>.</div>' +
+      '<div class="sdm-kicker">PROGENITOR · GRAND PRIZE</div>' +
+      '<div class="sdm-title">THE PROGENITOR ASSEMBLED</div>' +
+      '<div class="sdm-art"><img src="ships/vm2-mothership.png" alt=""></div>' +
+      '<div class="sdm-cd">' + PROG_NEED + ' parts forged into the mothership.<br>Five cannons, six fighter bays and its own <b>harvesters</b> — switch to it in the <b>Hangar ▸ Ships</b>.</div>' +
       '<button class="sdm-ok" id="sdm-ok">Magnificent</button>'
     );
     _modal.querySelector('#sdm-ok').addEventListener('click', () => { closeModal(); render(); });
   }
+  // RETIRED (season 2). The Voidmaw is no longer assembled from parts — the
+  // Progenitor replaced it as the event's grand prize. Kept as a no-op rather
+  // than deleted: vmOwned() is still read to hide the hull from the store for
+  // pilots who assembled one in season 1, and they keep it in their Hangar.
+  function vmAssemble() { /* retired — see progAssemble() */ }
 
   // ---- stage rewards ------------------------------------------------------
   const PART_BANDS = [
@@ -203,12 +306,12 @@
       const bg = Math.floor(goldFor(stage) * 0.8);
       st.gold += bg; out.push({ t: '$' + fmt(bg) + ' Bonus Gold', c: '#e6b566' });
     }
-    // VOIDMAW PART — the season's grand-prize hull, dripped from stage 5 up.
+    // PROGENITOR PART — the season's grand-prize hull, dripped from stage 5 up.
     // ≈0.025–0.09 per stage cleared (halved Jul 2026), plus daily leaderboard
     // tiers and the first-fight bonus.
-    if (!vmOwned() && stage >= 5 && Math.random() < Math.min(0.09, 0.025 + stage * 0.002)) {
+    if (!progOwned() && stage >= 5 && Math.random() < Math.min(0.09, 0.025 + stage * 0.002)) {
       addPart(VM_KEY, 1);
-      out.push({ t: '❖ 1× VOIDMAW PART (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff', jackpot: true });
+      out.push({ t: '❖ 1× PROGENITOR PART (' + vmParts() + '/' + PROG_NEED + ')', c: '#d9a0ff', jackpot: true });
     }
     // aspirational: TITAN SINA part — exceptionally rare, very high stages only
     if (stage >= 40 && Math.random() < 0.005) {
@@ -225,7 +328,7 @@
     const lo = fmt(goldFor(stage)), hi = fmt(goldFor(stage) * 3);
     const band = partBand(stage);
     const bits = ['$' + lo + '–' + hi + ' Gold', band.tier + 's'];
-    if (stage >= 5) bits.push('❖ Voidmaw Part chance');
+    if (stage >= 5) bits.push('❖ Progenitor Part chance');
     if (stage >= 20) bits.push('◇ Core chance');
     if (stage >= 40) bits.push('★ Titan Sina Part (very rare)');
     return bits;
@@ -284,6 +387,38 @@
     } catch (e) {}
     try { G().save(); } catch (e) {}
   }
+  // ONE-TIME: pay out the Voidmaw season, then open the Mothership season.
+  function rolloverSeason2(s) {
+    const played = Math.floor(Number(s.total) || 0) > 0 || (s.bestEver | 0) > 0;
+    if (played) {
+      const rank = knownSeasonRank(s);
+      const idx = rank ? Math.max(0, SEASON_TIERS.findIndex((x) => rank <= x.max)) : SEASON_TIERS.length - 1;
+      const t = SEASON_TIERS[idx < 0 ? SEASON_TIERS.length - 1 : idx];
+      if (!s.claims) s.claims = [];
+      s.claims.push({ t: 's', rank: rank || 0, idx: idx < 0 ? 3 : idx, made: Date.now() });
+      s.pendingToast = rank
+        ? '🏆 ' + PREV_SEASON.label + ' season settled — you placed #' + rank + '. Collect your prize in the event.'
+        : '🏆 ' + PREV_SEASON.label + ' season settled — your prize is waiting in the event.';
+      try {
+        if (window.MAIL) window.MAIL.push({ ic: '🏆',
+          title: rank ? PREV_SEASON.label + ' season — final standing #' + rank : PREV_SEASON.label + ' season settled',
+          body: 'The <b>' + PREV_SEASON.label + '</b> season is closed. '
+            + (rank ? 'Your total damage placed you <b>#' + rank + '</b> (' + t.name + ')'
+                    : 'Your final placing never reached this device, so you are paid as <b>' + t.name + '</b>')
+            + ' — your prize is waiting: <b>' + tierTxt(t) + '</b>.<br><br>'
+            + 'A new season has begun. <b>' + SEASON.label + '</b> has arrived to recover the Voidmaw, and the board is back to zero for everyone.',
+          meta: { kind: 'prize', cta: { label: '🏆 Collect season prize', screen: 'sdread' } } });
+      } catch (e) {}
+    }
+    s.total = 0; s.bestDay = 0; s.bestEver = 0; s.bestStage = 0; s.att = 0; s.buys = 0;
+    s.lbRank = null; s.lbSeasonRank = null; s.seasonDone = 0;
+    if (!s.hist) s.hist = [];
+    s.hist.unshift({ d: Date.now(), s: 0,
+      txt: '☄ THE MOTHERSHIP — a new season has begun and the board restarted for everyone.'
+         + (played ? ' Your ' + PREV_SEASON.label + ' season prize is waiting to be collected.' : '')
+         + ' Coins, parts and anything already paid are untouched.' });
+    try { G().save(); } catch (e) {}
+  }
   // called on day rollover, BEFORE resetting bestDay — stages yesterday's placement as a CLAIM
   function settleLeaderboard(s) {
     if (!s.bestDay || s.day >= dayIdx()) { return; }
@@ -322,7 +457,7 @@
         g.state.gold = (g.state.gold || 0) + (c.gold || 0);
         if (c.cores) g.state.dreadCores = (g.state.dreadCores || 0) + c.cores;
         let ptxt = '';
-        if (c.parts && !vmOwned()) { addPart(VM_KEY, c.parts); ptxt = '❖ ' + c.parts + ' Voidmaw Parts · '; }
+        if (c.parts && !progOwned()) { addPart(VM_KEY, c.parts); ptxt = '❖ ' + c.parts + ' Progenitor Parts · '; }
         const vpd = c.rank === 1 ? 100 : c.rank === 2 ? 50 : c.rank === 3 ? 25 : 10;
         try { if (window.VIP) window.VIP.grant(vpd, c.rank ? 'Daily rank #' + c.rank : 'Daily placement'); } catch (e) {}
         txt = '🏆 Daily ' + (c.rank ? 'rank #' + c.rank : 'placement') + ' (' + c.name + ') — ⚜' + vpd + ' · ' + ptxt + '$' + fmt(c.gold || 0) + (c.cores ? ' · ◇' + c.cores : '');
@@ -356,7 +491,8 @@
   const COIN = '✦';
   function storeItems() {
     return [
-      { id: 'vmpart', ic: '❖', name: 'Voidmaw Shard',       sub: 'grand prize · ' + VM_NEED + ' assemble the ship', cost: 1500, key: VM_KEY,        hide: () => vmOwned() },
+      { id: 'vmpart',  ic: '❖', name: 'Progenitor Part',      sub: 'grand prize · ' + PROG_NEED.toLocaleString() + ' assemble the mothership', cost: 400,  key: VM_KEY, hide: () => progOwned() },
+      { id: 'vmpart10', ic: '❖', name: 'Progenitor Parts ×10', sub: 'ten at once · saves ' + COIN + ' 500',                                    cost: 3500, key: VM_KEY, qty: 10, hide: () => progOwned() },
       { id: 'sina',   ic: '★', name: 'Titan Sina Shard',    sub: 'the apex hull · rainbow tracers',               cost: 2500, key: 'titansina' },
       { id: 'dread',  ic: '◈', name: 'Dread-class Shard',   sub: 'random recovered Dreadnaught hull',              cost: 2000, key: () => 'dread' + (1 + (Math.random() * 6 | 0)) },
       { id: 'obfin',  ic: '⬡', name: 'Oblivion Final Shard', sub: 'the final Oblivion hull',                       cost: 1800, key: 'oblivionfinal' },
@@ -378,8 +514,9 @@
       got = '⚜ ' + it.vip + ' VIP points';
     } else {
       const key = typeof it.key === 'function' ? it.key() : it.key;
-      addPart(key, 1);
-      got = '1× ' + shipName(key) + ' shard';
+      const qty = Math.max(1, it.qty | 0);
+      addPart(key, qty);
+      got = qty + '× ' + (key === VM_KEY ? 'Progenitor Part' : shipName(key) + ' shard');
     }
     s.hist.unshift({ d: Date.now(), s: -1, txt: '✦ Event Store — ' + it.name + ': ' + got + ' (' + COIN + ' ' + it.cost.toLocaleString() + ')' });
     if (s.hist.length > 40) s.hist.length = 40;
@@ -412,10 +549,14 @@
   // =========================================================================
   let run = null;
   const ERA_TINTS = ['#b04dff', '#ff4adf', '#6a5bff', '#ff5a68', '#4dd8c8', '#ffd24d'];
-  let _vmImg = null;
-  function bossImg() {   // the boss is ALWAYS the Voidmaw — eras only shift tint/glow
-    if (!_vmImg) { _vmImg = new Image(); _vmImg.src = 'ships/ship-voidmaw.png'; }
+  let _vmImg = null, _drImg = null;
+  function bossImg() {   // the Mothership — eras only shift tint/glow
+    if (!_vmImg) { _vmImg = new Image(); _vmImg.src = 'ships/vm2-mothership.png'; }
     return _vmImg;
+  }
+  function droneImg() {
+    if (!_drImg) { _drImg = new Image(); _drImg.src = 'ships/vm2-drone.png'; }
+    return _drImg;
   }
   function eraTint(stage) { return ERA_TINTS[bossEra(stage) % ERA_TINTS.length]; }
   // (re)apply the boss's stage-scaled stats — called at deploy and on every
@@ -427,7 +568,7 @@
     b.size = Math.min(190, 132 + bossEra(stage) * 7);
     b.tint = eraTint(stage);
     b.spriteImg = bossImg(stage);
-    b.name = 'VOIDMAW · STAGE ' + stage;
+    b.name = 'MOTHERSHIP · STAGE ' + stage;
   }
   // ---- purchasable extra attempts — ◈ LootCoins, 3× exponential, daily reset
   function attCost() { const s = sd(); return 100 * Math.pow(3, (s && s.buys) | 0); }
@@ -442,7 +583,7 @@
     s.hist.unshift({ d: Date.now(), s: -1, txt: '⚡ Bought +1 attempt for ◈ ' + fmt(cost) + ' — next costs ◈ ' + fmt(attCost()) });
     try { g.save(); } catch (e) {}
     if (window.UI) window.UI.refreshAll();
-    toast('⚡ +1 Voidmaw attempt · next costs ◈ ' + fmt(attCost()));
+    toast('⚡ +1 attempt · next costs ◈ ' + fmt(attCost()));
     render(); updateHud();
   }
 
@@ -462,11 +603,14 @@
     s.att = (s.att | 0) + 1; s.runs = (s.runs | 0) + 1;
     try { G().save(); } catch (e) {}
     applyBossStage(b, 1);                       // every attempt starts back at STAGE 1
-    run = { left: RUN_SECS, dealt: 0, drops: [], boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 7, zoneWarned: false, prevAuto, prevSpeed };
+    run = { left: RUN_SECS, dealt: 0, drops: [], boss: b, lastHp: b.hp, uiT: 0, zones: [], zoneT: 11, zoneWarned: false,
+            drones: [], droneT: DRONE.spawnAt, droneWarned: false, trails: [], trailWarned: false, slowT: 0,
+            rockets: [], rocketT: ROCKET.cd, rocketWarned: false,
+            prevAuto, prevSpeed };
     const app = $('app'); if (app) app.classList.add('sd-noauto');
     const nav = document.querySelector('.nav-btn[data-screen="battle"]'); if (nav) nav.click();
     ensureWarbar();
-    bbanner('VOIDMAW ENGAGED', 'MANUAL FLIGHT — auto-pilot disabled · survive 2:30 · every stage pays out instantly');
+    bbanner('MOTHERSHIP ENGAGED', 'MANUAL FLIGHT — survive 2:30 · never let a harvester touch you');
     updateHud();
   }
   // driven by the engine's update() every frame while rt.sdrun is active
@@ -517,7 +661,11 @@
         const ang = Math.random() * Math.PI * 2, off = i === 0 ? 0 : 110 + Math.random() * 150;
         run.zones.push({ x: a.x + Math.cos(ang) * off, y: a.y + Math.sin(ang) * off, r: 150 + Math.min(70, info.stage), t: 6.0, total: 6.0, phase: 0, hole: 0 });
       }
-      run.zoneT = Math.max(6, 11 - info.stage * 0.05);
+      // LESS FREQUENT THAN THE VOIDMAW SEASON (was 11 - stage×0.05, floor 6). The
+      // harvesters and their wakes are now the constant spatial pressure, so the
+      // collapse zones are the punctuation rather than the drumbeat — stacking
+      // both at the old cadence left nowhere to stand.
+      run.zoneT = Math.max(10, 17 - info.stage * 0.05);
       if (!run.zoneWarned) { run.zoneWarned = true; bbanner('⚠ VOID COLLAPSE', 'Fly OUT of the red blinking area — it becomes a black hole: 75% hull per second inside'); }
     }
     for (const z of run.zones) {
@@ -542,6 +690,106 @@
       }
     }
     run.zones = run.zones.filter((z) => z.t > 0 || z.hole > 0);
+
+    // ---- HARVESTER DRONES ---------------------------------------------------
+    // Two, slow, relentless, unkillable. They home on the pilot forever at a
+    // fraction of the pilot's OWN speed, so they can always be outrun in a
+    // straight line and never in a corner. Latching is the whole threat: 40% of
+    // max hull per second and engines at 45%, which kills anything in about two
+    // and a half seconds. It bypasses the per-hit cap for the same reason the
+    // black hole does — it is a sustained burn, not a hit.
+    if (a && !a.dead) {
+      const mySpd = (rt.stats && rt.stats.speed) || 220;
+      const dspd = mySpd * Math.min(DRONE.speedCapFrac, DRONE.speedFrac + info.stage * DRONE.gainPerStage);
+      run.droneT -= dt;
+      if (run.droneT <= 0 && run.drones.length < DRONE.n) {
+        const ang = Math.random() * Math.PI * 2, R = 620;
+        run.drones.push({ x: a.x + Math.cos(ang) * R, y: a.y + Math.sin(ang) * R, ph: Math.random() * 7, latch: 0 });
+        run.droneT = 3;
+        if (!run.droneWarned) {
+          run.droneWarned = true;
+          bbanner('⚠ HARVESTERS LAUNCHED', 'They are slow, they never stop and they cannot be killed — do not let one touch you');
+        }
+      }
+      for (const d of run.drones) {
+        const dx = a.x - d.x, dy = a.y - d.y, dist = Math.hypot(dx, dy) || 1;
+        d.x += (dx / dist) * dspd * dt;
+        d.y += (dy / dist) * dspd * dt;
+        d.ph += dt * 2.4;
+        // lay the wake
+        d.trT = (d.trT || 0) - dt;
+        if (d.trT <= 0) { d.trT = TRAIL.every; run.trails.push({ x: d.x, y: d.y, t: TRAIL.life }); }
+        if (dist <= DRONE.latchR && (a.invuln || 0) <= 0) {
+          d.latch = Math.min(1, (d.latch || 0) + dt * 4);
+          a.hp -= (rt.stats.maxHp || 100) * DRONE.hullPerSec * dt;
+          a.hurtFlash = 1;
+          if (typeof a.vx === 'number') { a.vx *= DRONE.slow; a.vy *= DRONE.slow; }
+          rt.shake = Math.min(7, (rt.shake || 0) + 2 * dt * 6);
+          if (a.hp <= 0) { a.hp = 0; a.dead = true; a.justDied = true; a.killer = run.boss || null; }
+        } else d.latch = Math.max(0, (d.latch || 0) - dt * 2);
+      }
+    }
+
+    // ---- VOID WAKE — the trail the harvesters leave behind --------------------
+    if (run.trails && run.trails.length) {
+      let touched = false;
+      for (const w of run.trails) {
+        w.t -= dt;
+        if (w.t > 0 && a && !a.dead && (a.invuln || 0) <= 0 && Math.hypot(a.x - w.x, a.y - w.y) <= TRAIL.r) {
+          touched = true;
+          a.hp -= (rt.stats.maxHp || 100) * TRAIL.hullPerSec * dt;
+          a.hurtFlash = 1;
+          if (a.hp <= 0) { a.hp = 0; a.dead = true; a.justDied = true; a.killer = run.boss || null; }
+        }
+      }
+      run.trails = run.trails.filter((w) => w.t > 0);
+      if (touched) {
+        run.slowT = TRAIL.slowFor;
+        if (!run.trailWarned) {
+          run.trailWarned = true;
+          bbanner('⚠ VOID WAKE', 'The harvesters leave a burning trail — it slows you the moment you touch it, so crossing costs more than you think');
+        }
+      }
+    }
+    // the wake's slow OUTLIVES the touch, which is the trap: you are slowed while
+    // still inside it. Applied to velocity so it self-clears the instant it lapses
+    // and can never leave a stat permanently modified.
+    if ((run.slowT || 0) > 0) {
+      run.slowT -= dt;
+      if (a && typeof a.vx === 'number') { a.vx *= TRAIL.slow; a.vy *= TRAIL.slow; }
+    }
+
+    // ---- VOID ROCKETS -------------------------------------------------------
+    // Long range, slow, and a flat 20% of max hull each — five land and anyone
+    // dies. Aimed at where the pilot WAS when the volley fired, so they are
+    // always dodgeable and they punish holding still while kiting a harvester.
+    if (a && !a.dead && b) {
+      run.rocketT -= dt;
+      if (run.rocketT <= 0) {
+        run.rocketT = Math.max(ROCKET.cdMin, ROCKET.cd - info.stage * 0.03);
+        const n = Math.min(ROCKET.volleyMax, ROCKET.volley + Math.floor(info.stage / ROCKET.volleyPerStage));
+        for (let i = 0; i < n; i++) {
+          const spread = (i - (n - 1) / 2) * 0.16;
+          const ang = Math.atan2(a.y - b.y, a.x - b.x) + spread;
+          run.rockets.push({ x: b.x, y: b.y, vx: Math.cos(ang) * ROCKET.speed, vy: Math.sin(ang) * ROCKET.speed, t: ROCKET.life, ang });
+        }
+        if (!run.rocketWarned) {
+          run.rocketWarned = true;
+          bbanner('⚠ ROCKET VOLLEY', 'Each rocket takes a fifth of your hull — they fly where you were, so keep moving');
+        }
+      }
+      for (const r of run.rockets) {
+        r.x += r.vx * dt; r.y += r.vy * dt; r.t -= dt;
+        if (r.t > 0 && (a.invuln || 0) <= 0 && Math.hypot(a.x - r.x, a.y - r.y) <= ROCKET.r + 14) {
+          a.hp -= (rt.stats.maxHp || 100) * ROCKET.hullFrac;
+          a.hurtFlash = 1; r.t = 0;
+          rt.shake = Math.min(7, (rt.shake || 0) + 3);
+          if (a.hp <= 0) { a.hp = 0; a.dead = true; a.justDied = true; a.killer = run.boss || null; }
+        }
+      }
+      run.rockets = run.rockets.filter((r) => r.t > 0);
+    }
+
     run.uiT -= dt;
     if (run.uiT <= 0) { run.uiT = 0.2; syncWarbar(info); }
     if (run.left <= 0) endRun('time');
@@ -586,6 +834,66 @@
       ctx.font = '800 ' + Math.round(z.r * 0.3) + 'px Orbitron, Rajdhani, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('⚠', z.x, z.y);
+      ctx.restore();
+    });
+    // ---- VOID WAKE — under everything the harvesters do
+    (run.trails || []).forEach((w) => {
+      const f = Math.max(0, w.t / TRAIL.life);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g3 = ctx.createRadialGradient(w.x, w.y, 1, w.x, w.y, TRAIL.r);
+      g3.addColorStop(0, 'rgba(255,74,180,' + (0.34 * f).toFixed(3) + ')');
+      g3.addColorStop(0.6, 'rgba(176,77,255,' + (0.20 * f).toFixed(3) + ')');
+      g3.addColorStop(1, 'rgba(176,77,255,0)');
+      ctx.fillStyle = g3; ctx.beginPath(); ctx.arc(w.x, w.y, TRAIL.r, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+    // ---- ROCKETS — drawn under the hull, over the zones
+    (run.rockets || []).forEach((r) => {
+      ctx.save();
+      ctx.translate(r.x, r.y); ctx.rotate(r.ang);
+      ctx.globalCompositeOperation = 'lighter';
+      const g2 = ctx.createLinearGradient(-34, 0, 10, 0);
+      g2.addColorStop(0, 'rgba(176,77,255,0)');
+      g2.addColorStop(1, 'rgba(226,150,255,.85)');
+      ctx.fillStyle = g2; ctx.fillRect(-34, -3.5, 44, 7);
+      ctx.fillStyle = '#f0d9ff'; ctx.shadowColor = '#c46bff'; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(6, 0, 5.5, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+    // ---- HARVESTER DRONES — the sprite, a threat ring, and a latch tether
+    (run.drones || []).forEach((d) => {
+      const im = droneImg(), R = 46;
+      ctx.save();
+      const pul = 0.6 + 0.4 * Math.sin(d.ph);
+      ctx.globalCompositeOperation = 'lighter';
+      const gg = ctx.createRadialGradient(d.x, d.y, 4, d.x, d.y, R * 1.7);
+      gg.addColorStop(0, 'rgba(255,74,223,' + (0.30 * pul).toFixed(3) + ')');
+      gg.addColorStop(1, 'rgba(176,77,255,0)');
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(d.x, d.y, R * 1.7, 0, 7); ctx.fill();
+      ctx.restore();
+      ctx.save();
+      // the kill radius, always visible — the rule has to be readable mid-fight
+      ctx.strokeStyle = 'rgba(255,74,120,' + (0.5 + 0.4 * pul).toFixed(2) + ')';
+      ctx.lineWidth = 2 + 1.5 * pul; ctx.setLineDash([9, 7]);
+      ctx.beginPath(); ctx.arc(d.x, d.y, DRONE.latchR, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      if (im && im.complete && im.naturalWidth) {
+        ctx.save(); ctx.translate(d.x, d.y);
+        ctx.rotate(Math.atan2((rt.archer ? rt.archer.y : d.y) - d.y, (rt.archer ? rt.archer.x : d.x) - d.x) + Math.PI / 2);
+        ctx.shadowColor = '#b04dff'; ctx.shadowBlur = 16;
+        ctx.drawImage(im, -R, -R, R * 2, R * 2);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = 'rgba(176,77,255,.9)';
+        ctx.beginPath(); ctx.arc(d.x, d.y, 16, 0, 7); ctx.fill();
+      }
+      if ((d.latch || 0) > 0 && rt.archer) {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(255,90,120,' + (0.8 * d.latch).toFixed(2) + ')';
+        ctx.lineWidth = 3 + 4 * d.latch; ctx.shadowColor = '#ff4a7a'; ctx.shadowBlur = 20;
+        ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(rt.archer.x, rt.archer.y); ctx.stroke();
+      }
       ctx.restore();
     });
     const s = sd(), stage = run ? stageInfo(run.dealt).stage : Math.max(1, s.bestStage | 0);
@@ -633,13 +941,13 @@
       try { G().selectDungeon(0); } catch (e) {}
     }
     removeWarbar();
-    // FIRST FIGHT OF THE DAY — guaranteed Voidmaw Part (the daily pacing pillar:
+    // FIRST FIGHT OF THE DAY — guaranteed Progenitor Part (the daily pacing pillar:
     // ~2 from rank + 1 here + drops + store ≈ six weeks of consistent play)
-    if (!vmOwned() && s.partDay !== dayIdx()) {
+    if (!progOwned() && s.partDay !== dayIdx()) {
       s.partDay = dayIdx();
       addPart(VM_KEY, 1);
-      drops.push({ stage: 0, drops: [{ t: '❖ 1× VOIDMAW PART — first fight of the day (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff' }] });
-      s.hist.unshift({ d: Date.now(), s: -1, txt: '❖ Daily first-fight bonus — 1× Voidmaw Part (' + vmParts() + '/' + VM_NEED + ')' });
+      drops.push({ stage: 0, drops: [{ t: '❖ 1× PROGENITOR PART — first fight of the day (' + vmParts() + '/' + PROG_NEED + ')', c: '#d9a0ff' }] });
+      s.hist.unshift({ d: Date.now(), s: -1, txt: '❖ Daily first-fight bonus — 1× Progenitor Part (' + vmParts() + '/' + PROG_NEED + ')' });
     }
     // PITY FLOOR (Jul 2026): there is NO cap on parts/cores per day — but RNG
     // could zero a whole run. Any attempt clearing 2+ stages now banks at least
@@ -648,9 +956,9 @@
       const clearedN = drops.filter((d) => d.stage > 0).length;
       const maxStage = drops.reduce((a, d) => Math.max(a, d.stage | 0), 0);
       const has = (needle) => drops.some((d) => (d.drops || []).some((x) => ((x.t || '') + '').indexOf(needle) >= 0));
-      if (!vmOwned() && clearedN >= 2 && !has('VOIDMAW PART')) {
+      if (!progOwned() && clearedN >= 2 && !has('PROGENITOR PART')) {
         addPart(VM_KEY, 1);
-        drops.push({ stage: 0, drops: [{ t: '❖ 1× VOIDMAW PART — persistence bonus (' + vmParts() + '/' + VM_NEED + ')', c: '#d9a0ff' }] });
+        drops.push({ stage: 0, drops: [{ t: '❖ 1× PROGENITOR PART — persistence bonus (' + vmParts() + '/' + PROG_NEED + ')', c: '#d9a0ff' }] });
       }
       if (clearedN >= 2 && maxStage >= 20 && !has('Dread Core')) {
         // Scarcity pass (729) — see CONFIG.DREAD_CORE_RATE. Silent when it does
@@ -757,7 +1065,7 @@
     return '<div class="sd-arena' + (idle ? ' idle' : '') + '">' +
       '<div class="sd-arena-sky"></div>' +
       '<div class="sd-stage-badge" id="sd-stage-badge">' + (run ? 'STAGE ' + stage : (s.bestStage ? 'BEST STAGE ' + s.bestStage : 'STAGE 1')) + '</div>' +
-      '<div class="sd-bosswrap" id="sd-bosswrap"><div class="sd-aura"></div><img class="sd-boss-img" id="sd-boss-img" src="' + bossSprite(stage) + '" alt="Voidmaw">' +
+      '<div class="sd-bosswrap" id="sd-bosswrap"><div class="sd-aura"></div><img class="sd-boss-img" id="sd-boss-img" src="' + bossSprite(stage) + '" alt="The Progenitor">' +
         '<div class="sd-weakpoints" id="sd-weakpoints"></div></div>' +
       (idle && !run
         ? '<div class="sd-arena-foot"><span>EVERY RUN STARTS AT STAGE 1 · ' + fmt(threshold(1)) + ' TO CLEAR</span><span class="sub">' + (s.bestStage ? 'best: stage ' + s.bestStage : 'no record yet') + '</span></div>'
@@ -773,7 +1081,7 @@
     const fightBtn = over
       ? '<button class="sd-fight" disabled>SEASON ENDED</button>'
       : att > 0
-        ? '<button class="sd-fight has-ship" id="sd-fight"><img class="sd-fight-ship" src="ships/ship-voidmaw.png" alt=""><span class="sd-fight-txt"><b>⚔ FIGHT VOIDMAW</b><span>2:30 auto-run</span></span></button>'
+        ? '<button class="sd-fight has-ship" id="sd-fight"><img class="sd-fight-ship" src="ships/vm2-mothership.png" alt=""><span class="sd-fight-txt"><b>⚔ FIGHT THE PROGENITOR</b><span>2:30 auto-run</span></span></button>'
         : '<button class="sd-fight" disabled>NO ATTEMPTS LEFT <span>resets in <b data-sdreset>' + fmtDur(msToDailyReset()) + '</b></span></button>';
     const claims = (s.claims && s.claims.length)
       ? '<button class="sd-claims" id="sd-claims">🎁 COLLECT REWARDS<span>' + s.claims.length + ' prize' + (s.claims.length > 1 ? 's' : '') + ' waiting — daily rank' + (s.claims.some((c) => c.t === 's') ? ' + season finals' : '') + '</span></button>'
@@ -801,24 +1109,32 @@
   }
   function statCard(l, v, sub) { return '<div class="sd-stat"><div class="sd-stat-l">' + l + '</div><div class="sd-stat-v">' + v + '</div><div class="sd-stat-s">' + sub + '</div></div>'; }
   // grand-prize progress strip on the event screen
+  // GRAND PRIZE LADDER — two hulls on one part pool.
+  // The Progenitor leads because it is season 2's prize; the Voidmaw stays
+  // visible and claimable beneath it so nobody mid-grind loses their target.
   function vmStrip() {
-    const parts = vmParts(), owned = vmOwned();
-    return '<div class="sd-vm" id="sd-vmstrip">' +
-      '<img src="ships/ship-voidmaw.png" alt="">' +
-      '<div class="sd-vm-t"><b>GRAND PRIZE — THE VOIDMAW</b>' +
-        '<span>Collect <b>' + VM_NEED + ' parts</b> to fly the boss yourself. Its cannons stun and open black holes.</span>' +
-        '<em>Parts drop from stage 5+, your first fight each day, and the ✦ Event Store.</em>' +
-        (owned
-          ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
-          : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / VM_NEED * 100) + '%"></i><span>❖ ' + parts + ' / ' + VM_NEED + ' parts</span></div>') +
-      '</div></div>';
+    const parts = vmParts();
+    const tier = (key, img, name, need, owned, blurb) =>
+      '<div class="sd-vm' + (owned ? ' done' : '') + '" data-prize="' + key + '">' +
+        '<img src="' + img + '" alt="">' +
+        '<div class="sd-vm-t"><b>' + name + '</b>' +
+          '<span>' + blurb + '</span>' +
+          (owned
+            ? '<div class="vm-partbar done"><i style="width:100%"></i><span>✓ ASSEMBLED — in your Hangar</span></div>'
+            : '<div class="vm-partbar"><i style="width:' + Math.min(100, parts / need * 100) + '%"></i><span>❖ ' + parts.toLocaleString() + ' / ' + need.toLocaleString() + ' parts</span></div>') +
+        '</div></div>';
+    return '<div class="sd-prizes" id="sd-vmstrip">' +
+      tier('prog', 'ships/vm2-mothership.png', 'GRAND PRIZE — THE PROGENITOR', PROG_NEED, progOwned(),
+        'Collect <b>' + PROG_NEED.toLocaleString() + ' parts</b> to fly the mothership itself — five cannons, six fighter bays, and its <b>harvesters</b> hunt for you.') +
+      '<div class="sd-prize-foot">Parts drop from stage 5+, your first fight each day, and the ✦ Event Store.</div>' +
+      '</div>';
   }
 
   function runView() {
     const s = sd(), info = stageInfo(s.total);
     return seasonBar() + arenaBlock(true) +
       '<div class="sd-runhud">' +
-        '<div class="sd-runrow"><span class="sd-run-t">⚔</span><span class="sd-run-lbl">RUN IN PROGRESS — YOUR FLEET IS ENGAGING VOIDMAW</span></div>' +
+        '<div class="sd-runrow"><span class="sd-run-t">⚔</span><span class="sd-run-lbl">RUN IN PROGRESS — YOUR FLEET IS ENGAGING THE PROGENITOR</span></div>' +
         '<div class="sd-runrow small"><span>Season total <b>' + fmt(s.total) + '</b></span><span>Stage <b>' + info.stage + '</b></span></div>' +
         '<button class="sd-fight" id="sd-return">▶ RETURN TO BATTLE</button>' +
       '</div>';
@@ -830,7 +1146,7 @@
     return seasonBar() +
       '<div class="sd-lock"><div class="sd-lock-ic">🔒</div>' +
       '<h3>Server Dreadnaught</h3>' +
-      '<p><b>' + SEASON.label + '</b> — one world boss for the whole server. Everyone fights the same Voidmaw and pushes it through damage stages for loot. Collect enough parts and you fly the <b>Voidmaw itself</b> — a hull you can only get this season.</p>' +
+      '<p><b>' + SEASON.label + '</b> — one world boss for the whole server. Everyone fights the same mothership and pushes it through damage stages for loot. Collect enough parts and you fly <b>the Progenitor itself</b> — a hull you can only get this season.</p>' +
       '<div class="sd-lock-lv">Minimum level to join: <b>' + UNLOCK + '</b> · you are Level <b>' + L + '</b></div>' +
       '<div class="sd-prog big"><i style="width:' + clamp(L / UNLOCK * 100, 0, 100) + '%"></i></div>' +
       '<div class="sd-lock-coach"><div class="sd-coach-h">💡 Get to Level 50 faster</div><ul>' +
@@ -849,13 +1165,13 @@
   function coaching() {
     return '<div class="sd-coach"><button class="sd-coach-h" id="sd-coach-t">💡 Commander Coaching <span>' + (_coachOpen ? '▾' : '▸') + '</span></button>' +
       (_coachOpen ? '<ul>' +
-        '<li><b>Survive longer, climb higher.</b> Voidmaw hits a % of your max HP — Hull, Shield Regen and Life Steal extend runs more than raw damage alone.</li>' +
+        '<li><b>Survive longer, climb higher.</b> The Progenitor hits a % of your max HP — Hull, Shield Regen and Life Steal extend runs more than raw damage alone.</li>' +
         '<li><b>Dodge the red zones — manually.</b> They collapse into black holes that burn <b>75% of your hull per second</b>. Auto-pilot is disabled in the event; the joystick is your life.</li>' +
         '<li><b>Every point of DPS counts.</b> Damage is cumulative for the whole season — upgrades today pay on every future run.</li>' +
         '<li><b>Never bank attempts.</b> They reset daily. Even a weak run clears stages and pays loot.</li>' +
         '<li><b>Leaderboard = best single run.</b> One great run beats three average ones.</li>' +
-        '<li><b>Fight every day.</b> Your first fight of the day always drops a ❖ Voidmaw Part, and every daily rank pays ✦ Event Coins — the store converts them into more parts and shards.</li>' +
-        '<li><b>Spend ✦ in the Event Store.</b> Voidmaw Parts, ★ Titan Sina shards (2,500 ✦) and other high-end ship shards — daily placements bankroll the grind.</li>' +
+        '<li><b>Fight every day.</b> Your first fight of the day always drops a ❖ Progenitor Part, and every daily rank pays ✦ Event Coins — the store converts them into more parts and shards.</li>' +
+        '<li><b>Spend ✦ in the Event Store.</b> Progenitor Parts, ★ Titan Sina shards (2,500 ✦) and other high-end ship shards — daily placements bankroll the grind.</li>' +
         '<li><b>Stage 40+.</b> A tiny chance at ★ Titan Sina parts begins. The grind is real — so is the ship.</li>' +
       '</ul>' : '') + '</div>';
   }
@@ -882,11 +1198,14 @@
       '<div class="sdm-title">' + SEASON.label.toUpperCase() + '</div>' +
       '<div class="sdm-cd">One world boss for the whole server · daily board resets in <b>' + fmtDur(msToDailyReset()) + '</b></div>' +
       '<div class="sdm-art small"><img src="' + bossSprite(1) + '" alt=""></div>' +
-      '<div class="sdm-intro">One server-wide boss with unlimited HP. Everyone falls eventually — better fleets fall later.</div>' +
+      '<div class="sdm-intro">The Voidmaw was never alone. <b>The Progenitor</b> — its mothership — has arrived to recover it. One server-wide boss with unlimited HP. Everyone falls eventually; better fleets fall later.</div>' +
       '<div class="sdm-rules">' +
-        rule('❖', 'Grand prize: the VOIDMAW', 'Collect <b>' + VM_NEED + ' parts</b> to assemble the boss itself — about a month of daily play.') +
+        rule('❖', 'Grand prize: THE PROGENITOR', 'Collect <b>' + PROG_NEED.toLocaleString() + ' parts</b> to fly the mothership itself — five cannons, six fighter bays and its own harvesters.') +
         rule('⚔', String(BASE_ATTEMPTS) + ' attempts a day', '2:30 auto-combat runs. Damage is <b>cumulative all season</b>, and every stage crossed drops loot.') +
         rule('🔴', 'Dodge the red zones', 'They collapse into a <b>black hole</b> for 5 seconds — <b>75% of your hull per second</b> inside. Fly out with the joystick.') +
+        rule('☄', 'NEVER let a harvester touch you', 'Two drones launch and hunt you for the whole run. They are <b>slow</b>, they <b>never stop</b> and they <b>cannot be killed</b>. Touch one and it latches: your engines drop to <b>45%</b> and it strips <b>30% of your hull every second</b> — a little over three seconds from full, whatever you fly. No hull survives one. Break away the instant it grabs you.') +
+        rule('〜', 'Their wake burns', 'Each harvester leaves a <b>long trail</b> behind it that lingers for a good while. Fly through one and it takes <b>12% of your hull per second</b> and <b>slows your engines</b> — which keeps you in it longer. Cross fast and clean, or go around. Over a long run the wakes turn the arena into a maze.') +
+        rule('🚀', 'Rocket volleys — a fifth of your hull each', 'Fired from long range and slow enough to see coming. Each hit takes <b>20% of your maximum hull</b>, so five will kill anyone. They fly to where you <b>were</b> — keep moving and they miss.') +
         rule('🏆', 'Two boards, one store', 'Daily = best single run · Season = total damage. Both pay <b>✦ Event Coins</b> to spend in the store.') +
       '</div>' +
       (locked ? '<div class="sdm-locknote">🔒 Opens at <b>Level ' + UNLOCK + '</b> — you are Level ' + lvl() + '.</div>' : '') +
@@ -1233,7 +1552,13 @@
     // and the run summary use REAL standings
     if (lvl() >= UNLOCK && !ended()) ensureCloud();
     // GRAND PRIZE — auto-assemble the moment the final part lands (never mid-run)
-    if (!run && lvl() >= UNLOCK && !vmOwned() && vmParts() >= VM_NEED) vmAssemble();
+    // THE VOIDMAW IS RETIRED AS A PRIZE (season 2). vmAssemble() is deliberately
+    // no longer called: the hull is season 1's and the Progenitor replaces it.
+    // NOTHING IS TAKEN — every banked part is kept and now counts toward a
+    // strictly better hull, and anyone who already assembled the Voidmaw keeps it
+    // in their Hangar. Parts are never spent on it again, so a pilot sitting on
+    // 150+ is closer to the Progenitor rather than poorer.
+    if (!run && lvl() >= UNLOCK && !progOwned() && vmParts() >= PROG_NEED) progAssemble();
     // command-card badge = attempts remaining (only once unlocked & live)
     const b = $('cmd-sdread-badge');
     if (b) {
@@ -1244,7 +1569,8 @@
     }
     // command-card countdown
     const cd = $('cmd-sdread-cd');
-    if (cd) cd.textContent = fmtDur(msToDailyReset()) + ' to reset';
+    // the label owns the words; this owns only the duration
+    if (cd) cd.textContent = fmtDur(msToDailyReset());
     // on-screen countdowns
     const scr = $('screen-sdread');
     if (scr && scr.classList.contains('active')) {
@@ -1304,7 +1630,7 @@
   }
   // partsNeed is exported so the SHIP CARD can print the real requirement instead
   // of a hardcoded copy of it — that card said 100 while this said 150.
-  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, partsNeed: VM_NEED, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
+  window.SDREAD = { render, updateHud, openHowTo, engineTick, engineRender, onDeath, payPrize, partsNeed: PROG_NEED, _dbg: { sd, stageInfo, threshold, bossPct, grantStageReward, startRun, endRun } };
 
   // =========================================================================
   // CSS
@@ -1336,7 +1662,7 @@
   .sd-season-cd b{ color:#ffd24d; }
 
   /* arena */
-  .sd-arena{ position:relative; height:210px; border:1px solid #3c2560; border-radius:16px; overflow:hidden;
+  .sd-arena{ position:relative; height:288px; border:1px solid #3c2560; border-radius:16px; overflow:hidden;
     background:radial-gradient(140% 120% at 50% 0%, #221238 0%, #120a1e 55%, #0a0612 100%); }
   .sd-arena-sky{ position:absolute; inset:0; background:
     radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.5), transparent 60%),
@@ -1347,9 +1673,9 @@
   .sd-stage-badge{ position:absolute; top:9px; left:10px; z-index:5; font-family:'Orbitron',sans-serif; font-weight:800; font-size:11px; letter-spacing:.1em;
     color:#f0dcff; background:rgba(20,11,34,.85); border:1px solid #4a2f78; border-radius:8px; padding:4px 9px; box-shadow:0 0 12px -4px ${ACCENT}; }
   .sd-bosswrap{ position:absolute; left:0; right:0; top:4px; bottom:34px; display:grid; place-items:center; z-index:2; }
-  .sd-boss-img{ width:180px; height:108px; object-fit:contain; filter:drop-shadow(0 0 16px ${ACCENT}); animation:sdBossFloat 4.5s ease-in-out infinite; position:relative; z-index:2; }
+  .sd-boss-img{ width:236px; height:236px; object-fit:contain; filter:drop-shadow(0 0 16px ${ACCENT}); animation:sdBossFloat 4.5s ease-in-out infinite; position:relative; z-index:2; }
   @keyframes sdBossFloat{ 0%,100%{ transform:translateY(2px); } 50%{ transform:translateY(-7px); } }
-  .sd-aura{ position:absolute; width:210px; height:210px; border-radius:50%; z-index:1;
+  .sd-aura{ position:absolute; width:310px; height:310px; border-radius:50%; z-index:1;
     background:radial-gradient(circle, rgba(176,77,255,.34) 0%, rgba(255,74,223,.12) 45%, transparent 66%); animation:sdAura 2.6s ease-in-out infinite; }
   @keyframes sdAura{ 0%,100%{ transform:scale(.94); opacity:.75; } 50%{ transform:scale(1.06); opacity:1; } }
   .sd-weakpoints{ position:absolute; inset:0; z-index:3; pointer-events:none; }
@@ -1559,9 +1885,14 @@
   .sdh-st{ display:block; font-family:'Orbitron',sans-serif; font-size:8.5px; font-weight:800; letter-spacing:.1em; color:#b79ad6; margin-bottom:2px; }
   .sdh-txt{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:11.5px; color:#c5b3de; line-height:1.4; }
 
-  /* ===== VOIDMAW grand prize ===== */
+  /* ===== GRAND PRIZE LADDER (two tiers, one pool) ===== */
+  .sd-prizes{ display:flex; flex-direction:column; gap:8px; margin:10px 0 0; }
+  .sd-prizes .sd-vm{ margin:0; }
+  .sd-prizes .sd-vm.done{ opacity:.78; }
+  .sd-prize-foot{ font-size:10.5px; line-height:1.5; color:#9c86bd; padding:0 4px; text-wrap:pretty; }
+  /* ===== grand-prize strip ===== */
   .sd-fight.has-ship{ flex-direction:row; gap:14px; align-items:center; justify-content:center; padding:10px 14px; }
-  .sd-fight-ship{ width:74px; height:50px; object-fit:contain; flex:none; filter:drop-shadow(0 0 12px rgba(255,255,255,.55)); animation:sdBossFloat 4.5s ease-in-out infinite; }
+  .sd-fight-ship{ width:62px; height:62px; object-fit:contain; flex:none; filter:drop-shadow(0 0 12px rgba(255,255,255,.55)); animation:sdBossFloat 4.5s ease-in-out infinite; }
   .sd-fight-txt{ display:flex; flex-direction:column; gap:3px; align-items:center; }
   .sd-fight-txt b{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:16px; letter-spacing:.08em; }
   .sd-buyatt{ margin-left:auto; flex:none; border:1px dashed #4a2f78; border-radius:9px; background:rgba(176,77,255,.07); color:#d9c2f2; padding:5px 10px;
@@ -1579,7 +1910,7 @@
   .vm-partbar i{ display:block; height:100%; background:linear-gradient(90deg,#b04dff,#ff4adf); box-shadow:0 0 10px ${ACCENT}; }
   .vm-partbar.done i{ background:linear-gradient(90deg,#2f9e4f,#46d27a); box-shadow:0 0 10px #46d27a; }
   .vm-partbar span{ position:absolute; inset:0; display:grid; place-items:center; font-family:'Rajdhani',sans-serif; font-weight:800; font-size:10px; letter-spacing:.04em; color:#fff; text-shadow:0 1px 3px #000; }
-  /* Voidmaw Store featured card */
+  /* Event Store featured card */
   .sds-vm{ display:flex; gap:11px; align-items:center; background:linear-gradient(90deg,#241733,#161022); border:1px solid ${ACCENT}; border-radius:13px; padding:10px 11px; margin-top:8px; box-shadow:0 0 22px -8px ${ACCENT}; }
   .sds-vm img{ width:88px; height:62px; object-fit:contain; flex:none; filter:drop-shadow(0 0 14px ${ACCENT}); animation:sdBossFloat 4.5s ease-in-out infinite; }
   .sds-vm-t{ flex:1; min-width:0; }

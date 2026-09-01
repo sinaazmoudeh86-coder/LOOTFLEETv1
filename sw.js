@@ -28,7 +28,7 @@ const CORE = [
   'js/mech-corruption.js', 'js/mech-foundry.js', 'js/commanders.js', 'js/fleet-deep.js',
   'ships/ship-monolith1.png', 'ships/ship-monolith2.png', 'ships/ship-monolith3.png', 'ships/ship-monolith4.png',
   'ships/void-cit-1.png', 'ships/void-cit-2.png', 'ships/void-cit-3.png', 'ships/void-cit-4.png', 'js/void-zone.js',
-  'ships/ship-voidmaw.png', 'ships/ship-vanguard.png', 'ships/fighter-heavy.png', 'js/fighters.js', 'ships/ship-chromafang.png', 'ships/ship-chromaregent.png', 'ships/ship-frostyfrost.png', 'ships/ship-veridian.png', 'js/home-citadel.js', 'js/session-lock.js', 'js/vip.js', 'ships/hc-citadel.png', 'ships/hc-mine.png', 'ships/hc-silo.png', 'ships/hc-turret.png', 'ships/hc-repair.png',
+  'ships/ship-voidmaw.png', 'ships/ship-progenitor.png', 'ships/vm2-mothership.png', 'ships/vm2-drone.png', 'ships/ship-vanguard.png', 'ships/fighter-heavy.png', 'js/fighters.js', 'ships/ship-chromafang.png', 'ships/ship-chromaregent.png', 'ships/ship-frostyfrost.png', 'ships/ship-veridian.png', 'js/home-citadel.js', 'js/session-lock.js', 'js/vip.js', 'ships/hc-citadel.png', 'ships/hc-mine.png', 'ships/hc-silo.png', 'ships/hc-turret.png', 'ships/hc-repair.png',
   'css/fx-aaa.css', 'css/readability.css', 'css/moon-colony.css', 'css/pilot-ascension.css',
   // v407 — core screens that were fetched live only and so were unavailable offline
   'js/starforge.js', 'js/pilot-ascension.js', 'js/achievements.js', 'js/analytics.js', 'js/sim-pilots.js',

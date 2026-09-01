@@ -111,20 +111,16 @@
       },
       empty: 'No systems claimed yet. Take one in My Galaxy and it starts paying immediately.',
     },
-    {
-      id: 'voidmaw', ic: '\u2620', col: '#ff4d6d', label: 'VOIDMAW', sub: 'World boss',
-      info: 'The Voidmaw world boss. Ranked by deepest stage cleared, then by total damage.',
-      unit: 'STAGE',
-      metric: (p) => (p.stage || 0) * 1e12 + Math.min(1e12, Math.log10(Math.max(1, p.total || 0)) * 1e10),
-      fmt: (v, p) => String(p.stage | 0),
-      meta: (p) => 'Stage ' + (p.stage | 0) + ' · ' + fmt(p.total || 0) + ' total damage',
-      // NOT "this season". server-dreadnaught.js made the Voidmaw a PERMANENT
-      // fixture and states the rule out loud: no screen prints a deadline, because
-      // `SEASON.num` survives only as a wire key. Saying "this season" on an empty
-      // board implies a reset that will never come.
-      empty: 'Nobody has fought the Voidmaw yet.',
-      async: true,
-    },
+    // THE WORLD-BOSS BOARD LIVES IN THE EVENT, NOT HERE (737). It was the one
+    // board on this tab that duplicated a screen the player reaches another way —
+    // the event has its own Leaderboards button with the daily AND season ladders,
+    // both richer than this single stage column. Removed rather than kept in two
+    // places, because two boards on one dataset drift.
+    //
+    // `fetchVoidmaw()` and the 'voidmaw' entry in rank-rewards.js STAY: reward
+    // letters already issued name that board and must keep rendering "stage 41"
+    // rather than a bare number. A board id is a stored identifier in an issued
+    // prize; removing the tab does not revoke the receipt.
     {
       id: 'ships', ic: '\u27a4', col: '#7ce0a0', label: 'HANGAR', sub: 'Hulls Owned',
       info: 'Every hull built, bought, or granted — the size of the collection, not the fleet flying.',

@@ -1310,7 +1310,11 @@
     // the 1-in-200 chase at the top of it — so the ladder spans nearly the whole
     // scale, the same way its drop odds do.
     emb1:1, emb2:1.6, emb3:2.3, emb4:3.2, emb5:4.4,
-    titanaquila:4.5, corvus:5 };
+    titanaquila:4.5, corvus:5,
+    // THE PROGENITOR — a mothership, and the largest hull in the game. Above the
+    // Eternum (5.2) on purpose: it is the world boss you fought, flown. Missing
+    // from this table it defaulted to 1 and drew at FRIGATE size in battle.
+    progenitor:5.6 };
   function shipScaleOf(key){ return SHIP_SCALE[key] || 1; }
   function hullTier(level) {
     const key = (window.GAME && window.GAME.state) ? window.GAME.state.ship : 'frigate';
@@ -1320,7 +1324,7 @@
   const SHIP_NAMES = ['Scout Fighter', 'Strike Bomber', 'Battle Cruiser', 'Heavy Cruiser', 'Dreadnought', 'Super Carrier'];
 
   // ---- sprite art for the 10 hulls (preloaded) ----
-  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','eternum','aeternum','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4','xen1','xen2','xen3','xen4','xen5','emb1','emb2','emb3','emb4','emb5','mechspawn','mechgremlin','mechbeast','mecharchon','mechtitan','mechsovereign'];
+  const SHIP_KEYS = ['frigate','interceptor','cruiser','heavycruiser','destroyer','battleship','dreadnought','carrier','aegis','supercarrier','titan','mothership','oblivionspear','oblivionspearalpha','oblivionfinal','dread1','dread2','dread3','dread4','dread5','dread6','titansina','eternum','aeternum','voidmaw','chromafang','chromaregent','frostyfrost','veridian','monolith1','monolith2','monolith3','monolith4','xen1','xen2','xen3','xen4','xen5','emb1','emb2','emb3','emb4','emb5','mechspawn','mechgremlin','mechbeast','mecharchon','mechtitan','mechsovereign','progenitor'];
   const SHIP_IMG = {};
   SHIP_KEYS.forEach((k) => { const im = new Image(); im.src = 'ships/ship-' + k + '.png'; SHIP_IMG[k] = im; });
   function activeShipKey() { return (window.GAME && window.GAME.state && window.GAME.state.ship) || 'frigate'; }

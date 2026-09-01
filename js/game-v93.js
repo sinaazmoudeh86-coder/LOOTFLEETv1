@@ -3086,6 +3086,7 @@
     lanceTick(dt);
     // ✦ ETERNUM: the five death beams — continuous locks, no cooldown
     beamTick(dt);
+    harvTick(dt);
     // defending fleets run shield repair while they hold the field
     cloneTick(dt);
 
@@ -3527,6 +3528,7 @@
     try { drawLance(ctx); } catch (e) {}
     // ✦ ETERNUM DEATH BEAMS — continuous locks on the nearest hostiles
     try { drawBeams(ctx); } catch (e) {}
+    try { drawHarvesters(ctx); } catch (e) {}
     // PRISM MINING — ore field + miners, drawn in world space just above the
     // arena floor (enemies & player render on top).
     if (state.prismRun && state.prismRun.active && window.PRISM && window.PRISM.render) { try { window.PRISM.render(ctx, rt.time, rt); } catch (e) {} }
@@ -8238,12 +8240,204 @@
   // ---------------------------------------------------------------------------
   // No charge, no cooldown, no aiming. The hull holds a lock on the N nearest
   // hostiles (5 on the Eternum) and pours a continuous beam into each for as
-  // long as they stay inside weapon range. Each beam does BEAM.dps × effective
-  // DPS per second, so it scales with the pilot's build rather than replacing
-  // it. Locks re-target every BEAM.relock seconds so the beams sweep the field
-  // instead of sitting on one corpse.
+  // long as they stay inside weapon range.
+  //
+  // THE ARRAY IS BUDGETED AS A WHOLE, NOT PER BEAM (737). It used to pay
+  // `effectiveDps() × 1.35` to EACH beam, so five beams was **6.75× the pilot's
+  // entire fleet DPS**, applied every frame, on top of the weapons still firing.
+  // The comment above it claimed the beam "scales with the pilot's build rather
+  // than replacing it" — at 6.75× it replaced it completely and deleted anything
+  // it touched on contact. `share` is now the total the WHOLE array contributes,
+  // split across the hull's beam count, so a future hull with ten beams gets ten
+  // thinner lances rather than twice the damage.
+  //
+  // AND NO BEAM CAN ONE-SHOT. `maxHpPerSec` caps each beam at a fraction of the
+  // target's own max HP per second, so a full-health hostile always takes at
+  // least ~2s of beam to fall no matter how far the pilot's DPS has scaled. That
+  // is the guard that actually stops the one-shot — a share alone is proportional
+  // to DPS and would drift back into it as builds grow.
+  const BEAM = { share: 1.5, bossMult: 0.4, maxHpPerSec: 0.5, relock: 0.35, tick: 0.2 };
   // ===========================================================================
-  const BEAM = { dps: 1.35, bossDps: 0.55, relock: 0.35, tick: 0.2 };
+  // ✦ HARVESTERS — the Progenitor's armament
+  // ---------------------------------------------------------------------------
+  // The drones that hunted you in the Voidmaw event, flying for you. Two launch
+  // on a cadence, fly to the nearest hostiles, latch, and burn a share of the
+  // target's OWN max HP per second until it dies or the drone expires.
+  //
+  // DENOMINATED IN THE TARGET, NOT IN YOUR DPS. That is the whole reason this is
+  // interesting next to the death beams: beams scale with your build and do
+  // nothing special to a wall of HP, while a harvester takes the same bite out of
+  // anything it touches. It is the answer to a tanky target, not a faster clear.
+  //
+  // BOUNDED THREE WAYS so it cannot become the whole fight: a lifetime (a drone
+  // is worth at most life × rate of a target's bar), a hard bossMult, and a
+  // per-target lock so two drones never stack on one hostile. Unkillable is fine
+  // when the ceiling is this explicit.
+  // TWO PERMANENT DRONES, not a cooldown ability. They are the same harvesters
+  // the Progenitor sent after you in the event — the sprite is literally the same
+  // file — except now they fly escort and hunt for you, and their wake burns
+  // hostiles instead of you. A flagship perk you can SEE at all times reads far
+  // better than a 9s pulse, and it makes the hull unmistakable on screen.
+  //
+  // DENOMINATED IN YOUR DPS, LIKE THE DEATH BEAMS. An earlier cut burned a share
+  // of the TARGET's max HP per second, which is unstable in both directions: it
+  // is equally strong against a frigate and a stage-400 boss, it ignores every
+  // upgrade the pilot buys, and as boss HP curves upward it turns into the only
+  // thing that matters. A share of effective DPS scales with the build, stays in
+  // proportion to every other weapon on the hull, and cannot outrun the fight.
+  //
+  // BUDGETED AS A PAIR, NOT PER DRONE (the beam lesson): `share` is the total the
+  // whole flight contributes, split between them, so adding a third drone later
+  // means three thinner ones rather than 50% more damage.
+  const HARV = {
+    n: 2,               // set by the hull's `harvesters` flag; this is the fallback
+    share: 0.60,        // the PAIR together adds 60% of effective DPS while latched
+    bossMult: 0.45,
+    maxHpPerSec: 0.60,  // …and still never strips more than 60% of a bar per second
+    slow: 0.62,         // latched hostiles lose speed
+    speed: 330,         // drone flight speed
+    latchR: 38,
+    orbitR: 92,         // idle station-keeping radius around the flagship
+    seek: 1.35,         // hunt radius, as a multiple of your fire range
+    tick: 0.25,
+    // the wake: thin, short-lived, and it burns anything that flies through it
+    trail: 0.09,        // seconds between segments
+    trailLife: 2.6,
+    trailR: 30,
+    trailShare: 0.12,   // 12% of effective DPS to everything standing in it
+    trailTick: 0.1,     // wake damage is sampled, not evaluated every frame
+  };
+  let _harvImg = null;
+  function harvImg() {
+    if (!_harvImg) { _harvImg = new Image(); _harvImg.src = 'ships/vm2-drone.png'; }
+    return _harvImg;
+  }
+  function harvCount() { const sh = C.SHIP_BY_KEY[state.ship]; return sh && sh.harvesters ? (sh.harvesters | 0) : 0; }
+  function harvTick(dt) {
+    const n = harvCount();
+    if (!n || !rt.archer || rt.archer.dead || state.currentDungeon < 1) { rt.harv = null; rt.harvTr = null; return; }
+    const a = rt.archer;
+    if (!rt.harv || rt.harv.length !== n) {
+      rt.harv = []; rt.harvTr = [];
+      for (let i = 0; i < n; i++) rt.harv.push({ x: a.x, y: a.y, ang: 0, o: null, ph: i * 3.1, trT: 0 });
+    }
+    const range = ((rt.stats && rt.stats.fireRange) || 900) * HARV.seek;
+    rt.harvT = (rt.harvT || 0) + dt;
+    const pulse = rt.harvT >= HARV.tick; if (pulse) rt.harvT = 0;
+    rt.harvTrT = (rt.harvTrT || 0) + dt;
+    const trPulse = rt.harvTrT >= HARV.trailTick; if (trPulse) rt.harvTrT = 0;
+    const dps = effectiveDps();
+    const per = dps * HARV.share / Math.max(1, rt.harv.length);
+    const taken = new Set();
+    for (const h of rt.harv) if (h.o && !h.o.dead && !h.o.dying) taken.add(h.o);
+    for (let i = 0; i < rt.harv.length; i++) {
+      const h = rt.harv[i];
+      h.ph += dt * 2.6;
+      // re-acquire: nearest live hostile in range that the other drone is not on
+      if (!h.o || h.o.dead || h.o.dying || Math.hypot(h.o.x - a.x, h.o.y - a.y) > range) {
+        if (h.o) taken.delete(h.o);
+        h.o = null;
+        let best = null, bd = Infinity;
+        for (const o of rt.enemies) {
+          if (o.dead || o.dying || taken.has(o)) continue;
+          const d = Math.hypot(o.x - h.x, o.y - h.y);
+          if (d < bd && Math.hypot(o.x - a.x, o.y - a.y) <= range) { bd = d; best = o; }
+        }
+        if (best) { h.o = best; taken.add(best); }
+      }
+      // fly: to the target if it has one, otherwise station-keep on the flagship
+      const tx = h.o ? h.o.x : a.x + Math.cos(h.ph * 0.6 + i * Math.PI) * HARV.orbitR;
+      const ty = h.o ? h.o.y : a.y + Math.sin(h.ph * 0.6 + i * Math.PI) * HARV.orbitR;
+      const dx = tx - h.x, dy = ty - h.y, d = Math.hypot(dx, dy) || 1;
+      if (d > 2) {
+        const step = Math.min(d, HARV.speed * dt);
+        h.x += (dx / d) * step; h.y += (dy / d) * step;
+        h.ang = Math.atan2(dy, dx);
+      }
+      // lay the wake
+      h.trT -= dt;
+      if (h.trT <= 0) { h.trT = HARV.trail; rt.harvTr.push({ x: h.x, y: h.y, t: HARV.trailLife }); }
+      // burn the target once close enough
+      const o = h.o;
+      if (!o || d > HARV.latchR) { h.latch = Math.max(0, (h.latch || 0) - dt * 2); continue; }
+      h.latch = Math.min(1, (h.latch || 0) + dt * 4);
+      if (typeof o.vx === 'number') { o.vx *= HARV.slow; o.vy *= HARV.slow; }
+      let rate = per * (o.isBoss ? HARV.bossMult : 1) * (window.MONO_MULT ? window.MONO_MULT(o) : 1);
+      const hp = Number(o.maxHp) || 0;
+      if (hp > 0) rate = Math.min(rate, hp * HARV.maxHpPerSec);   // never an instant delete
+      const dmg = rate * dt;
+      if (dmg < 1) continue;
+      const k = o.takeDamage(dmg);
+      rt.dmgWindow.push({ t: rt.time, dmg });
+      if (pulse && rt.floats.length < 26) rt.floats.push(new E.FloatText(o.x, o.y - o.size, formatNum(dmg / dt * (rt.dmgShow || 1)) + '/s', { color: '#ff8ae0', size: 20 }));
+      if (k) { onKill(o); h.o = null; }
+    }
+    // age the wake, and burn anything sitting in it. SAMPLED on trailTick rather
+    // than every frame: this is N segments × M hostiles and it runs always-on.
+    if (rt.harvTr && rt.harvTr.length) {
+      for (const w of rt.harvTr) w.t -= dt;
+      rt.harvTr = rt.harvTr.filter((w) => w.t > 0);
+      if (trPulse) {
+        for (const o of rt.enemies) {
+          if (o.dead || o.dying) continue;
+          let hit = false;
+          for (const w of rt.harvTr) { if (Math.hypot(o.x - w.x, o.y - w.y) <= HARV.trailR) { hit = true; break; } }
+          if (!hit) continue;
+          let rate = dps * HARV.trailShare * (o.isBoss ? HARV.bossMult : 1)
+                   * (window.MONO_MULT ? window.MONO_MULT(o) : 1);
+          const hp = Number(o.maxHp) || 0;
+          if (hp > 0) rate = Math.min(rate, hp * HARV.maxHpPerSec);
+          const dmg = rate * HARV.trailTick;
+          if (dmg < 1) continue;
+          if (o.takeDamage(dmg)) onKill(o); else rt.dmgWindow.push({ t: rt.time, dmg });
+        }
+      }
+    }
+  }
+  // canvas: the wake first, then the drones over it, then the burn tether
+  function drawHarvesters(ctx) {
+    const list = rt.harv; if (!list || !list.length || !rt.archer) return;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const w of (rt.harvTr || [])) {
+      const f = Math.max(0, w.t / HARV.trailLife);
+      const gr = ctx.createRadialGradient(w.x, w.y, 1, w.x, w.y, HARV.trailR);
+      gr.addColorStop(0, 'rgba(255,74,180,' + (0.30 * f).toFixed(3) + ')');
+      gr.addColorStop(0.6, 'rgba(176,77,255,' + (0.17 * f).toFixed(3) + ')');
+      gr.addColorStop(1, 'rgba(176,77,255,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(w.x, w.y, HARV.trailR, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    const im = harvImg();
+    let dk = 2.2;
+    try { dk = Math.min(2.2, 1 + Math.max(0, window.RENDER.shipScaleOf(state.ship) - 1) * 0.32); } catch (e) {}
+    const R = 11 * dk * 1.5;
+    for (const h of list) {
+      const pul = 0.6 + 0.4 * Math.sin(h.ph);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const gg = ctx.createRadialGradient(h.x, h.y, 3, h.x, h.y, R * 1.6);
+      gg.addColorStop(0, 'rgba(255,74,223,' + (0.26 * pul).toFixed(3) + ')');
+      gg.addColorStop(1, 'rgba(176,77,255,0)');
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(h.x, h.y, R * 1.6, 0, 7); ctx.fill();
+      ctx.restore();
+      if ((h.latch || 0) > 0 && h.o) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(255,138,224,' + (0.7 * h.latch).toFixed(2) + ')';
+        ctx.lineWidth = 2 + 3 * h.latch;
+        ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.o.x, h.o.y); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.translate(h.x, h.y); ctx.rotate((h.ang || 0) + Math.PI / 2);
+      if (im && im.complete && im.naturalWidth) {
+        ctx.shadowColor = '#b04dff'; ctx.shadowBlur = 14;
+        ctx.drawImage(im, -R, -R, R * 2, R * 2);
+      } else {
+        ctx.fillStyle = '#c46bff'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
   function beamCount() { const sh = C.SHIP_BY_KEY[state.ship]; return sh && sh.deathBeams ? (sh.deathBeams | 0) : 0; }
   function beamTick(dt) {
     const n = beamCount();
@@ -8262,8 +8456,15 @@
     rt.beamT = (rt.beamT || 0) + dt;
     const pulse = rt.beamT >= BEAM.tick; if (pulse) rt.beamT = 0;
     const dps = effectiveDps();
+    // per-beam share of the array budget — divided by the hull's BEAM COUNT, not
+    // by how many happen to be locked, so a lone target does not inherit the
+    // whole array's output.
+    const per = dps * BEAM.share / Math.max(1, n);
     for (const o of rt.beams) {
-      const dmg = dps * (o.isBoss ? BEAM.bossDps : BEAM.dps) * dt * (window.MONO_MULT ? window.MONO_MULT(o) : 1);
+      let rate = per * (o.isBoss ? BEAM.bossMult : 1) * (window.MONO_MULT ? window.MONO_MULT(o) : 1);
+      const hp = Number(o.maxHp) || 0;
+      if (hp > 0) rate = Math.min(rate, hp * BEAM.maxHpPerSec);   // never a one-shot
+      const dmg = rate * dt;
       if (dmg < 1) continue;
       const k = o.takeDamage(dmg);
       rt.dmgWindow.push({ t: rt.time, dmg });

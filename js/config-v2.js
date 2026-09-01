@@ -643,7 +643,11 @@
     // proc: 12% per bolt to stun a target and tear open a black hole beneath it.
     // NEVER purchasable: assembled from 150 Voidmaw Parts earned only in the
     // event (stage drops, leaderboard ranks, Voidmaw Store).
-    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:1}, tag:'EVENT EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of the event. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Voidmaw world-boss event.' },
+    // RETIRED (season 2). The Voidmaw was season 1's grand prize and is no longer
+    // assembled from parts — the Progenitor replaced it. `retired` keeps its card
+    // honest: owners keep the hull and fly it, and nobody else is shown a grind
+    // they can never finish. NOT `unreleased`, which promises a future route.
+    { key:'voidmaw', name:'Voidmaw', cls:'Carrier', retired:true, price:0, reqKills:0, weapons:8, ammo:3, hull:3, drones:14, mods:{hpPct:170,dmgPct:105,multiShot:28,critChance:24,critDamage:75,moveSpeed:28,atkSpeedPct:30,rangePct:55,lifeSteal:1}, tag:'EVENT EXCLUSIVE', event:'sdread', perk:'● SINGULARITY — 12% per shot: stuns the target 1.6s and collapses a black hole beneath it. Everything caught inside is dragged to the core and ground for 22% of your attack damage per second over 3s. Bosses resist the stun but still burn in the well.', desc:'The Server Dreadnaught itself, refit for your fleet — the apex hull of the event. Its cannons punch holes in spacetime: targets are stunned and a singularity opens beneath them, dragging every nearby ship into the crush. Assembled ONLY from Voidmaw Parts earned in the Voidmaw world-boss event.' },
     // ---- THE MECH LINE ------------------------------------------------------
     // Five hulls, one per Mech class, each recovered from that class's own Foundry
     // tier. All are AWARD-ONLY (`event`), which is what keeps a price:0 hull out of
@@ -801,6 +805,19 @@
       // entire stated reason to buy that track, so it must not read as unobtainable.
       tag:'DREAD-CLASS · PRAETORIAN', dreadAura:true, reqLevel:200, tour:{ lv:100, track:'Admiralty' },
       desc:'The apex Dreadnaught, and the only hull in the galaxy that is both gunship and carrier. FOUR cannon hardpoints fire while SIX FIGHTER BAYS launch six autonomous Heavy Fighters that pick their own targets and swarm them — on top of full Dread-class munitions, plating and utility fittings. Nineteen fitted slots. Every line on its sheet is above the Dread Omega.' },
+    // ---- THE PROGENITOR · VOIDMAW MOTHERSHIP --------------------------------
+    // The season-2 world boss, salvaged and flown. Praetorian-class: the only
+    // other hull that is both gunship and carrier, and this one trades a little
+    // raw damage for a fifth cannon and the harvesters it hunted you with.
+    //
+    // `progenitor`, NOT `mothership` — that key is already a mid-tier hull in
+    // PART_BANDS and reusing it would hand every player a free apex ship.
+    { key:'progenitor', name:'The Progenitor', cls:'Carrier', price:0, reqKills:0,
+      weapons:5, ammo:3, hull:3, drones:96, fighterCapacity:6,
+      mods:{ hpPct:3350, dmgPct:1620, multiShot:470, critChance:90, critDamage:1290, moveSpeed:300, atkSpeedPct:545, rangePct:960, lifeSteal:18 },
+      tag:'DREAD-CLASS · MOTHERSHIP', event:'sdread', dreadAura:true, harvesters:2, reqLevel:200,
+      perk:'● HARVEST — two harvester drones fly permanent escort, the same ones the Progenitor hunted you with. They pick their own targets, latch on, cut their speed and add 60% of your fleet damage between them, split across whatever they are holding — so they scale with everything you build. They trail a burning wake that scorches anything flying through it. They cannot be shot down. Bosses take under half.',
+      desc:'The mothership that came for the Voidmaw, rebuilt from a thousand salvaged parts. FIVE cannon hardpoints fire while SIX FIGHTER BAYS launch autonomous Heavy Fighters — and its harvesters, the same ones that hunted you, now hunt for you. More hull, reach and speed than the Dread Praetorian; slightly less raw damage.' },
     // ---- KAEVITH ALIEN TECHNOLOGY · THE INCURSION EVENT ---------------------
     // Five recovered hulls, never sold and never blueprinted: the ONLY way to
     // get one is to clear an invaded zone in My Galaxy and win the salvage roll

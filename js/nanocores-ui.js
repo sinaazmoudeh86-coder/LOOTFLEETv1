@@ -57,7 +57,7 @@
     const n = N(); if (!n) return;
     const sub = $('nano-sub');
     const t = n.tally();
-    if (sub) sub.textContent = t.owned + ' / ' + t.total + ' cores · ◈ ' + money(n.prism());
+    if (sub) sub.textContent = t.owned + ' / ' + t.total + ' cores · ◭ ' + money(n.prism());
     if (!n.unlocked()) { body.innerHTML = lockHtml(); return; }
     body.innerHTML = view ? manageHtml(view.ship, view.r) : rosterHtml(t);
     wire(body);
@@ -67,7 +67,7 @@
     const n = N(), lv = n.CFG.gate.level;
     return '<div class="nc-lock"><div class="nc-lock-ic">◈</div>' +
       '<h3>NANOCORES</h3>' +
-      '<p>Opens at <b>Level ' + lv + '</b>. Cores are bought and upgraded with <b>◈ Prism Ingots</b>.</p>' +
+      '<p>Opens at <b>Level ' + lv + '</b>. Cores are bought and upgraded with <b>◭ Prism Ingots</b>.</p>' +
       '<p class="nc-dim">Every hull in the fleet has five cores, one per loot rarity — Common through Legendary. Rarity pays a guaranteed damage, health and speed bonus; everything above Common also carries extra buff slots you unlock and reroll.</p></div>';
   }
 
@@ -85,7 +85,7 @@
     return '<div class="nc-hero">' +
         '<div class="nc-hero-ic">◈</div>' +
         '<div class="nc-hero-txt"><div class="nc-hero-n">' + t.owned + ' <span>/ ' + t.total + ' CORES</span></div>' +
-          '<div class="nc-hero-s">◈ ' + money(n.prism()) + ' Prism Ingots banked</div></div>' +
+          '<div class="nc-hero-s">◭ ' + money(n.prism()) + ' Prism Ingots banked</div></div>' +
         '<button class="nc-cta" data-ngo="crates">GET CORES</button>' +
       '</div>' +
       '<p class="nc-intro">One core is equipped per hull. It pays <b>in full</b> on the hull you fly and at <b>' + sharePct() + '%</b> on a hull flying as an escort in your fleet — the same share an escort\u2019s own hull mods pay. Cores drop for <b>any ship in the game</b>, so one for a hull you have not built yet is banked progress waiting for it.</p>' +
@@ -149,7 +149,7 @@
         '<button class="nc-ex-b" data-nex="' + r.k + '"' + (ok ? '' : ' disabled') + '>TRADE</button></div>';
     }).join('');
     return '<div class="nc-panel"><div class="nc-panel-h">⇄ DUPLICATE EXCHANGE</div>' +
-      '<p class="nc-dim">A core you already own arrives as a duplicate. Trade ' + n.CFG.exchange.ratio + ' of a rarity for one random core of the rarity above — or ' + n.CFG.exchange.same + ' <b>' + n.RAR[n.RAR.length - 1].name.toUpperCase() + '</b> dupes for a Legendary core of a hull you have not recovered yet. Eligible dupes are counted for you.</p>' +
+      '<p class="nc-dim">A core you already own arrives as a duplicate. Trade ' + n.CFG.exchange.ratio + ' of a rarity for one random core of the rarity above — or ' + n.CFG.exchange.same + ' <b>' + n.RAR[n.RAR.length - 1].name.toUpperCase() + '</b> dupes for another top-tier core of a hull you have not recovered yet. Eligible dupes are counted for you.</p>' +
       rows + '</div>';
   }
 
@@ -203,7 +203,7 @@
       '<div class="nc-dots">' + dots.join('') + '</div>' +
       '<div class="nc-ug">' +
         '<div class="nc-ug-i"><div class="nc-ug-v">' + Math.round(chance) + '%</div><div class="nc-ug-l">SUCCESS CHANCE' + (fails ? ' · +' + (fails * n.CFG.upgrade.failBonus) + ' from ' + fails + ' fail' + (fails > 1 ? 's' : '') : '') + '</div></div>' +
-        '<div class="nc-ug-i"><div class="nc-ug-v' + (afford ? '' : ' short') + '">◈ ' + money(cost) + '</div><div class="nc-ug-l">UPGRADE ' + stage + ' OF ' + per + '</div></div>' +
+        '<div class="nc-ug-i"><div class="nc-ug-v' + (afford ? '' : ' short') + '">◭ ' + money(cost) + '</div><div class="nc-ug-l">UPGRADE ' + stage + ' OF ' + per + '</div></div>' +
       '</div>' +
       '<button class="nc-btn big" data-nup="' + ship + '|' + rk + '"' + (afford ? '' : ' disabled') + '>UPGRADE</button>' +
       '<p class="nc-dim sm">Ingots are spent whether the upgrade lands or not. A failure raises <b>this</b> attempt\u2019s chance by ' + n.CFG.upgrade.failBonus + ' points until it succeeds.</p></div>';
@@ -228,7 +228,7 @@
     }
     return '<div class="nc-panel"><div class="nc-panel-h">EXTRA BUFFS <span class="nc-h-r">' + c.slots + ' / ' + r.slots + ' unlocked</span></div>' +
       rows.join('') +
-      '<div class="nc-roll"><div><div class="nc-roll-c' + (afford ? '' : ' short') + '">◈ ' + money(cost) + '</div>' +
+      '<div class="nc-roll"><div><div class="nc-roll-c' + (afford ? '' : ' short') + '">◭ ' + money(cost) + '</div>' +
         '<div class="nc-roll-l">REROLL COST' + (locked ? ' · ' + locked + ' locked ×' + Math.pow(n.CFG.roll.lockMult, locked) : '') + '</div></div>' +
         '<button class="nc-btn" data-nroll="' + ship + '|' + rk + '"' + (afford ? '' : ' disabled') + '>REROLL</button></div>' +
       '<p class="nc-dim sm">Every unlocked slot that is not locked rerolls at once. Each locked slot doubles the cost.</p>' +
@@ -256,11 +256,18 @@
     // explanation is a dead end — Nanocores opens on LEVEL alone, so a pilot can
     // reach this screen having never mined an ingot and find two dark buttons and
     // no reason. Say the balance, the shortfall, and where ingots come from.
-    const short = bal < cfg.single;
+    // …and say it for the TEN-PACK TOO. `short` only covered "cannot afford one",
+    // so a pilot holding between one and ten crates' worth saw OPEN 10 dark with
+    // no reason given anywhere on the screen — the same dead end, one tier up.
+    const short = bal < cfg.single, shortTen = !short && bal < cfg.ten;
     const why = short
-      ? '<div class="nc-short"><div class="nc-short-h">◈ NOT ENOUGH PRISM INGOTS</div>' +
-          '<div class="nc-short-b">You hold <b>◈ ' + money(bal) + '</b> · a crate costs <b>◈ ' + money(cfg.single) + '</b>.</div>' +
+      ? '<div class="nc-short"><div class="nc-short-h"><i>◭</i> NOT ENOUGH PRISM INGOTS</div>' +
+          '<div class="nc-short-b">You hold <b class="nc-ing">◭ ' + money(bal) + '</b> · a crate costs <b class="nc-ing">◭ ' + money(cfg.single) + '</b>.</div>' +
           '<div class="nc-short-b">Ingots are mined in <b>Prism Mining</b> — deploy into a Prism Field and every kill there refines into ingots. The <b>Moon Colony</b> and the <b>Alliance store</b> pay them out too.</div>' +
+          '<button class="nc-btn wide" data-ngo="prism">OPEN PRISM MINING</button></div>'
+      : shortTen
+      ? '<div class="nc-short"><div class="nc-short-h"><i>◭</i> NOT ENOUGH FOR THE TEN-PACK</div>' +
+          '<div class="nc-short-b">You hold <b class="nc-ing">◭ ' + money(bal) + '</b> · ten costs <b class="nc-ing">◭ ' + money(cfg.ten) + '</b> — <b class="nc-ing">◭ ' + money(cfg.ten - bal) + '</b> short. <b>OPEN 1</b> is affordable now.</div>' +
           '<button class="nc-btn wide" data-ngo="prism">OPEN PRISM MINING</button></div>'
       : '';
     return '<div class="nc-crate">' +
@@ -269,10 +276,10 @@
         '<div class="nc-crate-s">One core per crate, any hull in the game · ' + t.owned + ' / ' + t.total + ' collected</div></div></div>' +
       '<div class="nc-odds">' + odds + '</div>' +
       '<div class="nc-buy">' +
-        '<button class="nc-btn big" data-nbuy="1"' + (bal >= cfg.single ? '' : ' disabled') + '>OPEN 1<span>◈ ' + money(cfg.single) + '</span></button>' +
-        '<button class="nc-btn big alt" data-nbuy="10"' + (bal >= cfg.ten ? '' : ' disabled') + '>OPEN 10<span>◈ ' + money(cfg.ten) + ' <s>' + money(cfg.tenList) + '</s></span></button>' +
+        '<button class="nc-btn big" data-nbuy="1"' + (bal >= cfg.single ? '' : ' disabled') + '>OPEN 1<span>◭ ' + money(cfg.single) + '</span></button>' +
+        '<button class="nc-btn big alt" data-nbuy="10"' + (bal >= cfg.ten ? '' : ' disabled') + '>OPEN 10<span>◭ ' + money(cfg.ten) + ' <s>' + money(cfg.tenList) + '</s></span></button>' +
       '</div>' +
-      '<div class="nc-bal">◈ ' + money(bal) + ' banked</div>' +
+      '<div class="nc-bal">◭ ' + money(bal) + ' banked</div>' +
       why +
       (crateRes ? resultsHtml() : '') +
       '<p class="nc-dim">Duplicates are kept: ' + n.CFG.exchange.ratio + ' of a rarity trade up in <b>Command ▸ Nanocores</b>.</p>' +
@@ -384,7 +391,7 @@
   .nc-hero-txt{flex:1;min-width:0}
   .nc-hero-n{font-family:'Orbitron',sans-serif;font-weight:800;font-size:19px;color:#eaf2fb;letter-spacing:.02em}
   .nc-hero-n span{font-size:11px;color:#93a2ba;letter-spacing:.08em}
-  .nc-hero-s{font-size:11.5px;color:#c9a0ff;font-weight:700;margin-top:2px}
+  .nc-hero-s{font-size:11.5px;color:#1fe3b2;font-weight:700;margin-top:2px}
   .nc-cta{flex:none;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid #c9a0ff;background:rgba(201,160,255,.14);
     color:#e9d9ff;font-family:'Orbitron',sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.1em;cursor:pointer}
   .nc-intro,.nc-dim{font-size:11.5px;line-height:1.55;color:#93a2ba;margin:0 0 10px}
@@ -460,10 +467,15 @@
   .nc-btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #c9a0ff;background:rgba(201,160,255,.14);color:#e9d9ff;
     font-family:'Orbitron',sans-serif;font-weight:800;font-size:11px;letter-spacing:.1em;cursor:pointer}
   .nc-btn.big{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;padding:9px 14px;min-height:52px}
-  .nc-btn.big span{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.04em;color:#c9a0ff}
+  .nc-btn.big span{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.04em;color:#1fe3b2}
   .nc-btn.big span s{color:#6f7f99}
   .nc-btn.alt{border-color:#ffd450;background:rgba(255,212,80,.12);color:#ffeab0}
-  .nc-btn.alt span{color:#ffd450}
+  /* GOLD CHROME MARKS THE VALUE PICK; THE PRICE IS STILL PRISM. Gold was the
+     LootCoin colour on a Prism purchase, which made the two buttons look like two
+     different currencies for one crate. Every Prism figure in this panel is
+     ◭ / #1fe3b2 — the panel's own violet chrome is the NANOCORE feature colour,
+     not a currency. See config-v2.js → CURRENCY MARKS. */
+  .nc-btn.alt span{color:#1fe3b2}
   .nc-btn.wide{width:100%;margin-top:10px}
   .nc-btn:disabled{opacity:.4;cursor:default}
   .nc-slot{display:flex;align-items:center;gap:9px;padding:9px;border-radius:10px;margin-bottom:6px;background:#0f1725;border:1px solid #1e2a3c}
@@ -489,7 +501,7 @@
   .nc-pool summary{cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;color:#8fa0b8}
   .nc-pool-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px;margin-top:8px}
   .nc-pool-i{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:#93a2ba;padding:5px 7px;background:#0f1725;border-radius:7px}
-  .nc-pool-i b{color:#c9a0ff;font-variant-numeric:tabular-nums}
+  .nc-pool-i b{color:#1fe3b2;font-variant-numeric:tabular-nums}
   .nc-gkey{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
   .nc-gk{font-family:'Orbitron',sans-serif;font-weight:800;font-size:8px;letter-spacing:.09em;color:var(--g);
     border:1px solid color-mix(in srgb,var(--g) 50%,transparent);background:color-mix(in srgb,var(--g) 12%,transparent);border-radius:5px;padding:3px 6px}
@@ -507,7 +519,7 @@
     font-size:10.5px;color:#b8c6d8}
   .nc-odd b{margin-left:auto;font-family:'Rajdhani',sans-serif;font-size:12px;font-variant-numeric:tabular-nums}
   .nc-buy{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
-  .nc-bal{text-align:center;font-size:11px;color:#c9a0ff;font-weight:700;margin:9px 0 4px}
+  .nc-bal{text-align:center;font-size:11px;color:#1fe3b2;font-weight:700;margin:9px 0 4px}
   .nc-res{margin:10px 0;padding:11px;border-radius:12px;background:#0d1420;border:1px solid #223245}
   .nc-res-h{font-family:'Orbitron',sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.12em;color:#c3d2e6;margin-bottom:9px}
   .nc-res-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:6px}
@@ -521,6 +533,8 @@
   .nc-short-h{font-family:'Orbitron',sans-serif;font-weight:800;font-size:10px;letter-spacing:.11em;color:#ffcf7a;margin-bottom:7px}
   .nc-short-b{font-size:11.5px;line-height:1.55;color:#e6d3b4;margin-bottom:6px}
   .nc-short-b b{color:#fff}
+  .nc-short-h i{font-style:normal;color:#1fe3b2}
+  .nc-short-b b.nc-ing{color:#1fe3b2}
   .nc-short .nc-btn{margin-top:4px;border-color:#f2b24b;background:rgba(242,178,75,.14);color:#ffe3b0}
   .nc-strip{margin-top:9px;padding:9px;border-radius:11px;background:#0d1420;border:1px solid #223245}
   .nc-strip-h{display:flex;align-items:center;gap:8px;font-family:'Orbitron',sans-serif;font-weight:800;font-size:9px;

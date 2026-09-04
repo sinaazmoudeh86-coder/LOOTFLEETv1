@@ -53,8 +53,25 @@
     rt.worldW = Math.round(Math.sqrt(area * aspect));
     rt.worldH = Math.round(Math.sqrt(area / aspect));
     const lin = Math.sqrt((w * h) / (REF_W * REF_H));
-    rt.zoom = zoomFor(zone) * Math.min(1, Math.max(0.62, Math.sqrt(lin)));
+    rt.zoom = zoomFor(zone) * Math.min(1, Math.max(0.62, Math.sqrt(lin))) * xynZoom();
   }
+  // ---- FLYING SOMETHING MASSIVE --------------------------------------------
+  // The Xyn draws at SHIP_SCALE 9, nearly twice any other hull — and on its own
+  // that reads as "a bigger ship", not as an enormous one. Scale is relative: a
+  // sprite only looks huge next to things that look small. So the zone camera
+  // pulls back to 0.55× when the Xyn is the flagship, which shrinks every hostile,
+  // hazard and piece of arena furniture around it and widens the visible world.
+  //
+  // It multiplies fitWorld()'s existing figure rather than replacing it, so the
+  // small-screen easing and the per-zone curve both still apply — the Xyn is
+  // 0.55× whatever this device and zone were already showing.
+  //
+  // rt.zoom is the ONE camera number: the draw transform, both camera clamps and
+  // the minimap viewport rect all read it. Putting the multiplier here means they
+  // cannot disagree about where the view is — which is what would happen if the
+  // scale were applied at draw time and the clamps kept the old figure.
+  const XYN_ZOOM = 0.55;
+  function xynZoom() { try { return state.ship === 'xyn' ? XYN_ZOOM : 1; } catch (e) { return 1; } }
   // Zone unlocking — you can reach at most 10 zones ahead of your pilot level, so
   // you can't skip into wildly over-level zones and farm insane loot. Still also
   // ZONE LOOKAHEAD — how far past your level the Grind Zone list unlocks.
@@ -314,6 +331,11 @@
     // flatten; regrowing their NPC fortress on ascension would re-lock ground
     // they still own.
     'razedCitadels',
+    // THE XYN — a lifetime kill record on Xyn Prime and the receipt for a hull
+    // that was already granted. `ownedShips` is kept, so wiping this would leave a
+    // pilot flying the Super Fighter with no record of ever having earned it.
+    // A record of something that happened is never run progress.
+    'xyn',
     // HOME CITADEL and PRISM are INFRASTRUCTURE, not run progress — the same
     // argument as the Moon Colony. The Home Citadel is described in-game as a
     // "permanent AFK empire": pads, towers and defences built up over days that
@@ -1980,6 +2002,10 @@
       state.totalKills++;
       state.shipKills[state.ship] = (state.shipKills[state.ship] || 0) + 1;
       maybeDropDrone(e);
+      // THE XYN — the roll resolves when the XYN ITSELF goes down, not on trash.
+      // The module owns the gate, the odds, the grant and the popup so none of
+      // that lives here. Wrapped because a throw must never eat the kill.
+      try { window.XYN && window.XYN.onKill(e); } catch (_x) {}
     }
     burst(e.x, e.y, e.tint, e.isBoss ? 60 : 16, { speed: e.isBoss ? 320 : 180, life: 0.9, gravity: 120, glow: e.isBoss });
     // SPACE CARGO DEFENSE PAYS ON DELIVERY, NOT PER KILL. The instance deploys
@@ -2217,8 +2243,11 @@
     b.size *= isSuper ? 3.1 : 2.5;
     b.speed *= 0.72;
     b.name = isSuper ? ('SUPER ' + type.name + ' Prime') : (type.name + ' Alpha');
+    // XYN PRIME — tested FIRST, ahead of every other skin. It is a single fixed
+    // tile with its own hull and its own prize, so nothing else may claim its boss.
+    if (xynSkin(b)) { b.isSuper = true; }
     // INVADED TILE — the zone boss is a Kaevith command hull, not the local fauna
-    if (xenSkin(b, true)) b.name = isSuper ? 'KAEVITH OVERSEER' : 'KAEVITH WARDEN';
+    else if (xenSkin(b, true)) b.name = isSuper ? 'KAEVITH OVERSEER' : 'KAEVITH WARDEN';
     // CHOIR-CLAIMED ZONE — the encounter that ends the zone is a Choir hull.
     // Checked after xenSkin because the two events never overlap: Kaevith lives on
     // galaxy tiles, the Choir in Zone Grind, and isEmberBossPending() requires no
@@ -3013,6 +3042,15 @@
     // first frame after the update, handing the player the hull they paid for.
     if (state.construction) { checkConstruction(); }
     // when downed, freeze everything until the player picks a respawn zone
+    //
+    // THE XYN WATCHER RUNS ABOVE THIS RETURN, and that is the entire point of it
+    // being here rather than beside the other event ticks. Going down IS the Xyn
+    // event's losing condition, and everything past this line is skipped the moment
+    // the pilot is downed — so a watcher placed with its siblings below could only
+    // ever fire while the player was alive, i.e. never on the case it exists for.
+    // It is gated on standing on the one tile, so it costs one string compare a
+    // frame anywhere else in the galaxy.
+    try { xynTick(); } catch (e) {}
     if (rt.awaitingRespawn) { a.update(dt); return; }
     a.update(dt);
 
@@ -4379,6 +4417,11 @@
     // state therefore carries no stamp and can never out-rank a real pick. See
     // the flagship note in mergeSaves() for the login bug that made it necessary.
     state.shipPick = Date.now();
+    // THE CAMERA FOLLOWS THE HULL. rt.zoom is computed in fitWorld(), which only
+    // runs on a resize or a zone change — so switching to or from the Xyn mid-zone
+    // left the previous hull's framing in place until something else happened to
+    // resize. Re-fit here so the pull-back lands on the tap.
+    try { fitWorld(state.currentDungeon); } catch (e) {}
     // the new flagship can't also fly as an escort — free its fleet slot
     if (state.fleet) state.fleet = state.fleet.map((k) => (k === key ? null : k));
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
@@ -5031,6 +5074,35 @@
     if (window.UI) window.UI.refreshAll(); save();
     return b;
   }
+  // ---- THE XYN · BOSS SKIN --------------------------------------------------
+  // On XYN PRIME the zone boss IS the Xyn. Same mechanism as xenSkin/emberSkin —
+  // no second spawn path, no bespoke encounter loop: the tile's ordinary boss is
+  // re-skinned, re-named and hardened, so every weapon, every death path and the
+  // whole boss HUD already work on it.
+  //
+  // IT SPAWNS WHETHER OR NOT YOU ALREADY OWN THE HULL, deliberately. Gating the
+  // encounter on not-owning would delete the fight the moment a pilot won it, and
+  // this tile's whole purpose is being fought over — the holder has to keep
+  // beating it while everyone else queues up to take the tile off them. Owning the
+  // Xyn changes what the popup says, not whether the Xyn is there.
+  let _xynBossImg = null;
+  function xynBossImg() { if (!_xynBossImg) { _xynBossImg = new Image(); _xynBossImg.src = 'ships/ship-xyn.png'; } return _xynBossImg; }
+  function xynSkin(e) {
+    if (!GX.isXyn || !GX.isXyn(state.currentSystem)) return false;
+    e.spriteImg = xynBossImg();
+    e.tint = '#7cd4ff';
+    e.isXyn = true;
+    // A SUPER FIGHTER, so it fights like one: heavier than a super boss, slow, and
+    // it reaches. The size is what sells it — this is the largest hull in the game
+    // and it should not share a silhouette with the local fauna.
+    e.maxHp = Math.round(e.maxHp * 2.4); e.hp = e.maxHp;
+    e.damage *= 1.5;
+    e.size = Math.max(e.size, 150);
+    e.speed *= 0.35;                      // sloth speed, same as the hull
+    e.ranged = true; e.range = 620; e.fireCd = 1.4; e.fireT = 1.5;
+    e.name = 'THE XYN';
+    return true;
+  }
   // ---- SERVER DREADNAUGHT boss art — the Voidmaw (Season 1) ---------------
   let _vmBossImg = null;
   function voidmawImg() { if (!_vmBossImg) { _vmBossImg = new Image(); _vmBossImg.src = 'ships/ship-voidmaw.png'; } return _vmBossImg; }
@@ -5117,9 +5189,14 @@
     return e;
   }
   // SAFE HANGAR — tow the pilot somewhere nothing can shoot them: clear every
-  // hostile, full heal + 6s invulnerability, and open the Hangar screen.
+  // hostile, full heal + 6s invulnerability, and open a screen.
   // Used after every event exit (retreat / timer / death) and every shipwreck.
-  function goSafeHangar() {
+  //
+  // `screen` defaults to the Hangar, which is what every existing caller wants and
+  // is why it is a default rather than a required argument — the Xyn event is the
+  // one exit that lands on My Galaxy instead (743).
+  function goSafeHangar(screen) {
+    const to = screen || 'hero';
     try {
       rt._pendShield = null;   // retreating before first blood leaves the tile unshielded
       rt.siege = null; rt.waves = null;
@@ -5128,10 +5205,44 @@
       rt.archer.dead = false; rt.archer.killer = null;
       rt.archer.hp = rt.stats.maxHp; rt.archer.invuln = 6;
     } catch (e) {}
-    const nav = document.querySelector('.nav-btn[data-screen="hero"]');
+    const nav = document.querySelector('.nav-btn[data-screen="' + to + '"]');
     if (nav) nav.click();
-    else if (window.UI && window.UI.showScreen) { try { window.UI.showScreen('hero'); } catch (e) {} }
+    else if (window.UI && window.UI.showScreen) { try { window.UI.showScreen(to); } catch (e) {} }
     if (window.UI) window.UI.refreshAll();
+  }
+  // ---- THE XYN EVENT ENDS ON A RESULT --------------------------------------
+  // Two outcomes end it and there is no third: the Xyn dies, or you do. Either way
+  // the encounter is over, the pilot is UNDEPLOYED to the safe hangar bay, and the
+  // screen returned to My Galaxy — where the tile they were fighting for is.
+  //
+  // WHY UNDEPLOY RATHER THAN LEAVE THEM STANDING THERE: the Xyn is the tile's zone
+  // boss, so staying on the tile would respawn it on the ordinary boss timer and
+  // the "event" would just be the zone grind with a popup. Ending the deployment is
+  // what makes each attempt a discrete run with a discrete result.
+  //
+  // IT MUST BE IDEMPOTENT. The kill path and the death watcher can both fire in the
+  // same frame (a trade that kills you and the boss together), and selectDungeon(0)
+  // is not free — `_xynEnding` makes the second call a no-op rather than towing the
+  // pilot twice and firing two screen changes.
+  let _xynEnding = false;
+  function endXynEvent() {
+    if (_xynEnding) return;
+    _xynEnding = true;
+    try { selectDungeon(0); } catch (e) {}          // out of combat, into the hangar bay
+    try { state.currentSystem = null; } catch (e) {}
+    goSafeHangar('galaxy');
+    try { save(); } catch (e) {}
+    setTimeout(() => { _xynEnding = false; }, 1200);
+  }
+  // DEATH WATCHER — same shape as prism-fleet's: the module that owns the encounter
+  // checks for the pilot going down in its own tick rather than the engine growing
+  // a death callback for every event that wants one.
+  function xynTick() {
+    if (!GX.isXyn || !GX.isXyn(state.currentSystem)) return;
+    if (rt.archer && (rt.archer.dead || rt.awaitingRespawn)) {
+      try { if (window.UI && window.UI.unlockToast) window.UI.unlockToast('◈ Driven off Xyn Prime — the Xyn still stands'); } catch (e) {}
+      endXynEvent();
+    }
   }
   // HOLLOW ARMADA deploy — the alliance raid boss on the REAL battle engine,
   // exactly the Voidmaw treatment: clean arena, one huge boss, the module
@@ -6095,6 +6206,46 @@
     if (real && real.cooldownUntil) { const t = new Date(real.cooldownUntil).getTime(); if (t > until) until = t; }
     return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
   }
+  // ---- EXSANGUINATION — THE ARTERY'S EFFECT --------------------------------
+  // Every Artery system you hold bleeds the shield off all of them.
+  //
+  // An ordinary capture is attack-shielded for 24 h. Inside the Artery the window
+  // is 24 h / (Artery systems you hold): one tile keeps the full day, all eleven
+  // drop to a little over two hours each. Take the whole branch and you hold the
+  // richest ground in the game with almost no shield anywhere on it — which is
+  // the point. The filament's one-wide geometry already means nothing in it can
+  // ever be sealed (see tileShield); this is the same pressure applied to the
+  // clock instead of to the border.
+  //
+  // DERIVED FROM THE HOLDING, never a stored counter, so it self-corrects the
+  // moment the holding changes: lose or abandon a system and every shield taken
+  // from then on is longer again. No new save key, nothing to migrate, and no
+  // tally that can drift out of step with what the pilot actually holds — the
+  // same rule as deriving a respec refund from the ranks held.
+  //
+  // DECLARED ONCE. Two sites write a capture shield and one publishes it to the
+  // server; all three read these functions, because a hand-copied second copy of
+  // a duration is exactly how two halves of one rule stop agreeing.
+  //
+  // IT NEVER SHORTENS A SHIELD ALREADY RUNNING. Both write sites keep their
+  // Math.max, so a window a pilot is already sitting on is never taken off them
+  // by a later capture — the shorter window applies only to the tile being taken
+  // now. Retroactively removing something a player is holding reads as a bug.
+  const SHIELD_H = 24;
+  function arteryHeld() {
+    let n = 0;
+    try {
+      const ids = GX.ART_IDS || [], own = state.ownedSystems || {};
+      for (let i = 0; i < ids.length; i++) if (own[ids[i]]) n++;
+    } catch (e) {}
+    return n;
+  }
+  function shieldHoursFor(k) {
+    if (!GX.isArtery || !GX.isArtery(k)) return SHIELD_H;
+    return SHIELD_H / Math.max(1, arteryHeld());
+  }
+  function shieldMsFor(k) { return Math.round(shieldHoursFor(k) * 3600 * 1000); }
+  function shieldMinFor(k) { return Math.max(1, Math.round(shieldHoursFor(k) * 60)); }
   // Combat multipliers for the tile we're standing in — deep space rings give
   // 20× density, 3× spawn rate, 10× loot, and the lose-2-items death rule.
   function applyTileMults(tile) {
@@ -6766,7 +6917,7 @@
     // siege-locked for 24 h (your new fortress can only be sieged once a day)
     if (rt.waves && rt.waves.claimTile) {
       if (!state.tileCd) state.tileCd = {};
-      state.tileCd[rt.waves.claimTile] = Date.now() + 24 * 3600 * 1000;
+      state.tileCd[rt.waves.claimTile] = Date.now() + shieldMsFor(rt.waves.claimTile);
       if (rt.waves.playerCit) {
         captureCitadel(rt.waves.claimTile);      // rival's fortress taken INTACT → the tile flips to you
       } else {
@@ -6992,9 +7143,10 @@
     // plain tile and quietly deleted a Rank 5 fortress. Winning a citadel now
     // always means OWNING that citadel, at the rank it was built to.
     inheritCitadel(k, tile);
-    // your fresh capture is attack-shielded for 24 h
+    // your fresh capture is attack-shielded for 24 h — less inside the Artery,
+    // where every system you hold bleeds the window down (see shieldHoursFor)
     if (!state.tileCd) state.tileCd = {};
-    state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + 24 * 3600 * 1000);
+    state.tileCd[k] = Math.max(state.tileCd[k] || 0, Date.now() + shieldMsFor(k));
     if (state.rivalTiles) delete state.rivalTiles[k];
     pushFeed(fromRival ? ('You took ' + tile.name + ' from ' + fromRival) : ('You captured ' + tile.name));
     try { if (window.MAIL) window.MAIL.tileWon(tile.name, fromRival, razing, k); } catch (e) {}
@@ -7002,7 +7154,7 @@
     // atomic). If several operators raced for this tile, FIRST claim wins —
     // a rejected claim means we lost the race and must give the tile back.
     if (window.TERRITORY && window.TERRITORY.enabled()) {
-      window.TERRITORY.claim(k, window.TERRITORY.myName(), 1440, (tile.void || tile.citadel) ? { citadel: true, citadelLv: citadelLevel(k) || 1, fleetScore: Math.round(score()), force: razing, defense: defenseSnapshot() } : razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
+      window.TERRITORY.claim(k, window.TERRITORY.myName(), shieldMinFor(k), (tile.void || tile.citadel) ? { citadel: true, citadelLv: citadelLevel(k) || 1, fleetScore: Math.round(score()), force: razing, defense: defenseSnapshot() } : razing ? { citadel: false, fleetScore: Math.round(score()), force: true, defense: defenseSnapshot() } : { fleetScore: Math.round(score()), defense: defenseSnapshot() }).then((res) => {
         if (!rt.realTiles) rt.realTiles = {};
         if (res.ok && res.row) {
           rt.realTiles[k] = { ownerId: res.row.owner_id, ownerName: res.row.owner_name, cooldownUntil: res.row.cooldown_until, citadel: !!res.row.citadel, citadelLv: (res.row.citadel_lv | 0) || citadelLevel(k) || 0, fleetScore: res.row.fleet_score || 0, defense: res.row.defense || null };
@@ -7716,12 +7868,54 @@
   // never what makes a capture show up late. 700ms is chosen against the galaxy
   // world bake's ~2Hz idle rebake: a shorter window than the gap between bakes
   // would rebuild the whole map's shields on every one of them.
+  // ---- THE ARTERY IS A FUNNEL, NOT A BLOB ----------------------------------
+  // Every tile in the galaxy proper is shielded by having all SIX borders held
+  // (`open === 0`), which is the right rule for a plane you can encircle. The
+  // Artery is a one-wide chain hanging off the rim, so it could never reach six
+  // and was therefore permanently attackable at every hex — the region had no
+  // defence at all, which is what the operator called out.
+  //
+  // THE CHAIN HAS ONE ENTRANCE AND IT IS THE MOUTH. Every hex out there is
+  // reachable only through the hex before it, so the honest rule is REACHABILITY,
+  // not encirclement: an Artery system you hold is shielded when the system
+  // between it and the mouth is also yours. Hold the whole filament and exactly
+  // ONE hex of it is attackable — Lancet, at the mouth, the lowest-level tile in
+  // the region. Break that and the next one opens, and so on inward. That is the
+  // funnel: attackers grind up the chain from the cheap end instead of helicoptering
+  // onto the fortress at the tip.
+  //
+  // THE MOUTH IS NEVER SHIELDED, on purpose. If it could shield itself the region
+  // would seal completely and become unattackable ground with five fortresses on
+  // it. The door has to stay open; what the funnel buys is that there is only one.
+  //
+  // IT IS NOT A FREE RIDE. EXSANGUINATION is the counterweight and the two are
+  // designed against each other: every Artery system you hold divides the attack
+  // shield on all of them (see shieldHoursFor), so a pilot who owns the whole chain
+  // is defensible in SPACE and fragile in TIME — one door, but it reopens in a
+  // couple of hours instead of a day.
+  function arteryShield(k, fac) {
+    const parent = GX.arteryParent ? GX.arteryParent(k) : null;
+    // No parent = the mouth. Its way in is the galaxy, which nobody can close.
+    if (!parent) return { faction: fac, mine: fac === 'me', open: 1, edge: 1, sides: 1,
+                          rim: true, shielded: false, ring: [], artery: true, mouth: true };
+    const held = factionOf(parent) === fac;
+    return { faction: fac, mine: fac === 'me', open: held ? 0 : 1, edge: 0, sides: 1,
+             rim: false, shielded: held, ring: held ? [parent] : [], artery: true, mouth: false };
+  }
   function tileShield(k) {
     const now = Date.now();
     if (!_shdMemo || now - _shdAt > 700) { _shdMemo = {}; _shdAt = now; }
     const hit = _shdMemo[k];
     if (hit) return hit;
     const c = GX.parseId(k), fac = factionOf(k);
+    // THE ARTERY ANSWERS FIRST and does not fall through to the six-border rule —
+    // the two rules are different geometries and mixing them gave the chain the
+    // worst of both (never sealable, and no reachability gate either).
+    if (fac && GX.isArtery && GX.isArtery(k)) {
+      const a = arteryShield(k, fac);
+      _shdMemo[k] = a;
+      return a;
+    }
     let open = 0, edge = 0, rim = false;
     const doors = [];
     if (c && fac) {
@@ -7752,6 +7946,30 @@
   function shieldDoors(k) {
     const s = tileShield(k);
     if (!s.shielded) return [];
+    // THE ARTERY'S DOOR IS DOWN THE CHAIN, NOT NEXT DOOR. Its `ring` holds the
+    // parent, which by definition is a hex the holder owns — so the generic filter
+    // below would reject it and the sheet would say "shielded" while naming no way
+    // in at all. Walk toward the mouth to the first hex that is NOT theirs: that is
+    // the hex an attacker actually has to break, and on a fully-held chain it is
+    // always the mouth.
+    if (s.artery && GX.arteryParent) {
+      const fac = s.faction;
+      let cur = GX.arteryParent(k), guard = 0;
+      while (cur && guard++ < 32) {
+        if (factionOf(cur) !== fac) return [cur];
+        cur = GX.arteryParent(cur);
+      }
+      // THE WHOLE CHAIN TO THE ENTRANCE IS THEIRS, so the entrance is the door — it
+      // is the one hex out here that can never shield. Returning nothing would leave
+      // the sheet saying "shielded" while naming no way in, which is the exact
+      // failure this function exists to prevent.
+      //
+      // READ, NOT RE-DERIVED. This line used to hand-build the entrance from
+      // path[0] behind a dead `ARTERY.mouthTile` reference, because `ARTERY.mouth`
+      // meant the RIM ANCHOR — an ordinary galaxy tile that is not in the region at
+      // all. galaxy.js declares `entry` now; one statement of the geometry.
+      return [GX.ARTERY.entry].filter(Boolean);
+    }
     return s.ring.filter((nid) => {
       const ns = tileShield(nid);
       return ns.open > 0 && !isOwned(nid) && !isAllyTile(nid);
@@ -9781,6 +9999,7 @@
     // SIEGE SHIELD — derived from ownership, stored nowhere. One statement of
     // "no exposed border, no siege", read by the map, the sheet and warp().
     tileShield, shieldDoors, factionOf, blocOf, BLOC_MIN,
+    arteryHeld, shieldHoursFor, endXynEvent,   // THE ARTERY · EXSANGUINATION + the Xyn event exit
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,
     nowMs, dayRolled,   // 741 — the ONE clock. Never read Date.now() for a grant.

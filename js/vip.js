@@ -45,14 +45,14 @@
     5:  ['+5% gold', '+5% AFK production'],
     6:  ['+5% XP', 'Offline earnings cap +2h'],
     7:  ['+5% gold (empire & waves)', '+5% AFK production'],
-    8:  ['+5% XP', '+10% AFK production', '+2% ◈ Prism yield'],
-    9:  ['+8% gold', 'Offline earnings cap +2h', '+2% ◈ Prism yield (4% total)'],
-    10: ['+8% XP', '+10% AFK production', '+2% ◈ Prism yield (6% total)', '⚜ Gold VIP badge'],
-    11: ['+10% gold', '+2% ◈ Prism yield (8% total)'],
-    12: ['+10% XP', '+15% AFK production', '+2% ◈ Prism yield (10% total)'],
-    13: ['+12% gold', 'Offline earnings cap +4h', '+2% ◈ Prism yield (12% total)'],
-    14: ['+12% XP', '+15% AFK production', '+2% ◈ Prism yield (14% total)'],
-    15: ['+15% gold & XP', '+20% AFK production', '+2% ◈ Prism yield (16% total)', '⚜ Prismatic badge'],
+    8:  ['+5% XP', '+10% AFK production', '+2% ◭ Prism yield'],
+    9:  ['+8% gold', 'Offline earnings cap +2h', '+2% ◭ Prism yield (4% total)'],
+    10: ['+8% XP', '+10% AFK production', '+2% ◭ Prism yield (6% total)', '⚜ Gold VIP badge'],
+    11: ['+10% gold', '+2% ◭ Prism yield (8% total)'],
+    12: ['+10% XP', '+15% AFK production', '+2% ◭ Prism yield (10% total)'],
+    13: ['+12% gold', 'Offline earnings cap +4h', '+2% ◭ Prism yield (12% total)'],
+    14: ['+12% XP', '+15% AFK production', '+2% ◭ Prism yield (14% total)'],
+    15: ['+15% gold & XP', '+20% AFK production', '+2% ◭ Prism yield (16% total)', '⚜ Prismatic badge'],
   };
   // rolled-up multipliers by level (precomputed from PERKS wording)
   const GOLD = [0, 2, 2, 5, 5, 10, 10, 15, 15, 23, 31, 41, 41, 53, 53, 68];
@@ -143,7 +143,7 @@
       '<div class="vipm-score">⚜ ' + fmt(s) + ' VIP points</div>' +
       (next ? '<div class="vipm-bar"><i style="width:' + pct + '%"></i><span>' + fmt(next.need - s) + ' to VIP ' + (lv + 1) + '</span></div>'
             : '<div class="vipm-bar"><i style="width:100%"></i><span>MAX LEVEL</span></div>') +
-      '<div class="vipm-now">Active now: <b>+' + (GOLD[Math.min(lv, 15)] || 0) + '% gold · +' + (XP[Math.min(lv, 15)] || 0) + '% XP · +' + (AFK[Math.min(lv, 15)] || 0) + '% AFK' + (lv > 7 ? ' · +' + (lv - 7) * 2 + '% ◈ Prism' : '') + ' · ◈ ' + (window.GAME && window.GAME.tileCap ? window.GAME.tileCap() : 50 + lv * 5) + ' system cap' + (lv > 0 ? ' (+' + lv * 5 + ')' : '') + '</b></div>' +
+      '<div class="vipm-now">Active now: <b>+' + (GOLD[Math.min(lv, 15)] || 0) + '% gold · +' + (XP[Math.min(lv, 15)] || 0) + '% XP · +' + (AFK[Math.min(lv, 15)] || 0) + '% AFK' + (lv > 7 ? ' · +' + (lv - 7) * 2 + '% ◭ Prism' : '') + ' · ◈ ' + (window.GAME && window.GAME.tileCap ? window.GAME.tileCap() : 50 + lv * 5) + ' system cap' + (lv > 0 ? ' (+' + lv * 5 + ')' : '') + '</b></div>' +
       '<div class="vipm-list">' + rows + '</div>' +
       '<button class="vipm-ok" id="vipm-ok">Keep earning</button></div>';
     ($('app') || document.body).appendChild(_m);

@@ -21,7 +21,7 @@
   let shuttle = null, nextLaunch = 8;
   let lastBuildSig = '';
 
-  const OUT_COL = { gold: '#f2b94c', fuel: '#5bc0ff', iron: '#d0a060', plasma: '#c07bff', prism: '#ff5a5a' };
+  const OUT_COL = { gold: '#f2b94c', fuel: '#5bc0ff', iron: '#d0a060', plasma: '#c07bff', prism: '#1fe3b2' };
   const rand = (a, b) => a + Math.random() * (b - a);
 
   // ---------------------------------------------------------------------------

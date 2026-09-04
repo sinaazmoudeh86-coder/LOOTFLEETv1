@@ -21,20 +21,35 @@
    WHEN A BUILD SHIPS: add its rows at the TOP and drop as many off the BOTTOM as
    you added. Never let it grow past ten. The full changelog lives on the site.
 
-   WHICH ROWS SURVIVE A TRIM: the ones the POPULATION HAS NOT SEEN. 741 kept 740's
-   four never-pushed rows and dropped the six that went live in 739 (the Nanocore
-   price, Dread Core scarcity, the death-beam cut, the Home Citadel wave pass, the
-   two-device save protection, the Progenitor, the contiguity bonus). Two 741 items
-   are deliberately NOT here — the Bridge's FLY NOW no longer pulses or moves, and
-   desktop can double-click a skill node to buy it. Both are visible the moment you
-   look at them, which is the test: a row is for something a player would otherwise
-   never learn.
+   THIS CARD IS STAMPED 740 BY OPERATOR REQUEST, AND IT CARRIES THREE CUTS.
+   740, 741 and 743 were each cut without being pushed; the live population is on
+   739 and has seen none of them. The number was set back to 740 deliberately so
+   the population's next build is 739 + 1 — see DEPLOY-v268.md. The ROWS are the
+   743 set unchanged, because the rows are chosen by what the POPULATION has not
+   seen, and that answer does not change when the stamp does.
+
+   WHICH ROWS SURVIVE A TRIM: the ones the POPULATION HAS NOT SEEN. This card kept
+   the never-pushed rows from all three cuts and dropped the six that went live in
+   739 (the Nanocore price, Dread Core scarcity, the death-beam cut, the Home
+   Citadel wave pass, the two-device save protection, the Progenitor, the
+   contiguity bonus). Two items are deliberately NOT here — the Bridge's FLY NOW no
+   longer pulses or moves, and desktop can double-click a skill node to buy it.
+   Both are visible the moment you look at them, which is the test: a row is for
+   something a player would otherwise never learn.
 
    THE CLOCK ROW COST THE COMMANDER-CARD ROW ITS PLACE, and that is the rule doing
    its job: one in at the top of FIXED, one off the bottom, still ten. It earns the
    seat because closing that hole takes something off HONEST accounts too — anyone
    who flies across timezones was getting cargo dailies early without ever knowing
    why, and losing that silently is indistinguishable from a bug.
+
+   THE `NEW` GROUP LEADS THE CARD. Three additions went in at the
+   top — the Artery, the Xyn, the two Nanocore tiers — so three came off the bottom
+   of FIXED (Omega Cargo V's core range, Delete Account, and the world-boss guard).
+   Still exactly ten. Those three were the most self-evident of the fixes: a player
+   who opens the cargo manifest, deletes an account or fights the Progenitor sees
+   the corrected behaviour directly. A whole region past the rim and a hull class
+   that did not exist before are the opposite — nobody finds those by accident.
 
    TONE: one short sentence per row. A player reads this in fifteen seconds
    standing in a queue. If a row needs a paragraph, it needs a site post instead.
@@ -46,12 +61,21 @@
 (function () {
   'use strict';
 
-  const BUILD = 741;
+  const BUILD = 740;
   const NOTES = {
-    build: 741,
-    title: 'BUILD 741',
+    build: 740,
+    title: 'BUILD 740',
     sub: 'The ten latest changes.',
     groups: [
+      // NEW earns its own group and leads the card. Three additions here are things
+      // a player cannot discover by looking at a screen they already open — a region
+      // past the rim, a hull class that did not exist, and two core tiers above the
+      // one that used to be the top. That is exactly the file's editorial test.
+      { k: 'NEW', c: '#7cd4ff', rows: [
+        ['◈', 'THE ARTERY — a new Lv 500+ region', 'A filament of <b>fourteen systems</b> hanging off the eastern rim, paying <b>×3</b> the richest ground in the galaxy and holding <b>five natural fortresses</b>. It is <b>one tile wide</b>, so nothing in it can ever be sealed — and every Artery system you hold shortens the attack shield on all of them.'],
+        ['◈', 'THE XYN — Super Fighter class', 'A new hull class <b>above Celestial</b>. <b>22 fighter bays</b>, double the Celestial Corvus, on the same combat sheet — and the slowest, largest thing that flies. It is the boss of <b>Xyn Prime</b> at the end of the Artery: own that system, beat it, and every defeat rolls a <b>1 in 1,000,000</b> chance at the hull.'],
+        ['◈', 'Nanocores: Mythic and Ancient', 'Two tiers above Legendary — <b>6 and 7 buff slots</b>, up to <b>+60% damage and health</b>. Very rare and very expensive: an Ancient is about <b>one crate in 1,700</b>. <b>No existing tier got more expensive</b>, and Legendary duplicates now trade <b>up</b> into Mythic instead of sideways.'],
+      ] },
       { k: 'CHANGED', c: '#ffcf4d', rows: [
         ['✧', 'The Event Horizon Lance is one shot again', 'The rift it left behind was <b>burning harder than the beam itself</b> — sitting in the lane did more damage than being hit by it. The rift no longer burns at all, the shot is <b>one bounded hit</b>, and the rift still pays its <b>4× loot</b>.'],
         ['◇', 'Top-tier drop rates corrected', 'Primordial, Relic and Artifact were dropping more often than <b>Eternal</b>, three tiers below them. Back on the curve — <b>nothing you already own changed grade</b>.'],
@@ -62,9 +86,6 @@
         ['⚑', 'Your flagship survives a logout', 'Logging back in put you in the <b>Frigate</b> and left your real hull sitting in the hangar. The hull you pick is the hull you keep, on every device.'],
         ['✈', 'Escort carriers launch their fighters', 'A carrier you <b>bought</b> rather than won arrived with <b>empty bays</b>, so parked in an escort slot it flew nothing. Every carrier now arrives with its wing aboard.'],
         ['⛏', 'Home Citadel keeps your night’s production', 'A second device could reset the storage clock on login and wipe everything banked while you slept. The clock is now the one that did the mining.'],
-        ['◇', 'Omega Cargo V states its real core range', 'It advertised <b>2–4</b> Dread Cores and could legitimately pay <b>5</b>. The manifest now quotes what the roll can actually return.'],
-        ['⊘', 'Delete Account really deletes', 'If the server refused, the app wiped your device, said it was done, and you could sign straight back in. It now only reports success when the account is <b>actually gone</b>.'],
-        ['☠', 'The world boss can no longer be killed', 'The Progenitor arena is a <b>damage ladder</b> — push stages, bank an unlimited score. Big special effects could end the run early. They can’t now.'],
       ] },
     ],
   };
@@ -113,7 +134,11 @@
   }
 
   function maybeShow() {
-    if (seen() >= BUILD) return;
+    // EQUALITY, NOT ≥. A device that saw a card from a cut that was never pushed
+    // (741, 743) has a HIGHER number stored than the build it is now running, and
+    // `>=` would swallow this card on exactly the devices most likely to need it.
+    // The key records which card was seen, not how far the player has come.
+    if (seen() === BUILD) return;
     if (isNewPlayer()) { mark(BUILD); return; }
     show(false);
   }

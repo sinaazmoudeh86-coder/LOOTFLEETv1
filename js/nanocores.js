@@ -2,7 +2,7 @@
    nanocores.js — NANOCORES: system logic + every balance number
    ---------------------------------------------------------------------------
    Equippable per-hull cores. Rarity gives a GUARANTEED base bonus; Blue/Purple/
-   Gold also carry EXTRA BUFF SLOTS that are unlocked with ◈ Prism Ingots and
+   Gold also carry EXTRA BUFF SLOTS that are unlocked with ◭ Prism Ingots and
    then rerolled for random buffs.
 
    BALANCE LIVES IN CFG AND NOWHERE ELSE. Every percentage, price, probability,
@@ -31,16 +31,44 @@
     // requirement reads a truthful zero rather than a stale 50.
     gate: { level: 0 },
     // ---- RARITIES ---------------------------------------------------------
-    // THE GAME'S OWN LOOT SCALE, first five tiers, with the loot colours — a
+    // THE GAME'S OWN LOOT SCALE, first SEVEN tiers, with the loot colours — a
     // Rare core reads Rare-blue exactly like a Rare fitting, so nobody has to
     // learn a second rarity language. dmg/hp/spd are the GUARANTEED base
-    // bonuses (%), stepping evenly up the ladder. slots = Extra Buff Slots.
+    // bonuses (%), stepping up the ladder. slots = Extra Buff Slots.
+    //
+    // MYTHIC AND ANCIENT (743). Two tiers above Legendary, continuing the game's
+    // own rarity chain rather than inventing names — #ff3b4e and #21d4c4 are
+    // lifted verbatim from CONFIG.RARITY, which is the whole point of the "one
+    // rarity language" rule above.
+    //
+    // WHERE THE POWER ACTUALLY IS: THE SLOTS, not the guaranteed lines. Every
+    // fleet percentage is additive into one pool per stat and those pools run in
+    // the thousands of percent late-game, so +35 dmg over a Legendary reads far
+    // bigger than it plays. A buff slot is a whole extra rolled line, and that is
+    // real. Slots therefore step at the cadence the ladder already uses (+1 a
+    // tier: 2/3/4/5 → 6/7) while the guaranteed lines take a deliberate leap, so
+    // the tier reads like a jump on the card and is still honest in the maths.
+    //
+    // WHY SLOTS WERE NOT PUSHED HARDER: a slot can roll ANY line in the pool and
+    // rollBuff() does NOT pick distinct keys, so N slots of `cdmg` is a reachable
+    // outcome — 7 slots puts the crit-damage ceiling at +700%, and 12 would put it
+    // past +1,200%. The CEILING is the constraint, not the average roll. It is
+    // also why `dr` was cut 10× in Aug 2026; see the buff pool below.
+    //
+    // `costMult` MULTIPLIES BOTH UPGRADE AND REROLL COST FOR THAT TIER ONLY. The
+    // first five rows deliberately carry none, so `|| 1` leaves every existing
+    // price byte-identical — nobody's Legendary got more expensive to finish
+    // because two tiers were added above it. Raising `upgrade.costBase` would have
+    // been the lazy way to price the new tiers and would have silently re-priced
+    // every core in the population.
     rarities: [
-      { k: 'common',    name: 'Common',    col: '#9aa0a6', dmg: 5,  hp: 5,  spd: 10, slots: 0 },
-      { k: 'uncommon',  name: 'Uncommon',  col: '#5bc06b', dmg: 10, hp: 10, spd: 20, slots: 2 },
-      { k: 'rare',      name: 'Rare',      col: '#4a90e2', dmg: 15, hp: 15, spd: 30, slots: 3 },
-      { k: 'epic',      name: 'Epic',      col: '#b15cff', dmg: 20, hp: 20, spd: 40, slots: 4 },
-      { k: 'legendary', name: 'Legendary', col: '#f0972a', dmg: 25, hp: 25, spd: 50, slots: 5 },
+      { k: 'common',    name: 'Common',    col: '#9aa0a6', dmg: 5,  hp: 5,  spd: 10,  slots: 0 },
+      { k: 'uncommon',  name: 'Uncommon',  col: '#5bc06b', dmg: 10, hp: 10, spd: 20,  slots: 2 },
+      { k: 'rare',      name: 'Rare',      col: '#4a90e2', dmg: 15, hp: 15, spd: 30,  slots: 3 },
+      { k: 'epic',      name: 'Epic',      col: '#b15cff', dmg: 20, hp: 20, spd: 40,  slots: 4 },
+      { k: 'legendary', name: 'Legendary', col: '#f0972a', dmg: 25, hp: 25, spd: 50,  slots: 5 },
+      { k: 'mythic',    name: 'Mythic',    col: '#ff3b4e', dmg: 40, hp: 40, spd: 80,  slots: 6, costMult: 3 },
+      { k: 'ancient',   name: 'Ancient',   col: '#21d4c4', dmg: 60, hp: 60, spd: 120, slots: 7, costMult: 8 },
     ],
     // ---- EXTRA BUFF POOL --------------------------------------------------
     // `mod` is the computeStats() modifier the buff feeds. 'xp' is special: it
@@ -80,11 +108,25 @@
     // ---- REROLLING --------------------------------------------------------
     roll: { base: 1000, lockMult: 2 },     // cost = base × lockMult^locked
     // ---- CRATES -----------------------------------------------------------
-    // Drop table keeps the spec's shape across the five-tier scale: the floor
-    // dominates, the ceiling is genuinely rare.
+    // Drop table keeps the spec's shape across the scale: the floor dominates,
+    // the ceiling is genuinely rare. rollRarity() NORMALISES by the column total,
+    // so these are WEIGHTS and need not sum to 100 — which is what makes adding a
+    // tier a one-line change instead of a rebalance.
+    //
+    // MYTHIC 0.3 AND ANCIENT 0.06 (743) follow the ratios the game's own rarity
+    // chain already uses: CONFIG.RARITY steps legendary 10 → mythic 2.2 → ancient
+    // 0.45, i.e. roughly ÷4.5 then ÷4.9. Applied to legendary's 1.5 that gives
+    // 0.33 and 0.068, rounded to 0.3 and 0.06. So an Ancient is about ONE CRATE IN
+    // 1,700 — at 60,000 ingots a crate that is ~100M ingots of expectation before
+    // the first one, before a single upgrade is paid for.
+    //
+    // The existing five are UNCHANGED in absolute weight. Adding 0.36 to a total
+    // of 100 dilutes their real odds by ~0.36%, the unavoidable cost of there
+    // being more tiers and far too small to read as a nerf.
     crate: {
       single: 60000, ten: 540000, tenList: 600000,   // tenList = pre-discount
-      drops: [['common', 70], ['uncommon', 17], ['rare', 8], ['epic', 3.5], ['legendary', 1.5]],
+      drops: [['common', 70], ['uncommon', 17], ['rare', 8], ['epic', 3.5], ['legendary', 1.5],
+        ['mythic', 0.3], ['ancient', 0.06]],
     },
     exchange: { ratio: 10, same: 5 },
   };
@@ -192,6 +234,14 @@
     const p = rollPos(b);
     return RAR[p >= GRADE_AT[0] ? 4 : p >= GRADE_AT[1] ? 3 : p >= GRADE_AT[2] ? 2 : p >= GRADE_AT[3] ? 1 : 0];
   }
+  // LEGENDARY OR ABOVE (743). Every one of these tests used to read `=== 'legendary'`
+  // because Legendary WAS the top of the scale. With Mythic and Ancient above it,
+  // that literal quietly meant "the two rarest cores in the game are the only ones
+  // that do not count" — no badge, no depth record, no god-roll tally and no
+  // Discord feed post for the hardest thing to get. Compared by INDEX so the next
+  // tier added is correct by construction rather than by remembering this comment.
+  const APEX_I = BY_R.legendary.i;
+  const isApex = (r) => !!(BY_R[r] && BY_R[r].i >= APEX_I);
   const isGod = (b) => rollPos(b) >= TOP_FRAC;
   const toast = (m, c) => { try { window.SOCIAL.toast(m, c || '#c9a0ff'); } catch (e) {} };
 
@@ -202,14 +252,19 @@
   // COSTS + ODDS  (pure functions of CFG — the UI quotes these directly)
   // ===========================================================================
   // Slot S, upgrade stage U (both 1-based).
-  const upCost = (slot, stage) => Math.round(CFG.upgrade.costBase * stage * Math.pow(CFG.upgrade.slotMult, slot - 1));
+  // `costMult` is the TIER's own multiplier and defaults to 1, so the five
+  // original rarities price exactly as they always did (743). BOTH cost paths read
+  // it — upgrades and rerolls — because a tier that is expensive to unlock and
+  // cheap to re-roll is not an expensive tier.
+  const costMultOf = (r) => ((BY_R[r] && BY_R[r].costMult) || 1);
+  const upCost = (slot, stage, r) => Math.round(CFG.upgrade.costBase * stage * Math.pow(CFG.upgrade.slotMult, slot - 1) * costMultOf(r));
   function upChance(c, slot, stage) {
     const base = CFG.upgrade.base[stage - 1] || 0;
     const f = (c.fail && c.fail[slot + ':' + stage]) || 0;
     return Math.min(100, base + f * CFG.upgrade.failBonus);
   }
   const lockedCount = (c) => (c.buffs || []).reduce((a, b) => a + (b && b.lock ? 1 : 0), 0);
-  const rollCost = (c) => Math.round(CFG.roll.base * Math.pow(CFG.roll.lockMult, lockedCount(c)));
+  const rollCost = (c) => Math.round(CFG.roll.base * Math.pow(CFG.roll.lockMult, lockedCount(c)) * costMultOf(c.r));
   // The slot currently being worked on (1-based), or 0 when the rarity is full.
   function workSlot(c) { const max = BY_R[c.r].slots; return c.slots >= max ? 0 : c.slots + 1; }
 
@@ -232,8 +287,8 @@
     const c = coreAt(ship, r); if (!c) return null;
     const slot = workSlot(c); if (!slot) return null;
     const stage = c.stage + 1;
-    const cost = upCost(slot, stage);
-    if (!spend(cost)) { toast('Need ◈ ' + fmt(cost) + ' Prism Ingots'); return null; }
+    const cost = upCost(slot, stage, r);
+    if (!spend(cost)) { toast('Need ◭ ' + fmt(cost) + ' Prism Ingots'); return null; }
     const chance = upChance(c, slot, stage);
     const win = Math.random() * 100 < chance;
     const out = { win, slot, stage, cost, chance, slotUnlocked: false };
@@ -246,7 +301,7 @@
         bumpLife('nanoSlots', 1);
         // Depth on a LEGENDARY core is the endgame signal: five slots means 25
         // successful upgrades on one core.
-        if (c.r === 'legendary') peakLife('nanoLegendSlots', c.slots);
+        if (isApex(c.r)) peakLife('nanoLegendSlots', c.slots);
         // A freshly unlocked slot starts EMPTY — the first reroll fills it.
         c.buffs[c.slots - 1] = null;
         out.slotUnlocked = true;
@@ -266,12 +321,12 @@
     for (let i = 0; i < c.slots; i++) if (!(c.buffs[i] && c.buffs[i].lock)) open.push(i);
     if (!open.length) { toast('Every slot is locked — unlock one to reroll'); return null; }
     const cost = rollCost(c);
-    if (!spend(cost)) { toast('Need ◈ ' + fmt(cost) + ' Prism Ingots'); return null; }
+    if (!spend(cost)) { toast('Need ◭ ' + fmt(cost) + ' Prism Ingots'); return null; }
     const before = open.map((i) => c.buffs[i]);
     open.forEach((i) => { c.buffs[i] = rollBuff(); });
     bumpLife('nanoRolls', 1);
     let gods = 0;
-    if (c.r === 'legendary') open.forEach((i) => { if (isGod(c.buffs[i])) gods++; });
+    if (isApex(c.r)) open.forEach((i) => { if (isGod(c.buffs[i])) gods++; });
     if (gods) bumpLife('nanoGod', gods);
     dirty(); restat();
     return { cost, slots: open, before, after: open.map((i) => c.buffs[i]), gods };
@@ -318,7 +373,7 @@
     // WHICH HULL THE LEGENDARY WAS FOR. A core belongs to a specific hull, so the
     // Discord feed can post that hull's real sprite — but only if the key is
     // published. Stamped here, on the recovery itself.
-    if (r === 'legendary') { bumpLife('nanoLegend', 1); try { G().state.lastNano = { ship, at: Date.now() }; } catch (e) {} }
+    if (isApex(r)) { bumpLife('nanoLegend', 1); try { G().state.lastNano = { ship, at: Date.now() }; } catch (e) {} }
     // First core for a hull equips itself — nobody wants a stat bonus that
     // needs a second tap to switch on.
     if (!equipped(ship)) n.equip[ship] = r;
@@ -333,7 +388,7 @@
     // have cost 270k for twenty crates. Only 1 and 10 ship today, but the price
     // should not depend on that staying true.
     const cost = Math.floor(qty / 10) * CFG.crate.ten + (qty % 10) * CFG.crate.single;
-    if (!spend(cost)) { toast('Need ◈ ' + fmt(cost) + ' Prism Ingots'); return null; }
+    if (!spend(cost)) { toast('Need ◭ ' + fmt(cost) + ' Prism Ingots'); return null; }
     const out = [];
     for (let i = 0; i < qty; i++) {
       const r = rollRarity();
@@ -455,7 +510,7 @@
     try { last = (G().state.lastNano && G().state.lastNano.ship) || ''; } catch (e) {}
     return {
       nano_legend: lifeOf('nanoLegend'),
-      nano_slots: Math.min(BY_R.legendary.slots, lifeOf('nanoLegendSlots')),
+      nano_slots: Math.min(RAR[RAR.length - 1].slots, lifeOf('nanoLegendSlots')),
       nano_god: lifeOf('nanoGod'),
       nano_last: String(last || '').slice(0, 32),
     };

@@ -85,6 +85,7 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/chat.css?v=728">
 <link rel="stylesheet" href="css/shell-fit.css?v=732">
 <link rel="stylesheet" href="css/contiguity.css?v=733">
+<link rel="stylesheet" href="css/artery.css?v=740">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; align-items:flex-start; }
@@ -604,7 +605,7 @@ window.__lfErr=[];
           <div class="res-chip" style="--rc:#5bc0ff"><span class="rg">⬢</span><span id="hud-fuel">0</span><span class="rr" id="hud-fuel-rate"></span></div>
           <div class="res-chip" style="--rc:#d0a060"><span class="rg">◆</span><span id="hud-iron">0</span><span class="rr" id="hud-iron-rate"></span></div>
           <div class="res-chip" style="--rc:#c07bff"><span class="rg">✦</span><span id="hud-plasma">0</span><span class="rr" id="hud-plasma-rate"></span></div>
-          <div class="res-chip lc-chip pm-chip" id="prism-chip" style="--rc:#ff3a3a;display:none" title="Prism Ore"><span class="rg" style="color:#ff3a3a">◈</span><span id="hud-prism">0</span></div>
+          <div class="res-chip lc-chip pm-chip" id="prism-chip" style="--rc:#1fe3b2;display:none" title="Prism Ingots"><span class="rg" style="color:#1fe3b2"><svg width="13" height="13" viewBox="0 0 24 24" style="display:block" aria-hidden="true"><defs><linearGradient id="pmgg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9ff8e2"></stop><stop offset=".52" stop-color="#1fe3b2"></stop><stop offset="1" stop-color="#0e9c86"></stop></linearGradient></defs><path d="M12 2.6 21.6 20.2H2.4z" fill="url(#pmgg)"></path><path d="M12 2.6 21.6 20.2H2.4z" fill="none" stroke="#e2fff7" stroke-opacity=".5" stroke-width="1.1"></path><path d="M12 3.4v16M12 3.4 6.9 19.6M12 3.4 17.1 19.6" stroke="#07201c" stroke-opacity=".34" stroke-width="1"></path></svg></span><span id="hud-prism">0</span></div>
           <div class="res-chip lc-chip" id="hud-dread" style="--rc:#ff3a4a;display:none" title="Dread Cores"><span class="rg" style="color:#ff3a4a">◇</span><span id="hud-dread-v">0</span></div>
           <div class="res-chip lc-chip chip-glow" id="hud-lc-chip" style="--rc:#f2a93c;cursor:pointer" title="LootCoins — tap to get more"><svg class="lc" viewBox="0 0 24 24"><defs><linearGradient id="lf-lcg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"></stop><stop offset=".55" stop-color="#f2a93c"></stop><stop offset="1" stop-color="#b86adf"></stop></linearGradient></defs><path d="M12 1.5l9 5.25v10.5L12 22.5l-9-5.25V6.75z" fill="url(#lf-lcg)" stroke="#2a1808" stroke-width="1.1"></path><path d="M12 5.6l5.6 3.25v6.3L12 18.4l-5.6-3.25v-6.3z" fill="rgba(22,12,32,.88)"></path><path d="M12 8.4l3.1 1.85v3.5L12 15.6l-3.1-1.85v-3.5z" fill="url(#lf-lcg)"></path><path d="M12 8.4l3.1 1.85-3.1 1.8-3.1-1.8z" fill="#fff3c9" opacity=".75"></path></svg><span id="hud-lc">0</span></div>
         </div>
@@ -1066,7 +1067,7 @@ window.__lfErr=[];
             </div>
             <div class="mega-card cmd-prism" data-go="prism">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 7-7 13-7-13z"/><path d="M5 9h14M12 2v20"/></svg></div>
-              <div><div class="mc-n">Prism Mining</div><div class="mc-s">Deploy &amp; fight for ◈ Prism Ingots</div></div>
+              <div><div class="mc-n">Prism Mining</div><div class="mc-s">Deploy &amp; fight for ◭ Prism Ingots</div></div>
               <span class="mc-lock"></span>
             </div>
             <div class="mega-card cmd-prism cmd-pfleet" data-go="prismfleet">
@@ -1106,7 +1107,7 @@ window.__lfErr=[];
             </div>
             <div class="mega-card cmd-prism cmd-nano" data-go="nano">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.8 2.8M16.2 16.2L19 19M19 5l-2.8 2.8M7.8 16.2L5 19"/></svg></div>
-              <div><div class="mc-n">Nanocores</div><div class="mc-s">One core per hull · unlock buff slots with ◈ Prism Ingots</div></div>
+              <div><div class="mc-n">Nanocores</div><div class="mc-s">One core per hull · unlock buff slots with ◭ Prism Ingots</div></div>
               <span class="mc-lock"></span>
             </div>
             <div class="mega-card pa-pill" data-go="pasc" id="cmd-pasc">
@@ -1155,7 +1156,7 @@ window.__lfErr=[];
             <h1 class="lg-title">Loot Fleet <span class="lg-ver">V3.0 BETA</span> <span class="lg-build" id="lg-build"></span></h1>
             <div class="lg-update" id="lg-update" hidden>
               <div class="lg-upd-t">⚠ UPDATE REQUIRED</div>
-              <div class="lg-upd-s">You're on an outdated build — logging in on old versions can desync your save. Update to continue.</div>
+              <div class="lg-upd-s">Your build does not match the live one — logging in on any other build can desync your save. Update to continue.</div>
               <button type="button" class="lg-primary" id="lg-update-btn">⟳ Update now</button>
             </div>
 
@@ -1215,39 +1216,39 @@ window.__lfErr=[];
 <script src="js/config-v2.js?v=740"></script>
 <script src="js/items.js?v=740"></script>
 <script src="js/entities.js?v=740"></script>
-<script src="js/render.js?v=738"></script>
-<script src="js/galaxy.js?v=738"></script>
+<script src="js/render.js?v=740"></script>
+<script src="js/galaxy.js?v=740"></script>
 <script src="js/leaderboard.js?v=726"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js?v=725"></script>
 <script src="js/servertime.js?v=725"></script>
 <script src="js/analytics.js?v=725"></script>
 <script src="js/cloud.js?v=741"></script>
-<script src="js/account.js?v=741"></script>
+<script src="js/account.js?v=740"></script>
 <script src="js/session-lock.js?v=725"></script>
-<script src="js/vip.js?v=725"></script>
+<script src="js/vip.js?v=740"></script>
 <script src="js/territory.js?v=738"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=741"></script>
-<script src="js/ui-v94.js?v=741"></script>
+<script src="js/game-v93.js?v=740"></script>
+<script src="js/ui-v94.js?v=740"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
 <script src="js/perf-tier.js?v=725"></script>
 <script src="js/fit-audit.js?v=731"></script>
-<script src="js/moon-scene.js?v=725"></script>
-<script src="js/moon-colony.js?v=725"></script>
+<script src="js/moon-scene.js?v=740"></script>
+<script src="js/moon-colony.js?v=740"></script>
 <script src="js/expedition.js?v=729"></script>
 <script src="js/expedition-ui.js?v=725"></script>
 <script src="js/koth.js?v=727"></script>
 <script src="js/koth-ui.js?v=736"></script>
-<script src="js/return-brief.js?v=725"></script>
-<script src="js/home-citadel.js?v=741"></script>
+<script src="js/return-brief.js?v=740"></script>
+<script src="js/home-citadel.js?v=740"></script>
 <script src="js/missions.js?v=736"></script>
-<script src="js/achievements.js?v=725"></script>
-<script src="js/coach-v89.js?v=725"></script>
-<script src="js/prism-v5.js?v=725"></script>
-<script src="js/prism-fleet.js?v=725"></script>
+<script src="js/achievements.js?v=740"></script>
+<script src="js/coach-v89.js?v=740"></script>
+<script src="js/prism-v5.js?v=740"></script>
+<script src="js/prism-fleet.js?v=740"></script>
 <script src="js/dreadnaught.js?v=734"></script>
 <script src="js/server-dreadnaught.js?v=741"></script>
 <script src="js/galaxy-box.js?v=725"></script>
@@ -1261,50 +1262,54 @@ window.__lfErr=[];
 <script src="js/discord-reward.js?v=725"></script>
 <script src="js/onboard.js?v=725"></script>
 <script src="js/pro-offer.js?v=725"></script>
-<script src="js/ship-panels.js?v=735"></script>
+<script src="js/ship-panels.js?v=740"></script>
 <script src="js/fleet-deep.js?v=725"></script>
 <script src="js/paragon-cannon.js?v=725"></script>
-<script src="js/social.js?v=736"></script>
+<script src="js/social.js?v=740"></script>
 <script src="js/chat.js?v=729"></script>
 <script src="js/mail.js?v=734"></script>
-<script src="js/alliance.js?v=725"></script>
+<script src="js/alliance.js?v=740"></script>
 <script src="js/alliance-boss.js?v=725"></script>
 <script src="js/void-zone.js?v=725"></script>
 <script src="js/cargo-run.js?v=725"></script>
 <script src="js/cargo-defense.js?v=741"></script>
-<script src="js/nanocores.js?v=734"></script>
+<script src="js/xyn.js?v=740"></script>
+<script src="js/nanocores.js?v=740"></script>
 <script src="js/fighters.js?v=729"></script>
 <script src="js/bridge.js?v=731"></script>
-<script src="js/fighter-ascension.js?v=729"></script>
+<script src="js/fighter-ascension.js?v=740"></script>
 <script src="js/fighter-ascension-ui.js?v=729"></script>
 <script src="js/aegis-auras.js?v=725"></script>
 <script src="js/mech-corruption.js?v=725"></script>
 <script src="js/mech-foundry.js?v=725"></script>
 <script src="js/commanders.js?v=740"></script>
-<script src="js/nanocores-ui.js?v=734"></script>
+<script src="js/nanocores-ui.js?v=740"></script>
 <script src="js/crates-hub.js?v=725"></script>
 <script src="js/ascension.js?v=725"></script>
 <script src="js/casino.js?v=725"></script>
-<script src="js/casino2.js?v=725"></script>
+<script src="js/casino2.js?v=740"></script>
 <script src="js/casino-citadels.js?v=725"></script>
 <script src="js/redeem.js?v=740"></script>
 <script src="js/auth.js?v=741"></script>
-<script src="js/patch-notes.js?v=741"></script>
-<script src="js/update-gate.js?v=725"></script>
+<script src="js/patch-notes.js?v=740"></script>
+<script src="js/update-gate.js?v=740"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
-  // truth. A client behind the live build may NOT log in: stale code on one
-  // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 741;
+  // truth. A client that DISAGREES with it may not log in — in either direction.
+  // Behind is the obvious case; ahead is the internal one, a device left on a cut
+  // that was never pushed. Both fork saves between iPad and PC the same way, so
+  // the test is equality, not "newer".
+  window.LF_BUILD = 740;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
-      if(!latest || (latest.build|0) <= window.LF_BUILD) return;
+      var live=latest && (latest.build|0);
+      if(!live || live === (window.LF_BUILD|0)) return;   // a malformed beacon is not a build
       var lg=document.getElementById('login'), up=document.getElementById('lg-update');
       if(lg) lg.classList.add('stale');
       if(up){ up.hidden=false;
         var s=up.querySelector('.lg-upd-s');
-        if(s) s.textContent='Build '+latest.build+' is live — you\u2019re on '+window.LF_BUILD+'. Logging in on old versions can desync your save. Update to continue.';
+        if(s) s.textContent='Build '+live+' is live — you\u2019re on '+window.LF_BUILD+'. Logging in on any other build can desync your save. Update to continue.';
         document.getElementById('lg-update-btn').addEventListener('click', function(){
           var done=function(){ location.reload(); };
           try{

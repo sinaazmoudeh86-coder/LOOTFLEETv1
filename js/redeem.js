@@ -81,7 +81,7 @@
     set(st, 'dreadCores');         // ◇ Dread Cores
     if (!st.resources) st.resources = { fuel: 0, iron: 0, plasma: 0 };
     set(st.resources, 'fuel'); set(st.resources, 'iron'); set(st.resources, 'plasma');
-    if (st.prism) set(st.prism, 'ingots');   // ◈ Prism (only once Prism is unlocked)
+    if (st.prism) set(st.prism, 'ingots');   // ◭ Prism (only once Prism is unlocked)
     return changed;
   }
   // One watchdog for the session. Cheap (a handful of comparisons) and only

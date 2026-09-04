@@ -363,7 +363,7 @@
   }
   const MILES = [
     [1, 'Gold flows'], [5, '+Ore & Fuel · ❄ Cryo Spire tower'], [10, 'Part crate every 10th wave'], [12, '☄ Missile Battery tower'], [15, '+Plasma'],
-    [20, 'RARE raiders · richer tables'], [25, '✦ Annihilator Rail tower'], [40, '+◈ Prism trickle'], [50, 'EPIC era · +◇ Cores on crates'],
+    [20, 'RARE raiders · richer tables'], [25, '✦ Annihilator Rail tower'], [40, '+◭ Prism trickle'], [50, 'EPIC era · +◇ Cores on crates'],
     [100, 'LEGENDARY era · ×2 ALL production'], [250, 'MYTHIC era — endgame tables'],
   ];
 
@@ -1344,7 +1344,7 @@
       '<div class="hcm-kicker">HOME CITADEL</div>' +
       '<div class="hcm-title">YOUR INDUSTRIAL EMPIRE</div>' +
       '<div class="hcm-rules">' +
-      rule('⛏', 'It mines while you play', 'Gold, ore, fuel, plasma — even ◈ prism at high waves. Storage caps at ' + capHours(hc() || { b: { silo: 0 } }) + 'h; return and COLLECT.') +
+      rule('⛏', 'It mines while you play', 'Gold, ore, fuel, plasma — even ◭ prism at high waves. Storage caps at ' + capHours(hc() || { b: { silo: 0 } }) + 'h; return and COLLECT.') +
       rule('⚔', 'Waves make it richer, forever', 'Each defended wave permanently raises production and unlocks better tables.') +
       rule('↗', 'Getting stronger actually pays here', 'A wave is built for the fleet that wave expects. Once yours is past it the raiders stop keeping up and start dying faster — so pushing deeper is something your fleet does, not just the clock.') +
       rule('⚔', 'Real battles, in your zone', 'Waves deploy you into the live arena. Raiders besiege the FORT — your fleet, guns and Defense Grid turrets must cut them down first.') +
@@ -1390,14 +1390,14 @@
       '<div class="hc-head" style="--bc:' + bd.c + '">' +
         '<div class="hc-head-l"><div class="hc-wave">WAVE ' + (s.wave || '—') + '</div><div class="hc-era">' + (s.wave ? bd.name + ' era' : 'UNPROVEN') + '</div></div>' +
         '<div class="hc-head-r"><div class="hc-rate-big">' + (s.wave ? fmt(r.gold) + ' <i>$/h</i>' : 'NO INCOME') + '</div>' +
-        '<div class="hc-rate-sub">' + (s.wave ? [r.iron && '+' + fmt(r.iron) + ' ◆', r.fuel && '+' + fmt(r.fuel) + ' ⬢', r.plasma && '+' + fmt(r.plasma) + ' ✦', r.prism >= 0.5 && '+' + fmt(r.prism) + ' ◈'].filter(Boolean).join(' · ') || 'resources unlock at Wave 5' : 'clear Wave 1 to switch the mines on') + '</div></div>' +
+        '<div class="hc-rate-sub">' + (s.wave ? [r.iron && '+' + fmt(r.iron) + ' ◆', r.fuel && '+' + fmt(r.fuel) + ' ⬢', r.plasma && '+' + fmt(r.plasma) + ' ✦', r.prism >= 0.5 && '+' + fmt(r.prism) + ' ◭'].filter(Boolean).join(' · ') || 'resources unlock at Wave 5' : 'clear Wave 1 to switch the mines on') + '</div></div>' +
       '</div>' +
       (dmg
         ? '<div class="hc-dmg"><b>⚠ STRUCTURES DAMAGED — MINING OFFLINE</b><span>Auto-repair in <b data-hc-rep>' + repLeft(s) + '</b></span>' +
           '<button class="hc-repair" id="hc-repair">🔧 Repair now · $' + fmt(repairCost(s)) + '</button></div>'
         : '<div class="hc-collect' + (fullPct >= 100 ? ' full' : '') + '" id="hc-collect" title="Tap to collect — the bar below is your storage.">' +
           '<div class="hc-c-l"><div class="hc-c-t">' + (fullPct >= 100 ? '⚠ STORAGE FULL — COLLECT' : 'STORED PRODUCTION') + '</div>' +
-          '<div class="hc-c-v">' + (s.wave ? '$' + fmt(a.out.gold) + (a.out.iron >= 1 ? ' · ◆' + fmt(a.out.iron) + ' · ⬢' + fmt(a.out.fuel) : '') + (a.out.plasma >= 1 ? ' · ✦' + fmt(a.out.plasma) : '') + (a.out.prism >= 1 ? ' · ◈' + fmt(a.out.prism) : '') : 'Mines offline — defend Wave 1') + '</div>' +
+          '<div class="hc-c-v">' + (s.wave ? '$' + fmt(a.out.gold) + (a.out.iron >= 1 ? ' · ◆' + fmt(a.out.iron) + ' · ⬢' + fmt(a.out.fuel) : '') + (a.out.plasma >= 1 ? ' · ✦' + fmt(a.out.plasma) : '') + (a.out.prism >= 1 ? ' · ◭' + fmt(a.out.prism) : '') : 'Mines offline — defend Wave 1') + '</div>' +
           '<div class="hc-c-bar"><i style="width:' + fullPct + '%"></i><span>' + a.h.toFixed(1) + 'h / ' + capH + 'h</span></div></div>' +
           '<button class="hc-c-btn"' + (a.tot >= 1 ? '' : ' disabled') + '>COLLECT</button></div>') +
       '<button class="hc-fight" id="hc-fight" title="Deploys your fleet to the citadel grounds in a safe BUILD PHASE — place towers, upgrade structures, then launch the wave."' + (dmg ? ' disabled' : '') + '>⚔ DEPLOY — WAVE ' + ((s.wave | 0) + 1) +

@@ -44,14 +44,14 @@
     { key: 'ion',    name: 'Ion',        hue: 275, bias: { plasma: 1.9 },             cost: { gold: 30000000, fuel: 1200000, iron: 700000, plasma: 440000 },
       blurb: 'A storm-wracked moon crackling with ✦ plasma · +90% plasma.' },
     { key: 'prisma', name: 'Prisma',     hue: 350, bias: { prism: 2.2, gold: 1.4 },   cost: { gold: 160000000, fuel: 5000000, iron: 3000000, plasma: 2000000 },
-      blurb: 'The crown jewel — ◈ prism crystal to the core · 2.2× prism, +40% gold.' },
+      blurb: 'The crown jewel — ◭ prism crystal to the core · 2.2× prism, +40% gold.' },
   ];
   const B = {
     oremine:  { name: 'Ore Mine',        ic: '⛏', cat: 'mine',    out: 'iron',   rate: 28, cost: { gold: 3000, fuel: 160 },              desc: 'Extracts ◆ iron from the regolith.' },
     fuelwell: { name: 'Fuel Well',       ic: '⛽', cat: 'mine',    out: 'fuel',   rate: 40, cost: { gold: 2400, iron: 120 },              desc: 'Taps ⬢ fuel ice pockets.' },
     plasmarig:{ name: 'Plasma Rig',      ic: '⚡', cat: 'mine',    out: 'plasma', rate: 18, cost: { gold: 5000, fuel: 300, iron: 200 },  desc: 'Condenses ✦ plasma from solar wind.', minSector: 1 },
     goldrig:  { name: 'Assay Plant',     ic: '⚖', cat: 'mine',    out: 'gold',   rate: 520,cost: { gold: 8000, iron: 400 },             desc: 'Refines trace metals into $ gold.', minSector: 1 },
-    prismex:  { name: 'Prism Extractor', ic: '◈', cat: 'mine',    out: 'prism',  rate: 1.2,cost: { gold: 800000, fuel: 40000, plasma: 16000 }, desc: 'Late-game: sifts ◈ prism fragments.', minSector: 4 },
+    prismex:  { name: 'Prism Extractor', ic: '◭', cat: 'mine',    out: 'prism',  rate: 1.2,cost: { gold: 800000, fuel: 40000, plasma: 16000 }, desc: 'Late-game: sifts ◭ prism fragments.', minSector: 4 },
     refinery: { name: 'Refinery',        ic: '⚗', cat: 'boost',   pct: 8,  cost: { gold: 12000, iron: 700 },                 desc: '+8%/lv colony-wide production.', minSector: 1 },
     drones:   { name: 'Cargo Drones',    ic: '⬡', cat: 'boost',   pct: 5,  cost: { gold: 7000, fuel: 500 },                 desc: '+5%/lv production · automation swarm.' },
     cargohub: { name: 'Cargo Hub',       ic: '▣', cat: 'storage', hrs: 2,  cost: { gold: 5000, iron: 300 },                 desc: '+2h/lv storage before production idles.' },
@@ -71,7 +71,7 @@
     { id: 'vein',   w: 30, ic: '◆', name: 'Rich Ore Vein',      txt: '2× production for 2h',            mult: 2,    hrs: 2 },
     { id: 'meteor', w: 25, ic: '☄', name: 'Meteor Shower',      txt: 'Rare materials recovered!',       instant: true },
     { id: 'flare',  w: 20, ic: '☉', name: 'Solar Flare',        txt: '−25% production for 1h',          mult: 0.75, hrs: 1 },
-    { id: 'prism',  w: 15, ic: '◈', name: 'Prism Deposit',      txt: 'Bonus prism fragments',           instantPrism: true },
+    { id: 'prism',  w: 15, ic: '◭', name: 'Prism Deposit',      txt: 'Bonus prism fragments',           instantPrism: true },
     { id: 'ancient',w: 10, ic: '⌬', name: 'Ancient Technology', txt: '+2% permanent production (max +20%)', perm: true },
   ];
 
@@ -354,7 +354,7 @@
   // opens with `G.state` — so this threw, the catch upstream swallowed it, and
   // the colony section vanished exactly as it did before the fix. Bind on
   // demand; init() adds only a render interval on top of this.
-  // The ◈ ingot bag, created on demand in the shape prism-v5.js expects.
+  // The ◭ ingot bag, created on demand in the shape prism-v5.js expects.
   function pbag() {
     try { if (window.NANOCORES && window.NANOCORES.bag) return window.NANOCORES.bag(); } catch (e) {}
     const s = G && G.state; if (!s) return null;
@@ -648,9 +648,9 @@
       (allStored.fuel >= 1 ? '<span style="color:#5bc0ff">⬢ ' + fN(allStored.fuel) + '</span>' : '') +
       (allStored.iron >= 1 ? '<span style="color:#d0a060">◆ ' + fN(allStored.iron) + '</span>' : '') +
       (allStored.plasma >= 1 ? '<span style="color:#c07bff">✦ ' + fN(allStored.plasma) + '</span>' : '') +
-      (allStored.prism >= 1 ? '<span style="color:#ff5a5a">◈ ' + fN(allStored.prism) + '</span>' : '') +
+      (allStored.prism >= 1 ? '<span style="color:#1fe3b2">◭ ' + fN(allStored.prism) + '</span>' : '') +
       (storedTotal < 1 ? '<span style="color:#6c8098">production ticking…</span>' : '') + '</div>' +
-      '<div class="mn-c-rate">' + ((MOONCAT[mi] || MOONCAT[0]).name) + ': +' + fN(r.gold) + ' $/h · +' + fN(r.fuel) + ' ⬢/h · +' + fN(r.iron) + ' ◆/h · +' + fN(r.plasma) + ' ✦/h' + (r.prism > 0 ? ' · +' + r.prism.toFixed(1) + ' ◈/h' : '') + '</div>' +
+      '<div class="mn-c-rate">' + ((MOONCAT[mi] || MOONCAT[0]).name) + ': +' + fN(r.gold) + ' $/h · +' + fN(r.fuel) + ' ⬢/h · +' + fN(r.iron) + ' ◆/h · +' + fN(r.plasma) + ' ✦/h' + (r.prism > 0 ? ' · +' + r.prism.toFixed(1) + ' ◭/h' : '') + '</div>' +
       (function () { // time-to-full readout — tells the player when to come back
         if (mm._idle) return '<div class="mn-c-full" style="color:#ffcf7a">⏳ Storage saturated — collect to restart production</div>';
         const leftH = Math.max(0, capH - (Date.now() - mm.lastCollect) / 3600e3);
@@ -707,7 +707,7 @@
             const bias = (MOONCAT[mi] || {}).bias || {};
             html += '<div class="mn-b t' + tier + '"><div class="mn-b-ic">' + def.ic + '</div>' +
               '<div class="mn-b-m"><div class="mn-b-n">' + def.name + ' <span class="mn-b-lv">Lv ' + bd.lv + '</span>' + (tier > 1 ? '<span class="mn-b-tier">T' + tier + '</span>' : '') + '</div>' +
-              '<div class="mn-b-d">' + (def.cat === 'mine' ? '+' + fN(def.rate * Math.pow(bd.lv, 1.12) * (def.out === 'prism' ? 1 : zScale()) * (bias[def.out] || 1) * prodBonus(root, mm)) + ' ' + ({ gold: '$', fuel: '⬢', iron: '◆', plasma: '✦', prism: '◈' })[def.out] + '/h' : def.desc) + '</div>' +
+              '<div class="mn-b-d">' + (def.cat === 'mine' ? '+' + fN(def.rate * Math.pow(bd.lv, 1.12) * (def.out === 'prism' ? 1 : zScale()) * (bias[def.out] || 1) * prodBonus(root, mm)) + ' ' + ({ gold: '$', fuel: '⬢', iron: '◆', plasma: '✦', prism: '◭' })[def.out] + '/h' : def.desc) + '</div>' +
               (maxed ? '<div class="mn-b-max">★ MAX — industrial complex</div>' : '<div class="mn-b-cost">' + costChips(cost) + '</div>') + '</div>' +
               '<div class="mn-b-btns">' + (maxed ? '' : '<button class="mn-b-up" data-mn-up="' + key + '" ' + (canAfford(cost) ? '' : 'disabled') + '>▲</button>') +
               '<button class="mn-b-del" data-mn-del="' + key + '" title="Demolish">✕</button></div></div>';
@@ -761,7 +761,7 @@
       const res = collectAll(); if (!res) return; const { got, evHtml } = res;
       const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.color = '#9ecfff';
       t.innerHTML = '🌙 COLONY SHIPMENT<br><span style="font-size:13px;color:#d8e8fa">' +
-        [got.gold ? '$ ' + fN(got.gold) : '', got.fuel ? '⬢ ' + fN(got.fuel) : '', got.iron ? '◆ ' + fN(got.iron) : '', got.plasma ? '✦ ' + fN(got.plasma) : '', got.prism ? '◈ ' + fN(got.prism) : ''].filter(Boolean).join(' · ') + '</span>' +
+        [got.gold ? '$ ' + fN(got.gold) : '', got.fuel ? '⬢ ' + fN(got.fuel) : '', got.iron ? '◆ ' + fN(got.iron) : '', got.plasma ? '✦ ' + fN(got.plasma) : '', got.prism ? '◭ ' + fN(got.prism) : ''].filter(Boolean).join(' · ') + '</span>' +
         (evHtml ? '<br><span style="font-size:12px;color:#ffd24d">' + evHtml + '</span>' : '');
       $('toast-layer').appendChild(t); setTimeout(() => t.remove(), 3200);
       render();
@@ -864,7 +864,7 @@
         // live level-1 output preview — scaled to THIS moon's bias + your zone
         const root2 = ensure(); const bias2 = (MOONCAT[root2.cur] || {}).bias || {};
         const prev = def.cat === 'mine'
-          ? '→ +' + fN(def.rate * (def.out === 'prism' ? 1 : zScale()) * (bias2[def.out] || 1)) + ' ' + ({ gold: '$', fuel: '⬢', iron: '◆', plasma: '✦', prism: '◈' })[def.out] + '/h at Lv 1' +
+          ? '→ +' + fN(def.rate * (def.out === 'prism' ? 1 : zScale()) * (bias2[def.out] || 1)) + ' ' + ({ gold: '$', fuel: '⬢', iron: '◆', plasma: '✦', prism: '◭' })[def.out] + '/h at Lv 1' +
             (bias2[def.out] ? ' <b style="color:#7ce0a0">(' + Math.round((bias2[def.out] - 1) * 100) + '% moon bonus)</b>' : '')
           : '';
         inner += '<button class="mn-pick" data-kind="' + kind + '" ' + (ok ? '' : 'disabled') + '>' +

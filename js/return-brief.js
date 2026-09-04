@@ -31,7 +31,7 @@
     { k: 'fuel',   ic: '\u2b22', c: '#5bc0ff' },
     { k: 'iron',   ic: '\u25c6', c: '#d0a060' },
     { k: 'plasma', ic: '\u2726', c: '#c07bff' },
-    { k: 'prism',  ic: '\u25c8', c: '#ff5a5a' },
+    { k: 'prism',  ic: '\u25ed', c: '#1fe3b2' },
   ];
 
   // ---- what the colony is holding -------------------------------------------

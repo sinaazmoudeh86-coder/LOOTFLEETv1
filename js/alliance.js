@@ -40,7 +40,7 @@
   const AC_ITEMS = [
     { id: 'lc',    ic: '◈', name: '150 LootCoins',  cost: 600, wk: 4, col: '#ffd66a', grant: (s) => { s.credits = (s.credits || 0) + 150; return '+150 ◈ LootCoins'; } },
     { id: 'core',  ic: '◇', name: 'Dread Core',     cost: 250, wk: 3, col: '#ff5a68', grant: (s) => { s.dreadCores = (s.dreadCores || 0) + 1; return '+1 ◇ Dread Core'; } },
-    { id: 'prism', ic: '◈', name: '5 Prism Ingots', cost: 900, wk: 1, col: '#ff5a5a', minLv: 5, need: (s) => !!s.prism, grant: (s) => { s.prism.ingots = (s.prism.ingots || 0) + 5; return '+5 ◈ Prism Ingots'; } },
+    { id: 'prism', ic: '◭', name: '5 Prism Ingots', cost: 900, wk: 1, col: '#1fe3b2', minLv: 5, need: (s) => !!s.prism, grant: (s) => { s.prism.ingots = (s.prism.ingots || 0) + 5; return '+5 ◭ Prism Ingots'; } },
   ];
 
   // MONOLITH SHIPYARD — alliance-exclusive hull line (sequential unlock)

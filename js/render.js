@@ -1249,7 +1249,9 @@
     // fighter carriers sit with their class peers.
     emb1:0, emb2:1, emb3:2, emb4:4, emb5:5,
     monolith1:1, monolith2:2, monolith3:4, monolith4:5,
-    titanaquila:5, corvus:5 };
+    titanaquila:5, corvus:5,
+    // THE XYN — SUPER FIGHTER CLASS, above Celestial. Top visual tier.
+    xyn:5 };
   // On-screen sprite size multiplier — the Oblivion hulls are colossal capital ships.
   // THE AETERNUM is not a ship at all but an artificial WORLD, so it draws larger
   // than anything else in the game. It had no entry before, which meant a
@@ -1311,6 +1313,13 @@
     // scale, the same way its drop odds do.
     emb1:1, emb2:1.6, emb3:2.3, emb4:3.2, emb5:4.4,
     titanaquila:4.5, corvus:5,
+    // THE XYN — THE LARGEST THING THAT FLIES, and the number is the feature.
+    // The Corvus is 5 and the Progenitor above it; the Xyn is 9, drawn nearly twice
+    // any hull in the game. That alone is not enough to read as MASSIVE, because a
+    // sprite can only ever be big relative to what is beside it — so flying it also
+    // pulls the zone camera out (see xynZoom in game-v93). Scale up the ship AND
+    // shrink the world: either one alone just looks like a bigger ship.
+    xyn:9,
     // THE PROGENITOR — a mothership, and the largest hull in the game. Above the
     // Eternum (5.2) on purpose: it is the world boss you fought, flown. Missing
     // from this table it defaulted to 1 and drew at FRIGATE size in battle.

@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v741';
+const CACHE = 'lootfleet-v740';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -73,6 +73,10 @@ const CORE = [
   'js/patch-notes.js', 'css/patch-notes.css', 'js/cloud.js', 'js/account.js',
   'js/ui-v94.js', 'js/game-v93.js', 'js/home-citadel.js', 'js/dreadnaught.js',
   'css/koth.css', 'css/expedition.css', 'css/season-pass.css',
+  // NEW THIS RELEASE — the Artery region and the Xyn. Both are referenced by
+  // game.html, so without an entry here an offline PWA falls back to the network
+  // and a whole new region comes up unstyled. Same reason as the v217 batch.
+  'js/xyn.js', 'css/artery.css',
 ];
 
 self.addEventListener('install', (e) => {

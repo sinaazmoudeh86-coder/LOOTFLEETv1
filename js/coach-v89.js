@@ -17,7 +17,7 @@
      skills     · first skill points     → Command ▸ Pilot Skills
      bagfull    · hold hits capacity     → auto-sell / expand cargo
      ships      · level 8                → Hangar ▸ Ships (blueprints & escorts)
-     prism      · level 15               → Command ▸ Prism Mining (idle ◈)
+     prism      · level 15               → Command ▸ Prism Mining (idle ◭)
      galaxy     · level 25               → Command ▸ My Galaxy (turf war)
      citadel    · own a 2nd system       → Command ▸ My Galaxy (build a Citadel)
      pilot      · level 30               → Command ▸ Pilot Tree (◇ Dread Cores)
@@ -133,7 +133,7 @@
       when: (s) => s.level >= 15,
       dock: true,
       steps: [
-        { title: 'Level 15 — PRISM MINING ◈', body: 'A new idle income: deploy into a Prism Field and your kills there refine into <b>◈ Prism Ingots</b> — the currency behind the strongest late-game gear.' },
+        { title: 'Level 15 — PRISM MINING ◭', body: 'A new idle income: deploy into a Prism Field and your kills there refine into <b>◭ Prism Ingots</b> — the currency behind the strongest late-game gear.' },
         { target: '#nav-command', tap: true, title: 'Open Command', body: 'Tap the highlighted button.' },
         { target: '#mega .mega-card[data-go="prism"]', tap: true, title: 'Open Prism Mining', body: 'Tap the card.' },
         { target: '#prism-body', title: 'Deploy and fight', body: 'Start a run, then battle inside the field — every kill refines ingots. Deeper zones refine faster.' },

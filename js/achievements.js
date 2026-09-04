@@ -108,7 +108,7 @@
     { id: 'ascloot', ic: '⬡', name: 'Beyond the Artifact', unit: 'ascension-tier fittings',   n: 40, t: genT(1, 1.17, 40),   v: () => life('ascLoot'), end: true },
     { id: 'void',    ic: '●', name: 'Warden of the Void',  unit: 'Void spires taken',          n: 40, t: genT(1, 1.15, 40),   v: () => life('voidTiles'), end: true },
     { id: 'cits',    ic: '⛴', name: 'Fortress Dynasty',   unit: 'citadels raised or seized',  n: 40, t: genT(1, 1.16, 40),   v: () => life('cits'), end: true },
-    { id: 'prism',   ic: '◈', name: 'Prism Emperor',      unit: 'prism refined',              n: 60, t: genT(500, 1.42, 60), v: () => Math.max((S().prism && S().prism.best) || 0, life('prism')), end: true },
+    { id: 'prism',   ic: '◭', name: 'Prism Emperor',      unit: 'prism refined',              n: 60, t: genT(500, 1.42, 60), v: () => Math.max((S().prism && S().prism.best) || 0, life('prism')), end: true },
     { id: 'clones',  ic: '⚔', name: 'Fleetbreaker',       unit: 'rival fleets destroyed',     n: 40, t: genT(1, 1.18, 40),   v: () => life('clones'), end: true },
     { id: 'peak',    ic: '⚡', name: 'Apex Commander',     unit: 'peak fleet power',           n: 40, t: genT(1e5, 1.6, 40),  v: () => life('peakPower'), end: true },
   ];

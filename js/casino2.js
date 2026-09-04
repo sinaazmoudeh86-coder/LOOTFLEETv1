@@ -104,7 +104,7 @@
   const SYMS = ['●', '⬢', '◆', '✦', '◈', '★'];
   const SLOT_OUT = [
     { p: 250, w: 0.04,  kind: 'trip', s: '★', label: '★★★ MEGA JACKPOT' },
-    { p: 50,  w: 0.2,   kind: 'trip', s: '◈', label: '◈◈◈ PRISM JACKPOT' },
+    { p: 50,  w: 0.2,   kind: 'trip', s: '◭', label: '◭◭◭ PRISM JACKPOT' },
     { p: 12,  w: 1,     kind: 'trip', s: '✦', label: '✦✦✦ PLASMA LINE' },
     { p: 6,   w: 2.5,   kind: 'trip', s: '◆', label: '◆◆◆ IRON LINE' },
     { p: 3,   w: 5.5,   kind: 'trip', s: '⬢', label: '⬢⬢⬢ FUEL LINE' },

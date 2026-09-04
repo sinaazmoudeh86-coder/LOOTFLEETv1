@@ -381,6 +381,25 @@ function mergeSaves(local, cloud) {
     // disappears from the HUD, which is what players report as "it stopped
     // working and dropped me to 5×". Union it: earned once, earned for good.
     base.secretSpeed = !!(base.secretSpeed || other.secretSpeed);
+    // THE XYN — a lifetime RECORD and a RECEIPT, so neither may be decided
+    // wholesale by the base pick (743).
+    //
+    // `kills` is every Xyn defeated on Xyn Prime. It buys nothing and is spent by
+    // nothing, so max is the only correct fold: the higher copy is the true one and
+    // a lower one simply saw fewer fights. `won` is a receipt for a hull that was
+    // granted — it can only ever go false → true, and ORing it is what stops a
+    // stale device un-winning the rarest prize in the game. `ownedShips` unions
+    // above, so the hull itself already survives; without this the pilot could keep
+    // the hull and lose the record of earning it.
+    if (other.xyn || base.xyn) {
+      const bx = base.xyn || {}, ox = other.xyn || {};
+      base.xyn = {
+        v: 1,
+        kills: Math.max(Math.floor(Number(bx.kills) || 0), Math.floor(Number(ox.kills) || 0)),
+        won: !!(bx.won || ox.won),
+        wonAt: Math.max(Number(bx.wonAt) || 0, Number(ox.wonAt) || 0),
+      };
+    }
     ['purchases', 'ownedShips', 'blueprints'].forEach((k) => {
       if (!other[k]) return;
       base[k] = base[k] || {};

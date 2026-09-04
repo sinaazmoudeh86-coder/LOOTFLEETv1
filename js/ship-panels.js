@@ -194,7 +194,7 @@
     { k: 'fuel',   g: '⬢', n: 'Fuel',   c: '#5bc0ff' },
     { k: 'iron',   g: '◆', n: 'Iron',   c: '#d0a060' },
     { k: 'plasma', g: '✦', n: 'Plasma', c: '#c07bff' },
-    { k: 'prism',  g: '◈', n: 'Prism',  c: '#ff8ad4' },
+    { k: 'prism',  g: '◭', n: 'Prism',  c: '#1fe3b2' },
   ];
 
   // Galaxy and Void both deposit through resourceRates(). It returns one merged

@@ -1762,6 +1762,9 @@
   const gxCam = { x: 0, y: 0, z: 1 };       // persistent across re-renders
   let _gxCv = null, _gxNeedsDraw = false;
   const gxCitImg = new Image(); gxCitImg.src = 'ships/ship-citadel.png';
+  // THE XYN sits on its tile the same way a fortress does — real art seated in the
+  // hex, not a glyph. It is the only ship on the galaxy map.
+  const gxXynImg = new Image(); gxXynImg.src = 'ships/ship-xyn.png';
   let _citTint = {};   // color → tinted <canvas> of the citadel sprite (built once it loads)
   function tintedCitadel(color) {
     if (!gxCitImg.complete || !gxCitImg.naturalWidth) return null;
@@ -1773,13 +1776,41 @@
     _citTint[color] = cv; return cv;
   }
   const GX_HEX = 26;                         // base hex size at zoom 1
+  // ---- XYN PRIME DRAWS DOUBLE SIZE -----------------------------------------
+  // It is the arena for the rarest prize in the game and should read as a
+  // landmark rather than the fourteenth hex of a chain — but only just. It shipped
+  // at ×4 and that was too much: it dwarfed the filament it belongs to.
+  //
+  // IT GROWS EASTWARD, NOT OUT FROM ITS CENTRE. A scaled hex centred on (33,0)
+  // reaches back over Embolus and Thrombus and swallows the stem that leads to it,
+  // which destroys the one thing that geometry is for. Xyn Prime is a dead end
+  // pointing into empty space with no on-map neighbour at all, so the drawn centre
+  // is pushed east — it expands into nothing and covers no tile.
+  //
+  // THE SHIFT IS DERIVED SO THE HEX TOUCHES ITS NEIGHBOUR. These are POINTY-TOP
+  // hexes, so a hex of circumradius R is √3·R wide and its half-width is √3·R/2.
+  // For the scaled hex's west edge to land exactly on Embolus's east edge, the
+  // centre has to move by the extra half-width it gained: (S−1)·(√3/2)·GX_HEX.
+  // The first cut used a hand-picked 1.05× fudge instead, which pushed it too far
+  // and left a visible GAP — the reported "not connected". Derived, it is flush at
+  // any scale, so changing XYN_HEX_SCALE alone can never disconnect it again.
+  //
+  // THE TAP FOLLOWS THE DRAWING, which is why _xynHit exists. pointerup maps a
+  // pixel back to a coordinate with unpixel(), which knows nothing about a visual
+  // offset — so a shifted hex would have been UN-TAPPABLE, and the biggest landmark
+  // on the map would have been the one tile a player could not open. The draw pass
+  // records where it actually put the hex and the tap reads that record, so the
+  // geometry is stated once instead of twice.
+  const XYN_HEX_SCALE = 2;
+  const XYN_HEX_SHIFT = GX_HEX * (XYN_HEX_SCALE - 1) * Math.sqrt(3) / 2;
+  let _xynHit = null;
   // The tile outline, as a path. Extracted because the canvas current path is NOT
   // part of the drawing state: any beginPath() between building the hex and
   // stroking it silently replaces it, and save()/restore() will not restore it.
   // Call this again after any such interruption rather than assuming the hex
   // survived. Radius matches the original inline loop exactly.
-  function gxHexPath(ctx, cx, cy) {
-    const r = GX_HEX - 1.5;
+  function gxHexPath(ctx, cx, cy, scale) {
+    const r = GX_HEX * (scale || 1) - 1.5;
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
       const a = Math.PI / 3 * i + Math.PI / 6;
@@ -2092,6 +2123,12 @@
         if (r) out.push(r);
       }
     }
+    // THE ARTERY sits past the rim, off the ring walk — without this the list
+    // would never show the eleven richest tiles in the game.
+    if (GM.ARTERY) GM.ARTERY.path.forEach((a) => {
+      const r = gxRow(GM.tileId(a.q, a.r));
+      if (r) out.push(r);
+    });
     return out;
   }
   function gxFilterFn(r) {
@@ -2570,6 +2607,10 @@
         const r = cv.getBoundingClientRect();
         const wx = (e.clientX - r.left - cv._w / 2) / gxCam.z + gxCam.x;
         const wy = (e.clientY - r.top - cv._h / 2) / gxCam.z + gxCam.y;
+        // XYN PRIME FIRST — it draws ×4 and offset east, so unpixel() would map a tap
+        // on it to whatever empty coordinate sits under the enlargement. Its own
+        // drawn footprint is the authority (see _xynHit).
+        if (_xynHit && Math.hypot(wx - _xynHit.x, wy - _xynHit.y) <= _xynHit.r) { openTileAction(_xynHit.id); down = null; return; }
         const c = GM.unpixel(wx, wy, GX_HEX);
         const id = GM.tileId(c.q, c.r);
         if (GM.tileAt(id)) openTileAction(id);
@@ -2680,13 +2721,25 @@
     const showText = z >= 0.55;
     const sq3 = Math.sqrt(3);
     let homeDraw = null;
-    for (let ring = 0; ring <= maxRing; ring++) {
-      const coords = GM.ringCoords(ring);
+    // THE ARTERY RIDES THE SAME DRAW PASS AS THE RINGS. It is built from ordinary
+    // hex tiles, so every fill, edge, shield, citadel and label rule below applies
+    // to it with no second copy of the drawing code. Its coords sit past the rim,
+    // which is the only reason they have to be appended — the ring walk stops at
+    // RINGS and always will (citadelSet() depends on that).
+    const passes = [];
+    for (let ring = 0; ring <= maxRing; ring++) passes.push(GM.ringCoords(ring));
+    if (GM.ARTERY) passes.push(GM.ARTERY.path);
+    for (const coords of passes) {
       for (const c of coords) {
         const p = GM.pixel(c.q, c.r, GX_HEX);
+        const id0 = GM.tileId(c.q, c.r);
+        // XYN PRIME · ×4. Resolved BEFORE the cull so the wider footprint is not
+        // culled on its own centre and popped off screen while still visible.
+        const hexS = (GM.isXyn && GM.isXyn(id0)) ? XYN_HEX_SCALE : 1;
+        if (hexS > 1) { p.x += XYN_HEX_SHIFT; _xynHit = { x: p.x, y: p.y, r: GX_HEX * hexS, id: id0 }; }
         // viewport cull
-        if (Math.abs(p.x - gxCam.x) > half + GX_HEX || Math.abs(p.y - gxCam.y) > half + GX_HEX) continue;
-        const id = GM.tileId(c.q, c.r);
+        if (Math.abs(p.x - gxCam.x) > half + GX_HEX * hexS || Math.abs(p.y - gxCam.y) > half + GX_HEX * hexS) continue;
+        const id = id0;
         const t = GM.tileAt(id); if (!t) continue;
         const owned = G.isOwned(id), rival = !owned && G.rivalOf(id);
         const ally = !owned && G.isAllyTile && G.isAllyTile(id);
@@ -2730,9 +2783,18 @@
         }
         else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
         else { fill = 'rgba(120,134,158,0.14)'; edge = '#566884'; }              // unclaimed — neutral slate
+        // THE ARTERY READS AS ONE CONTINUOUS VESSEL. Ownership keeps the FILL — a
+        // held tile has to stay legible as held, and on this filament who holds
+        // what is the whole story — but the EDGE is always the region's crimson,
+        // so the chain draws as a single line running off the rim instead of
+        // eleven unrelated hexes.
+        if (t.artery) {
+          if (!owned && !rival && !ally) fill = locked ? 'rgba(122,18,48,0.32)' : 'rgba(255,45,107,0.20)';
+          edge = GM.ARTERY.edge;
+        }
         // hex path (see gxHexPath — the current path is NOT part of canvas drawing
         // state, so anything that calls beginPath() below must re-establish it)
-        gxHexPath(ctx, p.x, p.y);
+        gxHexPath(ctx, p.x, p.y, hexS);
         ctx.fillStyle = fill; ctx.fill();
         // —— KAEVITH INCURSION —— an invaded tile reads as a hole in the map:
         // a dark void core bleeding purple, over whatever the ownership fill is.
@@ -2785,7 +2847,7 @@
           if (myCit || rivCit || freeCit) {
             const cc = myCit ? [70, 150, 255] : rivCit ? [240, 60, 70] : [255, 190, 110];
             const tint = myCit ? '#2f7dff' : rivCit ? '#e23b3b' : '#ffbe6e';
-            const pp = 0.55 + 0.45 * Math.sin(Date.now() / 380 + ring);
+            const pp = 0.55 + 0.45 * Math.sin(Date.now() / 380 + t.ring);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
             const ag = ctx.createRadialGradient(p.x, p.y, GX_HEX * 0.2, p.x, p.y, GX_HEX * 1.7);
@@ -2951,7 +3013,7 @@
         if (!showText) {
           // zoomed out: just mark specials
           if (t.citadel) {
-            const hue2 = (Date.now() / 25 + ring * 30) % 360;
+            const hue2 = (Date.now() / 25 + t.ring * 30) % 360;
             ctx.fillStyle = 'hsl(' + hue2 + ',90%,65%)';
             ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, 7); ctx.fill();
           } else if (t.alien) {
@@ -2963,7 +3025,13 @@
         // icon + level
         ctx.textAlign = 'center';
         {
-          if (t.citadel && gxCitImg.complete && gxCitImg.naturalWidth) {
+          if (t.xyn && gxXynImg.complete && gxXynImg.naturalWidth) {
+            // THE XYN, seated in its hex. Drawn a touch larger than a fortress
+            // because it is the thing the whole stem exists for — and because it
+            // is the largest hull in the game, which should read at map scale too.
+            const dw = GX_HEX * 1.72 * hexS, dh = dw * (gxXynImg.naturalHeight / gxXynImg.naturalWidth);
+            ctx.drawImage(gxXynImg, p.x - dw / 2, p.y - dh / 2 - 2 * hexS, dw, dh);
+          } else if (t.citadel && gxCitImg.complete && gxCitImg.naturalWidth) {
             // real citadel art seated in the hex
             const dw = GX_HEX * 1.5, dh = dw * (gxCitImg.naturalHeight / gxCitImg.naturalWidth);
             ctx.drawImage(gxCitImg, p.x - dw / 2, p.y - dh / 2 - 3, dw, dh);
@@ -3020,7 +3088,19 @@
     // ring label — which ring band is at the center of the view?
     const cring = Math.round(Math.hypot(gxCam.x, gxCam.y) / (GX_HEX * 1.55));
     const lab = document.getElementById('gx-ringlab');
-    if (lab) lab.textContent = cring <= 0 ? 'CORE · Home Citadel' : 'RING ' + Math.min(GM.RINGS, cring) + ' · Lv ' + GM.ringLevel(Math.min(GM.RINGS, Math.max(1, cring)));
+    // PAST THE RIM TO THE EAST IS THE ARTERY, not "RING 25". Clamping the label at
+    // RINGS the way the ring readout does would name the filament after the map it
+    // hangs off, and its levels start where the rings stop.
+    let inArt = false;
+    if (GM.ARTERY && GM.unpixel) {
+      try {
+        const a = GM.unpixel(gxCam.x, gxCam.y, GX_HEX);
+        inArt = !!a && GM.ringOf(a.q, a.r) > GM.RINGS && a.q > 0;
+      } catch (e) { inArt = false; }
+    }
+    if (lab) lab.textContent = inArt ? GM.ARTERY.name + ' · Lv ' + GM.ARTERY.minLevel + '+'
+      : cring <= 0 ? 'CORE · Home Citadel'
+      : 'RING ' + Math.min(GM.RINGS, cring) + ' · Lv ' + GM.ringLevel(Math.min(GM.RINGS, Math.max(1, cring)));
   }
   // DREAD-class confirm sheet — was dropped in the dead-code cleanup while the
   // unified ship card still emitted data-mega-buy, so Acquire silently threw.
@@ -3052,6 +3132,64 @@
   //
   // Every answer comes from G.tileShield()/G.shieldDoors(), the same functions
   // warp() refuses on and the map paints from. Nothing here re-derives adjacency.
+  // THE XYN EVENT · XYN PRIME. Every figure and every gate comes from XYN.status()
+  // — the same module onKill() rolls through — so the card cannot advertise odds or
+  // a requirement the engine does not actually enforce.
+  function gxXynCard(t) {
+    if (!t || !t.xyn) return '';
+    const S = (window.XYN && window.XYN.status) ? window.XYN.status() : null;
+    if (!S) return '';
+    const odds = '1 in ' + S.odds.toLocaleString();
+    const gate = S.gate === 'owned'
+      ? '<b class="gx-xyn-ok">✓ The Xyn is in your hangar.</b> It still spawns here — holding this system is what stops anyone else rolling for it.'
+      : S.gate === 'need-tile'
+        ? '<b class="gx-xyn-no">⚠ You must OWN this system for a defeat to pay.</b> Take it first — there is no other way in.'
+        : '<b class="gx-xyn-ok">✓ You hold this system.</b> Every Xyn defeat here rolls.';
+    return '<div class="gx-xyn">'
+      + '<div class="gx-xyn-h">◈ THE XYN<em>Super Fighter class · 22 fighter bays</em></div>'
+      + '<div class="gx-xyn-b">The <b>Xyn</b> itself is the <b>boss</b> of this system, and it spawns whether or not you already own the hull. Every defeat rolls a '
+      + '<b>' + odds + '</b> chance the hull is recovered — no escalator, no pity timer — and you are told the outcome every time. '
+      + 'It is the first hull <b>above Celestial</b>: the Celestial Corvus’s combat sheet with '
+      + '<b>twenty-two</b> fighter bays instead of eleven.</div>'
+      + '<div class="gx-xyn-g">' + gate + '</div>'
+      + (S.kills ? '<div class="gx-xyn-r"><span>Xyn defeats logged here</span><b>' + G.formatNum(S.kills) + '</b></div>' : '')
+      + '<div class="gx-xyn-n">Hold the chain behind it and this hex is <b>shielded</b> — attackers have to grind the filament up from the <b>mouth</b> to reach it. There is no other way in.</div>'
+      + '</div>';
+  }
+  // THE ARTERY · EXSANGUINATION. Both numbers come from the engine (G.arteryHeld,
+  // G.shieldHoursFor) — the same functions the capture path writes the shield
+  // from — so the card cannot quote a window the game does not actually give.
+  // A card that states a figure a player cannot convert into an outcome is
+  // decoration; this one states the exact hours their next capture will hold.
+  function gxArteryCard(t) {
+    if (!t || !t.artery) return '';
+    const A = GM.ARTERY || {};
+    const held = G.arteryHeld ? G.arteryHeld() : 0;
+    const total = (A.path || []).length;
+    const hrs = G.shieldHoursFor ? G.shieldHoursFor(t.id) : 24;
+    const hTxt = hrs >= 1 ? (Math.round(hrs * 10) / 10) + ' h' : Math.round(hrs * 60) + ' min';
+    // THE ×3 IS STATED AGAINST THE RIGHT COMPARAND. A fortress here is ×3 the best
+    // natural fortress on the map; an ordinary system is ×3 the best ordinary hex.
+    // Saying "the richest tile in the galaxy" for both would be false for one of
+    // them, and a card that overstates a number is worse than one that omits it.
+    const vs = t.citadel ? 'the richest natural fortress on the map' : 'the richest ordinary system on the map';
+    // NO "24 h instead of 24 h". At nothing held there is no reduction yet, so the
+    // line states the rule that is about to bite instead of a comparison to itself.
+    const fx = held < 2
+      ? 'Every Artery system you hold bleeds the attack shield off all of them. Your first shields for the full '
+        + '<b>24 h</b> — the second cuts both to <b>12 h</b>, and all ' + total + ' would leave each on <b>'
+        + (Math.round(24 / total * 10) / 10) + ' h</b>.'
+      : 'Every Artery system you hold bleeds the attack shield off all of them. You hold <b>' + held + ' of '
+        + total + '</b>, so a capture here shields for <b>' + hTxt + '</b> instead of 24 h.';
+    return '<div class="gx-art">'
+      + '<div class="gx-art-h">◈ ' + (A.name || 'THE ARTERY') + '<em>Lv ' + (A.minLevel || 500) + '+ · ' + total + ' systems, one tile wide</em></div>'
+      + '<div class="gx-art-b">Pays <b>×' + (A.mult || 3) + '</b> ' + vs + '. The filament is <b>one tile wide with a '
+      + 'single entrance</b>, so it defends as a <b>funnel</b>: hold the chain and only the hex at the '
+      + '<b>mouth</b> can be attacked — everything behind it is shielded until that one falls.</div>'
+      + '<div class="gx-art-fx"><b>' + (A.effect || 'EXSANGUINATION') + '</b><span>' + fx + '</span></div>'
+      + '<div class="gx-art-n">Hold the whole branch and you own the best ground in the game with almost no shield on any of it.</div>'
+      + '</div>';
+  }
   function gxShieldCard(t) {
     const s = t && t.shield;
     if (!s || !s.faction) return '';          // neutral ground has no border to speak of
@@ -3318,6 +3456,8 @@
       ${ecRow}
       ${cdTxt && !t.owned ? `<div class="gx-shield">🛡 <b>ATTACK SHIELD</b> — this tile was attacked recently. Nobody can attack it again for <b>${cdTxt}</b>.</div>` : ''}
       ${cdTxt && t.owned ? `<div class="gx-shield mine">🛡 <b>PROTECTED</b> — your tile can't be attacked for <b>${cdTxt}</b>.</div>` : ''}
+      ${gxXynCard(t)}
+      ${gxArteryCard(t)}
       ${gxShieldCard(t)}
       <div class="ip-stat"><span class="ip-sname">Status</span><span class="v">${cdTxt ? '◷ ' + (t.citadel ? 'Siege lockout ' : 'Attack shield ') + cdTxt : (tooHigh ? '🔒 Lv ' + needLv + ' required' : '⚔ Open to attack')}</span></div>
       <div class="ip-stat"><span class="ip-sname">Objective</span><span class="v">${obj}</span></div>
@@ -3665,7 +3805,7 @@
   }
   // LootCoins join the build ledger — the two carrier apexes cost them alongside
   // the three raw resources. Same glyph and colour the rest of the game uses.
-  const BUILD_RES = [['gold','●','#f2b24b'],['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◈','#ff3a3a'],['credits','◈','#ffd66a']];
+  const BUILD_RES = [['gold','●','#f2b24b'],['fuel','⬢','#5bc0ff'],['iron','◆','#d0a060'],['plasma','✦','#c07bff'],['prism','◭','#1fe3b2'],['credits','◈','#ffd66a']];
   function buildCostChips(cost, have) {
     return BUILD_RES.filter(([k]) => cost[k]).map(([k, g, c]) => {
       const ok = (have[k] || 0) >= cost[k];
@@ -3676,7 +3816,7 @@
     const row = [];
     const add = (col, gly, v) => { if (v) row.push('<span class="mega-c"><span style="color:' + col + '">' + gly + '</span> ' + G.formatNum(v) + '</span>'); };
     add('#f2a93c', '$', c.gold); add('#5bc0ff', '⬢', c.fuel); add('#d0a060', '◆', c.iron);
-    add('#c07bff', '✦', c.plasma); add('#ff3a3a', '◈', c.prism);
+    add('#c07bff', '✦', c.plasma); add('#1fe3b2', '◭', c.prism);
     // LootCoins must wear the REAL coin mark here too. This row used to draw a
     // plain orange disc (◉), which reads as "some resource" and matches nothing
     // else in the game — every other price uses the hex-coin SVG.
@@ -3784,6 +3924,9 @@
     // otherwise be described by whichever generic flag came first.
     if (ship.tour) return '✦ Tour of Duty';
     if (ship.event === 'mech') return '⚙ Mech Foundry';
+    // THE XYN — named before the generic `event` line, which would otherwise send
+    // players to the Progenitor for a hull that only drops on Xyn Prime.
+    if (ship.event === 'xyn') return '◈ Xyn Prime';
     if (ship.retired) return '◈ RETIRED';
     if (ship.event) return '❖ Progenitor';
     if (ship.celestial) return '✦ Cargo Defense';
@@ -3905,6 +4048,9 @@
     { cls: 'Aegis', accent: '#7ce0a0', pick: (s) => s.cls === 'Aegis',
       role: 'The support hull — it keeps the rest of the fleet alive.',
       benefit: 'The <b>only</b> hull that mounts Warden arrays, at <b>double</b> their listed regen and damage reduction. As an escort an Aegis fires nothing — it pulses <b>repairs</b> instead.' },
+    { cls: 'Super Fighter', accent: '#7cd4ff', pick: (s) => /^SUPER FIGHTER/.test(s.tag || ''),
+      role: 'A class of one — above Celestial.',
+      benefit: '<b>Twenty-two fighter bays</b>, double the Celestial Corvus, on the same combat sheet. The largest hull that flies and very nearly the slowest.' },
     // Key OR the CELESTIAL tag — the Corvus joined the tier in 611, and a hardcoded
     // key had already dropped the Aquila into plain Carrier once (609).
     { cls: 'Celestial', accent: '#5b7cff', pick: (s) => s.key === 'eternum' || /^CELESTIAL/.test(s.tag || ''),
@@ -3927,7 +4073,21 @@
   ];
   // Display order on screen: the progression ladder, with the two specialist tiers
   // last. (SHIP_CLASSES order is MATCH priority, which is a different thing.)
-  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Aegis', 'Carrier', 'Dread', 'Titan', 'Celestial'];
+  const SHIP_TIER_ORDER = ['Frigate', 'Cruiser', 'Battleship', 'Aegis', 'Carrier', 'Dread', 'Titan', 'Celestial', 'Super Fighter'];
+  // AND NOTHING MAY BE DROPPED BY OMISSION FROM THAT LIST.
+  //
+  // SHIP_TIER_ORDER is display order; SHIP_CLASSES order is MATCH priority. They
+  // are genuinely different orderings, so they cannot be one array — but that made
+  // the second list a hand-maintained copy of the first list's names, and the Xyn
+  // proved the failure: 'Super Fighter' was added to SHIP_CLASSES, its bucket was
+  // built and filled, and then `SHIP_TIER_ORDER.map()` never asked for it. The
+  // hull was in CONFIG, correctly classified, and simply absent from the Hangar.
+  //
+  // The orphan check below only catches a hull no class row PICKS. This catches a
+  // class row the display order FORGETS — any tier missing from the order is
+  // appended rather than lost, so adding a class can never again make hulls vanish.
+  const SHIP_TIER_VIEW = SHIP_TIER_ORDER.concat(
+    SHIP_CLASSES.map((m) => m.cls).filter((c) => SHIP_TIER_ORDER.indexOf(c) < 0));
 
   function shipRoster() {
     const owned = G.state.ownedShips || {};
@@ -3941,7 +4101,7 @@
       const m = SHIP_CLASSES.find((x) => x.pick(s));
       if (m) bucket[m.cls].list.push(s); else orphans.push(s);
     });
-    const groups = SHIP_TIER_ORDER.map((k) => bucket[k]).filter(Boolean);
+    const groups = SHIP_TIER_VIEW.map((k) => bucket[k]).filter(Boolean);
     if (orphans.length) groups.push({ meta: { cls: 'Other', accent: '#8fa3bd', role: 'Hulls outside the standard class ladder.', benefit: 'These fall back to gatling escort fire.' }, list: orphans });
 
     // Sticky jump bar — one chip per tier. Every heading below is reachable, so no
@@ -5631,6 +5791,68 @@
     const g2 = sheet.querySelector('[data-galaxy]'); if (g2) g2.addEventListener('click', () => { closeSheet(); showScreen('galaxy'); });
     refreshAll();
   }
+  // THE XYN · EVERY DEFEAT REPORTS ITS OUTCOME.
+  //
+  // A lottery the player cannot see resolve is indistinguishable from one that
+  // does not exist — so this fires on EVERY Xyn defeat, win or lose, and always
+  // states the odds. The player who has just been told “no” is exactly the one who
+  // needs to know what they were rolling against.
+  //
+  // Four outcomes, because four honest things can have happened:
+  //   win      — the one in a million landed
+  //   miss     — it did not
+  //   have     — already flying it, so it cannot pay a second hull
+  //   no-tile  — the system changed hands mid-fight, so the roll paid nothing
+  // Every figure comes from XYN's payload; nothing here re-derives an odds number.
+  function xynResult(r) {
+    if (!_inited || !r) return;
+    const odds = '1 in ' + (r.odds || 1000000).toLocaleString();
+    if (r.result === 'win') {
+      const t = document.createElement('div'); t.className = 'lvl-toast'; t.style.fontSize = '24px';
+      t.innerHTML = '<span style="color:#7cd4ff;text-shadow:0 0 22px #2b8fd0">◈ SUPER FIGHTER RECOVERED</span><br><span style="font-size:14px;color:#dff0ff">THE XYN · one in a million</span>';
+      el['toast-layer'].appendChild(t); setTimeout(() => t.remove(), 4800);
+    }
+    const body = r.result === 'win'
+      ? '<div class="xres won">'
+        + '<div class="xres-tag">SUPER FIGHTER CLASS RECOVERED</div>'
+        + '<img class="xres-img" src="ships/ship-xyn.png" alt="">'
+        + '<div class="xres-t">The Xyn</div>'
+        + '<div class="xres-c">Super Fighter · the first class above Celestial</div>'
+        + '<div class="xres-xp">22 fighter bays<i>double the Celestial Corvus, on the same combat sheet</i></div>'
+        + '<div class="xres-note">You hit a <b>' + odds + '</b> chance. It is in your hangar now — nothing was spent.</div>'
+        + '</div>'
+      : r.result === 'have'
+      ? '<div class="xres miss">'
+        + '<div class="xres-tag">THE XYN IS DOWN</div><div class="xres-g">◈</div>'
+        + '<div class="xres-t2">You already fly the Xyn</div>'
+        + '<div class="xres-c">No second hull drops — but the fight still paid gold, XP and loot, and the defeat is on your record.</div>'
+        + '<div class="xres-note">The Xyn keeps spawning here whether you own it or not. Holding this system is what stops anyone else rolling for it.</div>'
+        + '</div>'
+      : r.result === 'no-tile'
+      ? '<div class="xres miss">'
+        + '<div class="xres-tag">NO HULL — SYSTEM NOT HELD</div><div class="xres-g">⚠</div>'
+        + '<div class="xres-t2">You do not hold Xyn Prime</div>'
+        + '<div class="xres-c">The roll only pays the pilot who <b>owns the system</b>, and this one is not yours right now. The fight still paid gold, XP and loot.</div>'
+        + '<div class="xres-note">Take Xyn Prime and every defeat here rolls a <b>' + odds + '</b> chance at the Super Fighter.</div>'
+        + '</div>'
+      : '<div class="xres miss">'
+        + '<div class="xres-tag">NO SUPER FIGHTER THIS TIME</div><div class="xres-g">◈</div>'
+        + '<div class="xres-t2">The Xyn gave up nothing</div>'
+        + '<div class="xres-c">Every defeat here rolls a <b>' + odds + '</b> chance at the hull — <b>no escalator and no pity timer</b>, so this roll was exactly the same as your first.</div>'
+        + '<div class="xres-note">The run is over and you are docked — deploy to Xyn Prime again to fight it again. The fight still paid gold, XP and loot. Xyn defeats logged: <b>' + G.formatNum(r.kills || 0) + '</b>.</div>'
+        + '</div>';
+    const sheet = showSheet('<div class="sheet-head">◈ THE XYN · defeated</div><div class="sheet-body">'
+      + body
+      + '<div class="sheet-actions"><button class="btn" data-x>Close</button>'
+      + (r.result === 'win' ? '<button class="btn gold" data-fleet>Open Hangar</button>' : '<button class="btn gold" data-again>Back to My Galaxy</button>')
+      + '</div></div>');
+    sheet.querySelector('[data-x]').addEventListener('click', closeSheet);
+    const f = sheet.querySelector('[data-fleet]');
+    if (f) f.addEventListener('click', () => { closeSheet(); tapMyShip(); storeCat = 'ships'; showScreen('store'); });
+    const a = sheet.querySelector('[data-again]');
+    if (a) a.addEventListener('click', closeSheet);
+    refreshAll();
+  }
   function blueprintEvent(ship) {
     if (!_inited || !ship) return;
     if (ship.build) {
@@ -6008,5 +6230,5 @@
     return v + s;
   }
 
-  window.UI = { fleetSlotsHTML, wireFleetSlots, syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
+  window.UI = { xynResult, fleetSlotsHTML, wireFleetSlots, syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
 })();

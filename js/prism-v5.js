@@ -3,7 +3,7 @@
    ---------------------------------------------------------------------------
    Deploy into the SAME combat arena as Zone Grind — your ship, joystick,
    auto-fire, enemy waves. The twist: a huge PRISM ORE FIELD sits at the centre
-   of the map and your MINERS dig it for ◈ Prism Ingots. Raiders peel off to
+   of the map and your MINERS dig it for ◭ Prism Ingots. Raiders peel off to
    wreck your miners, so you fly around killing things to PROTECT THE DIG. Send
    in more (and stronger) miners as you go; lose them if you don't defend.
 
@@ -19,7 +19,7 @@
   const EN = () => window.ENTITIES;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const TAU = Math.PI * 2;
-  const PRISM = '#c9a0ff';
+  const PRISM = '#1fe3b2';   // ◭ Prism Ingots — see config-v2.js → CURRENCY MARKS
   const ORE = '#ff2a2f';         // glowing red prism ore — the mined currency
   const ORE_HOT = '#ff7a52';     // hot inner facet
 
@@ -194,7 +194,7 @@
       RUN.ore -= prod; bank(prod);
       const pp = P(); ensureDaily(pp); pp.daily.used[RUN.tier] = (pp.daily.used[RUN.tier] || 0) + prod;
       RUN.floatAcc += prod; RUN.floatT -= dt;
-      if (RUN.floatT <= 0 && RUN.floatAcc >= 1) { rt.floats.push(new (EN().FloatText)(RUN.cx, RUN.cy - fR - 8, '◈ +' + fmt(RUN.floatAcc), { color: ORE, size: 14, vy: -40, life: 0.9 })); RUN.floatAcc = 0; RUN.floatT = 0.7; }
+      if (RUN.floatT <= 0 && RUN.floatAcc >= 1) { rt.floats.push(new (EN().FloatText)(RUN.cx, RUN.cy - fR - 8, '◭ +' + fmt(RUN.floatAcc), { color: PRISM, size: 14, vy: -40, life: 0.9 })); RUN.floatAcc = 0; RUN.floatT = 0.7; }
       if (RUN.ore <= 0 || pp.daily.used[RUN.tier] >= dailyCap(RUN.tier)) { releaseRaiders(rt); fieldDone(RUN.tier); return; }
     }
 
@@ -416,8 +416,8 @@
     const earned = p.runEarned || 0;
     if (capped) p.lock[tier] = p.daily.resetAt;
     kickOut();
-    if (capped) showPrompt('◈ Daily limit reached', 'You have mined <b>' + FIELDS[tier - 1].name + '</b> dry for today — ◈ <b>' + fmt(dailyCap(tier)) + '</b> banked.<br><br>It refills in <b data-modaltimer="' + tier + '">' + fmtTime(lockedLeft(tier)) + '</b>. Try another tier meanwhile.', 'Back to hub');
-    else showPrompt('◈ Field mined out', 'You cleared <b>' + FIELDS[tier - 1].name + '</b> — ◈ <b>' + fmt(earned) + '</b> banked this run.<br><br>Redeploy for a fresh field (◈ ' + fmt(dailyLeft(tier)) + ' left today) or try another tier.', 'Back to hub');
+    if (capped) showPrompt('◭ Daily limit reached', 'You have mined <b>' + FIELDS[tier - 1].name + '</b> dry for today — ◭ <b>' + fmt(dailyCap(tier)) + '</b> banked.<br><br>It refills in <b data-modaltimer="' + tier + '">' + fmtTime(lockedLeft(tier)) + '</b>. Try another tier meanwhile.', 'Back to hub');
+    else showPrompt('◭ Field mined out', 'You cleared <b>' + FIELDS[tier - 1].name + '</b> — ◭ <b>' + fmt(earned) + '</b> banked this run.<br><br>Redeploy for a fresh field (◭ ' + fmt(dailyLeft(tier)) + ' left today) or try another tier.', 'Back to hub');
   }
   function kickOut() {
     const g = G(); try { g.state.prismRun = null; } catch (e) {}
@@ -440,9 +440,9 @@
   // ---- HUB (screen-prism) ---------------------------------------------------
   function renderHub() {
     const body = $('prism-body'); if (!body) return; const p = P(); if (!p) return;
-    const sub = $('prism-sub'); if (sub) sub.textContent = '◈ ' + fmt(p.ingots) + ' banked';
+    const sub = $('prism-sub'); if (sub) sub.textContent = '◭ ' + fmt(p.ingots) + ' banked';
     const running = inRun();
-    const runBar = running ? ('<div class="pm-run"><div><div class="pm-run-t">Prism Field active · Tier ' + G().state.prismRun.tier + '</div><div class="pm-run-s">◈ ' + fmt(p.runEarned || 0) + ' mined · ' + aliveMiners().length + ' rigs digging</div></div><button class="pm-run-go" data-resume>Return to combat ▸</button></div>') : '';
+    const runBar = running ? ('<div class="pm-run"><div><div class="pm-run-t">Prism Field active · Tier ' + G().state.prismRun.tier + '</div><div class="pm-run-s">◭ ' + fmt(p.runEarned || 0) + ' mined · ' + aliveMiners().length + ' rigs digging</div></div><button class="pm-run-go" data-resume>Return to combat ▸</button></div>') : '';
 
     ensureDaily(p);
     const fields = FIELDS.map((f) => {
@@ -451,7 +451,7 @@
       let sub, action;
       if (!open) { sub = 'Unlocks at Level ' + f.unlock; action = '<span class="pm-lock">🔒 ' + f.unlock + '</span>'; }
       else if (lk > 0) { sub = '<span class="pm-cool">Daily limit reached · refills in <b data-locktimer="' + f.tier + '">' + fmtTime(lk) + '</b></span>'; action = '<span class="pm-lock">⏱</span>'; }
-      else { sub = 'Zone ' + d + ' · ~Lv ' + f.enemyLv + ' · today ◈' + fmt(left) + '/' + fmt(cap); action = '<button class="pm-deploy" data-deploy="' + f.tier + '">Deploy</button>'; }
+      else { sub = 'Zone ' + d + ' · ~Lv ' + f.enemyLv + ' · today ◭' + fmt(left) + '/' + fmt(cap); action = '<button class="pm-deploy" data-deploy="' + f.tier + '">Deploy</button>'; }
       return '<div class="pm-field ' + (open && lk <= 0 ? '' : 'locked') + '" style="--fc:' + f.col + '"><span class="pm-tier">T' + f.tier + '</span>' +
         '<div class="pm-field-m"><div class="pm-field-n">' + f.name + '</div><div class="pm-field-s">' + sub + '</div></div>' + action + '</div>';
     }).join('');
@@ -468,12 +468,12 @@
     const totalRate = ratePerSec(1);
 
     const cc = coreCost(), coreAf = p.ingots >= cc;
-    const upg = '<div class="pm-core"><div class="pm-core-h">◈ Prismatic Core <span>Lv ' + (p.core || 0) + '</span></div><div class="pm-core-d">Permanent <b>+' + Math.round(CORE_BONUS * 100) + '%</b> mining rate per level — the endgame Prism sink.</div><button class="pm-core-buy ' + (coreAf ? '' : 'dis') + '" data-core>◈ ' + fmt(cc) + ' — Upgrade Core</button></div>';
+    const upg = '<div class="pm-core"><div class="pm-core-h">◈ Prismatic Core <span>Lv ' + (p.core || 0) + '</span></div><div class="pm-core-d">Permanent <b>+' + Math.round(CORE_BONUS * 100) + '%</b> mining rate per level — the endgame Prism sink.</div><button class="pm-core-buy ' + (coreAf ? '' : 'dis') + '" data-core>◭ ' + fmt(cc) + ' — Upgrade Core</button></div>';
 
     body.innerHTML =
-      '<div class="pm-hero"><div class="pm-hero-ic">◈</div><div><div class="pm-hero-amt">' + fmt(p.ingots) + '</div><div class="pm-hero-lab">PRISM INGOTS · lifetime ' + fmt(p.best) + '</div></div></div>' + runBar +
-      '<div class="pm-note">Deploy into a Prism Field — real combat. A huge ore field sits at the centre; your miners dig it for ◈ Prism. Raiders will hunt your rigs, so <b>fly around and protect the dig.</b> Mined prism banks instantly; only your miners are at risk.</div>' +
-      '<div class="pm-lab">Your Mining Fleet <span class="pm-lab-r">' + P().miners.length + ' rigs · ◈' + totalRate.toFixed(1) + '/s at T1</span></div><div id="pm-roster">' + roster + '</div>' +
+      '<div class="pm-hero"><div class="pm-hero-ic">◭</div><div><div class="pm-hero-amt">' + fmt(p.ingots) + '</div><div class="pm-hero-lab">PRISM INGOTS · lifetime ' + fmt(p.best) + '</div></div></div>' + runBar +
+      '<div class="pm-note">Deploy into a Prism Field — real combat. A huge ore field sits at the centre; your miners dig it for ◭ Prism. Raiders will hunt your rigs, so <b>fly around and protect the dig.</b> Mined prism banks instantly; only your miners are at risk.</div>' +
+      '<div class="pm-lab">Your Mining Fleet <span class="pm-lab-r">' + P().miners.length + ' rigs · ◭' + totalRate.toFixed(1) + '/s at T1</span></div><div id="pm-roster">' + roster + '</div>' +
       '<div class="pm-lab">Prism Fields</div>' + fields +
       '<div class="pm-lab">Upgrades</div>' + upg;
 
@@ -483,7 +483,7 @@
     const cb = body.querySelector('[data-core]'); if (cb) cb.addEventListener('click', buyCore);
   }
   function flashRoster() { const r = $('pm-roster'); if (r) { r.style.transition = 'box-shadow .2s'; r.style.boxShadow = '0 0 0 2px ' + PRISM; setTimeout(() => r.style.boxShadow = '', 700); } }
-  function buyCore() { const p = P(), c = coreCost(); if (p.ingots < c) { toast('Need ◈ ' + fmt(c) + ' Prism Ingots'); return; } p.ingots -= c; p.core = (p.core || 0) + 1; toast('◈ Prismatic Core → Lv ' + p.core); try { G().save(); } catch (e) {} updateHud(); renderHub(); }
+  function buyCore() { const p = P(), c = coreCost(); if (p.ingots < c) { toast('Need ◭ ' + fmt(c) + ' Prism Ingots'); return; } p.ingots -= c; p.core = (p.core || 0) + 1; toast('◈ Prismatic Core → Lv ' + p.core); try { G().save(); } catch (e) {} updateHud(); renderHub(); }
   function buyRef() { const p = P(), c = refCost(); if ((p.refinery || 0) >= REFINERY.max) return; if (gold() < c) { toast('Need ' + fmt(c) + ' gold'); return; } G().state.gold -= c; p.refinery = (p.refinery || 0) + 1; if (window.UI) window.UI.refreshAll(); try { G().save(); } catch (e) {} renderHub(); }
 
   // ---- IN-COMBAT HUD: badge + deploy FAB + panel ----------------------------
@@ -507,7 +507,7 @@
     if (!_badge) return; const p = P(); const t = G().state.prismRun ? G().state.prismRun.tier : 1;
     const alive = aliveMiners().length, tot = P().miners.length;
     const ore = RUN.active ? Math.round(clamp(RUN.ore / RUN.oreMax, 0, 1) * 100) : 0;
-    _badge.innerHTML = '<span class="pb-dot"></span>PRISM T' + t + ' · ◈ ' + fmt((p && p.runEarned) || 0) + ' · ⛏ ' + alive + '/' + tot + ' · ORE ' + ore + '%';
+    _badge.innerHTML = '<span class="pb-dot"></span>PRISM T' + t + ' · ◭ ' + fmt((p && p.runEarned) || 0) + ' · ⛏ ' + alive + '/' + tot + ' · ORE ' + ore + '%';
     if (_panel) refreshPanel();
   }
 
@@ -525,7 +525,7 @@
     if (!_panel) return;
     const rows = MINER_ORDER.map((type) => {
       const def = MINERS[type];
-      return '<div class="pp-row"><div class="pp-l"><div class="pp-n" style="color:' + def.col + '">' + def.name + ' <span class="pp-have" data-cnt="' + type + '">0/0</span></div><div class="pp-d">◈' + def.rate.toFixed(1) + '/s · ' + fmt(Math.round(def.hp * (1 + lvl() * 0.07))) + ' HP</div></div><button class="pp-buy" data-pbuy="' + type + '">＋</button></div>';
+      return '<div class="pp-row"><div class="pp-l"><div class="pp-n" style="color:' + def.col + '">' + def.name + ' <span class="pp-have" data-cnt="' + type + '">0/0</span></div><div class="pp-d">◭' + def.rate.toFixed(1) + '/s · ' + fmt(Math.round(def.hp * (1 + lvl() * 0.07))) + ' HP</div></div><button class="pp-buy" data-pbuy="' + type + '">＋</button></div>';
     }).join('');
     _panel.innerHTML = '<div class="pp-head"><div><div class="pp-title">⛏ Mining Field</div><div class="pp-sub"></div></div><button class="pp-x" data-px>✕</button></div>' +
       '<div class="pp-orebar"><i></i></div><div class="pp-orelab"></div>' +
@@ -540,7 +540,7 @@
     const oreF = RUN.active ? clamp(RUN.ore / RUN.oreMax, 0, 1) : 0;
     const bar = _panel.querySelector('.pp-orebar i'); if (bar) bar.style.width = (oreF * 100) + '%';
     const ol = _panel.querySelector('.pp-orelab'); if (ol) ol.textContent = 'PRISM ORE ' + Math.round(oreF * 100) + '%';
-    const sub = _panel.querySelector('.pp-sub'); if (sub) sub.textContent = '◈ ' + fmt(p.runEarned || 0) + ' mined this run · ' + aliveMiners().length + ' rigs alive';
+    const sub = _panel.querySelector('.pp-sub'); if (sub) sub.textContent = '◭ ' + fmt(p.runEarned || 0) + ' mined this run · ' + aliveMiners().length + ' rigs alive';
     MINER_ORDER.forEach((type) => {
       const live = RUN.miners.filter((m) => m.type === type && !m.dead).length, have = minerCount(type);
       const cnt = _panel.querySelector('[data-cnt="' + type + '"]'); if (cnt) cnt.textContent = live + '/' + have;

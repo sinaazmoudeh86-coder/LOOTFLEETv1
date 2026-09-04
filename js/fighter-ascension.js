@@ -21,7 +21,7 @@
    these are neither. A rank costs what the card says and is granted, once.
 
    THE SINK. Rank r of a doctrine costs GOLD ×5 the last rank, its GALAXY
-   RESOURCE ×3, and ◈ PRISM INGOTS ×2 — three curves on three faucets, so the
+   RESOURCE ×3, and ◭ PRISM INGOTS ×2 — three curves on three faucets, so the
    ladder cannot be walked on one income stream. One doctrine to rank 10 is
    ~2.4e19 gold; all four is ~9.8e19. Rank 1 of anything is payable the day the
    gate opens, which is the point: the first taste is cheap, the tail is a
@@ -75,7 +75,7 @@
     fuel:   { glyph: '⬢', c: '#5bc0ff', name: 'Fuel' },
     iron:   { glyph: '◆', c: '#d0a060', name: 'Iron' },
     plasma: { glyph: '✦', c: '#c07bff', name: 'Plasma' },
-    ing:    { glyph: '◈', c: '#c9a0ff', name: 'Prism Ingots' },
+    ing:    { glyph: '◭', c: '#1fe3b2', name: 'Prism Ingots' },
   };
 
   // ---- THE FOUR DOCTRINES ---------------------------------------------------

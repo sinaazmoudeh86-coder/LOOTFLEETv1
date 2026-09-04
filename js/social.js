@@ -45,7 +45,7 @@
     { id: 'lc',    ic: '◈', name: '100 LootCoins',  cost: 250, wk: 3, col: '#ffd66a', grant: (s) => { s.credits = (s.credits || 0) + 100; return '+100 ◈ LootCoins'; } },
     { id: 'gold',  ic: '$', name: 'Gold Cache',     cost: 150, wk: 5, col: '#f2a93c', amt: (s) => Math.max(10000, Math.round((s.gold || 0) * 0.05)), grant: function (s) { const g = this.amt(s); s.gold = (s.gold || 0) + g; return '+' + fmt(g) + ' gold'; } },
     { id: 'core',  ic: '◇', name: 'Dread Core',     cost: 200, wk: 2, col: '#ff5a68', grant: (s) => { s.dreadCores = (s.dreadCores || 0) + 1; return '+1 ◇ Dread Core'; } },
-    { id: 'prism', ic: '◈', name: '3 Prism Ingots', cost: 500, wk: 1, col: '#ff5a5a', need: (s) => !!s.prism, grant: (s) => { s.prism.ingots = (s.prism.ingots || 0) + 3; return '+3 ◈ Prism Ingots'; } },
+    { id: 'prism', ic: '◭', name: '3 Prism Ingots', cost: 500, wk: 1, col: '#1fe3b2', need: (s) => !!s.prism, grant: (s) => { s.prism.ingots = (s.prism.ingots || 0) + 3; return '+3 ◭ Prism Ingots'; } },
   ];
   async function buyFP(item) {
     const so = ensure(), s = G().state;

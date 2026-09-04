@@ -4,7 +4,7 @@
    A weekly endgame gauntlet (account Level 100+). Each Sunday the climb resets.
    You deploy into the REAL battle arena and face a single, brutally-tanky
    "Prism Fleet" boss; killing it clears the stage. Entering each next stage
-   costs an exponentially rising amount of mined ◈ Prism and requires beating
+   costs an exponentially rising amount of mined ◭ Prism and requires beating
    the previous one. A boss kill has a (brutal, depth-scaling) chance to drop one
    of 5 Facets; collect all 5 and they auto-forge into a PRISM CORE, which you
    apply permanently to any ship to gain the PRISM AURA — 1% chance to deflect
@@ -31,7 +31,7 @@
   ];
   const MIN_LEVEL = 200;
   const RUN_LIMIT = 300;                         // seconds — 5 min to kill the stage boss
-  const COST_BASE = 50, COST_GROW = 1.7;        // ◈ Prism entry cost per stage
+  const COST_BASE = 50, COST_GROW = 1.7;        // ◭ Prism entry cost per stage
   const AURA_REFLECT = 1, AURA_SPLASH = 10;     // % (for copy; logic lives in engine)
 
   // ---- STATE ----------------------------------------------------------------
@@ -66,7 +66,7 @@
     const g = G(); if (!g) return;
     if (!canEnter()) { toast('Reach account Level ' + MIN_LEVEL + ' to enter'); return; }
     const cost = costFor(stage);
-    if (prism() < cost) { toast('Need ◈ ' + fmt(cost) + ' Prism to deploy'); return; }
+    if (prism() < cost) { toast('Need ◭ ' + fmt(cost) + ' Prism to deploy'); return; }
     if (g.state.prism) g.state.prism.ingots -= cost;
     const zone = Math.max(1, g.state.highestUnlocked || 1);
     RUN.active = false;
@@ -123,7 +123,7 @@
       else body += 'No Facet this run — push deeper for better odds.';
       showPrompt('◈ Stage ' + info.stage + ' cleared', body, 'Back to Prism Fleet');
     } else if (info && info.timeout) {
-      showPrompt('⏱ Out of time', 'The 5-minute deployment window closed before the <b>Prism Fleet</b> fell — your ship was pulled from the arena. Your ◈ Prism entry fee is spent, but you can redeploy and try again.', 'Back to Prism Fleet');
+      showPrompt('⏱ Out of time', 'The 5-minute deployment window closed before the <b>Prism Fleet</b> fell — your ship was pulled from the arena. Your ◭ Prism entry fee is spent, but you can redeploy and try again.', 'Back to Prism Fleet');
     } else {
       showPrompt('☠ Fleet run ended', 'Your ship was destroyed — the Prism Fleet still stands. Regroup and try again.', 'Back to Prism Fleet');
     }
@@ -180,7 +180,7 @@
         '<div class="pf-stage-mid"><div class="pf-stage-n">Stage <b id="pf-stg">' + target + '</b></div><div class="pf-stage-meta" id="pf-meta"></div></div>' +
         '<button class="pf-step" id="pf-up">›</button></div>' +
         '<button class="pf-go" id="pf-go"></button>' +
-        '<div class="pf-hint">A single, brutally-tanky boss — <b>5 minutes</b> to kill it or you\'re removed. Beat Stage N to unlock N+1. Mined ◈ Prism is the entry fee.</div>' +
+        '<div class="pf-hint">A single, brutally-tanky boss — <b>5 minutes</b> to kill it or you\'re removed. Beat Stage N to unlock N+1. Mined ◭ Prism is the entry fee.</div>' +
       '</div>';
 
     // stage picker state
@@ -192,13 +192,13 @@
       $('pf-meta').textContent = '◈ ' + fmt(cost) + ' entry · ' + odds + '% Facet · ' + (sel === target ? 'NEW' : 'cleared');
       const go = $('pf-go'), afford = prism() >= cost;
       go.className = 'pf-go' + (afford ? '' : ' dis');
-      go.textContent = (afford ? '⚔ Deploy — ◈ ' + fmt(cost) : 'Need ◈ ' + fmt(cost) + ' Prism');
+      go.textContent = (afford ? '⚔ Deploy — ◭ ' + fmt(cost) : 'Need ◭ ' + fmt(cost) + ' Prism');
       $('pf-dn').disabled = sel <= minSel; $('pf-up').disabled = sel >= maxSel;
     };
     refreshPick();
     $('pf-dn').addEventListener('click', () => { sel--; refreshPick(); });
     $('pf-up').addEventListener('click', () => { sel++; refreshPick(); });
-    $('pf-go').addEventListener('click', () => { if (prism() >= costFor(sel)) deploy(sel); else toast('Need ◈ ' + fmt(costFor(sel)) + ' Prism — mine more in Prism Mining'); });
+    $('pf-go').addEventListener('click', () => { if (prism() >= costFor(sel)) deploy(sel); else toast('Need ◭ ' + fmt(costFor(sel)) + ' Prism — mine more in Prism Mining'); });
     $('pf-info').addEventListener('click', () => showExplainer());
     const ap = $('pf-apply'); if (ap) ap.addEventListener('click', () => { if ((p.cores || 0) > 0) openApply(); else toast('Forge a Prism Core first (collect all 5 Facets)'); });
   }
@@ -222,7 +222,7 @@
     showPrompt('◈ Prism Fleet',
       '<div class="pf-ex">' +
       '<p><b>Weekly gauntlet.</b> Opens for everyone at <b>account Level ' + MIN_LEVEL + '</b> and the climb <b>resets every Sunday</b>.</p>' +
-      '<p><b>Climb the stages.</b> You start at Stage 1 and must <b>beat each stage to unlock the next</b>. Entering a stage costs an <b>exponentially rising amount of ◈ Prism</b> (the currency you mine in Prism Mining).</p>' +
+      '<p><b>Climb the stages.</b> You start at Stage 1 and must <b>beat each stage to unlock the next</b>. Entering a stage costs an <b>exponentially rising amount of ◭ Prism</b> (the currency you mine in Prism Mining).</p>' +
       '<p><b>One brutal boss.</b> Each stage is a single Prism Fleet ship with <b>enormous HP</b> — you fight it in your real arena with your ship &amp; fleet. The deeper you go, the tankier it gets. You get <b>5 minutes</b> to destroy it — if the timer runs out you\'re pulled from the arena and must redeploy and try again.</p>' +
       '<p><b>5 Facets → a Prism Core.</b> Killing the boss has a chance to drop one of <b>5 Facets</b> (rare — and <b>higher the deeper you fight</b>). Collect all 5 and they auto-forge into a <b style="color:' + PR + '">Prism Core</b>.</p>' +
       '<p><b>Prism Aura.</b> Apply a Prism Core to <b>any ship, permanently</b>, to gain the Prism Aura: a <b>' + AURA_REFLECT + '% chance to deflect incoming damage back</b> at attackers, plus <b>' + AURA_SPLASH + '% of your damage splashed as AOE</b>. Very rare, very strong.</p>' +

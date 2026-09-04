@@ -7,6 +7,32 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
+  // CURRENCY MARKS — WRITTEN DOWN IN ONE PLACE, because a hand-copied glyph is
+  // how ◈ came to mean LootCoins, Prism Ingots, the XP perk, two achievements
+  // and Elite Damage all at once, and how Prism ended up wearing FOUR different
+  // colours: #ff3a3a in the HUD chip, #ff5a5a in the Alliance/FP stores and the
+  // moon scene, #c9a0ff in Nanocores and Prism Mining, #ff8ad4 in ship panels.
+  // The HUD one sat 16 hex units from Dread Cores' #ff3a4a wearing a diamond one
+  // inner dot away from theirs, which is what players were reading as the wrong
+  // currency — and the chip you could SEE at 0 was always the Dread one, because
+  // Dread shows from its unlock level while Prism hides below 1 ingot.
+  //
+  //   gold      $ / ●   #f2a93c        iron    ◆   #d0a060
+  //   fuel      ⬢       #5bc0ff        plasma  ✦   #c07bff
+  //   dread     ◇       #ff3a4a        LootCoins ◈ #f2a93c / #ffd66a
+  //   PRISM INGOTS  ◭   #1fe3b2   ← a triangle, because a prism IS one and no
+  //   other wallet mark is; and the only green in the row, so it cannot be
+  //   confused with Dread red, Plasma violet or LootCoin gold. ◈ is LootCoins
+  //   and nothing else now.
+  //
+  // THE PRISM-NAMED FEATURES ARE NOT THE CURRENCY. Prism Core, Prism Aura and
+  // the Prism Fleet event keep their violet #c9a0ff chrome; so does the Nanocore
+  // panel. A feature that shares a currency's name is a different object — only
+  // the money moved. Same for the red ore field in the mining arena: that is the
+  // rock you dig, not the ingot it refines into.
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
   // RARITY TIERS
   // Each tier defines: color, glow color, how many stats items can roll,
   // a multiplier applied to stat rolls, and a relative drop weight.
@@ -982,6 +1008,36 @@
       // requirement in the game. Same route, same screen, four times the wait.
       build:{ reqCrowns:100, cost:{ fuel:100e12, iron:100e12, plasma:100e12, credits:10000000 } },
       desc:'Celestial-class, and the last word in carrier design — a mobile airfield rather than a warship. ELEVEN FIGHTER BAYS put eleven autonomous Heavy Fighters in the air at once, each choosing its own target, over five cannon hardpoints, 192 drone bays and full Celestial plating. Twenty-five fitted slots. It is the largest vessel ever built and it moves at under half the speed of a normal hull: the wing is how it reaches anything.' },
+    // ---- THE XYN · SUPER FIGHTER CLASS --------------------------------------
+    // THE FIRST HULL ABOVE CELESTIAL, and the end of the fighter line for real:
+    // TWENTY-TWO fighter bays, double the Corvus.
+    //
+    // Its combat sheet is the Corvus's, line for line and deliberately unchanged —
+    // `mods` is a verbatim copy. The Xyn is not a stat upgrade; it is the same
+    // warship with twice the airfield and none of the mobility. Buffing the mods on
+    // top would make the wing irrelevant, which is the one thing this hull is about.
+    //
+    // SLOTH SPEED. `speedMult` 0.10 against the Corvus's 0.45 and the Vanguard's
+    // 0.25 — the slowest thing in the game by a wide margin. It multiplies the
+    // hull's own movement AFTER the moveSpeed mod, so a movement build still helps;
+    // it just never makes the Xyn anything but ponderous. You do not fly the Xyn to
+    // a fight, you park it in one and let twenty-two craft do the work.
+    //
+    // MASSIVE. Two halves, and it needs both: SHIP_SCALE 9 in render.js (nearly
+    // twice any other hull) and a zone camera that pulls back when you fly it
+    // (xynZoom, game-v93). Scaling the sprite alone reads as a big ship; shrinking
+    // the world around it is what reads as an enormous one.
+    //
+    // AWARD-ONLY, and the rarest award in the game: a 1-in-1,000,000 kill roll on
+    // the Xyn tile at the end of the Artery, which you must OWN to enter. `event`
+    // keeps a price:0 hull out of buyShip(), the same guard the Voidmaw uses.
+    { key:'xyn', name:'The Xyn', cls:'Carrier', price:0, reqKills:0,
+      weapons:5, ammo:3, hull:3, drones:192, fighterCapacity:22, speedMult:0.10,
+      mods:{ hpPct:9500, dmgPct:5350, multiShot:1425, critChance:96, critDamage:4160, moveSpeed:300, atkSpeedPct:1780, rangePct:6000, lifeSteal:52 },
+      tag:'SUPER FIGHTER CLASS · XYN', superFighter:true, celestial:true, dreadAura:true, dpsAura:0.9,
+      reqLevel:200, event:'xyn',
+      perk:'◈ TWENTY-TWO BAYS — double the Celestial Corvus, and the largest wing any hull has ever carried. The Xyn itself fights like a Corvus and moves like nothing else in the galaxy: ×0.10 speed, the slowest vessel in the game. It does not chase, it arrives.',
+      desc:'The first Super Fighter — a class of one, above Celestial. TWENTY-TWO FIGHTER BAYS launch twenty-two autonomous Heavy Fighters, each picking its own targets, over the same five cannon hardpoints and the same combat sheet as the Celestial Corvus. It is also the largest object that flies and very nearly the slowest: the arena pulls back to fit it. Recovered only from the Xyn itself, at the end of the Artery, on a one-in-a-million kill.' },
     // ETERNUM — CELESTIAL CLASS. The hull that comes after Titan. Every line on
     // its sheet is 1.5× the Titan Sina, but the reason to fly it is the armament:
     //   • DEATH BEAMS — five continuous lances that lock the five nearest hostiles
@@ -1171,7 +1227,12 @@
   // slot count are the same number by construction — an 8-bay carrier is a config
   // line, exactly as intended.
   const BAY_SLOTS = ['fighter','fighter2','fighter3','fighter4','fighter5','fighter6',
-    'fighter7','fighter8','fighter9','fighter10','fighter11','fighter12'];
+    'fighter7','fighter8','fighter9','fighter10','fighter11','fighter12',
+    // WIDENED TO 22 FOR THE XYN. Bay count IS slot count by construction, so a
+    // 22-bay hull needs 22 named slots to exist or shipSlots() silently truncates
+    // its wing to 12 — the hull would advertise 22 bays and fly twelve craft.
+    'fighter13','fighter14','fighter15','fighter16','fighter17','fighter18',
+    'fighter19','fighter20','fighter21','fighter22'];
   function shipSlots(shipKey) {
     const s = SHIP_BY_KEY[shipKey] || SHIPS[0];
     // `noUtility` hulls expose NO boots/gloves/shield-core slots. The Vanguard is

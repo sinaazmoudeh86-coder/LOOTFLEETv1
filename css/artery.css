@@ -1,0 +1,43 @@
+/* =============================================================================
+   artery.css — THE ARTERY · the Lv 500+ filament east of the rim
+   -----------------------------------------------------------------------------
+   Crimson, because every other region on the map is already spoken for: the
+   galaxy proper is slate and blue, deep space is violet, the Kaevith veil is
+   purple, allied ground is green, a rival is red-at-low-saturation. The Artery
+   takes the one loud hue left and uses it sparingly — the map paints the
+   filament's EDGE in it (ownership keeps the fill), and this card is the only
+   place it fills a panel.
+
+   Built on the .gx-shield chassis's proportions so a card in the tile sheet
+   reads at the same weight as the shield and contiguity banners beside it.
+   ============================================================================= */
+.gx-art{margin:2px 0 10px;border:1px solid rgba(255,45,107,.5);background:linear-gradient(180deg,rgba(255,45,107,.13),rgba(255,45,107,.05));border-radius:11px;padding:11px 12px;font-size:12.5px;line-height:1.55;color:#ffd6e2}
+.gx-art b{color:#ff9ab8}
+.gx-art-h{display:flex;flex-direction:column;gap:2px;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:13.5px;letter-spacing:.06em;color:#ff9ab8;text-shadow:0 0 14px rgba(255,45,107,.45)}
+.gx-art-h em{font-family:inherit;font-style:normal;font-weight:700;font-size:11px;letter-spacing:.02em;color:#e39ab0;opacity:.9}
+.gx-art-b{margin-top:8px}
+/* THE EFFECT IS THE LOUDEST THING IN THE CARD — it is the one line that changes
+   how the player plays this region, and it carries a live number. */
+.gx-art-fx{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding:9px 10px;border:1px solid rgba(255,45,107,.42);border-radius:9px;background:rgba(10,4,9,.5)}
+.gx-art-fx>b{font-family:'Rajdhani',sans-serif;font-size:12.5px;letter-spacing:.1em;color:#ff4d7d}
+.gx-art-fx span{color:#f0c3d0}
+.gx-art-n{margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,45,107,.22);font-size:11.5px;color:#d9a3b4}
+
+/* ---- THE XYN · XYN PRIME ---------------------------------------------------
+   Ice blue against the Artery's crimson, and that contrast is the point: the
+   filament is territory, the Xyn is a PRIZE sitting on it. Same chassis, so the
+   two cards stack in one sheet without either shouting the other down.
+   The hull's own art is black and cyan — this is that palette. */
+.gx-xyn{margin:2px 0 10px;border:1px solid rgba(124,212,255,.5);background:linear-gradient(180deg,rgba(124,212,255,.14),rgba(20,40,60,.35));border-radius:11px;padding:11px 12px;font-size:12.5px;line-height:1.55;color:#d3ecff}
+.gx-xyn b{color:#7cd4ff}
+.gx-xyn-h{display:flex;flex-direction:column;gap:2px;font-family:'Rajdhani',sans-serif;font-weight:800;font-size:14px;letter-spacing:.07em;color:#7cd4ff;text-shadow:0 0 16px rgba(124,212,255,.5)}
+.gx-xyn-h em{font-family:inherit;font-style:normal;font-weight:700;font-size:11px;letter-spacing:.02em;color:#9fc8e0;opacity:.92}
+.gx-xyn-b{margin-top:8px}
+/* THE GATE is the one line that decides whether the player can act, so it gets
+   its own block rather than sitting inside the prose. */
+.gx-xyn-g{margin-top:10px;padding:9px 10px;border:1px solid rgba(124,212,255,.4);border-radius:9px;background:rgba(4,10,18,.55)}
+.gx-xyn-ok{color:#7ce0a0}
+.gx-xyn-no{color:#ffcf7a}
+.gx-xyn-r{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:9px;font-size:11.5px;color:#9fc8e0}
+.gx-xyn-r b{font-family:'Rajdhani',sans-serif;font-size:14px;color:#d3ecff}
+.gx-xyn-n{margin-top:9px;padding-top:8px;border-top:1px solid rgba(124,212,255,.22);font-size:11.5px;color:#a8c6da}

@@ -188,6 +188,235 @@
   const _grand = {};
   function grandfather() { return 0; }
 
+  // ---- THE ARTERY -----------------------------------------------------------
+  // A Lv 500+ filament hanging off the eastern rim: eleven systems, ONE TILE
+  // WIDE, paying 3× the richest thing the ring generator can build.
+  //
+  // WHY A STRING AND NOT A BLOB — this IS the design, not decoration.
+  // game-v93's tileShield() seals a tile only when all SIX neighbours share its
+  // faction. A one-wide chain gives every tile at most TWO same-faction
+  // neighbours, so `open` is never 0 and NOTHING IN THE ARTERY CAN EVER BE
+  // SHIELDED — not one tile, not by one owner, not ever. Taking the whole branch
+  // does not fortify it; it means all eleven hexes are permanently attackable and
+  // one pilot has to answer for every one of them. The contest is structural.
+  // Nothing had to be bolted on to make this region hostile to a monopolist; the
+  // geometry does it, which is why the geometry is the feature.
+  //
+  // GEOMETRY. pixel() is pointy-top — x = size·√3·(q + r/2), y = size·1.5·r — so
+  // +q along r=0 runs due EAST with zero vertical drift. The stem leaves the rim
+  // beside (25,0); THE VALVE forks north-east ([1,-1]) and south ([0,1]), which
+  // land symmetrically above and below the stem line.
+  //
+  // RINGS 26-33 SIT OUTSIDE THE MAP PROPER, AND THAT IS WHAT MAKES THIS SAFE:
+  //   · citadelSet() loops ring 2..RINGS over ringCoords(), so the 25 existing
+  //     natural fortresses are computed from exactly the coords they always were.
+  //     No fortress moves, retires or appears. Asserted in the harness.
+  //   · tileShield() decides "off the map" with `ringOf(n) > RINGS`, a pure ring
+  //     test — so every EXISTING rim tile's shield maths is untouched and an
+  //     Artery neighbour still reads to it as open space. That is the safe
+  //     direction: no tile anywhere becomes newly sealable, so no holding gets
+  //     quietly harder to attack.
+  //   · The ids are ordinary hex ids, so ownership, capture, contiguity, the tile
+  //     cap and territory sync all work with no new code and NO NEW SAVE KEY.
+  //     The save's shape does not change; `ownedSystems` simply gains coordinates
+  //     it could not previously hold.
+  const ART_MULT = 3;        // ×3 the richest ordinary tile on the map
+  const ART_LV0 = 500;       // the mouth
+  const ART_LV_STEP = 10;    // per system outward
+  // THE COMPARAND IS MEASURED, NOT ASSUMED — and this is the second attempt at it.
+  //
+  // The first version computed a THEORETICAL ceiling: rim ring, top rarity,
+  // resource-grade. That figure (17,400) is not the map's maximum and is not even
+  // close to it, because it left out `typeMult` — a BOSS tile pays ×1.5, so the
+  // richest ordinary hex in the galaxy is a rarity-2 boss at ring 24 paying
+  // 25,100. Multiplying the wrong comparand by three produced tiles worth 2.08×
+  // the real ceiling, i.e. the region would have shipped quietly under-powered
+  // against the brief and nobody would have noticed from reading the code.
+  //
+  // So: SWEEP THE REAL GENERATOR and take the real maxima, separately for an
+  // ordinary tile and for a natural fortress (whose rate already carries the
+  // baked ×CITADEL_RATE_MULT, and whose actual best is a ring-23 rarity-1 tile,
+  // not the rim — the citadel budget decides where fortresses land, so the top
+  // one is wherever citadelSet() put it).
+  //
+  // Memoized on first use and never recomputed. It is a pure function of the
+  // seed, so the answer is identical for every account and every session. The
+  // sweep only ever READS tileAt(), and an Artery id can never appear in it (the
+  // walk is ringCoords(1..RINGS)), so there is no recursion and no chance of the
+  // region measuring itself.
+  //
+  // Retune baseRate, TILE_VALUE_MULT, the rarity curve or the citadel budget and
+  // the Artery tracks it automatically — which is the point of measuring rather
+  // than writing 75300 down.
+  let _maxima = null;
+  function mapMaxima() {
+    if (_maxima) return _maxima;
+    _maxima = { ordinary: 1, citadel: 1 };      // set BEFORE the sweep — no re-entry, no repeat work
+    let ord = 0, cit = 0;
+    for (let ring = 1; ring <= RINGS; ring++) {
+      const cs = ringCoords(ring);
+      for (let i = 0; i < cs.length; i++) {
+        const t = tileAt(tileId(cs[i].q, cs[i].r));
+        if (!t || t.home) continue;
+        if (t.citadel) { if (t.rate > cit) cit = t.rate; }
+        else if (t.rate > ord) ord = t.rate;
+      }
+    }
+    _maxima = { ordinary: Math.max(1, ord), citadel: Math.max(1, cit) };
+    return _maxima;
+  }
+  function richestOrdinaryRate() { return mapMaxima().ordinary; }
+  function richestCitadelRate() { return mapMaxima().citadel; }
+  // `d` is DISTANCE FROM THE MOUTH along the filament, not an array index, so
+  // both arms past the fork climb the level ladder identically.
+  const ART_PATH = [
+    { q: 26, r:  0, d: 0, res: 'fuel',   name: 'Lancet', citadel: true },
+    { q: 27, r:  0, d: 1, res: 'iron',   name: 'Ligature' },
+    { q: 28, r:  0, d: 2, res: 'plasma', name: 'Tourniquet', citadel: true },
+    { q: 29, r:  0, d: 3, res: 'iron',   name: 'Suture' },
+    { q: 30, r:  0, d: 4, res: 'plasma', name: 'The Valve', citadel: true },
+    { q: 31, r: -1, d: 5, res: 'plasma', name: 'Ichor Reach' },
+    { q: 32, r: -2, d: 6, res: 'fuel',   name: 'Cauter Drift' },
+    { q: 33, r: -3, d: 7, res: 'plasma', name: 'Exsanguine', citadel: true },
+    { q: 30, r:  1, d: 5, res: 'iron',   name: 'Vitrine Hollow' },
+    { q: 30, r:  2, d: 6, res: 'plasma', name: 'Marrow Deep' },
+    { q: 30, r:  3, d: 7, res: 'plasma', name: 'The Last Beat', citadel: true },
+    // ---- THE THIRD STEM — THE XYN BERTH ------------------------------------
+    // A stem off the natural citadel at the junction, running due east, ending on
+    // the tile the XYN SUPER FIGHTER sits on.
+    //
+    // GEOMETRY NOTE, honestly: the fork already spends the Valve's north-east and
+    // south borders, so a third stem east necessarily touches both arms at its
+    // first tile — (31,0) has four Artery neighbours and the Valve has four. That
+    // is fine and it is checked: the guarantee that matters is SIX, because that
+    // is what tileShield() seals on. Four of six is still permanently attackable.
+    // XYN PRIME itself is a dead end with ONE friendly border, so the arena tile is
+    // the least defensible hex in the game — which is the correct shape for a prize
+    // everyone has to be able to come and take.
+    //
+    // XYN PRIME IS DELIBERATELY NOT A FORTRESS. It already carries the region's
+    // whole reason to exist; stacking a ×1000 fortress on the event arena would
+    // make one hex both the best income and the only prize on the map, and its tile
+    // sheet would have to argue two unrelated cases at once.
+    { q: 31, r:  0, d: 5, res: 'iron',   name: 'Thrombus' },
+    { q: 32, r:  0, d: 6, res: 'fuel',   name: 'Embolus' },
+    { q: 33, r:  0, d: 7, res: 'plasma', name: 'Xyn Prime', xyn: true },
+  ];
+  // ---- THE FIVE FORTRESSES -------------------------------------------------
+  // FIVE natural citadels in fourteen hexes, against twenty-five in the entire
+  // rest of the galaxy. That concentration is the point and it is a deliberate
+  // trade: the richest ground in the game sits in the one region that CANNOT BE
+  // DEFENDED. Every hex here tops out at four friendly borders of six and
+  // tileShield() seals at six, so none of it is ever safe. Enormous value, held
+  // only for as long as you can keep beating everyone who comes for it.
+  //
+  // THEY ARE NOT WORTH THE SAME, AND THAT IS WHAT MAKES THE CHAIN WORTH PUSHING.
+  // Value scales with DISTANCE FROM THE MOUTH, so a fortress you can reach on your
+  // first tile is worth a third of one at an arm tip you have to fight the whole
+  // filament to hold:
+  //
+  //   Lancet        d0  ×3.00   the mouth — the region's floor, and its chokepoint
+  //   Tourniquet    d2  ×4.50   mid-stem
+  //   The Valve     d4  ×6.00   the junction: whoever holds it controls both arms
+  //   Exsanguine    d7  ×8.25   north arm tip
+  //   The Last Beat d7  ×8.25   south arm tip
+  //
+  // × what? The map's own best natural fortress, measured (see mapMaxima). So the
+  // mouth is exactly the ×3 the region was specified at, and depth is the bonus on
+  // top — the ×3 is the FLOOR here, not the ceiling.
+  // Written as the multiplier it actually is: the ×3 floor, plus a quarter of it
+  // per step out from the mouth. d0 → ×3.00 · d2 → ×4.50 · d4 → ×6.00 · d7 → ×8.25.
+  const ART_CIT_PER_STEP = 0.25;
+  function artCitMult(d) { return ART_MULT * (1 + Math.max(0, d) * ART_CIT_PER_STEP); }
+  const ARTERY = {
+    key: 'artery', name: 'THE ARTERY', effect: 'EXSANGUINATION',
+    color: '#ff2d6b', edge: '#ff9ab8', glow: 'rgba(255,45,107,0.55)',
+    mult: ART_MULT, minLevel: ART_LV0,
+    // TWO DIFFERENT TILES, AND THEY HAD THE SAME NAME. `mouth` used to mean the
+    // rim hex the filament hangs off — which is an ORDINARY GALAXY TILE: isArtery()
+    // is false for it, it has no arteryParent, and feeding it to the funnel's
+    // shield walk would silently break the walk. The funnel's actual entrance is
+    // the first hex OF the chain. Naming both "mouth" is how shieldDoors ended up
+    // hand-deriving the entrance from path[0] inline rather than reading it.
+    //
+    //   rimAnchor  25,0  the galaxy tile the chain attaches to (NOT in the region)
+    //   entry      26,0  the funnel's entrance — Lancet, the only hex that can
+    //                    never shield, and the one an attacker has to break first
+    //
+    // `entry` is DERIVED FROM THE PATH so it cannot drift from the geometry: change
+    // where the chain starts and the entrance follows automatically.
+    rimAnchor: tileId(25, 0),
+    entry: tileId(ART_PATH[0].q, ART_PATH[0].r),
+    citadel: tileId(30, 0), xyn: tileId(33, 0), path: ART_PATH,
+    citadels: ART_PATH.filter((a) => a.citadel).map((a) => tileId(a.q, a.r)),
+  };
+  const ART_BY_ID = (() => {
+    const out = {};
+    ART_PATH.forEach((a) => { out[tileId(a.q, a.r)] = a; });
+    return out;
+  })();
+  const ART_IDS = Object.keys(ART_BY_ID);
+  function isArtery(id) { return !!ART_BY_ID[id]; }
+  function isXyn(id) { return !!(ART_BY_ID[id] && ART_BY_ID[id].xyn); }
+  // ---- REACHABILITY: THE CHAIN IS A TREE ROOTED AT THE MOUTH ---------------
+  // Every Artery hex is reachable only through the hex one step closer to the
+  // mouth, which is what lets game-v93 shield the region as a FUNNEL instead of
+  // trying to encircle a one-wide line (see arteryShield there).
+  //
+  // DERIVED, NOT HAND-LISTED. A parent is the adjacent Artery hex whose distance
+  // from the mouth is exactly one less, and on this shape that is unique for every
+  // tile — including all three hexes hanging off the junction, whose only d-1
+  // neighbour is THE VALVE. Writing the parents out by hand would be a second
+  // description of the same geometry, and the two would drift the first time the
+  // path changed. Built once, cached; the path is a constant.
+  //
+  // The MOUTH has no parent, and that is load-bearing: it is the one hex whose way
+  // in is the galaxy itself, so it can never shield and the region can never seal.
+  let _artParent = null;
+  function arteryParents() {
+    if (_artParent) return _artParent;
+    const p = {};
+    ART_PATH.forEach((a) => {
+      const id = tileId(a.q, a.r);
+      const up = neighbors(a.q, a.r)
+        .map((n) => ART_BY_ID[tileId(n.q, n.r)])
+        .filter((n) => n && n.d === a.d - 1);
+      p[id] = up.length ? tileId(up[0].q, up[0].r) : null;
+    });
+    _artParent = p;
+    return p;
+  }
+  function arteryParent(id) { const p = arteryParents(); return p[id] || null; }
+  function arteryTile(a) {
+    const level = ART_LV0 + a.d * ART_LV_STEP;
+    // ×3 THE REAL MAXIMUM OF ITS OWN CLASS. An ordinary Artery system is measured
+    // against the best ordinary hex on the map; a FORTRESS against the best natural
+    // fortress. Comparing the fortress to the ordinary ceiling instead would have
+    // made it ×3000, and comparing an ordinary system to the fortress ceiling would
+    // have made every tile on the filament a fortress in all but name.
+    //
+    // A FORTRESS ALSO SCALES WITH DEPTH — see artCitMult(). Ordinary systems are a
+    // flat ×3 the whole way out, because they are income; the fortresses are the
+    // prizes, and a prize at the end of an indefensible arm should be worth more
+    // than one at the mouth.
+    //
+    // tileRateOf() then applies deep ×25 and galaxy ×25 to these exactly as it does
+    // to the tiles they were measured against — which is why every Artery system is
+    // `deep` — so the multiplier is intact in the number the player reads.
+    const rate = a.citadel
+      ? richestCitadelRate() * artCitMult(a.d)
+      : richestOrdinaryRate() * ART_MULT;
+    return {
+      id: tileId(a.q, a.r), q: a.q, r: a.r, ring: ringOf(a.q, a.r),
+      type: a.citadel ? 'citadel' : 'resource',
+      home: false, boss: false, citadel: !!a.citadel, deep: true,
+      resource: a.res, rarity: 2, alien: false,
+      artery: true, arteryD: a.d, xyn: !!a.xyn,
+      diff: Math.max(1, Math.round(level * 0.95)), level,
+      name: a.name, rate,
+    };
+  }
+
   // ---- deterministic tile ----------------------------------------------------
   const HOME = tileId(0, 0);
   const _cache = {};
@@ -196,6 +425,10 @@
     const p = parseId(id);
     if (!p) return null;
     const ring = ringOf(p.q, p.r);
+    // THE ARTERY IS TESTED BEFORE THE RIM BAIL and never draws from `rnd`, so it
+    // cannot perturb a single generated tile: its coords are ones tileAt()
+    // previously refused outright.
+    if (ART_BY_ID[id]) return (_cache[id] = arteryTile(ART_BY_ID[id]));
     if (ring > RINGS) return null;
     if (ring === 0) {
       return (_cache[id] = {
@@ -278,12 +511,14 @@
   }
 
   function ringTiles(ring) { return ringCoords(ring).map((c) => tileAt(tileId(c.q, c.r))).filter(Boolean); }
-  function tileCount() { let n = 0; for (let r2 = 1; r2 <= RINGS; r2++) n += r2 * 6; return n; }
+  function tileCount() { let n = 0; for (let r2 = 1; r2 <= RINGS; r2++) n += r2 * 6; return n + ART_PATH.length; }
 
   window.GALAXYMAP = {
     RES, RES_KEYS, RINGS, DEEP_RING, DEEP_MULT, CITADEL_RATE_MULT, CITADEL_COST_MULT, TILE_VALUE_MULT, HOME,
     CIT_BAND, CIT_PER_BAND, citadelSet, legacyCitadel, grandfather,
     tileId, parseId, ringOf, neighbors, ringCoords, ringTiles, tileAt, tileCount,
     ringLevel, ringDiff, pixel, unpixel, entryCost, XEN, isInvaded, alienChance,
+    baseRate, ARTERY, ART_IDS, isArtery, isXyn, artCitMult, arteryParent, arteryParents,
+    richestOrdinaryRate, richestCitadelRate, mapMaxima,
   };
 })();

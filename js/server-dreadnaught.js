@@ -118,7 +118,12 @@
   function isPro() { try { return !!G().isPro(); } catch (e) { return false; } }
   function toast(m) { try { if (window.UI && window.UI.unlockToast) window.UI.unlockToast(m); } catch (e) {} }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function dayIdx() { return Math.floor(Date.now() / 864e5); }
+  // Clock helpers come from the engine so there is ONE implementation (741) —
+  // a hand-copied second version is exactly how sw.js CORE shipped a half-applied
+  // path split. Fallbacks are forward-only too, never the old `!==`.
+  const nowMs = () => { try { return G().nowMs(); } catch (e) { return Date.now(); } };
+  const dayRolled = (a, b) => { try { return G().dayRolled(a, b); } catch (e) { return !(a | 0) || (b | 0) > (a | 0); } };
+  function dayIdx() { return Math.floor(nowMs() / 864e5); }
   function ended() { return false; }   // permanent event — nothing closes it
   function fmtDur(ms) {
     const s = Math.max(0, Math.floor(ms / 1000));
@@ -165,7 +170,12 @@
     // a cloud conflict, an account switch — rather than the one path that was
     // being looked at. See the razed-citadel replay for the same lesson.
     progUnwind(s);
-    if (s.day !== dayIdx()) {                                    // daily reset
+    // FORWARD-ONLY (741). This was `!==`, which fires in BOTH directions, so
+    // winding the device clock back granted a full daily reset — free attempts, a
+    // re-armed `partDay`, and `buys: 0`, which resets attCost()'s 100 × 3^buys
+    // ladder back to 100 LootCoins. Repeatable at will, on a paid currency, and
+    // it publishes to the shared season board.
+    if (dayRolled(s.day, dayIdx())) {                            // daily reset
       settleLeaderboard(s);                                       // grant yesterday's placement first
       s.day = dayIdx(); s.att = 0; s.bestDay = 0; s.buys = 0;
       try { g.save(); } catch (e) {}
@@ -175,7 +185,7 @@
   }
   function attemptsMax() { const s = sd(); return BASE_ATTEMPTS + (isPro() ? PRO_ATTEMPTS : 0) + ((s && s.buys) | 0); }
   function attemptsLeft() { const s = sd(); return s ? Math.max(0, attemptsMax() - (s.att | 0)) : 0; }
-  function msToDailyReset() { return (dayIdx() + 1) * 864e5 - Date.now(); }
+  function msToDailyReset() { return (dayIdx() + 1) * 864e5 - nowMs(); }
 
   // ---- stage math -------------------------------------------------------
   // Cumulative damage needed to COMPLETE stage n: 10M · 25M · 50M · 100M · 250M
@@ -1130,7 +1140,7 @@
     removeWarbar();
     // FIRST FIGHT OF THE DAY — guaranteed Progenitor Part (the daily pacing pillar:
     // ~2 from rank + 1 here + drops + store ≈ six weeks of consistent play)
-    if (!progOwned() && s.partDay !== dayIdx()) {
+    if (!progOwned() && dayRolled(s.partDay, dayIdx())) {
       s.partDay = dayIdx();
       addPart(VM_KEY, 1);
       drops.push({ stage: 0, drops: [{ t: '❖ 1× PROGENITOR PART — first fight of the day (' + vmParts() + '/' + PROG_NEED + ')', c: '#d9a0ff' }] });

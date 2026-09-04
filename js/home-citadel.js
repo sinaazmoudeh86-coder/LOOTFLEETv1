@@ -105,7 +105,16 @@
   function hc() {
     const g = G(); if (!g || !g.state) return null;
     const st = g.state;
-    if (!st.homecit) st.homecit = { v: 1, wave: 0, cit: 0, last: Date.now(), b: { mine: 0, silo: 0, turret: 0, repair: 0 }, dmg: 0, seen: 0, tw: [] };
+    // `last: 0`, NOT Date.now() (741). This initialiser runs on the boot thread,
+    // before the cloud pull lands — so a device that has not hydrated yet stamps a
+    // brand-new record with "now", and mergeSaves() takes the LATER of the two
+    // `last` values (correctly: the earlier one would pay the same hours twice).
+    // The phantom stamp therefore beat the real one and the pilot's whole night of
+    // stored production was erased — the reported "overnight and the citadel had
+    // about thirty minutes in it". A genuinely fresh record has `wave: 0` and
+    // rates() pays nothing at wave 0, so the stamp was never doing any work here;
+    // dropping it makes the merge structurally unable to lose the real clock.
+    if (!st.homecit) st.homecit = { v: 1, wave: 0, cit: 0, last: 0, b: { mine: 0, silo: 0, turret: 0, repair: 0 }, dmg: 0, seen: 0, tw: [] };
     if (!Array.isArray(st.homecit.tw)) st.homecit.tw = [];
     while (st.homecit.tw.length < 8) st.homecit.tw.push(null);
     // THE BANK IS SEEDED FULL, DELIBERATELY. An existing pilot's first session

@@ -386,12 +386,31 @@
     location.reload();
   }
   // ---- ACCOUNT DELETION (App Review 5.1.1(v)) --------------------------------
-  // Deletes cloud rows (save, leaderboard, wallet) + auth user (via the
-  // delete-account Edge Function when deployed), then wipes the local save,
-  // stored credentials and session. Irreversible.
+  // Deletes cloud rows (save, leaderboard, wallet) + the auth user itself (via the
+  // delete-account Edge Function), THEN wipes the local save, stored credentials
+  // and session. Irreversible.
+  //
+  // THE LOCAL WIPE IS NOW CONDITIONAL ON THE SERVER (741). It used to run whatever
+  // happened, which produced the worst possible outcome: the device forgot the
+  // account, the server kept every row and the auth user, and the next sign-in
+  // restored the lot. The player was told it was deleted and it was not.
+  //
+  // Returns { ok, failed }. A signed-out/offline pilot has no server side, so the
+  // local wipe IS the whole deletion and reports ok — but a signed-in pilot whose
+  // identity could not be erased is told the truth and keeps their account, which
+  // is strictly better than a device wipe that deletes nothing.
   async function deleteAccount() {
     const s = getSession() || {};
-    try { if (cloudOn() && s.id && window.CLOUD.deleteAccountData) await window.CLOUD.deleteAccountData(s.id); } catch (e) {}
+    const cloud = !!(cloudOn() && s.id && window.CLOUD && window.CLOUD.deleteAccountData);
+    if (cloud) {
+      let res = null;
+      try { res = await window.CLOUD.deleteAccountData(s.id); }
+      catch (e) { res = { ok: false, failed: [String((e && e.message) || e)] }; }
+      // Tolerate the older boolean return in case a cached cloud.js is paired
+      // with this file; anything that is not an explicit success is a failure.
+      const ok = res === true || !!(res && res.ok);
+      if (!ok) return { ok: false, failed: (res && res.failed) || ['server did not confirm deletion'] };
+    }
     try {
       const uidKey = s.id ? 'u_' + s.id : (s.name || 'guest').toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_.-]/g, '');
       localStorage.removeItem('infinite-operator-save-v2::' + uidKey);
@@ -402,6 +421,7 @@
     try { if (cloudOn()) await window.CLOUD.signOut(); } catch (e) {}
     try { localStorage.removeItem(SESS); } catch (e) {}
     location.reload();
+    return { ok: true, failed: [] };
   }
   function name() { const s = getSession(); return s ? s.name : 'Operator'; }
 

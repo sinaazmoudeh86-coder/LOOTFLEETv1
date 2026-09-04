@@ -4281,6 +4281,17 @@
     state.ownedShips[key] = true;
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
     markHullEarned(key);
+    // A BOUGHT CARRIER IS DELIVERED WITH ITS WING ABOARD, EXACTLY LIKE A GRANTED
+    // ONE (741). grantShip() seeded the bays and buyShipLC() routes through it, but
+    // THIS path — gold, resources and the DREAD-class megaCost mix, i.e. how almost
+    // every carrier in the game is actually acquired — did not. A bare carrier has
+    // NO weapon at all, and the only safety net was a load-time pass deferred 3s
+    // behind the first frame, so a hull bought and dropped straight into an escort
+    // slot flew nothing for the rest of the session. That is the reported "fighter
+    // ships do not deploy from escort slots": the wing code was correct, the bays
+    // were empty. Seeding is a pure grant — it only ever FILLS AN EMPTY BAY and
+    // never overwrites a fitting.
+    seedFighterBays(key);
     save();
     if (window.UI) window.UI.refreshAll();
     return { ok: true };
@@ -4363,6 +4374,11 @@
     Object.keys(next).forEach((sk) => { if (next[sk] && !(sk in fit)) state.inventory.push(next[sk]); });
     state.equipped = fit;
     state.ship = key;
+    // WHEN THE CHOICE WAS MADE (741) — read by ACCOUNT.mergeSaves() to decide
+    // which copy's flagship survives. This is the ONLY writer: a boot-default
+    // state therefore carries no stamp and can never out-rank a real pick. See
+    // the flagship note in mergeSaves() for the login bug that made it necessary.
+    state.shipPick = Date.now();
     // the new flagship can't also fly as an escort — free its fleet slot
     if (state.fleet) state.fleet = state.fleet.map((k) => (k === key ? null : k));
     if (state.shipKills[key] == null) state.shipKills[key] = 0;
@@ -4549,6 +4565,10 @@
       if (key === state.ship) return { ok: false, reason: 'flagship' };
       if (state.fleet.some((k, j) => k === key && j !== i)) return { ok: false, reason: 'duplicate' };
       state.fleet[i] = key;
+      // AN ESCORT ARRIVES ARMED. Seeding at the point of use closes the window
+      // between acquiring a carrier and the deferred load-time top-up — the same
+      // pure grant as above, empty bays only.
+      seedFighterBays(key);
     }
     refreshStats(); rebuildEscorts(); save();
     if (window.UI) window.UI.refreshAll();
@@ -7858,6 +7878,67 @@
   // OFFLINE CAP — VIP levels 6, 9 and 13 each sell "Offline earnings cap +Nh".
   // Nothing read that until now: both caps were hardcoded to 12h, so the perk
   // was text on a purchase screen and no more. One source of truth for both.
+  // ---- CLOCK ----------------------------------------------------------------
+  // THE DEVICE CLOCK IS PLAYER-CONTROLLED, so nothing that GRANTS anything may
+  // read Date.now() directly (741).
+  //
+  // Reported: wind the device clock back, re-enter Voidmaw or a cargo run,
+  // background the app, wind it forward again — and keep the run, the attempts
+  // and a fresh batch of offline production. It also fired ACCIDENTALLY on real
+  // travel: a flight across two timezones moved cargo's local day index and reset
+  // the dailies, which is how the pilot who reported it stumbled into it.
+  //
+  // Two defences, covering different halves:
+  //
+  //   nowMs()      MID-SESSION. Anchored once at boot, then advanced only by
+  //                performance.now() — monotonic, and no date change can move it.
+  //                Changing the clock while the app is running is now inert.
+  //                It re-anchors to true wall time on every launch, so a long
+  //                suspension that performance.now() undercounts self-corrects on
+  //                the next boot; under-paying until then is the safe direction.
+  //
+  //   high-water   CROSS-SESSION. A relaunch necessarily picks up whatever wall
+  //   stamps       clock the device offers, so every accrual clock and every daily
+  //                stamp only ever moves FORWARD. Winding back writes nothing;
+  //                winding forward again only returns you to the point already
+  //                banked. See accrueResources(), computeOffline(), dayRolled().
+  //
+  // This is the same shape as Home Citadel's max() on `homecit.last` and Moon
+  // Colony's recompute-from-lastCollect — the two systems the reporter found he
+  // could NOT move. They were right by construction; these are now too.
+  //
+  // NOT CHANGED: `state.lastSave`, which mergeSaves() uses as its comparable-weight
+  // tiebreak. A spoofed clock can still make one copy win that tiebreak, which is
+  // the "stasis loop" the same pilot described — but it COSTS him progress rather
+  // than minting any, and forward-clamping a value the merge reads could strand a
+  // legitimate save behind a future stamp. That belongs in its own cut with its
+  // own harness; the durable answer is server time, not a client clamp.
+  const _bootWall = Date.now();
+  const _bootMono = (typeof performance !== 'undefined' && performance.now) ? performance.now() : null;
+  function nowMs() {
+    if (_bootMono == null) return Date.now();
+    return _bootWall + (performance.now() - _bootMono);
+  }
+  // DAILY ROLLOVER, FORWARD ONLY. Every daily gate compared `stored !== dayIdx()`,
+  // and an inequality fires in BOTH directions — so winding the clock back granted
+  // a full reset, as often as you cared to. The stored day is a high-water mark now.
+  //
+  // Jumping FORWARD still grants one reset. That cannot be closed on the client,
+  // and it is self-limiting: the stamp latches to the future day, so the pilot gets
+  // no further dailies until real time catches up. Every stolen reset is borrowed
+  // against their own account.
+  //
+  // The 30-day valve is a BRICK GUARD, not a feature — a device left set years
+  // ahead would otherwise latch the stamp and kill that pilot's dailies forever.
+  // It is never the cheap attack (a +1-day jump already buys a reset for one clock
+  // change), so it widens nothing.
+  function dayRolled(stored, cur) {
+    const s = stored | 0;
+    if (!s) return true;
+    if (cur > s) return true;
+    if (s - cur > 30) return true;
+    return false;
+  }
   function offlineCapHours() {
     let bonus = 0;
     try { if (window.VIP && window.VIP.capBonus) bonus = window.VIP.capBonus() | 0; } catch (e) {}
@@ -7865,9 +7946,16 @@
   }
   function accrueResources() {
     if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
-    const now = Date.now();
-    const hrs = Math.min(offlineCapHours(), Math.max(0, (now - (state.lastResTick || now)) / 3600000));
-    state.lastResTick = now;
+    const now = nowMs();
+    let prev = Number(state.lastResTick);
+    if (!isFinite(prev) || prev <= 0) prev = now;
+    const hrs = Math.min(offlineCapHours(), Math.max(0, (now - prev) / 3600000));
+    // HIGH-WATER MARK (741). This was a bare `= now`, so winding the clock back
+    // stamped the accrual clock into the PAST and the trip forward again paid the
+    // whole delta out — one full offline cap per round trip, repeatable. Max()
+    // makes a backward stamp a no-op, which is the same anti-double-pay direction
+    // as Home Citadel's `last`. Do not change it to a bare assignment.
+    state.lastResTick = Math.max(prev, now);
     if (hrs <= 0) return null;
     const rates = resourceRates();
     const gained = { fuel: rates.fuel * hrs, iron: rates.iron * hrs, plasma: rates.plasma * hrs, gold: (rates.gold || 0) * hrs };
@@ -8102,14 +8190,29 @@
   //           fleet into it.
   //   at 60s  FIRE. The beam does NOT stop at whatever it was aimed at — it runs
   //           from the hull to the far edge of the world and hits EVERY hostile in
-  //           the lane, then leaves a FRACTURE ZONE burning along it.
-  // Damage is written in DPS-seconds so it stays meaningful at any zone depth:
-  // ~55× your effective DPS to a normal hull, 22× to a boss (still the single
-  // largest hit in the game), and the fracture keeps bleeding 5×/s.
-  // Everything that dies inside a live fracture pays a 4× tithe and drops one
-  // extra fitting rolled at boosted rarity — the aftermath IS the reward.
+  //           the lane, then leaves a FRACTURE ZONE along it.
+  //
+  // ONE SHOT, AND ONLY THE SHOT (740). The lance is a spike weapon and it was
+  // being played as a damage-over-time field: the shot paid 55× effective DPS,
+  // and then the fracture bled 5×/s for 14 seconds, so anything that stayed in
+  // the lane took ~70× MORE than the beam that made it. The trickle was bigger
+  // than the hit it came from, it was invisible to the player (no beam on
+  // screen, no number moving), and it is why the lance read as far too strong.
+  // The fracture now deals NO DAMAGE AT ALL — see lanceTick — and the shot is
+  // the whole weapon: 25× your effective DPS to a normal hull, 10× to a boss.
+  // Still the single largest hit in the game by a wide margin (nothing else
+  // lands twenty-five seconds of fleet damage in one frame), and now bounded —
+  // a cycle contributes 25× dps and never more, however long a target sits in
+  // the lane. These two numbers are the tuning knob; there is no second faucet
+  // behind them any more.
+  //
+  // Damage is written in DPS-seconds so it stays meaningful at any zone depth.
+  // THE RIFT IS THE REWARD, NOT A WEAPON: everything that dies inside a live
+  // fracture pays a 4× tithe and drops one extra fitting rolled at boosted
+  // rarity, which is exactly what the hull's own description promises — "the
+  // rift it leaves behind pays out on everything that dies in it".
   // ===========================================================================
-  const LANCE = { cycle: 60, charge: 15, width: 130, hit: 55, bossHit: 22, fracDps: 5, fracLife: 14, tithe: 4 };
+  const LANCE = { cycle: 60, charge: 15, width: 130, hit: 25, bossHit: 10, fracLife: 14, tithe: 4 };
   function hasLance() { const sh = C.SHIP_BY_KEY[state.ship]; return !!(sh && sh.lance); }
   function lanceState() {
     if (!hasLance()) return null;
@@ -8153,19 +8256,14 @@
         const f = fr[i];
         f.t -= dt;
         if (f.t <= 0) { fr.splice(i, 1); continue; }
-        f.tick = (f.tick || 0) + dt;
-        const pulse = f.tick >= 0.25; if (pulse) f.tick = 0;
-        const dps = effectiveDps() * LANCE.fracDps;
+        // NO DAMAGE HERE. The rift only STAMPS the payout on whatever is standing
+        // in it; the kill comes from your guns. It used to burn 5× effective DPS a
+        // second for the full 14s, which is where "sitting in the death ray" got
+        // its damage — a bigger total than the shot, paid out invisibly.
         for (const o of rt.enemies) {
           if (o.dead || o.dying || !inLane(o, f)) continue;
           o.tithe = Math.max(o.tithe || 1, LANCE.tithe);   // rich ground: gold, xp, salvage
           o.fracT = 1;                                     // onKill adds the bonus fitting
-          if (pulse && dps >= 1) {
-            const dmg = dps * 0.25;
-            const k = o.takeDamage(dmg);
-            rt.dmgWindow.push({ t: rt.time, dmg });
-            if (k) onKill(o);
-          }
         }
         if (Math.random() < dt * 26) {
           const along = Math.random() * Math.hypot(rt.worldW, rt.worldH);
@@ -8708,7 +8806,15 @@
   // Rich offline sim (always on — free). Simulates kills, loot (auto
   // collected), gold, xp, AND deaths (lost items), just like live play.
   function computeOffline() {
-    const elapsed = Math.min(offlineCapHours() * 3600, (Date.now() - state.lastSave) / 1000);
+    // Floored by the ACCRUAL high-water mark, not by lastSave alone (741):
+    // lastSave is written from the device clock and a backdated one made this pay
+    // the whole spoofed gap on the way home. lastResTick only moves forward, so
+    // max() of the two can never be pulled into the past. MUST run BEFORE
+    // accrueResources(), which advances that mark — both call sites order it so.
+    const now = nowMs();
+    let prev = Math.max(Number(state.lastSave) || 0, Number(state.lastResTick) || 0);
+    if (!isFinite(prev) || prev <= 0) prev = now;
+    const elapsed = Math.min(offlineCapHours() * 3600, Math.max(0, (now - prev) / 1000));
     if (elapsed < 60) return null;
     refreshStats();
     const d = state.currentDungeon;
@@ -9304,7 +9410,9 @@
     setInterval(galaxyTick, 120000); // tick simulated rival turf wars (gently)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) save();
-      else { const bk = state.lastSave || Date.now(); const tl = accrueResources(); const sum = computeOffline(); if (window.UI) window.UI.refreshAll(); reportReturn(bk, sum, tl); rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled() && (!rt._terrSync || Date.now() - rt._terrSync > 60000)) { rt._terrSync = Date.now(); window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } }
+      // computeOffline() BEFORE accrueResources() — the latter advances the
+      // high-water mark the former is floored by. Boot already runs this order.
+      else { const bk = state.lastSave || Date.now(); const sum = computeOffline(); const tl = accrueResources(); if (window.UI) window.UI.refreshAll(); reportReturn(bk, sum, tl); rt.last = performance.now(); if (window.TERRITORY && window.TERRITORY.enabled() && (!rt._terrSync || Date.now() - rt._terrSync > 60000)) { rt._terrSync = Date.now(); window.TERRITORY.loadAll().then((m) => { syncRealTiles(m); if (window.UI) window.UI.galaxyChanged(); }); } }
     });
     window.addEventListener('beforeunload', save);
 
@@ -9414,8 +9522,29 @@
     const L = shipLevel(key);
     const idx = hullCostTier(key);
     const tierMul = Math.pow(1.8, idx);
-    const goldGrow = 1.95 + idx * 0.06;
-    const plasmaGrow = 1.8 + idx * 0.05;
+    // PER-LEVEL GROWTH IS A CONSTANT (741). THE TIER USED TO APPEAR AS AN EXPONENT
+    // TWICE — once in `tierMul` for the base price, and again INSIDE the growth
+    // rate — so cost was super-exponential in tier and the ladder's SHAPE changed
+    // from hull to hull. At the Aeternum's tier (31.3) the growth rate came out at
+    // ×3.36 per level, which is exactly the reported "Level 7 ≈ 4.9T plasma, Level
+    // 8 ≈ 17T" — reproduced to the decimal in audit/player-audit-741.html. Nineteen
+    // levels of that put 18 of 54 hulls' plasma and 22 of 54 hulls' gold past
+    // MAX_SAFE_INTEGER: not expensive, ARITHMETICALLY UNREACHABLE.
+    //
+    // The base price still says "this is an apex hull" — `tierMul` is untouched, so
+    // a Cruiser and an Eternum are as far apart at Lv 1 as they ever were. What is
+    // fixed is that every hull now climbs on the SAME curve: ×1.95 gold and ×1.80
+    // plasma per level, the figures the mainline progression was authored against.
+    //
+    // THIS IS A STRICT COST REDUCTION AND IT IS THE SAFE HALF ON PURPOSE. The new
+    // growth equals the old one at tier 0 and is lower at every tier above it, so
+    // no level anywhere gets more expensive (asserted over all 54 hulls × 20 levels
+    // in the harness). A cost cut takes nothing off any account. It leaves 9 hulls
+    // whose Lv19→20 GOLD is still past a possible wallet — that residual is the
+    // BASE multiplier (1.8^34 ≈ 1.1e8), a balance decision on what an apex hull
+    // should cost, and it is MEASURED and flagged rather than guessed.
+    const goldGrow = 1.95;
+    const plasmaGrow = 1.80;
     const resMul = L >= 3 ? 10 : 1;   // 10× the resources to push a hull past Lv 3
     return { gold: Math.round(3000 * tierMul * Math.pow(goldGrow, L - 1)),
              plasma: Math.round(12 * tierMul * Math.pow(plasmaGrow, L - 1) * resMul),
@@ -9654,6 +9783,7 @@
     tileShield, shieldDoors, factionOf, blocOf, BLOC_MIN,
     getGalaxyFeed: () => state.galaxyFeed || [],
     formatNum, formatNumRaw, formatTime,
+    nowMs, dayRolled,   // 741 — the ONE clock. Never read Date.now() for a grant.
     getStats: () => rt.stats, getDps: () => rt.dps, score, freeze, adoptSave, uiYield, ASC_START_HULL,
     getHp: () => ({ cur: rt.archer ? rt.archer.hp : 0, max: rt.stats.maxHp, dead: rt.archer && rt.archer.dead, awaiting: rt.awaitingRespawn }),
     itemPower: I.itemPower, compare: I.compare, rarityChances: I.rarityChances, save,

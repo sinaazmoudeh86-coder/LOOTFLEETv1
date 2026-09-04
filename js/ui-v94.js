@@ -489,9 +489,9 @@
         const fz = document.getElementById('fly-now-zone');
         if (fz) fz.textContent = 'ZONE ' + rec + ' — ' + zoneName(rec).toUpperCase();
         fn.dataset.rec = rec;
-        // Measure the nav rather than restate its height — the button docks above
-        // it while the Bridge is open (see the #fly-now rule in game.html), and
-        // #nav changes height at four breakpoints plus the safe-area inset.
+        // Measure the nav rather than restate its height — the button sits in one
+        // fixed dock above it (see the #fly-now rule in game.html), and #nav
+        // changes height at four breakpoints plus the safe-area inset.
         try {
           const nv = document.getElementById('nav');
           fn.style.setProperty('--fly-nav', ((nv && nv.offsetHeight) || 60) + 'px');
@@ -805,8 +805,22 @@
     go.addEventListener('click', async () => {
       if (go.disabled) return;
       go.disabled = true; go.textContent = 'Deleting…';
-      try { if (window.AUTH && window.AUTH.deleteAccount) await window.AUTH.deleteAccount(); }
-      catch (e) { toast('Could not delete — try again or email support@lootfleet.com', '#e23b4e'); go.disabled = false; go.textContent = 'Delete permanently'; }
+      // THE SERVER DECIDES, NOT THE BUTTON (741). deleteAccount() now returns
+      // { ok, failed } and only wipes the device once the identity was actually
+      // erased — so a failure here means the account is INTACT, and saying so is
+      // the whole point. It used to report success unconditionally and the pilot
+      // could sign straight back in.
+      let res = null;
+      try { res = (window.AUTH && window.AUTH.deleteAccount) ? await window.AUTH.deleteAccount() : { ok: false, failed: ['unavailable'] }; }
+      catch (e) { res = { ok: false, failed: [String((e && e.message) || e)] }; }
+      // A success reloads the page out from under us; anything still running here
+      // did not delete. `undefined` from an older auth.js counts as success, since
+      // that build's wipe-and-reload has already happened.
+      if (res && res.ok === false) {
+        const why = (res.failed && res.failed[0]) ? ' (' + String(res.failed[0]).slice(0, 90) + ')' : '';
+        toast('Account NOT deleted — your data is untouched. Try again, or email support@lootfleet.com' + why, '#e23b4e');
+        go.disabled = false; go.textContent = 'Delete permanently';
+      }
     });
   }
   function openProSheet() {
@@ -5340,6 +5354,34 @@
         if (!b || b.disabled) return;
         if (!G.investSkill(b.dataset.sk)) return;
         if (!skillsInPlace(b.dataset.sk)) renderSkills();
+      });
+      // DOUBLE-CLICK A NODE TO INVEST — DESKTOP ONLY (741). On a mouse the only
+      // way to buy a rank was the 24px `+`; the whole card is now a target.
+      //
+      // Bound behind `pointer:fine` so TOUCH IS UNTOUCHED: a double-tap while
+      // flicking through the tree would otherwise spend a point nobody meant to
+      // spend. And it deliberately ignores double-clicks that land ON the `+`,
+      // because those already delivered two ordinary clicks — two ranks, which is
+      // what clicking `+` twice should do — and buying a third here would be a
+      // phantom purchase.
+      //
+      // When the node cannot be bought it SAYS WHY rather than doing nothing. The
+      // three reasons are exactly canInvest()'s three clauses, in its order.
+      let fine = false;
+      try { fine = !!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches); } catch (e) {}
+      if (fine) el['skills-body'].addEventListener('dblclick', (ev) => {
+        if (!ev.target.closest) return;
+        if (ev.target.closest('[data-sk]')) return;              // the + button already handled it
+        if (ev.target.closest('.sk-tab') || ev.target.closest('[data-acc]')) return;
+        const card = ev.target.closest('.skill-node');
+        if (!card) return;
+        const id = card.dataset.node; if (!id) return;
+        const node = ((window.CONFIG && window.CONFIG.SKILLS && window.CONFIG.SKILLS.nodes) || []).find((n) => n.id === id);
+        if (!node) return;
+        if (G.skillRank(id) >= node.max) { unlockToast('✓ ' + node.name + ' is already at max rank'); return; }
+        if (G.skillReqMet && !G.skillReqMet(node)) { unlockToast('🔒 ' + node.name + ' — invest more points in this branch first'); return; }
+        if (!G.investSkill(id)) { unlockToast('⚠ Need ' + node.cost + ' skill point' + (node.cost > 1 ? 's' : '') + ' for ' + node.name); return; }
+        if (!skillsInPlace(id)) renderSkills();
       });
     }
   }

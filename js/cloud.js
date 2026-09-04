@@ -62,20 +62,47 @@
   }
   // ---- account deletion (App Review 5.1.1(v)) --------------------------------
   // Removes every row keyed to the user, then asks the delete-account Edge
-  // Function (service-role) to erase the auth user itself. Each step is
-  // best-effort so a missing table/function never blocks the wipe.
+  // Function (service-role) to erase the auth user itself.
+  //
+  // EVERY STEP IS CHECKED NOW (741). This used to be seven bare `try/catch`es and
+  // `return true` — and the supabase client DOES NOT THROW on a failed call, it
+  // RESOLVES with `{ error }`. So an RLS denial, a missing table, an expired JWT
+  // or a 404 on the function was never caught, never logged and never reported:
+  // the client declared success, auth.js wiped the device, and the account was
+  // still fully intact server-side. Sign in again and everything came back. That
+  // is the reported "deleted my account and could still log in".
+  //
+  // THE ROW DELETES ARE ADVISORY, THE AUTH ERASE IS THE DELETION. Rows keyed to a
+  // user id nobody can authenticate as are inert, and the Edge Function wipes them
+  // with the service role anyway — so `ok` reports the AUTH ERASE ALONE. A row
+  // that would not delete is recorded for the operator, not raised at the player.
+  //
+  // Order is unchanged and deliberate: rows first, identity last. Erasing the auth
+  // user first would revoke the JWT every remaining statement authenticates with.
   async function deleteAccountData(userId) {
-    try { await client.from('territory').delete().eq('owner_id', userId); } catch (e) {}   // release EVERY held tile — My Galaxy AND Void Zone
-    try { await client.from('saves').delete().eq('user_id', userId); } catch (e) {}
-    try { await client.from('save_conflicts').delete().eq('user_id', userId); } catch (e) {}
-    try { await client.from('leaderboard').delete().eq('user_id', userId); } catch (e) {}
+    const failed = [];
+    const step = async (name, p) => {
+      try { const r = await p; if (r && r.error) failed.push(name + ': ' + (r.error.message || r.error)); return r; }
+      catch (e) { failed.push(name + ': ' + (e && e.message ? e.message : String(e))); return null; }
+    };
+    await step('territory', client.from('territory').delete().eq('owner_id', userId));   // release EVERY held tile — My Galaxy AND Void Zone
+    await step('saves', client.from('saves').delete().eq('user_id', userId));
+    await step('save_conflicts', client.from('save_conflicts').delete().eq('user_id', userId));
+    await step('leaderboard', client.from('leaderboard').delete().eq('user_id', userId));
     // global chat (build 728). One RPC, because chat_messages has no delete
     // policy: a policy scoped to the caller would also let any pilot erase their
     // own words out of the live room. See supabase/global-chat.sql.
-    try { await client.rpc('chat_forget'); } catch (e) {}
-    try { await client.from('wallets').delete().eq('user_id', userId); } catch (e) {}
-    try { await client.functions.invoke('delete-account'); } catch (e) {}
-    return true;
+    await step('chat_forget', client.rpc('chat_forget'));
+    await step('wallets', client.from('wallets').delete().eq('user_id', userId));
+    // THE ONE THAT DECIDES IT. supabase-js reports a non-2xx as `error`; the
+    // function itself answers `{ ok: true }` once admin.deleteUser() has run.
+    const fn = await step('delete-account', client.functions.invoke('delete-account'));
+    const revoked = !!(fn && !fn.error && fn.data && fn.data.ok);
+    if (!revoked && !failed.some((f) => f.indexOf('delete-account') === 0)) {
+      failed.push('delete-account: no confirmation returned');
+    }
+    try { if (failed.length) console.warn('[LOOTFLEET] account delete incomplete', failed); } catch (e) {}
+    return { ok: revoked, revoked, failed };
   }
   async function getUser() {
     try { const { data } = await client.auth.getSession(); return data.session ? data.session.user : null; }

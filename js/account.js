@@ -420,9 +420,39 @@ function mergeSaves(local, cloud) {
     // reconcile. The session that is flying keeps it; the other device asserts its
     // own the next time it pushes. Guarded on ownership in the merged result,
     // because the union above may have just added the hull.
-    if (local.ship && local.ship !== base.ship && base.ownedShips && base.ownedShips[local.ship]) {
+    // …AND A BOOT DEFAULT IS NOT A CHOICE (741).
+    //
+    // The guard below was reverting EVERY returning pilot to the starter hull —
+    // the reported "select a main ship, log out, log back in, it is a Frigate".
+    //
+    // pull() calls mergeSaves(load(), cloud). On a login the local copy is NOT a
+    // live session: it is a freshly defaulted state that boot wrote before the
+    // cloud pull landed, and its `ship` is the DEFAULT 'frigate'. Every account
+    // owns the frigate, so the ownership test passed every single time and the
+    // default was forced over the real flagship. `lastSave` cannot separate the
+    // two either — the defaults seed it with Date.now().
+    //
+    // So discriminate on the CHOICE, not on the copy. switchShip() is the only
+    // thing in the game that ever picks a flagship, it stamps `shipPick`, and the
+    // LATER STAMP WINS. A boot default carries no stamp and can never win; a live
+    // session that switched hull a minute ago still beats a stale cloud copy,
+    // which is the 737 case this override exists for; and two real devices resolve
+    // to whichever pilot chose most recently, the right rule for a preference.
+    //
+    // NEITHER COPY STAMPED — a legacy save that has not switched hull since 741 —
+    // does nothing and `base.ship` stands. That is the pre-737 behaviour and it is
+    // the safe direction: a stale hull costs one tap, a wrong override costs the
+    // pilot their flagship on every login. The first switch stamps it forever.
+    const shipPick = (s) => (Number(s && s.shipPick) > 0 ? Number(s.shipPick) : 0);
+    const lPick = shipPick(local), bPick = shipPick(base);
+    if (lPick > bPick && local.ship && local.ship !== base.ship && base.ownedShips && base.ownedShips[local.ship]) {
       base.ship = local.ship;
     }
+    // The stamp is max-unioned like any other decision receipt, or the merged copy
+    // forgets which choice it is carrying and loses the next conflict to a stale
+    // device. Never written when neither copy has one, so saves stay clean.
+    const mPick = Math.max(bPick, shipPick(other));
+    if (mPick > 0) base.shipPick = mPick;
     // PERMANENT PROGRESSION — monotonic counters can never regress through a
     // stale copy: Home Citadel wave + buildings, lifetime missions, season damage.
     if (other.homecit) {

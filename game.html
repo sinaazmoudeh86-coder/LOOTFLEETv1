@@ -77,7 +77,7 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/hangar-ships.css?v=725">
 <link rel="stylesheet" href="css/sheet-cta.css?v=733">
 <link rel="stylesheet" href="css/fighter-ascension.css?v=729">
-<link rel="stylesheet" href="css/bridge.css?v=732">
+<link rel="stylesheet" href="css/bridge.css?v=741">
 <link rel="stylesheet" href="css/fit-guard.css?v=725">
 <link rel="stylesheet" href="css/patch-notes.css?v=725">
 <link rel="stylesheet" href="css/expedition.css?v=725">
@@ -229,28 +229,27 @@ window.__lfErr=[];
 .pro-cta.is-pro{ border-color:#2a6a44!important; box-shadow:0 0 12px -4px rgba(70,210,122,.5)!important; }
 .pro-cta.is-pro .pro-star{ color:#46d27a; text-shadow:0 0 10px rgba(70,210,122,.8); }
 .pro-cta.is-pro .lch-t .l2{ color:#7ce0a0; }
-/* hangar FLY NOW deploy CTA */
+/* hangar FLY NOW deploy CTA — ONE FIXED DOCK, NO IDLE MOTION (741).
+   Two things made this read as "behaving incorrectly": it PULSED forever (a
+   2.2s box-shadow animation), and it lived at two different addresses — pinned
+   to top:152px of #app normally, re-docked to the bottom while the bridge was
+   open — so it jumped position as the pilot moved between screens and covered
+   the third hull slot on the way. It has ONE address again — top of the hangar,
+   where it started — and on the Bridge it is not present at all rather than
+   re-docked. That is what stops it moving: the two positions are gone, not
+   swapped. It does not animate.
+   (ui-v94.js still measures #nav into --fly-nav; nothing reads it while the
+   button is top-docked. Left in place rather than removed mid-cut.) */
 #fly-now{ position:absolute; left:50%; top:152px; bottom:auto; transform:translateX(-50%); z-index:12; display:none; flex-direction:column; align-items:center; gap:3px;
   background:linear-gradient(180deg,#ffd24d,#e8960f); border:none; border-radius:16px; padding:13px 30px; cursor:pointer;
-  box-shadow:0 8px 30px -8px rgba(242,178,75,.85), inset 0 1px 0 rgba(255,255,255,.45); animation:flyPulse 2.2s ease-in-out infinite; }
+  box-shadow:0 8px 30px -8px rgba(242,178,75,.85), inset 0 1px 0 rgba(255,255,255,.45); }
 #fly-now.show{ display:flex; }
-/* DOCK IT WHILE THE BRIDGE IS OPEN, DO NOT FLOAT IT OVER THE CONTENT.
-   #fly-now is a sibling of #bridge at z-index 12, pinned to top:152px of #app,
-   while the bridge's own body (.br-sh-body) is the thing that scrolls. So the
-   button sat still at 152px and the formation cards and commander rail slid
-   underneath it — it covered the third hull slot outright. Docked to the bottom
-   it stays the one loud action, reachable at any scroll position, over dead
-   space instead of over content.
-   --fly-nav is MEASURED (#nav is 60/50/48/46px across four breakpoints plus a
-   safe-area inset) and falls back to the common 60px. */
-#bridge.open ~ #fly-now{ top:auto; bottom:calc(var(--fly-nav, 60px) + 12px); }
-/* …and the last card must clear the docked button rather than hide behind it. */
-#bridge.open .br-sh-body{ padding-bottom:96px; }
+/* THE BRIDGE HAS NO FLY NOW. #fly-now follows #bridge in the DOM, so the sheet
+   being open removes the button outright — the pilot closes the Bridge to fly. */
+#bridge.open ~ #fly-now{ display:none; }
 #fly-now:active{ transform:translateX(-50%) scale(.96); }
 #fly-now .fn-t{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:16px; letter-spacing:.1em; color:#0b1220; }
 #fly-now .fn-z{ font-family:'Rajdhani',sans-serif; font-weight:800; font-size:11px; letter-spacing:.08em; color:#4a2f08; }
-@keyframes flyPulse{ 0%,100%{ box-shadow:0 8px 30px -8px rgba(242,178,75,.85), inset 0 1px 0 rgba(255,255,255,.45); } 50%{ box-shadow:0 8px 42px -6px rgba(242,178,75,1), inset 0 1px 0 rgba(255,255,255,.45); } }
-@media (prefers-reduced-motion:reduce){ #fly-now{ animation:none; } }
 </style>
 <style id="lock-gate-css">
 .lock-veil{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:24px;overflow-y:auto;
@@ -1223,14 +1222,14 @@ window.__lfErr=[];
 <script src="js/config.live.js?v=725"></script>
 <script src="js/servertime.js?v=725"></script>
 <script src="js/analytics.js?v=725"></script>
-<script src="js/cloud.js?v=728"></script>
-<script src="js/account.js?v=739"></script>
+<script src="js/cloud.js?v=741"></script>
+<script src="js/account.js?v=741"></script>
 <script src="js/session-lock.js?v=725"></script>
 <script src="js/vip.js?v=725"></script>
 <script src="js/territory.js?v=738"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=740"></script>
-<script src="js/ui-v94.js?v=740"></script>
+<script src="js/game-v93.js?v=741"></script>
+<script src="js/ui-v94.js?v=741"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
@@ -1243,14 +1242,14 @@ window.__lfErr=[];
 <script src="js/koth.js?v=727"></script>
 <script src="js/koth-ui.js?v=736"></script>
 <script src="js/return-brief.js?v=725"></script>
-<script src="js/home-citadel.js?v=736"></script>
+<script src="js/home-citadel.js?v=741"></script>
 <script src="js/missions.js?v=736"></script>
 <script src="js/achievements.js?v=725"></script>
 <script src="js/coach-v89.js?v=725"></script>
 <script src="js/prism-v5.js?v=725"></script>
 <script src="js/prism-fleet.js?v=725"></script>
 <script src="js/dreadnaught.js?v=734"></script>
-<script src="js/server-dreadnaught.js?v=740"></script>
+<script src="js/server-dreadnaught.js?v=741"></script>
 <script src="js/galaxy-box.js?v=725"></script>
 <script src="js/shipworks.js?v=739"></script>
 <script src="js/starforge.js?v=725"></script>
@@ -1272,7 +1271,7 @@ window.__lfErr=[];
 <script src="js/alliance-boss.js?v=725"></script>
 <script src="js/void-zone.js?v=725"></script>
 <script src="js/cargo-run.js?v=725"></script>
-<script src="js/cargo-defense.js?v=734"></script>
+<script src="js/cargo-defense.js?v=741"></script>
 <script src="js/nanocores.js?v=734"></script>
 <script src="js/fighters.js?v=729"></script>
 <script src="js/bridge.js?v=731"></script>
@@ -1289,14 +1288,14 @@ window.__lfErr=[];
 <script src="js/casino2.js?v=725"></script>
 <script src="js/casino-citadels.js?v=725"></script>
 <script src="js/redeem.js?v=740"></script>
-<script src="js/auth.js?v=725"></script>
-<script src="js/patch-notes.js?v=740"></script>
+<script src="js/auth.js?v=741"></script>
+<script src="js/patch-notes.js?v=741"></script>
 <script src="js/update-gate.js?v=725"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client behind the live build may NOT log in: stale code on one
   // device is what forks saves between iPad and PC.
-  window.LF_BUILD = 740;
+  window.LF_BUILD = 741;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){

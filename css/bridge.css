@@ -39,7 +39,12 @@
 .br-sh-head{flex:none;display:flex;align-items:baseline;gap:9px;padding:11px 12px;border-bottom:1px solid var(--line)}
 .br-sh-t{font:800 11px/1 'Orbitron',sans-serif;letter-spacing:.15em;color:var(--gold)}
 .br-sh-s{font-size:11px;font-weight:700;color:var(--muted)}
-.br-x{margin-left:auto;width:32px;height:32px;border-radius:8px;border:1px solid var(--line-2);background:rgba(0,0,0,.4);color:var(--muted);cursor:pointer;font-size:13px}
+/* THE CLOSE BUTTON IS THE ONLY WAY OUT OF THE BRIDGE, so it is lit rather than
+   quiet: gold on gold-tinted fill, 38px, with a soft halo. A muted grey X on a
+   near-black head is the right weight for a dismissible toast and the wrong one
+   for the sole exit from a full-screen sheet. */
+.br-x{margin-left:auto;width:38px;height:38px;border-radius:9px;border:1px solid var(--gold);background:linear-gradient(180deg,rgba(242,178,75,.28),rgba(242,178,75,.1));color:var(--gold);cursor:pointer;font-size:16px;font-weight:800;line-height:1;box-shadow:0 0 15px -3px rgba(242,178,75,.62),inset 0 1px 0 rgba(255,255,255,.18)}
+.br-x:active{transform:scale(.94)}
 /* THE SHEET SCROLLS AND ITS CHILDREN NEVER SHRINK — the fit contract. */
 .br-sh-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:9px;padding:10px}
 .br-sh-body>*{flex:none}

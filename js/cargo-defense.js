@@ -37,7 +37,13 @@
   const hz = () => { try { return Math.max(1, G().state.highestUnlocked || 1); } catch (e) { return 1; } };
   const fmt = (n) => { try { return G().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n || 0) + ''; } };
   const rar = (t) => (C().RARITY[t] || C().RARITY[0]);
-  const dayIdx = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  // Clock helpers come from the engine so there is ONE implementation (741).
+  // dayIdx() stays LOCAL-time deliberately — the cargo day has always rolled at
+  // the pilot's midnight and moving it to UTC would shift reset time for everyone.
+  // Forward-only is what makes local safe: see the gate in st().
+  const nowMs = () => { try { return G().nowMs(); } catch (e) { return Date.now(); } };
+  const dayRolled = (a, b) => { try { return G().dayRolled(a, b); } catch (e) { return !(a | 0) || (b | 0) > (a | 0); } };
+  const dayIdx = () => Math.floor((nowMs() - new Date().getTimezoneOffset() * 60000) / 86400000);
   const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
   const toast = (m, c) => { try { window.SOCIAL.toast(m, c || '#8fc4ff'); } catch (e) {} };
 
@@ -145,7 +151,13 @@
   function st() {
     const s = G() && G().state; if (!s) return null;
     if (!s.cargo) s.cargo = { v: 2, day: dayIdx(), used: 0, extra: 0, runs: 0, wins: 0, losses: 0, best: 0, hulls: 0, hist: [] };
-    if (s.cargo.day !== dayIdx()) { s.cargo.day = dayIdx(); s.cargo.used = 0; s.cargo.extra = 0; }
+    // FORWARD-ONLY (741). This was `!==`, which fires in BOTH directions — and
+    // because dayIdx() is LOCAL, it needed no clock change at all: a flight across
+    // two timezones near midnight reset the dailies, which is how the exploit was
+    // found. Winding the clock back then did it on demand, unlimited.
+    // `extra` is a daily PURCHASE ALLOWANCE and correctly expires with the day; it
+    // is simply no longer lost mid-day to a clock that moved backward.
+    if (dayRolled(s.cargo.day, dayIdx())) { s.cargo.day = dayIdx(); s.cargo.used = 0; s.cargo.extra = 0; }
     if (!Array.isArray(s.cargo.hist)) s.cargo.hist = [];
     return s.cargo;
   }
@@ -559,11 +571,22 @@
     // cores a run actually pays — the reported "dread core drop numbers are still
     // wrong in cargo defence". coreYield() keeps the expected value exact, so the
     // honest low end of the range is zero: a manifest line can come back empty.
+    //
+    // AND THE TOP OF THE RANGE IS `ceil`, NOT `round` (741). coreYield() is
+    // PROBABILISTIC — `floor(n·rate) + (random < frac ? 1 : 0)` — so its true
+    // maximum is ceil(n·rate). Quoting Math.round() lopped the top off the
+    // distribution whenever the fraction sat below .5: Omega Cargo V advertised
+    // "2 – 4" and legitimately paid 5, which is exactly what was reported. The
+    // two lines also disagreed on the roll itself — rollManifest() rounds the
+    // pre-scale count and this did not — so the bounds are now taken from the
+    // SAME expression the roll uses, then bracketed by what coreYield() can
+    // return. Over-quoting the ceiling by one is harmless; under-quoting it makes
+    // the card a lie.
     if (kind === 'cores') {
       let rate = 1; try { rate = window.CONFIG.DREAD_CORE_RATE > 0 ? window.CONFIG.DREAD_CORE_RATE : 1; } catch (e) {}
-      const lo = Math.max(1, arg * 0.1 * 0.7 * Math.min(5, L)) * rate;
-      const hi = Math.max(1, arg * 0.1 * 1.4 * Math.min(5, L)) * rate;
-      return [Math.floor(lo), Math.max(1, Math.round(hi))];
+      const nLo = Math.max(1, Math.round(arg * 0.1 * 0.7 * Math.min(5, L)));
+      const nHi = Math.max(1, Math.round(arg * 0.1 * 1.4 * Math.min(5, L)));
+      return [Math.floor(nLo * rate), Math.max(1, Math.ceil(nHi * rate))];
     }
     return null;
   }

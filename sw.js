@@ -77,6 +77,15 @@ const CORE = [
   // game.html, so without an entry here an offline PWA falls back to the network
   // and a whole new region comes up unstyled. Same reason as the v217 batch.
   'js/xyn.js', 'css/artery.css',
+  // THE XYN'S HULL ART, and the ten fighter airframes. The hull is new; the ten
+  // fighter models are not — `fighters.js` has referenced them since 729 and no
+  // release has ever contained them, so every bay in the game has been drawing
+  // the single `fighter-heavy.png` fallback on live. The files were at root the
+  // whole time. A code reference to an asset is a release manifest entry; diff
+  // the ART against root too, not just js/css.
+  'ships/ship-xyn.png',
+  'ships/fighter-m01.png', 'ships/fighter-m02.png', 'ships/fighter-m03.png', 'ships/fighter-m04.png', 'ships/fighter-m05.png',
+  'ships/fighter-m06.png', 'ships/fighter-m07.png', 'ships/fighter-m08.png', 'ships/fighter-m09.png', 'ships/fighter-m10.png',
 ];
 
 self.addEventListener('install', (e) => {

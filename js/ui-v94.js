@@ -318,7 +318,6 @@
     else if (name === 'casino') { if (window.CASINO) window.CASINO.render(); }
     else if (name === 'missions') { if (window.MISSIONS) window.MISSIONS.render(); }
     else if (name === 'moon') { if (window.MOON) window.MOON.render(); }
-    else if (name === 'homecit') { if (window.HOMECIT) window.HOMECIT.render(); }
     else if (name === 'expo') { if (window.EXPOUI) window.EXPOUI.render(); }
     else if (name === 'koth') { if (window.KOTHUI) window.KOTHUI.render(); }
   }
@@ -2539,6 +2538,7 @@
           : r.reason === 'locked' ? 'Too high level — max +10 above you'
           : r.reason === 'cooldown' ? 'That system is on cooldown'
           : r.reason === 'abandoned' ? '✕ You abandoned this system — re-claim in ' + abandHms(r.secs || 0)
+          : r.reason === 'artery-chain' ? '◈ Take ' + nameOf((r.doors || [])[0]) + ' first — the Artery is taken one system at a time'
           : 'Could not deploy there', '#e23b4e');
         b.disabled = false;
       }));
@@ -2783,15 +2783,21 @@
         }
         else if (locked) { fill = 'rgba(74,81,96,0.25)'; edge = '#3a4150'; }
         else { fill = 'rgba(120,134,158,0.14)'; edge = '#566884'; }              // unclaimed — neutral slate
-        // THE ARTERY READS AS ONE CONTINUOUS VESSEL. Ownership keeps the FILL — a
-        // held tile has to stay legible as held, and on this filament who holds
-        // what is the whole story — but the EDGE is always the region's crimson,
-        // so the chain draws as a single line running off the rim instead of
-        // eleven unrelated hexes.
-        if (t.artery) {
-          if (!owned && !rival && !ally) fill = locked ? 'rgba(122,18,48,0.32)' : 'rgba(255,45,107,0.20)';
-          edge = GM.ARTERY.edge;
-        }
+        // THE ARTERY'S COLOUR IS ITS EDGE, NOT ITS FILL.
+        //
+        // The region used to tint its unclaimed hexes crimson — rgba(255,45,107,0.20)
+        // — and the rest of the map's ownership palette was designed against the
+        // neutral slate rgba(120,134,158,0.14). A stray rival claim anywhere in My
+        // Galaxy is a deliberately quiet rgba(210,59,78,0.30), which reads clearly
+        // on slate and is nearly INVISIBLE on crimson: same hue family, 10 points
+        // of alpha apart. So a captured Artery system looked like an empty one and
+        // only the owner's name gave it away.
+        //
+        // The fill is now the map's own, in every state — slate unclaimed, blue
+        // yours, green allied, red or the holder's bloc hue for a rival — and the
+        // region keeps its identity in the EDGE, on hexes nobody holds. Held
+        // ground is painted exactly like held ground anywhere else.
+        if (t.artery && !owned && !rival && !ally) edge = GM.ARTERY.edge;
         // hex path (see gxHexPath — the current path is NOT part of canvas drawing
         // state, so anything that calls beginPath() below must re-establish it)
         gxHexPath(ctx, p.x, p.y, hexS);
@@ -3184,8 +3190,10 @@
     return '<div class="gx-art">'
       + '<div class="gx-art-h">◈ ' + (A.name || 'THE ARTERY') + '<em>Lv ' + (A.minLevel || 500) + '+ · ' + total + ' systems, one tile wide</em></div>'
       + '<div class="gx-art-b">Pays <b>×' + (A.mult || 3) + '</b> ' + vs + '. The filament is <b>one tile wide with a '
-      + 'single entrance</b>, so it defends as a <b>funnel</b>: hold the chain and only the hex at the '
-      + '<b>mouth</b> can be attacked — everything behind it is shielded until that one falls.</div>'
+      + 'single entrance</b>, and it is taken <b>one system at a time</b>: you can only assault a system whose '
+      + 'neighbour toward the mouth you already hold. The way in is <b>Lancet</b> — for you and for anyone coming '
+      + 'after you. Hold the chain and only the hex at the <b>mouth</b> can be attacked; everything behind it is '
+      + 'shielded until that one falls.</div>'
       + '<div class="gx-art-fx"><b>' + (A.effect || 'EXSANGUINATION') + '</b><span>' + fx + '</span></div>'
       + '<div class="gx-art-n">Hold the whole branch and you own the best ground in the game with almost no shield on any of it.</div>'
       + '</div>';
@@ -3511,6 +3519,9 @@
         : r.reason === 'cooldown' ? '🛡 <b>Attack shield</b> — this tile was contested recently. It opens in <b>' + (cdTxt || 'a little while') + '</b>.'
         : r.reason === 'interior' ? '🛡 <b>Protected core — no exposed border.</b> Every side of this system faces <b>' + esc(t.rival || 'its holder') + '</b>’s own space. Take one of the outer systems first'
             + ((r.doors && r.doors.length) ? ' — try <b>' + esc(((G.tileInfo(r.doors[0]) || {}).name) || r.doors[0]) + '</b>' : '') + '.'
+        : r.reason === 'artery-chain' ? '◈ <b>The Artery is taken one system at a time.</b> You can only assault a system whose neighbour toward the mouth you already hold'
+            + ((r.doors && r.doors.length) ? ' — take <b>' + esc(((G.tileInfo(r.doors[0]) || {}).name) || r.doors[0]) + '</b> first' : '')
+            + '. The chain opens at <b>Lancet</b> and works inward.'
         : r.reason === 'locked' ? '🔒 <b>Lv ' + t.level + ' system — you are Lv ' + ((G.state.level | 0) || 1) + '.</b> A pilot can fly up to <b>10</b> levels above themselves, so this one opens at <b>Lv ' + needLv + '</b>.' + (t.owned ? ' It stays yours and keeps paying while you climb.' : '')
         : r.reason === 'resources' ? '⬢ <b>Not enough Galaxy Resources</b> to warp this deep — farm or capture closer rings first.'
         : r.reason === 'home' ? '⌂ The Home Citadel is neutral ground — there is nothing to fight here.'
@@ -5686,12 +5697,12 @@
   function xenPick(ring) {
     const split = G.xenSplit ? G.xenSplit(ring || 1) : null;
     if (!split) return 'any of the five';
-    const live = split.filter((r) => !r.owned);
-    if (!live.length) return 'all five earned';
+    const live = split.filter((r) => !r.owned && !r.gated);
+    if (!live.length) return split.some((r) => !r.owned) ? 'nothing at this depth' : 'all five earned';
     const best = live.reduce((a, b) => (b.share > a.share ? b : a));
     const top = split[4];
     const nm = (k) => ((C.SHIP_BY_KEY[k] || {}).name || k).replace(/^Kaevith\s+/, '');
-    const topTxt = (top && !top.owned) ? ` · Sovereign ${(top.share * 100).toFixed(2)}%` : '';
+    const topTxt = (top && !top.owned && !top.gated) ? ` · Sovereign ${(top.share * 100).toFixed(2)}%` : '';
     return `mostly ${nm(best.key)}${topTxt}`;
   }
   // Relative scarcity, stated plainly. The roll's per-hull weights live in
@@ -5707,6 +5718,7 @@
       const s = C.SHIP_BY_KEY[k]; if (!s) return '';
       const owned = !!(G.state.ownedShips && G.state.ownedShips[k]);
       const row = split ? split[i] : null;
+      const gated = !!(row && row.gated && !owned);
       const pct = row && !owned ? (row.share * 100) : 0;
       const pctTxt = !row || owned ? '' : pct >= 10 ? Math.round(pct) + '%' : pct >= 1 ? pct.toFixed(1) + '%' : pct.toFixed(2) + '%';
       const note = XEN_RARITY_NOTE[k];
@@ -5714,7 +5726,7 @@
         <img src="ships/ship-${k}.png" alt="">
         <div class="xr-m"><div class="xr-n">${s.name}${owned ? ' <i>✔ earned</i>' : ''}</div>
         <div class="xr-c">${s.cls}${k === 'xen1' ? ' · entry class' : k === 'xen5' ? ' · Dreadnaught class' : ''}${note && !owned ? ` · <b class="xr-rare">${note}</b>` : ''}</div>
-        ${owned ? '' : `<div class="xr-odds">${pctTxt} of a winning roll</div>`}</div>
+        ${owned ? '' : gated ? `<div class="xr-odds">Lv ${row.minLv}+ systems only — nothing shallower can drop it</div>` : `<div class="xr-odds">${pctTxt} of a winning roll</div>`}</div>
         <div class="xr-xp">+${s.xpBonus}%<i>fleet XP</i></div>
       </div>`;
     }).join('');

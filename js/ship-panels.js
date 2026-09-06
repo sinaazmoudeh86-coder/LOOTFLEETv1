@@ -144,7 +144,7 @@
       }
       const vipG = safe(() => (window.VIP ? VIP.mult('gold') : 1), 1);
       if (vipG > 1.001) out.push({ ic: '⬡', n: 'Empire Gold', v: '+' + pct(vipG) + '%', c: '#e6b566',
-        tip: 'VIP gold bonus — applies to empire income, Home Citadel waves and events. It does not affect gold from kills.' });
+        tip: 'VIP gold bonus — applies to empire income and events. It does not affect gold from kills.' });
     }
 
     const afk = safe(() => (window.VIP ? VIP.mult('afk') : 1), 1);
@@ -240,22 +240,6 @@
       src.push({ n: 'Moon Colony', sub: n + ' colon' + (n === 1 ? 'y' : 'ies') + ' · mines run offline', ic: '🌑', c: '#8fb0c8', r: moon });
     }
 
-    // HOME CITADEL — wave-defense infrastructure; produces hourly into its silo.
-    const hcit = safe(() => (window.HOMECIT && HOMECIT.totalRates ? HOMECIT.totalRates() : null), null);
-    if (hcit && hcit.rates && CUR.some((c) => (hcit.rates[c.k] || 0) > 0)) {
-      // A PAUSED SOURCE PAYS NOTHING, AND THE HEADLINE HAS TO AGREE WITH THE ROW.
-      // The row already said "⚠ damaged — production paused" while its figures
-      // were still being summed into the EMPIRE INCOME totals above it, under a
-      // header that promises "every hour, whether you play or not". A damaged
-      // base mines nothing until repairs finish (see accrued() in
-      // home-citadel.js), so the row stays — the player needs to know the
-      // citadel is there and why it is quiet — and its numbers go to zero.
-      src.push({
-        n: 'Home Citadel',
-        sub: 'Wave ' + hcit.wave + ' defended · ' + (hcit.damaged ? '⚠ damaged — production paused until repairs finish' : 'stores at the citadel, collect there'),
-        ic: '🏰', c: '#ffd24d', r: hcit.damaged ? {} : hcit.rates,
-      });
-    }
     return src;
   }
 

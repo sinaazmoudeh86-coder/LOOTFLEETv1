@@ -136,6 +136,14 @@
           : '<div class="uv-cd">Updating automatically in <b id="uv-n">' + GRACE_S + '</b>s</div>' +
             '<div class="uv-bar"><i id="uv-bar"></i></div>') +
         '<button class="uv-btn" id="uv-go">\u21bb UPDATE NOW</button>' +
+        // THE APP STORE IS NOT ALWAYS THE LATEST BUILD, AND THE WEB ONE ALWAYS IS.
+        // A store review can sit for days after a push, so a wrapped install can be
+        // told it is out of date and have no way to fix it — which is exactly the
+        // stuck path above. The browser build is served straight from the same
+        // origin this veil polls, so it is current by definition.
+        '<div class="uv-web">App Store updates can take a few days to appear. ' +
+          '<a href="https://lootfleet.com" target="_blank" rel="noopener">lootfleet.com</a> ' +
+          'in your browser is always running the latest build — same account, same save.</div>' +
       '</div>';
     document.body.appendChild(veil);
     document.getElementById('uv-go').addEventListener('click', () => hardReload(build));
@@ -186,6 +194,10 @@
   font-family:'Orbitron',sans-serif;font-weight:900;font-size:13px;letter-spacing:.08em;color:#08131c;
   background:linear-gradient(180deg,#bcdcff,#5fa8ff);box-shadow:0 8px 24px -10px rgba(95,168,255,1)}
 .uv-btn:active{transform:scale(.97)}
+.uv-web{margin-top:13px;font-family:'Rajdhani',sans-serif;font-size:12px;line-height:1.55;color:#8ba0b8;
+  border-top:1px solid rgba(255,255,255,.09);padding-top:12px;text-wrap:pretty}
+.uv-web a{font-weight:700;color:#5fa8ff;text-decoration:none;border-bottom:1px solid rgba(95,168,255,.5)}
+.uv-web a:hover{color:#9fcbff;border-bottom-color:#9fcbff}
 @media (prefers-reduced-motion:reduce){.uv-ic{animation:none}#lf-update-veil{animation:none}}`;
     document.head.appendChild(s);
   }

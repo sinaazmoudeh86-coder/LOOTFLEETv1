@@ -5982,24 +5982,52 @@
   // number rolled — the UI reads it through GAME, never GX.alienChance directly.
   const XEN_DRY_STEP = 0.4, XEN_DRY_CAP = 12;
   function xenChanceNow(ring) {
+    // NOTHING TO ROLL FOR, NO ODDS TO ADVERTISE. The tile sheet prints this figure,
+    // so it must be 0 when this system cannot pay this pilot a hull at all — every
+    // Kaevith hull already owned, or the only ones left gated deeper than this ring.
+    if (!xenPool(ring).length) return 0;
     const mult = Math.min(XEN_DRY_CAP, 1 + (state.xenDry || 0) * XEN_DRY_STEP);
     return Math.min(0.75, GX.alienChance(ring) * mult);
   }
   const XEN_BASE_W = [50, 25, 1.576, 0.17509, 0.169];
-  // Per-hull share of a winning roll at a given ring, for the event tooltips.
-  // Mirrors the pool build in xenTechRoll exactly — including which hulls are
-  // already owned and therefore out of the pool.
-  function xenSplit(ring) {
+  // ---- WHERE THE APEX HULLS LIVE --------------------------------------------
+  // THE SOVEREIGN AND THE GODSHARD ARE DEEP-SPACE PRIZES AND THE ROLL NOW SAYS SO.
+  //
+  // The pool correctly drops hulls you already own — but that meant once the three
+  // common chassis were in the hangar, the only two left were the apex pair, and
+  // they split the pool ~50/50 on ANY invaded tile, ring 1 included. Add the
+  // dry-streak escalator lifting a shallow tile from 0.8% to 9.6% and the cheapest
+  // ground in the game was the fastest route to a Godshard — a hull that skips most
+  // of the ladder it is meant to sit on top of.
+  //
+  // THE GATE IS ON THE TILE'S LEVEL, NOT THE PILOT'S: you have to be fighting deep
+  // to be paid deep, and no amount of levelling makes ring 1 pay an apex hull.
+  // Lv 250 is ring 14 (the outer half), Lv 300 is ring 17 (deep space). Nothing is
+  // taken from anyone — a hull already won is kept, and all five are still
+  // reachable, just not from the shallows.
+  const XEN_MIN_LV = [0, 0, 0, 250, 300];
+  function xenRows(ring) {
     const R = Math.max(1, ring || 1);
     const frac = Math.min(1, Math.max(0, (R - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
-    const rows = XEN_MOB_KEYS.map((k, i) => ({
+    const lv = GX.ringLevel ? GX.ringLevel(R) : 0;
+    return XEN_MOB_KEYS.map((k, i) => ({
       key: k, i,
       owned: !!(state.ownedShips && state.ownedShips[k]),
+      gated: lv < (XEN_MIN_LV[i] || 0),
+      minLv: XEN_MIN_LV[i] || 0,
       w: XEN_BASE_W[i] * (1 + frac * i * 1.15),
     }));
-    const live = rows.filter((r) => !r.owned);
-    const tot = live.reduce((a, b) => a + b.w, 0) || 1;
-    rows.forEach((r) => { r.share = r.owned ? 0 : r.w / tot; });
+  }
+  // ONE POOL BUILDER, TWO READERS. xenSplit() feeds the tooltips, xenTechRoll()
+  // feeds the grant. They used to build the same list twice, the second one under a
+  // comment promising it "mirrors the pool build in xenTechRoll exactly" — and a
+  // promise in a comment is not a mechanism. Same lesson as POOL_BUYS.
+  function xenPool(ring) { return xenRows(ring).filter((r) => !r.owned && !r.gated); }
+  // Per-hull share of a winning roll at a given ring, for the event tooltips.
+  function xenSplit(ring) {
+    const rows = xenRows(ring);
+    const tot = xenPool(ring).reduce((a, b) => a + b.w, 0) || 1;
+    rows.forEach((r) => { r.share = (r.owned || r.gated) ? 0 : r.w / tot; });
     return rows;
   }
   function xenTechRoll(tile) {
@@ -6008,38 +6036,35 @@
     // honest to 2dp — the old Math.max(1, round(pct)) floor reported "1%" on a tile
     // that actually pays 0.2%
     const pct = chance * 100 >= 1 ? Math.round(chance * 1000) / 10 : Math.round(chance * 10000) / 100;
-    // THE SET IS COMPLETE — SAY NOTHING. Same rule as the Choir: with every
-    // Kaevith hull in the hangar there is nothing left to roll for, so a clear
-    // no longer interrupts with a result card.
-    const have = XEN_MOB_KEYS.filter((k) => state.ownedShips && state.ownedShips[k]).length;
-    if (have >= XEN_MOB_KEYS.length) return null;
+    // NOTHING THIS SYSTEM CAN GIVE YOU — SAY NOTHING, AND BANK NOTHING.
+    // Either every Kaevith hull is already in the hangar, or the only ones left are
+    // gated deeper than this ring. Both mean the clear cannot pay a hull, so it does
+    // not interrupt with a result card AND it does not advance the dry streak:
+    // stockpiling an escalator on shallow tiles you were never eligible on would be
+    // the same exploit wearing a different hat.
+    const pool = xenPool(tile.ring);
+    if (!pool.length) return null;
     const dry = state.xenDry || 0;
     if (Math.random() >= chance) {
       state.xenDry = dry + 1; save();
       return { won: false, pct, dry: state.xenDry };
     }
-    const frac = Math.min(1, Math.max(0, (tile.ring - 1) / Math.max(1, (GX.RINGS || 25) - 1)));
-    const pool = [];
-    XEN_MOB_KEYS.forEach((k, i) => {
-      if (state.ownedShips && state.ownedShips[k]) return;
-      pool.push({ k, w: XEN_BASE_W[i] * (1 + frac * i * 1.15) });
-    });
     let roll = Math.random() * pool.reduce((a, b) => a + b.w, 0);
     const hit = pool.find((p) => (roll -= p.w) <= 0) || pool[pool.length - 1];
-    if (!grantShip(hit.k)) { state.xenDry = dry + 1; save(); return { won: false, pct, dry: state.xenDry }; }
+    if (!grantShip(hit.key)) { state.xenDry = dry + 1; save(); return { won: false, pct, dry: state.xenDry }; }
     state.xenDry = 0;
-    const sh = C.SHIP_BY_KEY[hit.k];
+    const sh = C.SHIP_BY_KEY[hit.key];
     pushFeed('◈ ALIEN SHIP TECHNOLOGY EARNED — the ' + sh.name + ' is in your hangar');
     // Announce to the shared world. Server-side the call is whitelisted and
     // idempotent per (pilot, hull), so it can't be replayed into spam.
-    try { if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.logXenHull(hit.k, tile.id, tile.ring, false); } catch (e) {}
+    try { if (window.TERRITORY && window.TERRITORY.enabled()) window.TERRITORY.logXenHull(hit.key, tile.id, tile.ring, false); } catch (e) {}
     save();
     // `pity` was read here and never declared — a ReferenceError on the ONE path
     // that matters. The hull was granted and saved a line earlier, so the ship
     // arrived silently while the caller's claim handling died with the throw:
     // winning the event looked like nothing happening. There is no pity FLOOR
     // (the escalator replaces it), so the flag is simply false.
-    return { won: true, key: hit.k, ship: sh, pct, dry: 0, pity: false };
+    return { won: true, key: hit.key, ship: sh, pct, dry: 0, pity: false };
   }
 
   let _vzArenaImg = null;
@@ -6175,6 +6200,20 @@
   }
   function npcOwner(k) {
     if (isOwned(k)) return null;
+    // THE ARTERY IS NOT NPC GROUND. Two reasons, and the second one is new.
+    //
+    // It was never a decision in the first place: strongholds skip the region, but
+    // `npcRingP` ran on rings 26-33 and saturated at its 0.26 ceiling, so the
+    // filament drew the deepest-space rate in the game because the formula ran out
+    // of clamp — and `npcLayer()`'s density budget walks rings 1..R, so those
+    // holdings sat outside the number the whole map is balanced against.
+    //
+    // AND SINCE THE CHAIN BECAME A STEPPING STONE IT WOULD BE ACTIVELY HARMFUL: a
+    // system can only be assaulted from the one before it, so a simulated pilot
+    // parked mid-filament is a hard wall across the entire region for every real
+    // operator behind it — a wall nobody placed, re-rolled daily by a hash. This
+    // region's contest is real accounts, and now it is only real accounts.
+    if (GX.isArtery && GX.isArtery(k)) return null;
     // NOTE: a live contest cooldown used to blank the owner here, which meant
     // attacking a held tile and bailing showed it as NEUTRAL — unclaimed for
     // 24 h (and dropped its garrison). Only an actual capture (isOwned) clears
@@ -6210,8 +6249,8 @@
   // Every Artery system you hold bleeds the shield off all of them.
   //
   // An ordinary capture is attack-shielded for 24 h. Inside the Artery the window
-  // is 24 h / (Artery systems you hold): one tile keeps the full day, all eleven
-  // drop to a little over two hours each. Take the whole branch and you hold the
+  // is 24 h / (Artery systems you hold): one tile keeps the full day, all fourteen
+  // drop to about 1.7 h each. Take the whole branch and you hold the
   // richest ground in the game with almost no shield anywhere on it — which is
   // the point. The filament's one-wide geometry already means nothing in it can
   // ever be sealed (see tileShield); this is the same pressure applied to the
@@ -6703,6 +6742,32 @@
     if (!owned) {
       const shd = tileShield(k);
       if (shd.shielded) return { ok: false, reason: 'interior', doors: shieldDoors(k), faction: shd.faction };
+    }
+    // THE ARTERY IS A STEPPING-STONE CHAIN: YOU ENTER AT THE MOUTH AND WORK IN.
+    //
+    // Every hex out here is reachable only through the hex one step closer to the
+    // mouth (see GX.arteryParent), and now the CONQUEST rule says the same thing
+    // the geometry does: you may only take a system whose parent you already
+    // hold. Lancet, at the mouth, has no parent and is therefore the one way in —
+    // for everybody, attacker and defender alike. Nobody warps straight to Xyn
+    // Prime or an arm-tip fortress; they fight the whole filament for it.
+    //
+    // It is the same rule in both directions, which is the point. arteryShield()
+    // already sealed a HELD chain from behind, so an attacker had to break it at
+    // the mouth — but a NEUTRAL deep hex had no faction, fell through to the
+    // six-border rule and was open to anyone. Ownership of the parent closes that
+    // door without a second concept: to reach your d5, a rival must own d4, which
+    // means taking d4 off you, which needs d3, and so on back to the mouth.
+    //
+    // GRANDFATHERED, DELIBERATELY. The gate is inside `if (!owned)`, so a pilot
+    // already holding a deep system keeps it and can still fly to it even with a
+    // broken chain. This rule restricts what may be TAKEN from today; it takes
+    // nothing off any account.
+    if (!owned && GX.isArtery && GX.isArtery(k)) {
+      const parent = GX.arteryParent ? GX.arteryParent(k) : null;
+      if (parent && !isOwned(parent)) {
+        return { ok: false, reason: 'artery-chain', doors: [parent], faction: factionOf(parent) };
+      }
     }
     // ENTRY COST — every warp burns resources; deeper rings are punishing
     const cost = entryCostFor(k);
@@ -8010,8 +8075,15 @@
         const c = GX.parseId(cur); if (!c) continue;
         const nb = GX.neighbors(c.q, c.r);
         for (let i = 0; i < nb.length; i++) {
-          if (GX.ringOf(nb[i].q, nb[i].r) > GX.RINGS) continue;
           const nid = GX.tileId(nb[i].q, nb[i].r);
+          // OFF THE MAP STOPS THE WALK — BUT THE ARTERY IS NOT OFF THE MAP.
+          // This bailed on `ringOf > RINGS`, a pure ring test, so every Artery
+          // neighbour was skipped and the chain could never flood-fill through
+          // itself: each hex out there was a bloc of ONE, below BLOC_MIN, so the
+          // holder's hue and the territory outline never engaged on the one
+          // stretch of ground where holding the whole chain is the entire point.
+          // The question is "is there a tile there", not "is the ring in range".
+          if (GX.ringOf(nb[i].q, nb[i].r) > GX.RINGS && !(GX.isArtery && GX.isArtery(nid))) continue;
           if (!seen[nid] && factionOf(nid) === fac) { seen[nid] = 1; stack.push(nid); }
         }
       }

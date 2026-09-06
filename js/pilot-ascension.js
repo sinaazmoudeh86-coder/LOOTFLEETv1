@@ -483,7 +483,6 @@
             // block in game-v93.js. They were listed under RESET TO ZERO here.
             '<li><b>Your gold and every Galaxy Resource</b> — the wallet rides across intact</li>' +
             '<li><b>Your whole galaxy</b> — every claimed system, citadel and Void spire stays yours</li>' +
-            '<li><b>Home Citadel</b> — pads, towers and defences, still earning</li>' +
             '<li><b>Moon Colony</b> — every building keeps producing</li>' +
             '<li><b>Prism</b> — rigs, ingots and forged Prism Cores</li>' +
             '<li><b>Nanocores</b> — every core, slot and rolled buff</li>' +
@@ -788,7 +787,7 @@
       ['\u25c7', '<b>Your Pilot Tree</b> \u2014 every node and every Dread Core'],
       ['\u2691', tiles ? '<b>All ' + tiles + ' system' + (tiles === 1 ? '' : 's') + '</b> \u2014 citadels and Void spires stay yours' : 'Any territory you hold'],
       ['$', '<b>Your gold and every Galaxy Resource</b> \u2014 the wallet is untouched'],
-      ['\u25d0', 'Moon Colony, Home Citadel and Prism \u2014 still producing'],
+      ['\u25d0', 'Moon Colony and Prism \u2014 still producing'],
       ['\u2756', 'Voidmaw \u2014 Event Coins, parts and best stage'],
       ['\u2b21', 'Badges, career totals and mission boards'],
       ['\u25c8', 'Everything you paid for'],

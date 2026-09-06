@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v740';
+const CACHE = 'lootfleet-v744';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -28,7 +28,7 @@ const CORE = [
   'js/mech-corruption.js', 'js/mech-foundry.js', 'js/commanders.js', 'js/fleet-deep.js',
   'ships/ship-monolith1.png', 'ships/ship-monolith2.png', 'ships/ship-monolith3.png', 'ships/ship-monolith4.png',
   'ships/void-cit-1.png', 'ships/void-cit-2.png', 'ships/void-cit-3.png', 'ships/void-cit-4.png', 'js/void-zone.js',
-  'ships/ship-voidmaw.png', 'ships/ship-progenitor.png', 'ships/vm2-mothership.png', 'ships/vm2-drone.png', 'ships/ship-vanguard.png', 'ships/fighter-heavy.png', 'js/fighters.js', 'ships/ship-chromafang.png', 'ships/ship-chromaregent.png', 'ships/ship-frostyfrost.png', 'ships/ship-veridian.png', 'js/home-citadel.js', 'js/session-lock.js', 'js/vip.js', 'ships/hc-citadel.png', 'ships/hc-mine.png', 'ships/hc-silo.png', 'ships/hc-turret.png', 'ships/hc-repair.png',
+  'ships/ship-voidmaw.png', 'ships/ship-progenitor.png', 'ships/vm2-mothership.png', 'ships/vm2-drone.png', 'ships/ship-vanguard.png', 'ships/fighter-heavy.png', 'js/fighters.js', 'ships/ship-chromafang.png', 'ships/ship-chromaregent.png', 'ships/ship-frostyfrost.png', 'ships/ship-veridian.png', 'js/session-lock.js', 'js/vip.js', 'ships/hc-citadel.png', 'ships/hc-mine.png', 'ships/hc-silo.png', 'ships/hc-turret.png', 'ships/hc-repair.png',
   'css/fx-aaa.css', 'css/readability.css', 'css/moon-colony.css', 'css/pilot-ascension.css',
   // v407 — core screens that were fetched live only and so were unavailable offline
   'js/starforge.js', 'js/pilot-ascension.js', 'js/achievements.js', 'js/analytics.js', 'js/sim-pilots.js',
@@ -71,7 +71,7 @@ const CORE = [
   'js/fighters.js', 'js/pilot-ascension.js',
   // changed this release and never precached, so offline served a stale copy
   'js/patch-notes.js', 'css/patch-notes.css', 'js/cloud.js', 'js/account.js',
-  'js/ui-v94.js', 'js/game-v93.js', 'js/home-citadel.js', 'js/dreadnaught.js',
+  'js/ui-v94.js', 'js/game-v93.js', 'js/dreadnaught.js',
   'css/koth.css', 'css/expedition.css', 'css/season-pass.css',
   // NEW THIS RELEASE — the Artery region and the Xyn. Both are referenced by
   // game.html, so without an entry here an offline PWA falls back to the network

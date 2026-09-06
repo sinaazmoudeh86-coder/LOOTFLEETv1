@@ -61,18 +61,25 @@
 (function () {
   'use strict';
 
-  const BUILD = 740;
+  const BUILD = 744;
   const NOTES = {
-    build: 740,
-    title: 'BUILD 740',
+    build: 744,
+    title: 'BUILD 744',
     sub: 'The ten latest changes.',
     groups: [
+      // A REMOVAL LEADS THE CARD. Taking a system off accounts that were using it is
+      // the loudest thing in this build, and the nerf rule is explicit: close it if
+      // you must, but never quietly — a mode that vanishes with no row reads to the
+      // player as a bug, and they will spend an evening looking for it.
+      { k: 'REMOVED', c: '#ff6b78', rows: [
+        ['⛏', 'The Home Citadel has been retired', 'The wave-defence base and its hourly production are <b>gone from the game</b>. Everything it paid you and you collected is <b>yours and untouched</b>. What was still <b>uncollected in the silo</b> goes with it, and what you spent on the Citadel and its towers is <b>not refunded</b>. The <b>Home Defense</b> board retires too; your deepest wave is kept on record.'],
+      ] },
       // NEW earns its own group and leads the card. Three additions here are things
       // a player cannot discover by looking at a screen they already open — a region
       // past the rim, a hull class that did not exist, and two core tiers above the
       // one that used to be the top. That is exactly the file's editorial test.
       { k: 'NEW', c: '#7cd4ff', rows: [
-        ['◈', 'THE ARTERY — a new Lv 500+ region', 'A filament of <b>fourteen systems</b> hanging off the eastern rim, paying <b>×3</b> the richest ground in the galaxy and holding <b>five natural fortresses</b>. It is <b>one tile wide</b>, so nothing in it can ever be sealed — and every Artery system you hold shortens the attack shield on all of them.'],
+        ['◈', 'THE ARTERY — a new Lv 500+ region', 'A filament of <b>fourteen systems</b> off the eastern rim, paying <b>×3</b> the best ground in the galaxy and holding <b>five fortresses</b>. <b>One tile wide, one entrance</b>: you can only take a system whose neighbour toward the mouth you already hold, so everyone enters at <b>Lancet</b> and fights inward. Nothing out there can ever be sealed.'],
         ['◈', 'THE XYN — Super Fighter class', 'A new hull class <b>above Celestial</b>. <b>22 fighter bays</b>, double the Celestial Corvus, on the same combat sheet — and the slowest, largest thing that flies. It is the boss of <b>Xyn Prime</b> at the end of the Artery: own that system, beat it, and every defeat rolls a <b>1 in 1,000,000</b> chance at the hull.'],
         ['◈', 'Nanocores: Mythic and Ancient', 'Two tiers above Legendary — <b>6 and 7 buff slots</b>, up to <b>+60% damage and health</b>. Very rare and very expensive: an Ancient is about <b>one crate in 1,700</b>. <b>No existing tier got more expensive</b>, and Legendary duplicates now trade <b>up</b> into Mythic instead of sideways.'],
       ] },
@@ -80,12 +87,11 @@
         ['✧', 'The Event Horizon Lance is one shot again', 'The rift it left behind was <b>burning harder than the beam itself</b> — sitting in the lane did more damage than being hit by it. The rift no longer burns at all, the shot is <b>one bounded hit</b>, and the rift still pays its <b>4× loot</b>.'],
         ['◇', 'Top-tier drop rates corrected', 'Primordial, Relic and Artifact were dropping more often than <b>Eternal</b>, three tiers below them. Back on the curve — <b>nothing you already own changed grade</b>.'],
         ['⚙', 'High-tier hull upgrades cost far less', 'Each level was multiplying by up to <b>3.4×</b> the one before it, which put Level 20 out of reach on 22 hulls. Now a flat <b>×1.8 plasma</b> per level on every hull. <b>Nothing got more expensive.</b>'],
+        ['◈', 'Kaevith Sovereign and Godshard are deep-space prizes', 'Once the three common chassis were in your hangar, the apex pair were the <b>only two left in the pool</b> — so they split it evenly on <b>any</b> invaded zone, ring 1 included. The Sovereign now drops only from <b>Lv 250+</b> systems, the Godshard from <b>Lv 300+</b>. <b>A hull you already earned is yours.</b>'],
       ] },
       { k: 'FIXED', c: '#7ce0a0', rows: [
         ['◷', 'Daily resets follow the calendar, not your device', 'Changing your device clock — or just flying across timezones — could roll cargo runs and event attempts over early, and could drop extra runs you’d paid for mid-day. Dailies now only ever move <b>forward</b>. <b>Nothing already earned has been taken back.</b>'],
         ['⚑', 'Your flagship survives a logout', 'Logging back in put you in the <b>Frigate</b> and left your real hull sitting in the hangar. The hull you pick is the hull you keep, on every device.'],
-        ['✈', 'Escort carriers launch their fighters', 'A carrier you <b>bought</b> rather than won arrived with <b>empty bays</b>, so parked in an escort slot it flew nothing. Every carrier now arrives with its wing aboard.'],
-        ['⛏', 'Home Citadel keeps your night’s production', 'A second device could reset the storage clock on login and wipe everything banked while you slept. The clock is now the one that did the mining.'],
       ] },
     ],
   };

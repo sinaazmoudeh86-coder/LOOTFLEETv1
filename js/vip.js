@@ -40,7 +40,7 @@
   const PERKS = {
     1:  ['+2% gold from your empire (AFK, waves, events)', '+5 Galaxy system cap — hold more tiles (every VIP level adds +5)'],
     2:  ['+2% XP from kills'],
-    3:  ['+3% gold', '+5% AFK production (Moon + Home Citadel)'],
+    3:  ['+3% gold', '+5% AFK production (Moon Colony)'],
     4:  ['+3% XP', '+5% AFK production'],
     5:  ['+5% gold', '+5% AFK production'],
     6:  ['+5% XP', 'Offline earnings cap +2h'],

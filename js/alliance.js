@@ -55,8 +55,8 @@
     { id: 'k1', r: 'common', ic: '☠', txt: 'Destroy {N} enemies',            n: 1200,  m: 'kills',  pts: 10, lc: 10 },
     { id: 'k2', r: 'rare',   ic: '☠', txt: 'Destroy {N} enemies',            n: 6000,  m: 'kills',  pts: 25, lc: 25 },
     { id: 'k3', r: 'epic',   ic: '☠', txt: 'Destroy {N} enemies',            n: 18000, m: 'kills',  pts: 60, lc: 60 },
-    { id: 'w1', r: 'common', ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 2,     m: 'waves',  pts: 10, lc: 10 },
-    { id: 'w2', r: 'rare',   ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 6,     m: 'waves',  pts: 25, lc: 25 },
+    { id: 'w1', r: 'common', ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 2,     m: 'waves',  pts: 10, lc: 10, retired: true },
+    { id: 'w2', r: 'rare',   ic: '🏰', txt: 'Clear {N} Home Citadel waves',   n: 6,     m: 'waves',  pts: 25, lc: 25, retired: true },
     { id: 'c1', r: 'rare',   ic: '⛏', txt: 'Add {N} colony structure levels', n: 4,    m: 'colony', pts: 25, lc: 25 },
     { id: 'z1', r: 'epic',   ic: '▲', txt: 'Unlock {N} new zones',           n: 2,     m: 'zones',  pts: 60, lc: 60 },
   ];
@@ -78,7 +78,12 @@
       let seed = 0; const uid = ((window.ACCOUNT && ACCOUNT.session() || {}).id || 'x') + wkKey();
       for (let i = 0; i < uid.length; i++) seed = (seed * 31 + uid.charCodeAt(i)) >>> 0;
       const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-      const pick = (r) => { const p = OPS.filter((o) => o.r === r); return p[Math.floor(rnd() * p.length)].id; };
+      // RETIRED OPS ARE NEVER DRAWN AGAIN, BUT THEY STAY IN THE TABLE. The two
+      // Home Citadel wave ops cannot progress now the mode is gone, so they are
+      // out of the pool — and they are NOT deleted, because a pilot mid-week is
+      // holding one by id and the renderer has to be able to resolve it. The
+      // weekly re-draw clears them within seven days on its own.
+      const pick = (r) => { const p = OPS.filter((o) => o.r === r && !o.retired); const q = p.length ? p : OPS.filter((o) => o.r === r); return q[Math.floor(rnd() * q.length)].id; };
       so.ops = { wk: wkKey(), base: counters(), ids: [pick('common'), pick('rare'), pick(rnd() < 0.5 ? 'epic' : 'rare')], done: {} };
       G().save();
     }

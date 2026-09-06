@@ -189,7 +189,7 @@
   function grandfather() { return 0; }
 
   // ---- THE ARTERY -----------------------------------------------------------
-  // A Lv 500+ filament hanging off the eastern rim: eleven systems, ONE TILE
+  // A Lv 500+ filament hanging off the eastern rim: fourteen systems, ONE TILE
   // WIDE, paying 3× the richest thing the ring generator can build.
   //
   // WHY A STRING AND NOT A BLOB — this IS the design, not decoration.

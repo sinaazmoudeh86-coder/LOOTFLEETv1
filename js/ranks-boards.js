@@ -187,24 +187,6 @@
       empty: 'No badges claimed yet.',
     },
     {
-      // HOME DEFENSE — the deepest wave the pilot is HOLDING. The Home Citadel
-      // never rolls a wave back on a breach (a breach damages the base and halts
-      // mining; the wave stands), so "holding" and "best" are the same number
-      // and the board can say the stronger of the two honestly.
-      id: 'hcwave', ic: '\u26e8', col: '#6fe0a0', label: 'HOME DEFENSE', sub: 'Deepest Wave',
-      sql: 'new-ladders.sql',
-      info: 'Ranked by the deepest Home Citadel wave you are holding. Every wave cleared raises passive production forever — this is the one board that shows whose base earns hardest. Ties break on fleet power.',
-      unit: 'WAVE',
-      metric: (p) => (p.hcwave | 0) * 1e15 + Math.min(1e15 - 1, p.power || 0),
-      fmt: (v, p) => String(p.hcwave | 0),
-      meta: (p) => {
-        const w = p.hcwave | 0;
-        const era = w >= 250 ? 'MYTHIC era' : w >= 100 ? 'LEGENDARY era · ×2 production' : w >= 50 ? 'EPIC era' : w >= 20 ? 'RARE raiders' : 'building up';
-        return (w ? era : 'No waves cleared') + ' · Lv ' + (p.level | 0);
-      },
-      empty: 'Nobody is holding a wave yet. Clear Wave 1 in the Home Citadel and you take this board outright.',
-    },
-    {
       // EXPLORATION — counts DEBRIEFED expeditions only, so a fleet still in
       // flight is not yet worth anything here and a recalled one never counts.
       id: 'expo', ic: '\u25ce', col: '#7fe0ff', label: 'EXPLORATION', sub: 'Expeditions Flown',
@@ -567,7 +549,7 @@
   // "not live yet", they ranked every human at zero, the realOnly filter then
   // dropped every one of them, and the player was left alone at #1 on a board
   // with no explanation for why nobody else was on it.
-  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, hcwave: 1, expo: 1, pilot: 1, mech: 1, command: 1 };
+  const NEEDS_SQL = { tiles: 1, ships: 1, missions: 1, badges: 1, cargo: 1, nano: 1, expo: 1, pilot: 1, mech: 1, command: 1 };
   // Which property proves the migration for THIS board ran. Haulage and Nanocore
   // ship in their OWN migrations (cargo-ladder.sql, nanocore-ladder.sql), so the
   // shared lb-onefunction probe would pass on a server that had run neither and
@@ -576,7 +558,6 @@
   const SQL_PROBE = {
     cargo: ['cargo', 'cargo_best'],
     nano: ['nano_legend', 'nano_slots'],
-    hcwave: ['hcwave'],
     expo: ['expo', 'expo_best'],
     pilot: ['pilot_score'],
     mech: ['mech_cores'],
@@ -596,7 +577,7 @@
     //
     // CLOUD.lbShape() reports which SELECT actually succeeded, which is a direct
     // statement about the schema and cannot be faked by a merged local row.
-    if (id === 'hcwave' || id === 'expo' || id === 'pilot' || id === 'mech' || id === 'command') {
+    if (id === 'expo' || id === 'pilot' || id === 'mech' || id === 'command') {
       try {
         const s = window.CLOUD && window.CLOUD.lbShape && window.CLOUD.lbShape();
         // The shapes are a LADDER, newest first: 'pilot' implies 'new'. So the
@@ -608,7 +589,7 @@
         // accepts anything newer, so landing a migration can never switch an
         // older board off.
         const RANK = { legacy: 0, base: 1, ladder: 2, cargo: 3, nano: 4, new: 5, pilot: 6, mech: 7, cmdr: 8 };
-        const NEED = { hcwave: 5, expo: 5, pilot: 6, mech: 7, command: 8 };
+        const NEED = { expo: 5, pilot: 6, mech: 7, command: 8 };
         if (s) return (RANK[s] || 0) >= (NEED[id] || 0);
       } catch (e) {}
       // No board read has landed yet (offline, signed out, first paint). We do
@@ -727,9 +708,8 @@
     // art for the thing that just happened. These three name it.
     q.cargo_tier = Math.min(5, Math.max(0, (s.cargo && s.cargo.lastTier) | 0));
     q.hull_last = String((s.lastHull && s.lastHull.key) || '').slice(0, 32);
-    // HOME DEFENSE + EXPLORATION — read live from the save, same as every other
+    // EXPLORATION — read live from the save, same as every other
     // figure on this row, so your own rank never lags the publish heartbeat.
-    q.hcwave = (s.homecit && s.homecit.wave) | 0;
     q.expo = (s.expo && s.expo.log && s.expo.log.done) | 0;
     q.expo_best = (s.expo && s.expo.log && s.expo.log.best) | 0;
     // PILOT TREE — read live from the save, for the same reason as every other
@@ -871,6 +851,14 @@
         tile_rev: tileRevenue(),
         ships: Object.keys(s.ownedShips || {}).length || 1,
         missions: s.lifetimeMissions | 0,
+        // HOME DEFENSE IS RETIRED, AND THIS LINE DELIBERATELY STAYS.
+        // The board is gone from the client, but `leaderboard.hcwave` still exists
+        // server-side and cloud.js sends `p_hcwave: p.hcwave | 0` whenever the rung
+        // fires. Stop setting this and every heartbeat would publish a 0 over the
+        // pilot's real deepest wave — destroying the record the board was judged on
+        // in the same build that retired the board. The mode can never move the
+        // number again, so what goes up is the frozen historical value, which is
+        // exactly what should be there when the column is dropped in its own cut.
         hcwave: (s.homecit && s.homecit.wave) | 0,
         // PILOT TREE. Read through the module so the board and the tree screen
         // can never disagree about what a pilot's score is.

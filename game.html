@@ -64,7 +64,7 @@ window.__lfErr=[];
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style-v2.css?v=725">
 <link rel="stylesheet" href="css/theme.css?v=725">
-<link rel="stylesheet" href="css/web-v89.css?v=740">
+<link rel="stylesheet" href="css/web-v89.css?v=744">
 <link rel="stylesheet" href="css/fx-cinematic.css?v=725">
 <link rel="stylesheet" href="css/fx-primordial.css?v=725">
 <link rel="stylesheet" href="css/moon-colony.css?v=725">
@@ -77,7 +77,7 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/hangar-ships.css?v=725">
 <link rel="stylesheet" href="css/sheet-cta.css?v=733">
 <link rel="stylesheet" href="css/fighter-ascension.css?v=729">
-<link rel="stylesheet" href="css/bridge.css?v=741">
+<link rel="stylesheet" href="css/bridge.css?v=744">
 <link rel="stylesheet" href="css/fit-guard.css?v=725">
 <link rel="stylesheet" href="css/patch-notes.css?v=725">
 <link rel="stylesheet" href="css/expedition.css?v=725">
@@ -85,7 +85,7 @@ window.__lfErr=[];
 <link rel="stylesheet" href="css/chat.css?v=728">
 <link rel="stylesheet" href="css/shell-fit.css?v=732">
 <link rel="stylesheet" href="css/contiguity.css?v=733">
-<link rel="stylesheet" href="css/artery.css?v=740">
+<link rel="stylesheet" href="css/artery.css?v=744">
 <style id="auth-redesign-css">
 /* ===== UNIFIED AUTH GATE — one clear login / register flow ===== */
 #login{ z-index:60; align-items:flex-start; }
@@ -102,6 +102,9 @@ window.__lfErr=[];
 .lg-update{ margin:12px 0 4px; padding:12px 14px; border:1px solid #ffcf4d55; border-radius:12px; background:linear-gradient(180deg,#221a08,#170f06); text-align:left; }
 .lg-update .lg-upd-t{ font-family:'Orbitron',sans-serif; font-weight:800; font-size:12px; letter-spacing:.1em; color:#ffd24d; }
 .lg-update .lg-upd-s{ font-size:12px; color:#c9b78a; line-height:1.5; margin:6px 0 10px; }
+.lg-update .lg-upd-web{ margin-top:10px; padding-top:10px; border-top:1px solid #ffcf4d33; font-size:11.5px; line-height:1.55; color:#a89a76; text-wrap:pretty; }
+.lg-update .lg-upd-web a{ font-weight:700; color:#ffd24d; text-decoration:none; border-bottom:1px solid #ffd24d80; }
+.lg-update .lg-upd-web a:hover{ color:#ffe49a; border-bottom-color:#ffe49a; }
 #login.stale .lg-form,#login.stale .auth-seg,#login.stale .lg-guest,#login.stale .auth-or{ opacity:.35; pointer-events:none; filter:grayscale(.5); }
 #login > .lg-wrap{ margin:auto; }
 .lg-wrap{ padding:20px; min-height:100%; display:flex; align-items:center; justify-content:center; }
@@ -837,11 +840,6 @@ window.__lfErr=[];
         </div>
 
         <!-- MISSIONS (Command) -->
-        <div class="screen overlay" id="screen-homecit" data-screen-label="Home Citadel">
-          <div class="scr-head"><span class="scr-title">Home Citadel</span><span class="scr-sub" id="homecit-sub"></span></div>
-          <div class="scr-body" id="homecit-body"></div>
-        </div>
-
         <div class="screen overlay" id="screen-missions">
           <div class="scr-head"><span class="scr-title">Missions</span><span class="scr-sub" id="missions-sub"></span></div>
           <div class="scr-body" id="missions-body"></div>
@@ -969,10 +967,6 @@ window.__lfErr=[];
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11z"/><path d="M12 7l4 2.3v5.4L12 17l-4-2.3V9.3z"/></svg>
           <span class="nl">Void Zone</span>
         </button>
-        <button class="nav-btn nav-grouped" data-screen="homecit">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l4-3 5 4 5-4 4 3v11z"/><path d="M9 21v-5h6v5"/></svg>
-          <span class="nl">Home Citadel</span>
-        </button>
         <button class="nav-btn nav-grouped" data-screen="missions">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg>
           <span class="nl">Missions</span>
@@ -1090,11 +1084,6 @@ window.__lfErr=[];
               <div><div class="mc-n">Fleet Exploration</div><div class="mc-s">Send idle hulls out for hours · cargo, cores &amp; ship experience</div></div>
               <span class="mc-lock"></span><span class="badge cmd-cardbadge" id="cmd-expo-badge" style="display:none">0</span>
             </div>
-            <div class="mega-card cmd-homecit" data-go="homecit">
-              <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l4-3 5 4 5-4 4 3v11z"/><path d="M9 21v-5h6v5"/></svg></div>
-              <div><div class="mc-n">Home Citadel</div><div class="mc-s">Defend waves · permanent AFK empire</div></div>
-              <span class="mc-lock"></span><span class="badge" id="cmd-homecit-badge" style="display:none">⛏</span>
-            </div>
             <div class="mega-card cmd-msn" data-go="missions">
               <div class="mc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V5h2.5A1.5 1.5 0 0 1 19 6.5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20.5v-14A1.5 1.5 0 0 1 6.5 5H9z"/><path d="M8.5 11l2.2 2.2L15.5 9"/><path d="M8.5 17h7"/></svg></div>
               <div><div class="mc-n">Missions</div><div class="mc-s">Daily · weekly · monthly boards + lifetime badges</div></div>
@@ -1158,6 +1147,7 @@ window.__lfErr=[];
               <div class="lg-upd-t">⚠ UPDATE REQUIRED</div>
               <div class="lg-upd-s">Your build does not match the live one — logging in on any other build can desync your save. Update to continue.</div>
               <button type="button" class="lg-primary" id="lg-update-btn">⟳ Update now</button>
+              <div class="lg-upd-web">App Store updates can take a few days to appear. <a href="https://lootfleet.com" target="_blank" rel="noopener">lootfleet.com</a> in your browser is always running the latest build — same account, same save.</div>
             </div>
 
             <!-- live build stamp — reads LF_BUILD so it can never drift from the code -->
@@ -1213,93 +1203,92 @@ window.__lfErr=[];
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=740"></script>
-<script src="js/items.js?v=740"></script>
-<script src="js/entities.js?v=740"></script>
-<script src="js/render.js?v=740"></script>
-<script src="js/galaxy.js?v=740"></script>
+<script src="js/config-v2.js?v=744"></script>
+<script src="js/items.js?v=744"></script>
+<script src="js/entities.js?v=744"></script>
+<script src="js/render.js?v=744"></script>
+<script src="js/galaxy.js?v=744"></script>
 <script src="js/leaderboard.js?v=726"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.live.js?v=725"></script>
 <script src="js/servertime.js?v=725"></script>
 <script src="js/analytics.js?v=725"></script>
-<script src="js/cloud.js?v=741"></script>
-<script src="js/account.js?v=740"></script>
+<script src="js/cloud.js?v=744"></script>
+<script src="js/account.js?v=744"></script>
 <script src="js/session-lock.js?v=725"></script>
-<script src="js/vip.js?v=740"></script>
+<script src="js/vip.js?v=744"></script>
 <script src="js/territory.js?v=738"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=740"></script>
-<script src="js/ui-v94.js?v=740"></script>
+<script src="js/game-v93.js?v=744"></script>
+<script src="js/ui-v94.js?v=744"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
 <script src="js/fx-aaa.js?v=725"></script>
 <script src="js/perf-tier.js?v=725"></script>
 <script src="js/fit-audit.js?v=731"></script>
-<script src="js/moon-scene.js?v=740"></script>
-<script src="js/moon-colony.js?v=740"></script>
+<script src="js/moon-scene.js?v=744"></script>
+<script src="js/moon-colony.js?v=744"></script>
 <script src="js/expedition.js?v=729"></script>
 <script src="js/expedition-ui.js?v=725"></script>
 <script src="js/koth.js?v=727"></script>
 <script src="js/koth-ui.js?v=736"></script>
-<script src="js/return-brief.js?v=740"></script>
-<script src="js/home-citadel.js?v=740"></script>
+<script src="js/return-brief.js?v=744"></script>
 <script src="js/missions.js?v=736"></script>
-<script src="js/achievements.js?v=740"></script>
-<script src="js/coach-v89.js?v=740"></script>
-<script src="js/prism-v5.js?v=740"></script>
-<script src="js/prism-fleet.js?v=740"></script>
+<script src="js/achievements.js?v=744"></script>
+<script src="js/coach-v89.js?v=744"></script>
+<script src="js/prism-v5.js?v=744"></script>
+<script src="js/prism-fleet.js?v=744"></script>
 <script src="js/dreadnaught.js?v=734"></script>
-<script src="js/server-dreadnaught.js?v=741"></script>
+<script src="js/server-dreadnaught.js?v=744"></script>
 <script src="js/galaxy-box.js?v=725"></script>
 <script src="js/shipworks.js?v=739"></script>
-<script src="js/starforge.js?v=725"></script>
-<script src="js/pilot-ascension.js?v=729"></script>
+<script src="js/starforge.js?v=744"></script>
+<script src="js/pilot-ascension.js?v=744"></script>
 <script src="js/season-pass.js?v=725"></script>
 <script src="js/sim-pilots.js?v=725"></script>
-<script src="js/ranks-boards.js?v=738"></script>
+<script src="js/ranks-boards.js?v=744"></script>
 <script src="js/rank-rewards.js?v=738"></script>
 <script src="js/discord-reward.js?v=725"></script>
 <script src="js/onboard.js?v=725"></script>
 <script src="js/pro-offer.js?v=725"></script>
-<script src="js/ship-panels.js?v=740"></script>
+<script src="js/ship-panels.js?v=744"></script>
 <script src="js/fleet-deep.js?v=725"></script>
 <script src="js/paragon-cannon.js?v=725"></script>
-<script src="js/social.js?v=740"></script>
+<script src="js/social.js?v=744"></script>
 <script src="js/chat.js?v=729"></script>
 <script src="js/mail.js?v=734"></script>
-<script src="js/alliance.js?v=740"></script>
+<script src="js/alliance.js?v=744"></script>
 <script src="js/alliance-boss.js?v=725"></script>
 <script src="js/void-zone.js?v=725"></script>
 <script src="js/cargo-run.js?v=725"></script>
-<script src="js/cargo-defense.js?v=741"></script>
-<script src="js/xyn.js?v=740"></script>
-<script src="js/nanocores.js?v=740"></script>
+<script src="js/cargo-defense.js?v=744"></script>
+<script src="js/xyn.js?v=744"></script>
+<script src="js/nanocores.js?v=744"></script>
 <script src="js/fighters.js?v=729"></script>
 <script src="js/bridge.js?v=731"></script>
-<script src="js/fighter-ascension.js?v=740"></script>
+<script src="js/fighter-ascension.js?v=744"></script>
 <script src="js/fighter-ascension-ui.js?v=729"></script>
 <script src="js/aegis-auras.js?v=725"></script>
 <script src="js/mech-corruption.js?v=725"></script>
 <script src="js/mech-foundry.js?v=725"></script>
-<script src="js/commanders.js?v=740"></script>
-<script src="js/nanocores-ui.js?v=740"></script>
+<script src="js/commanders.js?v=744"></script>
+<script src="js/nanocores-ui.js?v=744"></script>
 <script src="js/crates-hub.js?v=725"></script>
 <script src="js/ascension.js?v=725"></script>
 <script src="js/casino.js?v=725"></script>
-<script src="js/casino2.js?v=740"></script>
+<script src="js/casino2.js?v=744"></script>
 <script src="js/casino-citadels.js?v=725"></script>
-<script src="js/redeem.js?v=740"></script>
-<script src="js/auth.js?v=741"></script>
-<script src="js/patch-notes.js?v=740"></script>
-<script src="js/update-gate.js?v=740"></script>
+<script src="js/redeem.js?v=744"></script>
+<script src="js/auth.js?v=744"></script>
+<script src="js/patch-notes.js?v=744"></script>
+<script src="js/update-gate.js?v=744"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
   // truth. A client that DISAGREES with it may not log in — in either direction.
   // Behind is the obvious case; ahead is the internal one, a device left on a cut
   // that was never pushed. Both fork saves between iPad and PC the same way, so
   // the test is equality, not "newer".
-  window.LF_BUILD = 740;
+  window.LF_BUILD = 744;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1496,7 +1485,7 @@ window.__lfErr=[];
       // CRATES opens with its earliest tab (Shipworks, 20); Galaxy Supply (30)
       // keeps its own level. NANOCORES IS UNGATED — reachable from Level 1.
       crates:20, nano:0,
-      ascend:60, forge:100, pasc:100, homecit:150,
+      ascend:60, forge:100, pasc:100,
     };
     // STAR-GATED CARDS. A few systems are gated by PILOT ASCENSION, not level —
     // they must never be measured against L or they read "unlocks at Level 20"
@@ -1614,7 +1603,7 @@ window.__lfErr=[];
       let stars=0, pts=0, pv=null, tier=null;
       try{ if(window.PASCEND){ stars=PASCEND.stars(); pts=PASCEND.points(); pv=PASCEND.preview(); tier=PASCEND.tierDef(Math.max(1,stars)); } }catch(e){}
       if(badge) badge.innerHTML = (stars&&window.PASCEND) ? PASCEND.badge(null,stars) : '';
-      const keeps='<b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony, Home Citadel and Prism. Only <b>level, gold and items</b> reset.';
+      const keeps='<b>you keep everything you built</b>: every hull with its upgrades and Ship Ascensions, your territory and citadels, the Moon Colony and Prism. Only <b>level, gold and items</b> reset.';
       if(locked){
         if(sub) sub.innerHTML='Opens at <b>Level '+need+'</b>. From there it is your call: ascend, or keep climbing toward your Lv '+cap+' ceiling. Either way '+keeps;
         if(meta) meta.innerHTML='<span class="pa-pill-chip">LV <b>'+L+'</b> / '+need+'</span>'+
@@ -1649,7 +1638,7 @@ window.__lfErr=[];
        This whole feature has no save footprint. */
     const SECS=[
       { k:'events', g:'\u25c8', n:'LIVE & EVENTS', ids:['tour','sdread','cargo','koth','dread','prismfleet','missions'] },
-      { k:'empire', g:'\u2b21', n:'EMPIRE',        ids:['galaxy','voidzone','homecit','moon','expo','prism'] },
+      { k:'empire', g:'\u2b21', n:'EMPIRE',        ids:['galaxy','voidzone','moon','expo','prism'] },
       { k:'power',  g:'\u2726', n:'POWER',         ids:['pasc','ascend','fasc','pilot','skills'] },
       { k:'shop',   g:'\u2699', n:'WORKSHOP',      ids:['forge','nano','crates','cmdr','mech'] },
       { k:'more',   g:'\u25a6', n:'MORE',          ids:['casino','discord'] },
@@ -1752,7 +1741,7 @@ window.__lfErr=[];
     }));
     // keep Command highlighted while one of its screens is open
     setInterval(()=>{
-      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-homecit.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-crates.active,#screen-nano.active,#screen-ascend.active,#screen-fasc.active,#screen-casino.active,#screen-cargo.active,#screen-expo.active,#screen-koth.active');
+      const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-crates.active,#screen-nano.active,#screen-ascend.active,#screen-fasc.active,#screen-casino.active,#screen-cargo.active,#screen-expo.active,#screen-koth.active');
       cmd.classList.toggle('active', !!on);
       syncDock();
     },500);

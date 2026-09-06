@@ -144,19 +144,49 @@
   // costs are computed ONCE per render and reused on click, so the price shown
   // is exactly the price charged
   let _cCache = {};
-  function costT(slot) {
-    const e = fs(slot), k = slot + '|t|' + e.lv;
-    if (_cCache[k]) return _cCache[k];
-    const step = Math.pow(1.25, e.lv), m = PERMA * lvlF();
-    return (_cCache[k] = {
+  // ONE STATEMENT OF EACH PRICE. costT/costR are the LIVE price for a hardpoint's
+  // current level; costTAt/costRAt are the same formula for an ARBITRARY level, so
+  // the bulk quote can sum the ladder ahead without a second hand-copied copy of
+  // the arithmetic drifting away from the one that charges.
+  function costTAt(lv) {
+    const step = Math.pow(1.25, lv), m = PERMA * lvlF();
+    return {
       gold: floorAt(econGold() * 40 * m * step, 1000),      // ≈ 100 kills at your depth
       iron: floorAt(250 * econRes() * m * step, 100),
-    });
+    };
   }
+  function costT(slot) {
+    const e = fs(slot), k = slot + '|t|' + e.lv;
+    return _cCache[k] || (_cCache[k] = costTAt(e.lv));
+  }
+  function costRAt(rr) { return { plasma: floorAt(150 * econRes() * PERMA * lvlF() * Math.pow(1.25, rr), 200) }; }
   function costR(slot) {
     const e = fs(slot), k = slot + '|r|' + e.rr;
-    if (_cCache[k]) return _cCache[k];
-    return (_cCache[k] = { plasma: floorAt(150 * econRes() * PERMA * lvlF() * Math.pow(1.25, e.rr), 200) });
+    return _cCache[k] || (_cCache[k] = costRAt(e.rr));
+  }
+  // ---- BULK ------------------------------------------------------------------
+  // WHAT A BATCH CAN COST, AT MOST. Every strike that lands raises the next one's
+  // price, so the dearest possible run is the one where they all land — that is
+  // what these quote. Over-quoting a cost is the safe direction: the loop reprices
+  // and re-checks affordability before every single strike, so a batch can only
+  // ever charge less than the figure on the button, never more.
+  const BATCH = [10, 100];
+  function batchT(slot, n) {
+    const e = fs(slot), lv0 = e.lv, out = { gold: 0, iron: 0, n: 0 };
+    for (let i = 0; i < n; i++) {
+      const lv = lv0 + i;
+      if (lv >= MAX_LV) break;
+      if (lv0 < SLIP_FLOOR && lv >= SLIP_FLOOR) break;   // the run stops at the checkpoint
+      const c = costTAt(lv);
+      out.gold += c.gold; out.iron += c.iron; out.n++;
+    }
+    return out;
+  }
+  function batchR(slot, n) {
+    const e = fs(slot), out = { plasma: 0, n: 0 };
+    if (e.pur >= PRISTINE) return out;
+    for (let i = 0; i < n; i++) { out.plasma += costRAt(e.rr + i).plasma; out.n++; }
+    return out;
   }
   // "you need X more ● — about N kills in Zone Z" — makes the gate legible
   function shortfall(c) {
@@ -274,9 +304,17 @@
         '<span style="color:#f2b24b' + (bank('gold') < c.gold ? ';opacity:.45' : '') + '">● ' + fmt(c.gold) + '</span>' +
         (c.iron > 0 ? '<span style="color:#d0a060' + (bank('iron') < c.iron ? ';opacity:.45' : '') + '">◆ ' + fmt(c.iron) + '</span>' : '') +
       '</div>' +
-      '<button class="fg-btn" data-temper="' + k + '"' + (afford ? '' : ' disabled') + '>⚒ STRIKE</button>' +
+      '<div class="fg-btns">' +
+        '<button class="fg-btn" data-temper="' + k + ':1"' + (afford ? '' : ' disabled') + '>⚒ STRIKE</button>' +
+        BATCH.map((n) => {
+          const b = batchT(k, n);
+          return '<button class="fg-btn bulk" data-temper="' + k + ':' + n + '"' + (afford && b.n > 1 ? '' : ' disabled') + '>' +
+            '×' + n + '<i>≤ ● ' + fmt(b.gold) + '</i></button>';
+        }).join('') +
+      '</div>' +
       (afford ? '' : shortfall(c)) +
-      '<div class="fg-note">' + (e.lv >= SLIP_FLOOR ? 'Above +10 a miss has a 40% chance to slip one level (never below +10)' : 'Fail costs only the materials — heat carries to your next strike') + ' · the work stays on the hardpoint through every gear swap</div>';
+      '<div class="fg-note">' + (e.lv >= SLIP_FLOOR ? 'Above +10 a miss has a 40% chance to slip one level (never below +10)' : 'Fail costs only the materials — heat carries to your next strike') + ' · the work stays on the hardpoint through every gear swap</div>' +
+      '<div class="fg-note">×10/×100 strike until the temper <b>maxes</b>, reaches the <b>+10 checkpoint</b>, or you <b>run dry</b> — each strike is repriced and re-checked before it is paid for, so a batch can only cost <b>less</b> than the figure shown.</div>';
     return '<div class="fg-panel" id="fg-temper"><div class="fg-panel-h">⚒ TEMPER</div><div class="fg-pips">' + pips + '</div>' + inner + '</div>';
   }
 
@@ -289,60 +327,101 @@
       '<div class="fg-purbar"><i class="fg-pfloor" style="left:' + clamp((fl - 60) / 70 * 100, 0, 100) + '%"></i><i class="fg-ppris"></i><b style="left:' + pos + '%"></b></div>' +
       '<div class="fg-next">effective <b>+' + (PCT_PER_LV * e.pur / 100).toFixed(1) + '%</b> per temper level</div>' +
       (c.plasma > 0 ? '<div class="fg-cost"><span style="color:#c07bff' + (afford ? '' : ';opacity:.45') + '">✦ ' + fmt(c.plasma) + '</span></div>' : '') +
-      '<button class="fg-btn pur" data-reroll="' + k + '"' + (afford ? '' : ' disabled') + '>↻ REROLL PURITY</button>' +
+      '<div class="fg-btns">' +
+        '<button class="fg-btn pur" data-reroll="' + k + ':1"' + (afford ? '' : ' disabled') + '>↻ REROLL</button>' +
+        BATCH.map((n) => {
+          const b = batchR(k, n);
+          return '<button class="fg-btn pur bulk" data-reroll="' + k + ':' + n + '"' + (afford && b.n > 1 ? '' : ' disabled') + '>' +
+            '×' + n + '<i>≤ ✦ ' + fmt(b.plasma) + '</i></button>';
+        }).join('') +
+      '</div>' +
       (afford ? '' : '<div class="fg-short">Need <span style="color:#c07bff">✦ ' + fmt(c.plasma - bank('plasma')) + '</span> more plasma</div>') +
-      '<div class="fg-note">New roll REPLACES the old · minimum roll ' + fl + '% (creeps +1 per reroll, to 95%) · 125%+ is PRISTINE</div>';
+      '<div class="fg-note">New roll REPLACES the old · minimum roll ' + fl + '% (creeps +1 per reroll, to 95%) · 125%+ is PRISTINE</div>' +
+      '<div class="fg-note">×10/×100 keep rolling until <b>PRISTINE</b> or you run dry — and the <b>LAST</b> roll is the one you keep, exactly as with a single reroll. The floor you buy on the way up is kept whatever happens.</div>';
     return '<div class="fg-panel" id="fg-purity"><div class="fg-panel-h">✦ PURITY</div>' + inner + '</div>';
   }
 
   function wire(body) {
     body.querySelectorAll('[data-sel]').forEach((b) => b.onclick = () => { sel = b.dataset.sel; render(); });
-    body.querySelectorAll('[data-temper]').forEach((b) => b.onclick = () => attempt(b.dataset.temper));
-    body.querySelectorAll('[data-reroll]').forEach((b) => b.onclick = () => reroll(b.dataset.reroll));
+    body.querySelectorAll('[data-temper]').forEach((b) => b.onclick = () => { const p = b.dataset.temper.split(':'); attempt(p[0], +p[1] || 1); });
+    body.querySelectorAll('[data-reroll]').forEach((b) => b.onclick = () => { const p = b.dataset.reroll.split(':'); reroll(p[0], +p[1] || 1); });
   }
 
   // ===========================================================================
   // ACTIONS
   // ===========================================================================
-  function attempt(k) {
+  function attempt(k, count) {
     if (busy) return;
     const st = G().state, e = fs(k);
     if (e.lv >= MAX_LV) return;
-    const c = costT(k);
-    if (bank('gold') < c.gold || bank('iron') < c.iron) return;
-    busy = true;
-    st.gold -= c.gold;
-    st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
-    st.resources.iron -= c.iron;
-    const ok = Math.random() * 100 < chance(e);
-    let slipped = false;
-    if (ok) { e.lv++; e.heat = 0; }
-    else {
-      e.heat = Math.min(45, e.heat + 3);
-      if (e.lv > SLIP_FLOOR && Math.random() < 0.4) { e.lv--; slipped = true; }
+    const n = Math.max(1, count | 0);
+    const lv0 = e.lv;
+    // THE BATCH STOPS AT THE SLIP LINE. Past +10 a miss can knock a level off, so a
+    // run that STARTS below the checkpoint ends when it reaches it: nobody taps
+    // ×100 expecting to gamble away levels they already own. Starting above it is
+    // a decision the pilot has already made, and the run continues.
+    const stopAtFloor = lv0 < SLIP_FLOOR;
+    let strikes = 0, slips = 0;
+    // EVERY STRIKE IS PRICED AND PAID FOR ON ITS OWN. costT() reprices off the live
+    // level, affordability is re-checked at the moment of each write, and nothing is
+    // deducted for a strike that does not happen — so a batch cut short by funds or
+    // by the checkpoint has charged for exactly the strikes it made.
+    for (let i = 0; i < n; i++) {
+      if (e.lv >= MAX_LV) break;
+      if (stopAtFloor && e.lv >= SLIP_FLOOR) break;
+      const c = costT(k);
+      if (bank('gold') < c.gold || bank('iron') < c.iron) break;
+      st.gold -= c.gold;
+      st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
+      st.resources.iron -= c.iron;
+      strikes++;
+      const ok = Math.random() * 100 < chance(e);
+      if (ok) { e.lv++; e.heat = 0; }
+      else {
+        e.heat = Math.min(45, e.heat + 3);
+        if (e.lv > SLIP_FLOOR && Math.random() < 0.4) { e.lv--; slips++; }
+      }
     }
+    if (!strikes) return;
+    busy = true;
+    const ok = e.lv > lv0, maxed = e.lv >= MAX_LV;
     finish('fg-temper', () => {
-      flashText('fg-temper', ok, ok ? (e.lv >= MAX_LV ? '★ MAX TEMPER +' + e.lv : 'SUCCESS · +' + e.lv) : slipped ? 'MISS · SLIPPED TO +' + e.lv : 'MISS · 🔥 HEAT +' + e.heat + '%');
-      if (ok && e.lv >= MAX_LV) { try { G().bumpLife('temper15', 1); G().save(); } catch (x) {} }   // MASTER ARMOURER badge
-      if (ok && e.lv >= MAX_LV) showCine(k, '⚒ +15 TEMPER', 'CRYO-HARDENED · +1% FLASH-FREEZE', '#ffab4a');
+      const txt = strikes === 1
+        ? (ok ? (maxed ? '★ MAX TEMPER +' + e.lv : 'SUCCESS · +' + e.lv) : slips ? 'MISS · SLIPPED TO +' + e.lv : 'MISS · 🔥 HEAT +' + e.heat + '%')
+        : '×' + strikes + ' · +' + lv0 + ' → +' + e.lv + (slips ? ' · ' + slips + ' slip' + (slips === 1 ? '' : 's') : '');
+      flashText('fg-temper', ok, txt);
+      if (maxed && ok) { try { G().bumpLife('temper15', 1); G().save(); } catch (x) {} }   // MASTER ARMOURER badge
+      if (maxed && ok) showCine(k, '⚒ +15 TEMPER', 'CRYO-HARDENED · +1% FLASH-FREEZE', '#ffab4a');
     });
   }
 
-  function reroll(k) {
+  function reroll(k, count) {
     if (busy) return;
     const st = G().state, e = fs(k);
-    const c = costR(k);
-    if (bank('plasma') < c.plasma) return;
-    busy = true;
-    st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
-    st.resources.plasma -= c.plasma;
+    const n = Math.max(1, count | 0);
     const old = e.pur;
-    e.rr++;
-    const fl = purFloor(e);
-    e.pur = Math.round(fl + Math.random() * (130 - fl));
+    let rolls = 0;
+    // A BATCH STOPS THE MOMENT IT WINS. Every roll REPLACES the last, so a run that
+    // kept going past PRISTINE would gamble away the thing the pilot was paying to
+    // reach — and they would have watched it happen with no way to stop. Reaching
+    // 125% ends the run; short of that the last roll stands, exactly as it does on
+    // a single reroll, which is the mechanic and is stated on the panel.
+    for (let i = 0; i < n; i++) {
+      if (e.pur >= PRISTINE) break;
+      const c = costR(k);
+      if (bank('plasma') < c.plasma) break;
+      st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
+      st.resources.plasma -= c.plasma;
+      e.rr++;
+      const fl = purFloor(e);
+      e.pur = Math.round(fl + Math.random() * (130 - fl));
+      rolls++;
+    }
+    if (!rolls) return;
+    busy = true;
     finish('fg-purity', () => {
       const up = e.pur >= old;
-      flashText('fg-purity', up, old + '% → ' + e.pur + '%' + (e.pur >= PRISTINE ? ' ✦ PRISTINE' : ''));
+      flashText('fg-purity', up, (rolls > 1 ? '×' + rolls + ' · ' : '') + old + '% → ' + e.pur + '%' + (e.pur >= PRISTINE ? ' ✦ PRISTINE' : ''));
       if (e.pur >= PRISTINE) { try { G().bumpLife('pristine', 1); G().save(); } catch (x) {} }      // PRISTINE FORGE badge
       if (e.pur >= PRISTINE) showCine(k, '✦ ' + e.pur + '% PURITY', 'PRISTINE FORGE', '#7df3ff');
     });
@@ -481,6 +560,12 @@
   .fg-btn.pur{ color:#160a24; background:linear-gradient(180deg,#dcb8ff,#c07bff); box-shadow:0 6px 18px -8px #c07bff; }
   .fg-btn:active{ transform:scale(.97); }
   .fg-btn:disabled{ opacity:.38; cursor:default; }
+  .fg-btns{ display:flex; gap:6px; align-items:stretch; }
+  .fg-btns .fg-btn{ flex:1 1 auto; min-width:0; }
+  .fg-btn.bulk{ flex:0 0 auto; padding:9px 11px; font-size:11px; letter-spacing:.06em; display:flex; flex-direction:column; align-items:center; gap:2px;
+    color:#ffd9ae; background:linear-gradient(180deg,#2a1c0d,#1a1108); box-shadow:none; border:1px solid #6b4a1e; }
+  .fg-btn.pur.bulk{ color:#e2ccff; background:linear-gradient(180deg,#241535,#150d20); border-color:#5b3b8a; }
+  .fg-btn.bulk i{ font-style:normal; font-family:'Rajdhani',sans-serif; font-size:9px; font-weight:700; letter-spacing:.02em; opacity:.85; font-variant-numeric:tabular-nums; }
   .fg-note{ margin-top:6px; text-align:center; font-size:8.5px; color:#66798d; letter-spacing:.04em; line-height:1.5; }
   .fg-short{ margin-top:7px; text-align:center; font-size:10px; font-weight:700; color:#9fb1c4; border:1px dashed #3a2a17; border-radius:9px; padding:6px 8px; line-height:1.5; }
   .fg-short b{ color:#ffd9ae; }

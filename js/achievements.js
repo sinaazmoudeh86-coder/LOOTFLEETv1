@@ -86,11 +86,19 @@
     // RENDERED (unlike the ENDGAME block below) but flagged `extra` so they sit
     // OUTSIDE the 1,000-badge Titan Sina count — the capstone stays exactly the
     // ladder it shipped as. Deliberately no chain for merely opening crates:
-    // every one of these measures the top of the scale, so they track LEGENDARY
+    // every one of these measures the top of the scale, so they track ANCIENT
     // cores, the slots unlocked on them, and rolls landing in the top 5%.
-    { id: 'nanoleg', ic: '◈', name: 'Legend Core',        unit: 'Legendary Nanocores recovered',  n: 40, t: genT(1, 1.15, 40), v: () => life('nanoLegend'), extra: true },
+    //
+    // ANCIENT, NOT LEGENDARY (744). Legendary stopped being the top of the ladder
+    // when Mythic and Ancient shipped, so a chain called "Legend Core" was
+    // measuring the middle of the table. The BADGE IDS ARE UNCHANGED — 'nanoleg'
+    // and 'nanogod' are stored keys that claims and progress are filed under, and
+    // renaming one to read better would revoke what it has already proved. Only
+    // the names, the units and what they count have moved. The ladders are the
+    // same length and the same shape, per spec.
+    { id: 'nanoleg', ic: '◈', name: 'Ancient Core',       unit: 'Ancient Nanocores recovered',    n: 40, t: genT(1, 1.15, 40), v: () => life('nanoAncient'), extra: true },
     { id: 'nanoslot',ic: '⬢', name: 'Core Surgeon',       unit: 'extra buff slots unlocked',      n: 40, t: genT(1, 1.14, 40), v: () => life('nanoSlots'),  extra: true },
-    { id: 'nanogod', ic: '✧', name: 'Perfect Resonance',  unit: 'top-5% Legendary buff rolls',    n: 30, t: genT(1, 1.18, 30), v: () => life('nanoGod'),    extra: true },
+    { id: 'nanogod', ic: '✧', name: 'Perfect Resonance',  unit: 'top-5% Ancient buff rolls',      n: 30, t: genT(1, 1.18, 30), v: () => life('nanoGod'),    extra: true },
   ];
   // ---- ENDGAME CHAINS -------------------------------------------------------
   // 500 more badges on the SAME ladder, all counting toward the Titan Sina.

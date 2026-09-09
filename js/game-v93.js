@@ -48,28 +48,58 @@
   function fitWorld(zone) {
     const mul = worldMul(zone);
     const w = Math.max(1, rt.w || REF_W), h = Math.max(1, rt.h || REF_H);
-    const area = REF_W * REF_H * mul * mul;
-    const aspect = Math.min(2.6, Math.max(0.42, w / h));
-    rt.worldW = Math.round(Math.sqrt(area * aspect));
-    rt.worldH = Math.round(Math.sqrt(area / aspect));
+    // ---- ONE MAP, ONE SHAPE, AND IT ALWAYS COVERS THE SCREEN (744) ---------
+    // The box was laid out at the SCREEN's aspect ratio while holding area
+    // constant, so a 32" monitor got a wide, SHORT world and a phone a narrow,
+    // tall one. Two things went wrong with that.
+    //
+    // First, the map was a different shape on every device, so "the same map
+    // everywhere" was only true of its area — spawn spreads, fort approaches and
+    // beacon rings all sat in a differently-proportioned box.
+    //
+    // Second and worse: a wide viewport divided by the zone zoom asks for a
+    // visible slice WIDER THAN THE WORLD IS. The camera clamp then centres the
+    // box instead of scrolling it, and the arena is drawn as a small rectangle
+    // floating in black with the hull enormous inside it. That is the reported
+    // broken map on 27" and 32", and it is at its worst on the Xyn, whose 0.55×
+    // pull-back asks for roughly twice the width again.
+    //
+    // So: the world is a FIXED box at the reference aspect — same size and same
+    // shape on every device, area identical to before, every world-pixel distance
+    // in this file untouched — and the zoom is floored at whatever it takes to
+    // COVER the viewport. The map never shrinks to fit; the screen shows a slice
+    // of it and scrolls, which is what the minimap's viewport rectangle has
+    // always been drawn to tell the player (it reads rt.zoom, so it follows this
+    // automatically). The per-zone curve, the small-screen easing and the Xyn
+    // pull-back all still apply — they just cannot letterbox the arena any more.
+    rt.worldW = Math.round(REF_W * mul);
+    rt.worldH = Math.round(REF_H * mul);
     const lin = Math.sqrt((w * h) / (REF_W * REF_H));
-    rt.zoom = zoomFor(zone) * Math.min(1, Math.max(0.62, Math.sqrt(lin))) * xynZoom();
+    const want = zoomFor(zone) * Math.min(1, Math.max(0.62, Math.sqrt(lin))) * xynZoom();
+    const cover = Math.max(w / rt.worldW, h / rt.worldH);
+    rt.zoom = Math.max(want, cover);
   }
   // ---- FLYING SOMETHING MASSIVE --------------------------------------------
-  // The Xyn draws at SHIP_SCALE 9, nearly twice any other hull — and on its own
-  // that reads as "a bigger ship", not as an enormous one. Scale is relative: a
-  // sprite only looks huge next to things that look small. So the zone camera
-  // pulls back to 0.55× when the Xyn is the flagship, which shrinks every hostile,
-  // hazard and piece of arena furniture around it and widens the visible world.
+  // Flying the Xyn asks the zone camera to pull back, so that every hostile and
+  // piece of arena furniture around it shrinks and the hull reads as enormous
+  // rather than merely large.
   //
-  // It multiplies fitWorld()'s existing figure rather than replacing it, so the
-  // small-screen easing and the per-zone curve both still apply — the Xyn is
-  // 0.55× whatever this device and zone were already showing.
+  // ⚠ THIS IS NOW INERT ON EVERY DEVICE, AND THAT IS A CONSEQUENCE OF fitWorld().
+  // The camera is floored at whatever zoom it takes to COVER the viewport (744),
+  // because a zoom that shows more world than exists draws the arena as a small
+  // box in a black void — the reported broken map. At zone 600 the world is
+  // 4012×2448 and covering a 2560-wide viewport already needs 0.64, while this
+  // multiplier asks for 0.275. Cover wins, so the pull-back never applies.
   //
-  // rt.zoom is the ONE camera number: the draw transform, both camera clamps and
-  // the minimap viewport rect all read it. Putting the multiplier here means they
-  // cannot disagree about where the view is — which is what would happen if the
-  // scale were applied at draw time and the clamps kept the old figure.
+  // In other words THE CAMERA IS ALREADY SHOWING THE FULL WIDTH OF THE MAP and
+  // there is no zoom-out left to give. The only honest lever on how much screen
+  // the Xyn occupies is its SPRITE, which is why the size change lives in
+  // render.js's SHIP_SCALE and not here.
+  //
+  // Kept rather than deleted: it is harmless (Math.max discards it), it documents
+  // the intent, and it becomes live again the moment a zone's world is large
+  // enough relative to the viewport for the pull-back to fit inside it. Delete it
+  // in a cut that is only cleanup, like `--fly-nav`.
   const XYN_ZOOM = 0.55;
   function xynZoom() { try { return state.ship === 'xyn' ? XYN_ZOOM : 1; } catch (e) { return 1; } }
   // Zone unlocking — you can reach at most 10 zones ahead of your pilot level, so
@@ -2506,7 +2536,7 @@
       // anything that beats them before the auction is reached.
       C.shipSlots(hull).forEach((sk) => {
         if (fit[sk] && service) return;
-        out.push({ hull, base: C.slotBase(sk), taken: 0, service: !!service, cur: (!service && fit[sk]) || null });
+        out.push({ hull, sk, base: C.slotBase(sk), taken: 0, service: !!service, cur: (!service && fit[sk]) || null });
       });
     };
     add(state.ship, state.equipped || {}, true);
@@ -3389,6 +3419,39 @@
   // whatever happens, so leaving it out of the auction can only reserve a hole
   // for a grey that a better item will eventually take — one item too many, in
   // the safe direction. Erring the other way sells gear the fleet wanted.
+  // ---- A RESERVE THAT NEVER PAYS OUT IS JUST A FULL HOLD (744) --------------
+  // A PARKED hull's slot could RESERVE a better item — and nothing ever fitted
+  // it. autoEquip only ever touches hulls in service, so the reserved piece sat
+  // in the hold for good: it was never sold (it had a home) and never used (the
+  // home never took it). On an account with a parked Aegis that is exactly one
+  // pinned item per cannon hardpoint, forever — the reported "three Aegis items
+  // that will not sell, at any tier" — and the same trap holds a Fighter Bay
+  // hostage for a carrier sitting in the hangar.
+  //
+  // So the reserve is discharged at the moment it is claimed: the item goes ONTO
+  // the parked hull and whatever it displaced goes back to the hold, where the
+  // next sweep judges it on its own merits.
+  //
+  // This cannot cost anything. The comparison above already proved the incoming
+  // piece is stronger, a parked hull contributes nothing to combat or fleet score
+  // until it is actually flown (escorts are `service` and never reach this path),
+  // and the displaced item is returned rather than scrapped. It only ever makes
+  // the hull better and the hold shorter.
+  function fitParkedHole(hole, it) {
+    if (!hole || !hole.sk) return false;
+    if (!state.fittings) state.fittings = {};
+    const fit = state.fittings[hole.hull] || (state.fittings[hole.hull] = {});
+    const old = fit[hole.sk] || null;
+    if (old && I.itemPower(old) >= I.itemPower(it)) return false;   // never a downgrade
+    fit[hole.sk] = it;
+    const ix = state.inventory.indexOf(it);
+    if (ix >= 0) state.inventory.splice(ix, 1);
+    // Back to the hold, NOT to salvage — it is the pilot's item and it may still
+    // be the best thing for another hull. It is not in this sweep's candidate
+    // list, so it is considered one sweep later, which is the safe direction.
+    if (old) state.inventory.push(old);
+    return true;
+  }
   function autoSellSweep(g) {
     const tier = autoSellTier(); if (tier < 0) return { n: 0, gold: 0 };
     const open = emptyHardpoints();
@@ -3412,7 +3475,10 @@
         // a parked hull's FITTED slot is only a home for something better than
         // what is already in it — otherwise this piece has no home at all
         if (s.cur && I.itemPower(it) <= I.itemPower(s.cur)) continue;
-        s.taken = 1; claimed = true; break;
+        s.taken = 1; claimed = true;
+        // Hand the reserve over instead of leaving it owed — see fitParkedHole().
+        if (!s.service) fitParkedHole(s, it);
+        break;
       }
       if (!claimed) doomed.add(it);
     }
@@ -7993,7 +8059,18 @@
         // to say that instead of telling them to fill a border that does not exist:
         // "a corner tile that's technically surrounded still says 3 of 6 borders
         // face open space". One statement of the geometry, here.
-        if (GX.ringOf(n.q, n.r) > GX.RINGS) { open++; edge++; rim = true; continue; }
+        // OFF THE MAP IS A CLOSED BORDER (744, operator's call). This used to
+        // count as OPEN: the rim was deliberately kept permanently contestable so
+        // that geography could never mint untouchable ground, and a corner system
+        // was attackable forever however much space you held around it.
+        //
+        // The rule now is that the edge of the galaxy is a WALL you can back onto
+        // — hold every in-map neighbour of a rim system and you are sealed in,
+        // exactly as you would be in the interior. It is still counted SEPARATELY
+        // in `edge`, because it is the one kind of border a pilot never has to
+        // close by taking ground, and the sheet reads that to explain a seal held
+        // with fewer than six captures.
+        if (GX.ringOf(n.q, n.r) > GX.RINGS) { edge++; rim = true; continue; }
         const nid = GX.tileId(n.q, n.r);
         if (factionOf(nid) !== fac) open++;
         else doors.push(nid);          // same faction — a candidate way in, tested below

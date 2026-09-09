@@ -405,8 +405,38 @@
       fuel: Math.round(res * 0.5), iron: Math.round(res * 0.3), plasma: Math.round(res * 0.2),
       cores: 0, lc: 0,
     };
-    if (m.stars >= 3) p.cores = coreScale(Math.max(1, Math.min(12, Math.round((m.stars - 2) * (m.hours / 5) * j))));
+    // ---- A PREVIEW MUST NOT ROLL (744) -------------------------------------
+    // `coreYield()` is PROBABILISTIC — floor(n·rate) plus a fractional chance of
+    // one more, off Math.random() — and payout() is what the mission card calls
+    // to draw itself. So the Dread Core figure RE-ROLLED on every repaint:
+    // launching a fleet on one mission redraws the board, and a 3★ mission that
+    // had been advertising a core silently stopped advertising one. Nothing about
+    // that mission had changed, which is exactly what was reported.
+    //
+    // Same fix as the Omega Cargo manifest quote: the card shows the BRACKET the
+    // roll can actually land in, derived from the same expression, so it is
+    // stable across repaints and still honest about the ceiling. `cores` keeps
+    // the rolled value so the AWARD is untouched — this is a display fix and
+    // takes nothing off the payout.
+    if (m.stars >= 3) {
+      const raw = Math.max(1, Math.min(12, Math.round((m.stars - 2) * (m.hours / 5) * j)));
+      const q = coreQuote(raw);
+      p.coreRaw = raw;
+      p.coresMin = q.min;
+      p.coresMax = q.max;
+      p.cores = coreScale(raw);
+    }
     return p;
+  }
+  // The deterministic bracket behind the quote above: what coreYield() can return
+  // for this n, taken from coreYield()'s own expression so the two can never
+  // drift. floor is the guaranteed part, ceil is the ceiling — never `round`,
+  // which lops the top off the distribution whenever the fraction sits below .5.
+  function coreQuote(n) {
+    let rate = 0;
+    try { rate = Number(window.CONFIG.DREAD_CORE_RATE) || 0; } catch (e) { rate = 0; }
+    const scaled = Math.max(0, Number(n) || 0) * rate;
+    return { min: Math.floor(scaled), max: Math.ceil(scaled) };
   }
 
   // ---- the estimate the player acts on --------------------------------------
@@ -473,6 +503,13 @@
     const out = resolve(m, keys, rating, seed);
 
     res.fuel -= cost;
+    // LIFETIME LAUNCHES (744) — one monotonic counter, banked in the same
+    // lifeStats bag the nanocore and forge chains use, so it survives ascension
+    // with everything else and needs no migration. The mission boards read this
+    // rather than keeping a second tally of their own, which is how two counters
+    // for one thing start disagreeing. Counted at the point the fuel is taken:
+    // past here the expedition exists.
+    try { if (!st.lifeStats) st.lifeStats = {}; st.lifeStats.expoLaunch = (st.lifeStats.expoLaunch | 0) + 1; } catch (e) {}
     // escorts that shipped out leave the battle formation — stated on the sheet
     let pulled = [];
     if (Array.isArray(st.fleet)) {

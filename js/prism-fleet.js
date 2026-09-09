@@ -146,6 +146,19 @@
   function renderHub() {
     const body = $('pf-body'); if (!body) return; const p = P(); ensureWeek(p);
     const sub = $('pf-sub'); if (sub) sub.textContent = canEnter() ? ('Resets in ' + fmtDur(nextSunday() - Date.now())) : ('Locked · Level ' + MIN_LEVEL + ' required');
+    // THE LOCK CARD EXISTED AND WAS NEVER RENDERED (744). `.pf-lock` and its four
+    // child rules have been in this file's stylesheet from the start, but nothing
+    // ever emitted the markup: below the level gate the hub drew its full self —
+    // stages, facets, deploy button — and the only mention of the requirement was
+    // a subtitle line above the screen. Pilots read that as "the tab is broken",
+    // not "the tab is locked". Now it says so, in the styling that was already
+    // waiting for it.
+    if (!canEnter()) {
+      body.innerHTML = '<div class="pf-lock"><div class="pf-lock-ic">🔒</div><h3>Prism Fleet</h3>'
+        + '<p>A weekly boss gauntlet. One brutally-tanky target per stage, five minutes to kill it, and a Facet on the way — collect all five to forge a Prism Core.</p>'
+        + '<div class="pf-lock-lv">Unlocks at <b>account Level ' + MIN_LEVEL + '</b> · you are Level <b>' + lvl() + '</b></div></div>';
+      return;
+    }
 
     if (!canEnter()) {
       body.innerHTML = '<div class="pf-lock"><div class="pf-lock-ic">🔒</div><h3>Prism Fleet</h3><p>The weekly endgame gauntlet unlocks at <b>account Level ' + MIN_LEVEL + '</b>.</p><div class="pf-lock-lv">You\'re Level <b>' + lvl() + '</b></div></div>';

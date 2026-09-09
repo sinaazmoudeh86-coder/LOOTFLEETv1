@@ -232,7 +232,22 @@
     // tow to the safe hangar — unless another event now owns the arena
     let foreign = false;
     try { const grt = G().rt; foreign = !!(grt && ((grt.sdrun && grt.sdrun.active) || (grt.hcrun && grt.hcrun.active))); } catch (e) {}
-    if (!foreign) { try { if (G().goSafeHangar) G().goSafeHangar(); } catch (e) {} }
+    if (!foreign) {
+      // BACK TO THE ALLIANCE, NOT YOUR OWN SHIP (744). goSafeHangar() is a
+      // SAFE-STATE call — it parks the hull out of combat, which must still
+      // happen — but it also lands the pilot on the Hangar screen. So finishing
+      // an Armada raid dropped you on your own ship page, with no route back to
+      // the board you had just been fighting for. The safe-state call stays; the
+      // screen it leaves you on does not.
+      try { if (G().goSafeHangar) G().goSafeHangar(); } catch (e) {}
+      // Tried in order, first one that exists wins, so a nav rename can never
+      // silently strand the player here again.
+      try {
+        const back = ['social', 'alliance'].map((k) => document.querySelector('.nav-btn[data-screen="' + k + '"]')).filter(Boolean)[0];
+        if (back) back.click();
+        else if (window.ALLIANCE && window.ALLIANCE.open) window.ALLIANCE.open();
+      } catch (e) {}
+    }
     banner(killed ? '☠ ARMADA Mk-' + r.n + ' DESTROYED' : r.died ? '✝ FLEET LOST — partial damage logged' : '⌛ RAID WINDOW CLOSED',
       '⚔ ' + fmt(dmg) + ' damage transmitting to the alliance' +
       (killed ? ' — <b>Mk-' + r.n + ' is down</b>. Next mark is ×4 harder.' : ' · ' + fmt(Math.max(0, r.poolHp - r.dealt)) + ' hull still standing') +

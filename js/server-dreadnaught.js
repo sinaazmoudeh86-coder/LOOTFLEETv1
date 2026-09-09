@@ -587,7 +587,28 @@
           meta: { kind: 'prize', cta: { label: '🏆 Collect season prize', screen: 'sdread' } } });
       } catch (e) {}
     }
+    // ---- ARCHIVE BEFORE YOU ZERO, AND STAMP WHOSE RECORD IT IS (744) -------
+    // `bestEver` and `bestStage` are RECORDS the pilot earned against the Voidmaw,
+    // so the new season has no claim on them — but they were only ZEROED here, and
+    // both are max-unioned in mergeSaves(). So the moment any copy still carrying
+    // the Voidmaw figures reached a merge, max() handed them straight back and
+    // they reappeared under the Progenitor's name. That is the reported "Best Run
+    // Ever and Highest Stage from the previous event migrated to the current
+    // event", and it is exactly how the mistaken Progenitor grant used to return
+    // through `ownedShips`.
+    //
+    // Two halves, as always. The figures are ARCHIVED under the season that earned
+    // them, so a reset never destroys the record it is being judged on; and the
+    // live record now carries THE SEASON THAT CREATED IT, so the merge can refuse
+    // to union records from two different seasons instead of maxing across them.
+    if (!s.arch || typeof s.arch !== 'object') s.arch = {};
+    const _pk = 's' + PREV_SEASON.num;
+    if (!s.arch[_pk]) {
+      s.arch[_pk] = { best: Math.floor(Number(s.bestEver) || 0), stage: s.bestStage | 0,
+                      total: Math.floor(Number(s.total) || 0), label: PREV_SEASON.label };
+    }
     s.total = 0; s.bestDay = 0; s.bestEver = 0; s.bestStage = 0; s.att = 0; s.buys = 0;
+    s.bestSeason = SEASON.num;
     s.lbRank = null; s.lbSeasonRank = null; s.seasonDone = 0;
     if (!s.hist) s.hist = [];
     s.hist.unshift({ d: Date.now(), s: 0,

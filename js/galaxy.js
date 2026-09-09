@@ -193,14 +193,22 @@
   // WIDE, paying 3× the richest thing the ring generator can build.
   //
   // WHY A STRING AND NOT A BLOB — this IS the design, not decoration.
-  // game-v93's tileShield() seals a tile only when all SIX neighbours share its
-  // faction. A one-wide chain gives every tile at most TWO same-faction
-  // neighbours, so `open` is never 0 and NOTHING IN THE ARTERY CAN EVER BE
-  // SHIELDED — not one tile, not by one owner, not ever. Taking the whole branch
-  // does not fortify it; it means all eleven hexes are permanently attackable and
-  // one pilot has to answer for every one of them. The contest is structural.
-  // Nothing had to be bolted on to make this region hostile to a monopolist; the
-  // geometry does it, which is why the geometry is the feature.
+  // A one-wide chain gives every tile at most TWO same-faction neighbours, so it
+  // could never satisfy an encirclement rule and nothing out here was shieldable
+  // by anyone: taking the whole branch did not fortify it, and one pilot had to
+  // answer for every hex of it.
+  //
+  // SUPERSEDED, AND READ THIS BEFORE TRUSTING THE PARAGRAPH ABOVE. The Artery no
+  // longer goes anywhere near the six-border rule: tileShield() routes Artery ids
+  // to arteryShield() FIRST, which seals on REACHABILITY — a system is shielded
+  // when the one between it and the mouth is also yours. Hold the whole filament
+  // and exactly one hex is attackable (Lancet, at the mouth, which never seals on
+  // purpose). The geometry is still the feature; what it now buys is that there is
+  // only ONE door, not that there are none.
+  //
+  // The six-border rule has also changed underneath this note (744): off-map
+  // borders count as CLOSED, so rim systems in the galaxy proper are sealable.
+  // That does not touch the Artery, which never reaches that code path.
   //
   // GEOMETRY. pixel() is pointy-top — x = size·√3·(q + r/2), y = size·1.5·r — so
   // +q along r=0 runs due EAST with zero vertical drift. The stem leaves the rim
@@ -288,8 +296,10 @@
     // GEOMETRY NOTE, honestly: the fork already spends the Valve's north-east and
     // south borders, so a third stem east necessarily touches both arms at its
     // first tile — (31,0) has four Artery neighbours and the Valve has four. That
-    // is fine and it is checked: the guarantee that matters is SIX, because that
-    // is what tileShield() seals on. Four of six is still permanently attackable.
+    // is fine and it is checked. (The old reasoning here was that SIX was the
+    // number that mattered because the six-border rule was what sealed a tile —
+    // that is no longer how this region works: arteryShield() seals on reachability
+    // from the mouth, so neighbour COUNT is not what defends an Artery hex.)
     // XYN PRIME itself is a dead end with ONE friendly border, so the arena tile is
     // the least defensible hex in the game — which is the correct shape for a prize
     // everyone has to be able to come and take.
@@ -305,10 +315,12 @@
   // ---- THE FIVE FORTRESSES -------------------------------------------------
   // FIVE natural citadels in fourteen hexes, against twenty-five in the entire
   // rest of the galaxy. That concentration is the point and it is a deliberate
-  // trade: the richest ground in the game sits in the one region that CANNOT BE
-  // DEFENDED. Every hex here tops out at four friendly borders of six and
-  // tileShield() seals at six, so none of it is ever safe. Enormous value, held
-  // only for as long as you can keep beating everyone who comes for it.
+  // trade: the richest ground in the game sits in the region that is HARDEST to
+  // defend. Every hex here tops out at four friendly borders of six, and it is
+  // held by reachability rather than encirclement (arteryShield): the chain seals
+  // behind you, but the mouth never does, so there is always exactly one way in.
+  // Enormous value, held only for as long as you can keep beating everyone who
+  // walks up the filament for it.
   //
   // THEY ARE NOT WORTH THE SAME, AND THAT IS WHAT MAKES THE CHAIN WORTH PUSHING.
   // Value scales with DISTANCE FROM THE MOUTH, so a fortress you can reach on your

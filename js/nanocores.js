@@ -73,29 +73,64 @@
     // ---- EXTRA BUFF POOL --------------------------------------------------
     // `mod` is the computeStats() modifier the buff feeds. 'xp' is special: it
     // rides the fleet-XP pipeline instead of the combat stat block.
+    //
+    // RANGES WIDENED (744, operator spec). Every ceiling moved UP and no floor
+    // moved, so nothing a pilot is already holding is worth less than it was and
+    // no migration is needed. What DOES change is the GRADE a held roll displays:
+    // grade is derived from where a value sits inside min..max, so an old max roll
+    // now reads a tier or two lower against the taller range. That is the operator's
+    // explicit instruction ("change their rarity shown to the new rarities"), the
+    // VALUE is untouched, and the banked god-roll tally keeps what was earned.
+    //
+    // `dr` goes 0.5 → 1.0 per the same spec. Read the Aug 2026 note below before
+    // widening it again: it is a divisor on every hit taken and it stacks with the
+    // Pilot Tree's Armor, so seven slots is now up to +7% flat mitigation.
+    //
+    // ONLY ONE OF THE SIX NEW LINES IS IN HERE, AND THAT IS NOT AN OVERSIGHT.
+    // A buff is only real if its `mod` is something computeStats() actually reads.
+    // Weapon Range feeds `rangePct`, which is live on every hull. The other five
+    // asked for have NO modifier in the engine at all:
+    //   • boss damage / elite damage / projectile speed — zero occurrences of any
+    //     spelling anywhere in the codebase. Each needs a real term in the damage
+    //     path first; a buff pointing at a key nobody reads is a dead stat players
+    //     pay ingots for, which is the Bastion Command mistake with a price tag.
+    //   • loot quality — `lootQ()` is Math.round()ed and hard-capped at ×2, so a
+    //     +10% line is swallowed whole before it reaches a drop.
+    //   • gold find — the pipeline is real (DREAD.mult('goldFind') multiplies the
+    //     gold on every kill) but it is a CURRENCY FAUCET, not a combat mod, so it
+    //     wires in somewhere else and earns its own cut rather than riding a
+    //     buff-pool pass.
     buffs: [
-      { k: 'dmg',   name: 'Damage',           min: 1,   max: 8,   mod: 'dmgPct' },
-      { k: 'hp',    name: 'Health',           min: 1,   max: 8,   mod: 'hpPct' },
-      { k: 'regen', name: 'Health Regen',     min: 0.1, max: 0.5, mod: 'regen' },
-      { k: 'spd',   name: 'Ship Speed',       min: 10,  max: 50,  mod: 'moveSpeed' },
-      { k: 'cdmg',  name: 'Crit Damage',      min: 10,  max: 100, mod: 'critDamage' },
+      { k: 'dmg',   name: 'Damage',           min: 1,   max: 10,  mod: 'dmgPct' },
+      { k: 'hp',    name: 'Health',           min: 1,   max: 10,  mod: 'hpPct' },
+      { k: 'regen', name: 'Health Regen',     min: 0.1, max: 1,   mod: 'regen' },
+      { k: 'spd',   name: 'Ship Speed',       min: 10,  max: 100, mod: 'moveSpeed' },
+      { k: 'cdmg',  name: 'Crit Damage',      min: 10,  max: 150, mod: 'critDamage' },
+      // NOT IN THE SPEC and deliberately left alone — the nine lines named were
+      // changed and Crit Chance was not one of them.
       { k: 'cchn',  name: 'Crit Chance',      min: 1,   max: 5,   mod: 'critChance' },
-      { k: 'rate',  name: 'Fire Rate',        min: 1,   max: 5,   mod: 'atkSpeedPct' },
-      { k: 'multi', name: 'Multi Shot',       min: 1,   max: 5,   mod: 'multiShot' },
+      { k: 'rate',  name: 'Fire Rate',        min: 1,   max: 8,   mod: 'atkSpeedPct' },
+      { k: 'multi', name: 'Multi Shot',       min: 1,   max: 8,   mod: 'multiShot' },
       // BALANCE (Aug 2026) — 1–5% → 0.1–0.5%. Damage reduction is the strongest
       // line in the pool (it is a divisor on every hit taken, and it stacks with
       // Armor from the Pilot Tree, which itself pays 0.5% a node), so a five-slot
       // Legendary core was handing out up to 25% flat mitigation.
-      { k: 'dr',    name: 'Damage Reduction', min: 0.1, max: 0.5, mod: 'dmgReduce' },
+      { k: 'dr',    name: 'Damage Reduction', min: 0.1, max: 1,   mod: 'dmgReduce' },
       // PROGRESSION NOTE (Aug 2026) — 3–10 → 2–6, part of the game-wide XP
       // reduction (see the FLEET XP RATE block in game-v93.js); floor then
       // lowered 2 → 1 so the range has room for a genuinely bad roll.
-      { k: 'xp',    name: 'XP Gain',          min: 1,   max: 6,   mod: 'xp' },
+      { k: 'xp',    name: 'XP Gain',          min: 1,   max: 8,   mod: 'xp' },
+      // NEW (744) — the one requested line with a modifier already in the engine.
+      { k: 'range', name: 'Weapon Range',     min: 1,   max: 10,  mod: 'rangePct' },
     ],
     // Values step in 0.1 and are WEIGHTED toward the floor: v = min + range·rᵏ.
-    // k = 2.6 puts ~70% of rolls in the bottom third of the range and makes the
-    // last 5% genuinely rare, which is what makes a good roll worth locking.
-    rollBias: 2.6,
+    //
+    // 2.6 → 3.2 (744). The top band is now ANCIENT rather than Legendary, and the
+    // spec is that it must be RARER than the Legendary roll it replaces while still
+    // being described as "the top 5% of its range". The band edge stays at 0.95, so
+    // the rarity comes from the curve: P(p ≥ 0.95) = 1 − 0.95^(1/k), which moves
+    // 1.95% → 1.59%. Every band below it is re-cut in GRADE_AT.
+    rollBias: 3.2,
     step: 0.1,
     // ---- UNLOCKING SLOTS --------------------------------------------------
     upgrade: {
@@ -208,8 +243,12 @@
   }
   const lifeOf = (k) => { try { return (G().state.lifeStats && G().state.lifeStats[k]) | 0; } catch (e) { return 0; } };
   // A roll in the TOP 5% of its own range. This is the "god roll" every feed
-  // post and badge is about, and it is only counted on LEGENDARY cores — the
-  // top of the scale is the only place the flex means anything.
+  // post and badge is about, and it is only counted on APEX cores — the top of
+  // the scale is the only place the flex means anything.
+  //
+  // TOP 5% IS AN ANCIENT ROLL NOW (744), not a Legendary one. The band edge is
+  // unchanged; what changed is which tier sits on it, so `isGod` and the Ancient
+  // grade are the SAME test by construction and cannot drift apart.
   const TOP_FRAC = 0.95;
   // ---- ROLL QUALITY, ON THE LOOT SCALE -------------------------------------
   // Every rolled value is graded by WHERE IT LANDS INSIDE ITS OWN RANGE and
@@ -222,9 +261,28 @@
   // a Legendary core is exactly the thing that posts.
   //
   // Bands sit on range position, not percentile, and the roll curve is weighted
-  // toward the floor, so the colours stay honest about how good a roll is:
-  //   Common ~59% of rolls · Uncommon ~18% · Rare ~13% · Epic ~9% · Legendary ~2%.
-  const GRADE_AT = [TOP_FRAC, 0.75, 0.5, 0.25];   // legendary · epic · rare · uncommon
+  // toward the floor, so the colours stay honest about how good a roll is.
+  //
+  // SEVEN BANDS (744). There were five, so Mythic and Ancient existed as CORES but
+  // could never be rolled as a BUFF GRADE — the pool topped out at Legendary
+  // however good the roll, which is the reported "rarities go to Ancient but max
+  // rolls still only grade Legendary". The ladder now runs the full chain, with
+  // ANCIENT on the top-5% edge and every band below it re-cut to keep the slide
+  // smooth. At rollBias 3.2 that gives, per roll:
+  //   Ancient ~1.6% · Mythic ~2.4% · Legendary ~3.5% · Epic ~6.8% · Rare ~10.1%
+  //   · Uncommon ~15.1% · Common ~60.5%
+  // Ancient is rarer than the ~1.95% Legendary it replaces, as specified.
+  //
+  // Ordered TOP FIRST and read by index, so adding a tier is a row here and a row
+  // in `rarities` — never a hand-written chain of ternaries again.
+  const GRADE_AT = [
+    [0.95, 6],   // Ancient  — TOP_FRAC, the god-roll bar
+    [0.88, 5],   // Mythic
+    [0.78, 4],   // Legendary
+    [0.62, 3],   // Epic
+    [0.42, 2],   // Rare
+    [0.20, 1],   // Uncommon
+  ];
   function rollPos(b) {
     const d = b && BY_B[b.k]; if (!d || d.max <= d.min) return 0;
     const p = (b.v - d.min) / (d.max - d.min);
@@ -232,7 +290,8 @@
   }
   function grade(b) {
     const p = rollPos(b);
-    return RAR[p >= GRADE_AT[0] ? 4 : p >= GRADE_AT[1] ? 3 : p >= GRADE_AT[2] ? 2 : p >= GRADE_AT[3] ? 1 : 0];
+    for (let i = 0; i < GRADE_AT.length; i++) if (p >= GRADE_AT[i][0]) return RAR[GRADE_AT[i][1]];
+    return RAR[0];
   }
   // LEGENDARY OR ABOVE (743). Every one of these tests used to read `=== 'legendary'`
   // because Legendary WAS the top of the scale. With Mythic and Ancient above it,
@@ -242,6 +301,13 @@
   // tier added is correct by construction rather than by remembering this comment.
   const APEX_I = BY_R.legendary.i;
   const isApex = (r) => !!(BY_R[r] && BY_R[r].i >= APEX_I);
+  // THE TOP OF THE LADDER, BY INDEX AND NOT BY NAME (744). The badge chain and
+  // the Nanocore board now measure ANCIENT cores rather than Legendary ones, and
+  // `isApex` could not simply be repointed to do it: it ALSO gates the
+  // deepest-core record and the god-roll tally, where Legendary-and-above is
+  // still the right bar. Two different questions, so two different tests.
+  const TOP_I = BY_R[RKEYS[RKEYS.length - 1]].i;
+  const isTop = (r) => !!(BY_R[r] && BY_R[r].i >= TOP_I);
   const isGod = (b) => rollPos(b) >= TOP_FRAC;
   const toast = (m, c) => { try { window.SOCIAL.toast(m, c || '#c9a0ff'); } catch (e) {} };
 
@@ -264,7 +330,13 @@
     return Math.min(100, base + f * CFG.upgrade.failBonus);
   }
   const lockedCount = (c) => (c.buffs || []).reduce((a, b) => a + (b && b.lock ? 1 : 0), 0);
-  const rollCost = (c) => Math.round(CFG.roll.base * Math.pow(CFG.roll.lockMult, lockedCount(c)) * costMultOf(c.r));
+  // REROLLING IS PRICED THE SAME ON EVERY TIER (744, operator spec). `costMultOf`
+  // was applied here as well as to upgrades, so a Mythic reroll opened at ×3 and an
+  // Ancient at ×8 — 8,000 ingots for the first roll on the core that needs the most
+  // rolling. It now starts at CFG.roll.base and doubles per LOCKED buff, exactly as
+  // it does at Legendary and below. Upgrade cost is untouched: `costMult` still
+  // prices the new tiers' SLOT unlocks, which is what it was added for.
+  const rollCost = (c) => Math.round(CFG.roll.base * Math.pow(CFG.roll.lockMult, lockedCount(c)));
   // The slot currently being worked on (1-based), or 0 when the rarity is full.
   function workSlot(c) { const max = BY_R[c.r].slots; return c.slots >= max ? 0 : c.slots + 1; }
 
@@ -274,8 +346,35 @@
     const q = Math.round(v / CFG.step) * CFG.step;
     return Math.round(q * 10) / 10;
   }
-  function rollBuff() {
-    const b = BUF[(Math.random() * BUF.length) | 0];
+  // ---- ONE LINE PER CORE (744) ---------------------------------------------
+  // This picked from the whole pool every time and never looked at what the core
+  // already held, so N slots of the SAME buff was an ordinary outcome. In a
+  // system like this the CEILING governs, not the average roll: seven slots of
+  // Crit Damage is +1,050% on a single core at the widened range, and that
+  // ceiling is exactly the constraint the multiplicative pass has been blocked
+  // on. Distinct lines bound it to the sum of the top seven DIFFERENT buffs
+  // instead of seven copies of the biggest one, which is what makes measuring
+  // the pass meaningful at all.
+  //
+  // LOCKED SLOTS COUNT AS TAKEN. Without that the stack is still reachable: lock
+  // one Crit Damage and reroll the rest until a second lands. The caller passes
+  // every committed key, including the ones this batch has just assigned, so one
+  // multi-slot reroll cannot hand out the same line twice either.
+  //
+  // Falls back to the full pool if a core somehow has more slots than the pool
+  // has lines, so it can never fail to produce a buff.
+  //
+  // EXISTING DUPLICATES ARE KEPT. Nothing stored is rewritten and nothing is
+  // clawed back — a pilot holding four Crit Damage lines keeps all four at their
+  // rolled values. This changes what a NEW roll can produce. It IS a nerf and it
+  // belongs on the patch card.
+  function rollBuff(taken) {
+    let pool = BUF;
+    if (taken && taken.length) {
+      const free = BUF.filter((b) => taken.indexOf(b.k) === -1);
+      if (free.length) pool = free;
+    }
+    const b = pool[(Math.random() * pool.length) | 0];
     return { k: b.k, v: rollValue(b), lock: false };
   }
 
@@ -323,7 +422,19 @@
     const cost = rollCost(c);
     if (!spend(cost)) { toast('Need ◭ ' + fmt(cost) + ' Prism Ingots'); return null; }
     const before = open.map((i) => c.buffs[i]);
-    open.forEach((i) => { c.buffs[i] = rollBuff(); });
+    // Every key already committed on this core: the LOCKED slots first, then each
+    // line as this batch assigns it. See rollBuff() for why locked slots have to
+    // be in here.
+    const taken = [];
+    for (let i = 0; i < c.slots; i++) {
+      const bf = c.buffs[i];
+      if (bf && bf.lock && taken.indexOf(bf.k) === -1) taken.push(bf.k);
+    }
+    open.forEach((i) => {
+      const nb = rollBuff(taken);
+      c.buffs[i] = nb;
+      if (taken.indexOf(nb.k) === -1) taken.push(nb.k);
+    });
     bumpLife('nanoRolls', 1);
     let gods = 0;
     if (isApex(c.r)) open.forEach((i) => { if (isGod(c.buffs[i])) gods++; });
@@ -374,6 +485,11 @@
     // Discord feed can post that hull's real sprite — but only if the key is
     // published. Stamped here, on the recovery itself.
     if (isApex(r)) { bumpLife('nanoLegend', 1); try { G().state.lastNano = { ship, at: Date.now() }; } catch (e) {} }
+    // ANCIENT COUNT IS ITS OWN COUNTER (744). `nanoLegend` counts Legendary AND
+    // ABOVE and is left exactly as it is — it is banked on every save in the
+    // population and other chains read it, so it is never repurposed or removed.
+    // The Ancient Core badge and the Nanocore board read this new one instead.
+    if (isTop(r)) bumpLife('nanoAncient', 1);
     // First core for a hull equips itself — nobody wants a stat bonus that
     // needs a second tap to switch on.
     if (!equipped(ship)) n.equip[ship] = r;
@@ -509,7 +625,21 @@
     let last = '';
     try { last = (G().state.lastNano && G().state.lastNano.ship) || ''; } catch (e) {}
     return {
-      nano_legend: lifeOf('nanoLegend'),
+      // THE COLUMN KEEPS ITS NAME AND CHANGES WHAT IT COUNTS (744).
+      // `nano_legend` is a STORED identifier — every client heartbeat writes it
+      // and nanocore-ladder.sql reads it — so renaming it to `nano_ancient`
+      // would revoke every row already on the board and need a matching SQL
+      // migration to go with it. The board now measures ANCIENT cores; the field
+      // they travel in is unchanged. Do NOT rename it to make the code read
+      // better — a stored key is a receipt, not a label.
+      //
+      // TRANSITIONAL: while the population is mixed, a 739 client keeps writing
+      // its Legendary count into this same column, which is a different and much
+      // larger number. The update gate pulls every client to 744 within ~90s of
+      // the beacon moving, so that window is short — but the board is a cache of
+      // each pilot's last heartbeat, so expect it to settle over hours, not
+      // instantly, exactly as the citadel rescale did.
+      nano_legend: lifeOf('nanoAncient'),
       nano_slots: Math.min(RAR[RAR.length - 1].slots, lifeOf('nanoLegendSlots')),
       nano_god: lifeOf('nanoGod'),
       nano_last: String(last || '').slice(0, 32),
@@ -524,6 +654,10 @@
     upgrade, roll, toggleLock, equip, equipped,
     openCrates, exchange, canExchange, nextRarity, exRatio, exTarget, topTier,
     combatMods, fleetMods, fleetKeys, share, mult, tally, bag,
-    bumpLife, peakLife, lifeOf, isGod, grade, rollPos, feedFields,
+    bumpLife, peakLife, lifeOf, isGod,
+    // Exported for audit/nanocore-buffs-744.html: a harness has to measure through
+    // the REAL roller, because one holding its own copy of the numbers is a
+    // harness that lies. Pure function of a pool row — no state, no side effects.
+    rollValue, grade, rollPos, feedFields,
   };
 })();

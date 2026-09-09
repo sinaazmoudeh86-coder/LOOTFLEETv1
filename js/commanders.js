@@ -198,6 +198,51 @@
     // an empty bench. `slot` is left in place — an unrecognised key is never
     // deleted, and an old client reading this save still finds what it expects.
     if (!Array.isArray(s.cmdr.slots)) s.cmdr.slots = s.cmdr.slot ? [s.cmdr.slot] : [];
+    // ---- ONE-TIME: COMMANDER RE-RELEASE (744, operator-approved) -----------
+    // Resource crates moved ×20 and onto a flat per-pull rate, so every
+    // collection in the population was built in an economy that no longer
+    // exists. Operator's call, Sep 2026: wipe the investments and let the card
+    // experience start fresh.
+    //
+    // ARCHIVE BEFORE YOU ZERO, AND HERE THAT IS THE ENTIRE SAFETY NET. `own`
+    // stores only { r, n } — best rarity ever pulled and how many times — and
+    // NOTHING anywhere records which crate a card came from. A Paragon Vault
+    // pull bought with 20,000 LootCoins is therefore indistinguishable from a
+    // Foundry kill drop, so no make-good can ever be derived from the collection
+    // itself. `arch` holds the exact pre-reset collection, pull count, dust and
+    // bench, and it rides to the cloud with the save: it is the only place a
+    // refund could ever be computed from, and the only way this wipe is
+    // recoverable at all. DO NOT prune it in a later migration.
+    //
+    // TWO GUARDS, AND THEY GUARD DIFFERENT THINGS. The stamp stops the wipe from
+    // running twice; `!s.cmdr.arch` stops a second pass from archiving the
+    // ALREADY-EMPTY collection over the real one. Without the second guard a
+    // re-login or a merge landing an unstamped copy would destroy the record
+    // this block exists to keep — the same failure the Progenitor unwind had to
+    // split refund-once from enforce-always to avoid.
+    if (!s.cmdr.reset744) {
+      const keep = (v) => Math.floor(Number(v) || 0);
+      if (!s.cmdr.arch) {
+        let at = 0;
+        try { at = (window.GAME && window.GAME.nowMs) ? window.GAME.nowMs() : Date.now(); } catch (e) { at = Date.now(); }
+        s.cmdr.arch = {
+          own: s.cmdr.own || {},
+          pulls: keep(s.cmdr.pulls),
+          dust: keep(s.cmdr.dust),
+          slots: Array.isArray(s.cmdr.slots) ? s.cmdr.slots.slice() : [],
+          slot: s.cmdr.slot || null,
+          at: at,
+          build: (window.LF_BUILD | 0) || 0,
+        };
+      }
+      s.cmdr.own = {};
+      s.cmdr.pulls = 0;
+      s.cmdr.dust = 0;
+      s.cmdr.slots = [];
+      s.cmdr.slot = null;
+      s.cmdr.reset744 = 1;
+      try { G().save(); } catch (e) {}
+    }
     return s.cmdr;
   }
   // ONE COMMANDER PER ACTIVE SHIP. The bench is the size of the fleet actually
@@ -333,12 +378,34 @@
   // ceilings overlap deliberately (cores reach Mythic, the cheap LootCoin vault
   // starts at Epic) so the paid route is a continuation of the free one rather
   // than a separate game.
+  // RESOURCE CRATE PRICES ×20 (744, operator spec). The three resource crates were
+  // priced when Galaxy Resources were scarcer; held territory, salvage and colony
+  // output have all grown since, and the middle of the card table had become the
+  // cheapest progression in the game. The two LOOTCOIN VAULTS ARE UNCHANGED — this
+  // is a resource-economy correction, not a monetisation one, and moving a paid
+  // price is a different decision with different consent attached.
+  //
+  // IT IS A PRICE RISE, SO IT LEADS THE PATCH CARD. Nothing already pulled is
+  // touched and no card is clawed back: every commander a pilot holds stays held,
+  // at the price they paid on the day. Every figure below is an exact integer far
+  // inside MAX_SAFE_INTEGER.
+  // ...AND PRICED PER PULL, NOT PER CRATE (744, operator spec). The three resource
+  // crates each had their own hand-set price, so the per-pull rate drifted tier to
+  // tier and the bigger boxes were quietly the cheaper way to buy the same pulls.
+  // The Vanguard's rate is now the rate: 2.4B fuel / 1B iron / 600M plasma A PULL,
+  // and the 1× and 3× are exactly ⅕ and ⅘ of it.
+  //
+  // CONSEQUENCE, STATED PLAINLY: there is no longer a bulk discount. The only
+  // reason to buy a bigger resource crate is its higher FLOOR and CAP — which is
+  // what those crates are actually selling — rather than a better rate on the same
+  // roll. Combined with the ×20 above, the 1× rises ×3 and the 3× ×2.4 beyond it, so
+  // both figures belong on the patch card with the ×20.
   const CRATES = [
-    { t: 1, key: 'salvaged', ic: '🔧', name: 'Salvaged Crate',   res: { fuel: 40000000,  iron: 15000000,  plasma: 7500000 },  pulls: 1, floor: 0, cap: 2,
+    { t: 1, key: 'salvaged', ic: '🔧', name: 'Salvaged Crate',   res: { fuel: 2400000000,  iron: 1000000000, plasma: 600000000 },  pulls: 1, floor: 0, cap: 2,
       blurb: 'One pull, bought with Galaxy Resources. The grind box — no boosted odds, and it will never roll above Rare.' },
-    { t: 2, key: 'advanced', ic: '⚙',  name: 'Advanced Crate',   res: { fuel: 150000000, iron: 60000000,  plasma: 35000000 }, pulls: 3, floor: 2, cap: 4,
+    { t: 2, key: 'advanced', ic: '⚙',  name: 'Advanced Crate',   res: { fuel: 7200000000,  iron: 3000000000, plasma: 1800000000 }, pulls: 3, floor: 2, cap: 4,
       blurb: 'Three pulls, none below Rare. The everyday resource sink.' },
-    { t: 3, key: 'vanguard', ic: '◈',  name: 'Vanguard Crate',   res: { fuel: 600000000, iron: 250000000, plasma: 150000000 }, pulls: 5, floor: 3, cap: 5,
+    { t: 3, key: 'vanguard', ic: '◈',  name: 'Vanguard Crate',   res: { fuel: 12000000000, iron: 5000000000, plasma: 3000000000 }, pulls: 5, floor: 3, cap: 5,
       blurb: 'Five pulls, none below Epic. The deepest a resource-bought crate reaches.' },
     { t: 4, key: 'elite',    ic: '🌌', name: 'Elite Vault',      lc: 10000,     pulls: 5, floor: 3, cap: null, epicOne: true,
       blurb: 'Five pulls from Epic upward with NO ceiling — the first crate that can reach Ancient and beyond.' },
@@ -1095,7 +1162,19 @@
       + '</div></div></div>';
   }
   function albumHTML() {
-    if (!unlocked()) return '';
+    // SAY WHAT IT TAKES (744). This returned an EMPTY STRING when locked, so the
+    // Foundry simply had no Commanders section at all and nothing anywhere in the
+    // game told a pilot that ★5 opens it — Cargo Defense and Fighter Ascension
+    // both state their requirement, this did not. Uses the same lock-card markup
+    // the screen veils use, so it inherits styling that already exists rather
+    // than inventing a second lock look. The VAULT section stays empty: one
+    // statement of the gate, not two stacked on the same screen.
+    if (!unlocked()) {
+      const g = gate();
+      return '<div class="lock-card"><div class="lock-ic">🔒</div><h3>Commanders</h3>'
+        + '<p>Officer cards that fly with your fleet — each one a standing bonus to the whole formation, pulled from crates and levelled with duplicates.</p>'
+        + '<div class="lock-lv">Unlocks at <b>Ascension ★' + (g.stars | 0) + '</b> · you are at <b>★' + (g.have | 0) + '</b></div></div>';
+    }
     probeAll();
     const c = rec(), have = Object.keys(c.own);
     // UNIFORM WITH MY FLEET. The album used to have its own detail rail and its own

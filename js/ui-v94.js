@@ -3231,13 +3231,15 @@
     if (s.mine || t.ally) {
       if (!s.ring.length) return '';           // a lone system: "fill the borders" is not yet advice
       const shell = behind ? ' It is also the shell keeping <b>' + behind + '</b> of your systems sealed.' : '';
-      // THE MAP'S EDGE IS AN OPEN BORDER YOU CANNOT CLOSE. Telling a pilot on the
-      // rim to "hold the tiles around it and it seals itself" is advice they can
-      // follow to completion and still be refused — there is no tile out there to
-      // take. So a rim system says what it is instead of what to do.
+      // THE MAP'S EDGE IS A CLOSED BORDER NOW (744). This used to tell a rim
+      // holder the truth of the old rule — "the rim can never be closed, so this
+      // system stays open however much space you hold around it" — which is the
+      // exact opposite of how it behaves today. A rim system seals on its in-map
+      // neighbours alone, so the advice is now followable to completion.
       const edge = s.edge | 0;
-      if (edge >= s.open) {
-        return '<div class="gx-shield">⚠ <b>RIM SYSTEM</b> — <b>' + edge + '</b> of six borders face the edge of the galaxy, and there is no ground out there to take. The rim can never be closed, so this system stays open to attack however much space you hold around it.' + shell + '</div>';
+      if (edge > 0) {
+        const closable = Math.max(0, 6 - edge);
+        return '<div class="gx-shield">⛨ <b>RIM SYSTEM</b> — <b>' + edge + '</b> of six borders face the edge of the galaxy, and the edge counts as a <b>closed</b> border: there is nothing out there to attack from. Hold the <b>' + closable + '</b> system' + (closable === 1 ? '' : 's') + ' beside it and this one seals itself.' + shell + '</div>';
       }
       return '<div class="gx-shield">⚠ <b>FRONT LINE</b> — <b>' + s.open + '</b> of six borders are open, so this system can be attacked. '
         + (edge ? '<b>' + edge + '</b> of them face the edge of the galaxy and can never be closed — hold the rest and it is as sealed as the rim allows.' : 'Hold the tiles around it and it seals itself.')
@@ -6242,5 +6244,11 @@
     return v + s;
   }
 
-  window.UI = { xynResult, fleetSlotsHTML, wireFleetSlots, syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail };
+  window.UI = { xynResult, fleetSlotsHTML, wireFleetSlots, syncJoystick: () => { try { syncJoystickVisible(); } catch (e) {} }, bagTrace, focusGalaxyTile, openMySystems, openEmberBriefing, emberTechResult, openAccountSheet, init, syncHUD, syncAuto, refreshAll, syncStatsTab, syncBag, onLoot, lootScrapped, onCollect, onLevelUp, onDeathReturn, showCatastropheWarning, showLevelCap, showAscendGate, showOffline, unlockToast, bossEvent, blueprintEvent, xenTechResult, openXenBriefing, shipBuilt, siegeEvent, galaxyChanged, galaxyContestToast, openAccountSheet, purchaseResult, showScreen, openProSheet, openShipDetail,
+  // EXPORTED SO OTHER MODULES CAN ASK A QUESTION IN THE GAME'S OWN VOICE (744).
+  // These have always existed here and were never on the export, so any module
+  // needing a confirmation had to fall back to the browser's confirm() dialog —
+  // a system-grey box in the middle of a styled game, which reads as a bug. The
+  // Ancient-buff reroll guard in nanocores-ui.js is the first caller.
+  showSheet, closeSheet };
 })();

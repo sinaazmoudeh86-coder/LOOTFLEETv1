@@ -306,21 +306,48 @@
       '</div>' +
       '<div class="fg-btns">' +
         '<button class="fg-btn" data-temper="' + k + ':1"' + (afford ? '' : ' disabled') + '>⚒ STRIKE</button>' +
+        // A CLIPPED BATCH IS STILL A BATCH (744). The gate was `b.n > 1`, so at the
+        // two levels where the run has exactly one strike left in it — +9, where it
+        // stops on the +10 checkpoint, and +14, where it stops on the cap — BOTH bulk
+        // buttons went dark with no reason given, and the pilot was left pressing a
+        // dead control at the two levels they care most about. attempt() has always
+        // priced and paid per strike, so a clipped run is simply a shorter one: the
+        // button is live whenever there is at least ONE strike to make, and it states
+        // how many it will actually take rather than implying ten.
         BATCH.map((n) => {
           const b = batchT(k, n);
-          return '<button class="fg-btn bulk" data-temper="' + k + ':' + n + '"' + (afford && b.n > 1 ? '' : ' disabled') + '>' +
-            '×' + n + '<i>≤ ● ' + fmt(b.gold) + '</i></button>';
+          const clip = b.n < n;
+          return '<button class="fg-btn bulk" data-temper="' + k + ':' + n + '"' + (afford && b.n > 0 ? '' : ' disabled') +
+            (clip ? ' title="' + (e.lv + b.n >= MAX_LV ? '+' + MAX_LV + ' is the cap' : 'the +' + SLIP_FLOOR + ' checkpoint') +
+              ' — this run is ' + b.n + ' strike' + (b.n === 1 ? '' : 's') + '"' : '') + '>' +
+            '×' + n + '<i>' + (clip ? b.n + '× · ' : '') + '≤ ● ' + fmt(b.gold) + '</i></button>';
         }).join('') +
       '</div>' +
       (afford ? '' : shortfall(c)) +
       '<div class="fg-note">' + (e.lv >= SLIP_FLOOR ? 'Above +10 a miss has a 40% chance to slip one level (never below +10)' : 'Fail costs only the materials — heat carries to your next strike') + ' · the work stays on the hardpoint through every gear swap</div>' +
-      '<div class="fg-note">×10/×100 strike until the temper <b>maxes</b>, reaches the <b>+10 checkpoint</b>, or you <b>run dry</b> — each strike is repriced and re-checked before it is paid for, so a batch can only cost <b>less</b> than the figure shown.</div>';
+      '<div class="fg-note">×10/×100 strike until the temper <b>maxes</b>, reaches the <b>+10 checkpoint</b>, or you <b>run dry</b> — each strike is repriced and re-checked before it is paid for, so a batch can only cost <b>less</b> than the figure shown.</div>' +
+      // THE SUCCESS FIGURE IS THE NEXT STRIKE, NOT THE RUN. Heat carries inside a
+      // batch exactly as it does between single strikes, so a long run's later
+      // strikes land far more often than the number at the top of the panel — which
+      // is why a ×10 reads as though the odds were better than advertised. The
+      // arithmetic is identical to tapping STRIKE ten times; only the disclosure was
+      // missing, so the ceiling is stated here rather than left to be felt.
+      '<div class="fg-note">The <b>' + ch + '%</b> above is this strike only. Every miss adds <b>+3%</b> heat to the next one, up to <b>+45%</b> — so inside a long run the later strikes land much more often than the figure shown.</div>';
     return '<div class="fg-panel" id="fg-temper"><div class="fg-panel-h">⚒ TEMPER</div><div class="fg-pips">' + pips + '</div>' + inner + '</div>';
   }
 
   function purityPanel(k, e) {
     const c = costR(k), afford = bank('plasma') >= c.plasma;
     const fl = purFloor(e);
+    // PRISTINE IS THE END OF THE ROAD, AND IT SAYS SO NOW (744). reroll() breaks out
+    // on the first iteration at PRISTINE, so ↻ REROLL was an ENABLED button that
+    // silently did nothing — the dead-button trap this codebase has been bitten by
+    // before — while ×10/×100 went dark with no reason and read as a bug. All three
+    // are disabled together at 125%+ and the note states why. Whether a pristine
+    // pilot should be allowed to gamble 125 → 130 is a design call, not this fix:
+    // every roll REPLACES the last, so opening it up hands them a button whose most
+    // likely outcome is losing the roll they paid for.
+    const pris = e.pur >= PRISTINE;
     const pos = clamp((e.pur - 60) / (130 - 60) * 100, 0, 100);
     const inner =
       '<div class="fg-pur' + (e.pur >= PRISTINE ? ' pris' : '') + '"><b>' + e.pur + '%</b><span>' + (e.pur >= PRISTINE ? '✦ PRISTINE' : 'forge purity') + '</span></div>' +
@@ -328,14 +355,15 @@
       '<div class="fg-next">effective <b>+' + (PCT_PER_LV * e.pur / 100).toFixed(1) + '%</b> per temper level</div>' +
       (c.plasma > 0 ? '<div class="fg-cost"><span style="color:#c07bff' + (afford ? '' : ';opacity:.45') + '">✦ ' + fmt(c.plasma) + '</span></div>' : '') +
       '<div class="fg-btns">' +
-        '<button class="fg-btn pur" data-reroll="' + k + ':1"' + (afford ? '' : ' disabled') + '>↻ REROLL</button>' +
+        '<button class="fg-btn pur" data-reroll="' + k + ':1"' + (afford && !pris ? '' : ' disabled') + '>↻ REROLL</button>' +
         BATCH.map((n) => {
           const b = batchR(k, n);
-          return '<button class="fg-btn pur bulk" data-reroll="' + k + ':' + n + '"' + (afford && b.n > 1 ? '' : ' disabled') + '>' +
+          return '<button class="fg-btn pur bulk" data-reroll="' + k + ':' + n + '"' + (afford && !pris && b.n > 0 ? '' : ' disabled') + '>' +
             '×' + n + '<i>≤ ✦ ' + fmt(b.plasma) + '</i></button>';
         }).join('') +
       '</div>' +
-      (afford ? '' : '<div class="fg-short">Need <span style="color:#c07bff">✦ ' + fmt(c.plasma - bank('plasma')) + '</span> more plasma</div>') +
+      (afford || pris ? '' : '<div class="fg-short">Need <span style="color:#c07bff">✦ ' + fmt(c.plasma - bank('plasma')) + '</span> more plasma</div>') +
+      (pris ? '<div class="fg-short">✦ <b>PRISTINE</b> — this hardpoint is done. A reroll REPLACES the roll you paid for, so there is nothing left to buy here.</div>' : '') +
       '<div class="fg-note">New roll REPLACES the old · minimum roll ' + fl + '% (creeps +1 per reroll, to 95%) · 125%+ is PRISTINE</div>' +
       '<div class="fg-note">×10/×100 keep rolling until <b>PRISTINE</b> or you run dry — and the <b>LAST</b> roll is the one you keep, exactly as with a single reroll. The floor you buy on the way up is kept whatever happens.</div>';
     return '<div class="fg-panel" id="fg-purity"><div class="fg-panel-h">✦ PURITY</div>' + inner + '</div>';
@@ -560,9 +588,17 @@
   .fg-btn.pur{ color:#160a24; background:linear-gradient(180deg,#dcb8ff,#c07bff); box-shadow:0 6px 18px -8px #c07bff; }
   .fg-btn:active{ transform:scale(.97); }
   .fg-btn:disabled{ opacity:.38; cursor:default; }
-  .fg-btns{ display:flex; gap:6px; align-items:stretch; }
-  .fg-btns .fg-btn{ flex:1 1 auto; min-width:0; }
-  .fg-btn.bulk{ flex:0 0 auto; padding:9px 11px; font-size:11px; letter-spacing:.06em; display:flex; flex-direction:column; align-items:center; gap:2px;
+  /* THE PRIMARY BUTTON COULD COLLAPSE TO NOTHING (744). A zero min-width with a
+     shrink factor of 1, sitting next to bulk buttons pinned at flex 0 0 auto,
+     let the STRIKE and REROLL buttons be squeezed down to a few pixels wide — so
+     their labels wrapped to ONE LETTER PER LINE and read as a vertical sliver
+     beside an enormous x10, off-centre in its own box. Now the primary button
+     keeps a real width floor and never wraps, the bulk buttons are allowed to
+     give width back instead of only taking it, and the row wraps rather than
+     crushing anything when the panel is narrow. */
+  .fg-btns{ display:flex; flex-wrap:wrap; gap:6px; align-items:stretch; justify-content:center; }
+  .fg-btns .fg-btn{ flex:1 1 auto; min-width:104px; white-space:nowrap; display:flex; align-items:center; justify-content:center; text-align:center; }
+  .fg-btn.bulk{ flex:0 1 auto; min-width:76px; padding:9px 11px; font-size:11px; letter-spacing:.06em; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
     color:#ffd9ae; background:linear-gradient(180deg,#2a1c0d,#1a1108); box-shadow:none; border:1px solid #6b4a1e; }
   .fg-btn.pur.bulk{ color:#e2ccff; background:linear-gradient(180deg,#241535,#150d20); border-color:#5b3b8a; }
   .fg-btn.bulk i{ font-style:normal; font-family:'Rajdhani',sans-serif; font-size:9px; font-weight:700; letter-spacing:.02em; opacity:.85; font-variant-numeric:tabular-nums; }

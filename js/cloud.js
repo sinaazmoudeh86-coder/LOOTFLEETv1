@@ -104,6 +104,53 @@
     try { if (failed.length) console.warn('[LOOTFLEET] account delete incomplete', failed); } catch (e) {}
     return { ok: revoked, revoked, failed };
   }
+  // ---- PASSWORD RESET (744) -------------------------------------------------
+  // THERE WAS NO RESET FLOW IN THE CLIENT AT ALL. Supabase was sending the email
+  // and the link came back to the game with a recovery token in the URL fragment
+  // — where nothing read it. The game booted normally, the token was discarded,
+  // and the pilot was left staring at the sign-in screen they had just asked for
+  // help with. That is the reported "the reset link doesn't take you to any page
+  // where you can reset your password": the mail was real, the destination never
+  // existed.
+  //
+  // Both halves READ `error` instead of swallowing it, for exactly the reason
+  // deleteAccountData() does: this client RESOLVES with { error } rather than
+  // throwing, so a bare try/catch would silently report success on a failure —
+  // and telling someone their reset mail is on its way when it is not is how an
+  // account becomes unreachable.
+  async function resetPassword(email) {
+    if (!client) return { ok: false, error: 'offline' };
+    const to = location.origin + location.pathname;
+    try {
+      const { error } = await client.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo: to });
+      return error ? { ok: false, error: error.message || String(error) } : { ok: true };
+    } catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
+  }
+  async function setPassword(pw) {
+    if (!client) return { ok: false, error: 'offline' };
+    try {
+      const { error } = await client.auth.updateUser({ password: String(pw || '') });
+      return error ? { ok: false, error: error.message || String(error) } : { ok: true };
+    } catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
+  }
+  // The recovery link lands with `type=recovery` in the fragment. supabase-js
+  // consumes the fragment and fires PASSWORD_RECOVERY — but on a cold boot that
+  // event can fire BEFORE anything has subscribed, and a missed event means a
+  // pilot who followed a genuine link is told nothing whatsoever. So the raw
+  // fragment is sniffed as well, and the callback is guarded against running
+  // twice when both routes fire.
+  function isRecoveryLink() {
+    try {
+      return /type=recovery/.test(String(location.hash || '')) || /[?&]type=recovery/.test(String(location.search || ''));
+    } catch (e) { return false; }
+  }
+  function onPasswordRecovery(fn) {
+    if (!client || typeof fn !== 'function') return;
+    let fired = false;
+    const once = () => { if (fired) return; fired = true; try { fn(); } catch (e) {} };
+    try { client.auth.onAuthStateChange((ev) => { if (ev === 'PASSWORD_RECOVERY') once(); }); } catch (e) {}
+    if (isRecoveryLink()) setTimeout(once, 500);
+  }
   async function getUser() {
     try { const { data } = await client.auth.getSession(); return data.session ? data.session.user : null; }
     catch (e) { return null; }
@@ -841,7 +888,8 @@
     } catch (e) { return null; }
   }
 
-  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, providers, deleteAccountData, getUser, pull, pullMeta, push,
+  window.CLOUD = { enabled, client, signUp, signIn, oauth, signOut, providers, deleteAccountData,
+    resetPassword, setPassword, onPasswordRecovery, isRecoveryLink, getUser, pull, pullMeta, push,
     pullSave, pushSave, saveConflict, claimSession, touchSession, onSessionRow,
     lbUpsert, lbTop, sdUpsert, sdDaily, sdSeason, sdMine,
     // Which column set the last successful board read returned — 'new' means

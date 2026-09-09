@@ -156,22 +156,22 @@
     {
       // NANOCORES — the top of the scale only. Common through Epic cores drop
       // for everyone; ranking them would rank crate volume. This board measures
-      // the 1.5% pull, then what the pilot did with it: how deep they built ONE
-      // core, and how many rolls landed in the top 5% of their range.
-      id: 'nano', ic: '\u25c8', col: '#f0972a', label: 'NANOCORE', sub: 'Legendary Cores',
+      // the 1-in-1,700 pull, then what the pilot did with it: how deep they built
+      // ONE core, and how many rolls landed in the top 5% of their range.
+      id: 'nano', ic: '\u25c8', col: '#f0972a', label: 'NANOCORE', sub: 'Ancient Cores',
       sql: 'nanocore-ladder.sql',
-      info: 'Legendary Nanocores recovered — 1.5% a crate. Ties break on the deepest single core built, then on top-5% buff rolls.',
+      info: 'Ancient Nanocores recovered — about 1 in 1,700 crates. Ties break on the deepest single core built, then on top-5% buff rolls.',
       unit: 'CORES',
       metric: (p) => (p.nano_legend | 0) * 1e9 + Math.min(5, p.nano_slots | 0) * 1e6 + Math.min(999999, p.nano_god | 0),
       fmt: (v, p) => String(p.nano_legend | 0),
       meta: (p) => {
         const s = Math.min(5, p.nano_slots | 0), g = p.nano_god | 0;
-        if (!(p.nano_legend | 0)) return 'No Legendary core yet · Lv ' + (p.level | 0);
+        if (!(p.nano_legend | 0)) return 'No Ancient core yet · Lv ' + (p.level | 0);
         return (s >= 5 ? '★ 5/5 slots — core finished' : s + '/5 slots on one core') +
                (g ? ' · ' + fmt(g) + ' god roll' + (g === 1 ? '' : 's') : '') +
                ' · Lv ' + (p.level | 0);
       },
-      empty: 'No Legendary Nanocores recovered yet. They drop at 1.5% a crate — the first pilot to pull one takes this board outright.',
+      empty: 'No Ancient Nanocores recovered yet. They drop about once in 1,700 crates — the first pilot to pull one takes this board outright.',
     },
     {
       id: 'badges', ic: '\u2b21', col: '#b57bff', label: 'BADGES', sub: 'Ranks Claimed',
@@ -440,7 +440,12 @@
     // thing, and no derived pilot is ever handed a finished 5/5 — that row has to
     // be earned by a human.
     const legend = lv >= 50 ? Math.max(0, Math.floor((career / 900) * (0.25 + r() * 1.35))) : 0;
-    p.nano_legend = Math.min(14, legend);
+    // ANCIENT IS ~25× RARER THAN LEGENDARY (744) — about 0.06% a crate against
+    // 1.5%. `legend` still describes the pilot's CAREER with cores and still
+    // drives slot depth and god rolls below; what is PUBLISHED to this board is
+    // now the ANCIENT count, and seeding that from the Legendary figure would put
+    // a dozen derived pilots above every human on the board on day one.
+    p.nano_legend = legend && r() < 0.03 ? 1 : 0;
     p.nano_slots = legend ? Math.min(4, Math.floor(Math.pow(r(), 1.7) * 5.4)) : 0;
     p.nano_god = legend ? Math.floor(legend * r() * 1.4) : 0;
 

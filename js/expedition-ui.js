@@ -48,7 +48,29 @@
   ];
   function rewardChips(p, opts) {
     const o = opts || {};
-    const b = RW.filter((r) => p[r[0]]).map((r) => '<em class="' + r[1] + '">' + r[2] + ' ' + fmt(p[r[0]]) + '<u>' + r[3] + '</u></em>');
+    // DREAD CORES ARE QUOTED AS A RANGE, NOT A ROLL (744). The core figure from
+    // payout() is probabilistic, and this filtered the chip on `p.cores` being
+    // TRUTHY — so whenever the roll came up short the chip vanished outright, and
+    // because it re-rolled on every repaint, launching a fleet on one mission
+    // made a different mission's Dread Core reward disappear. Nothing about that
+    // mission had changed.
+    //
+    // The chip now reads the deterministic bracket payout() publishes, so it is
+    // stable across repaints and states the real ceiling. A RESOLVED report has
+    // `cores` and no bracket — that is the number actually awarded, and it still
+    // prints as a plain figure.
+    const b = [];
+    for (const r of RW) {
+      const k = r[0];
+      if (k === 'cores' && (p.coresMax != null || p.coresMin != null)) {
+        const lo = p.coresMin | 0, hi = p.coresMax | 0;
+        if (hi <= 0) continue;
+        b.push('<em class="' + r[1] + '">' + r[2] + ' ' + (lo === hi ? fmt(hi) : fmt(lo) + '–' + fmt(hi)) + '<u>' + r[3] + '</u></em>');
+        continue;
+      }
+      if (!p[k]) continue;
+      b.push('<em class="' + r[1] + '">' + r[2] + ' ' + fmt(p[k]) + '<u>' + r[3] + '</u></em>');
+    }
     if (!b.length) b.push('<em class="rw-n">nothing recoverable</em>');
     return '<div class="ex-rw' + (o.big ? ' big' : '') + '">' + b.join('') + '</div>';
   }
@@ -227,6 +249,27 @@
   }
   // THE NEAREST SCROLLING ANCESTOR. Used to hold a sheet's scroll position across
   // a partial redraw without coupling to a class name.
+  // EVERY SCROLLER ON THE WAY UP, INCLUDING THE DOCUMENT ITSELF (744).
+  // scrollHost() below walks to `document.body` and STOPS SHORT of it, and it
+  // also requires the ancestor to be scrolled-out RIGHT NOW
+  // (scrollHeight - clientHeight > 4). On any layout where the sheet scrolls on
+  // the body or the document element — and on any frame where the list has
+  // momentarily collapsed — it therefore finds NOTHING, the captured offset comes
+  // back 0, and the restore is a no-op: picking a hull from the bottom of a long
+  // hangar still threw the pilot to the top, which is what was still being
+  // reported after the first fix. This collects the whole chain instead and the
+  // caller puts every one of them back.
+  function scrollHosts(el) {
+    const out = [];
+    for (let n = el && el.parentElement; n; n = n.parentElement) {
+      const ov = getComputedStyle(n).overflowY;
+      if ((ov === 'auto' || ov === 'scroll') && out.indexOf(n) === -1) out.push(n);
+      if (n === document.body || n === document.documentElement) break;
+    }
+    const se = document.scrollingElement;
+    if (se && out.indexOf(se) === -1) out.push(se);
+    return out;
+  }
   function scrollHost(el) {
     for (let n = el && el.parentElement; n && n !== document.body; n = n.parentElement) {
       if (n.scrollHeight - n.clientHeight > 4) {
@@ -243,9 +286,9 @@
     // browser clamped the offset to 0 — picking a hull from the bottom of a long
     // hangar threw you back to the top, on every single pick. Nothing above the
     // list changes height, so the old offset is still the right one.
-    const sc = scrollHost(host), top = sc ? sc.scrollTop : 0;
+    const hosts = scrollHosts(host), tops = hosts.map((n) => n.scrollTop);
     host.innerHTML = assignLive(m);
-    if (sc && sc.scrollTop !== top) sc.scrollTop = top;
+    hosts.forEach((n, i) => { if (n.scrollTop !== tops[i]) n.scrollTop = tops[i]; });
   }
   function assignLive(m) {
     const t = X().TYPE_BY_K[m.t];

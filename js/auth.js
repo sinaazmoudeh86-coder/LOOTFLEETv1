@@ -425,8 +425,79 @@
   }
   function name() { const s = getSession(); return s ? s.name : 'Operator'; }
 
+  // ---- PASSWORD RECOVERY, THE DESTINATION HALF (744) -----------------------
+  // cloud.js can now send the mail and set a new password; this is the screen the
+  // link actually lands on. Without it the token in the URL was read by nobody
+  // and the pilot was returned to the sign-in form that sent them away.
+  //
+  // Deliberately its own tiny flow rather than a route into the account sheet: a
+  // pilot arriving here is SIGNED OUT and holds a one-shot recovery session that
+  // expires, so the one thing that must happen is setting a password, now.
+  //
+  // The prompt fallback is ugly on purpose-of-last-resort grounds: if the sheet
+  // system has not loaded yet, a plain prompt still lets somebody recover their
+  // account, and that beats a silent dead end every time.
+  function askNewPassword() {
+    const finish = async (pw) => {
+      if (!pw || String(pw).length < 6) { toastish('Password must be at least 6 characters.'); return; }
+      const r = await window.CLOUD.setPassword(pw);
+      if (r && r.ok) {
+        // Clear the recovery fragment so a refresh does not re-open this.
+        try { history.replaceState(null, '', location.origin + location.pathname); } catch (e) {}
+        toastish('Password updated — you are signed in.');
+        setTimeout(() => location.reload(), 900);
+      } else {
+        toastish('Could not set that password: ' + ((r && r.error) || 'unknown error'));
+      }
+    };
+    const U = window.UI;
+    if (U && typeof U.showSheet === 'function' && typeof U.closeSheet === 'function') {
+      const sh = U.showSheet('<div class="sheet-head">Set a new password</div><div class="sheet-body">'
+        + '<p>Your reset link is valid. Choose a new password for your account.</p>'
+        + '<input id="lf-newpw" type="password" autocomplete="new-password" placeholder="New password" '
+        + 'style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #31506a;background:#0c161e;color:#eaf6fa;font-family:\'Rajdhani\',sans-serif;font-size:16px;font-weight:700">'
+        + '<div class="sheet-actions" style="margin-top:14px"><button class="btn" data-x>Cancel</button>'
+        + '<button class="btn primary" data-ok>Set password</button></div></div>');
+      const ok = sh && sh.querySelector && sh.querySelector('[data-ok]');
+      const x = sh && sh.querySelector && sh.querySelector('[data-x]');
+      if (ok && x) {
+        x.addEventListener('click', () => { try { U.closeSheet(); } catch (e) {} });
+        ok.addEventListener('click', () => {
+          const el = document.getElementById('lf-newpw');
+          const pw = el ? el.value : '';
+          if (!pw || pw.length < 6) { toastish('Password must be at least 6 characters.'); return; }
+          try { U.closeSheet(); } catch (e) {}
+          finish(pw);
+        });
+        return;
+      }
+    }
+    const pw = window.prompt('Your reset link is valid. Enter a new password (at least 6 characters):');
+    if (pw != null) finish(pw);
+  }
+  function toastish(m) {
+    try { if (window.UI && window.UI.unlockToast) { window.UI.unlockToast(m); return; } } catch (e) {}
+    try { if (window.SOCIAL && window.SOCIAL.toast) { window.SOCIAL.toast(m); return; } } catch (e) {}
+    try { window.alert(m); } catch (e) {}
+  }
+  function wireRecovery() {
+    try {
+      if (window.CLOUD && window.CLOUD.onPasswordRecovery) window.CLOUD.onPasswordRecovery(askNewPassword);
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireRecovery);
+  else wireRecovery();
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 
-  window.AUTH = { signOut, deleteAccount, name, session: getSession };
+  window.AUTH = { signOut, deleteAccount, name, session: getSession, askNewPassword,
+    // Exposed so the sign-in screen can offer "Forgot password?" — it sends the
+    // mail and reports the truth about whether it went.
+    requestPasswordReset: async (email) => {
+      try {
+        if (!window.CLOUD || !window.CLOUD.resetPassword) return { ok: false, error: 'offline' };
+        return await window.CLOUD.resetPassword(email);
+      } catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
+    } };
 })();

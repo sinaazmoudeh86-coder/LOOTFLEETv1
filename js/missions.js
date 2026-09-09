@@ -34,7 +34,7 @@
     { id: 'fuel1',   ic: '⬢', name: 'Fuel Skimmer',       blurb: 'Scavenge {N} fuel',                  m: 'fuel',   n: (l, z) => Math.round(60 * dayScale(z)),   rw: (l, z) => ({ iron: Math.round(80 * dayScale(z)), lc: 3 }) },
     { id: 'iron1',   ic: '◆', name: 'Iron Harvest',       blurb: 'Scavenge {N} iron',                  m: 'iron',   n: (l, z) => Math.round(40 * dayScale(z)),   rw: (l, z) => ({ plasma: Math.round(60 * dayScale(z)), lc: 3 }) },
     { id: 'plas1',   ic: '✦', name: 'Plasma Rush',        blurb: 'Scavenge {N} plasma',                m: 'plasma', n: (l, z) => Math.round(30 * dayScale(z)),   rw: (l, z) => ({ gold: Math.round(1200 * dayScale(z)), lc: 3 }) },
-    { id: 'xp1',     ic: '▲', name: 'Flight Hours',       blurb: 'Gain {N} account levels',            m: 'levels', n: (l) => l < 40 ? 2 : 1,                    rw: (l, z) => ({ fuel: Math.round(150 * dayScale(z)), iron: Math.round(60 * dayScale(z)) }) },
+    { id: 'xp1',     retired: true, ic: '▲', name: 'Flight Hours',       blurb: 'Gain {N} account levels',            m: 'levels', n: (l) => l < 40 ? 2 : 1,                    rw: (l, z) => ({ fuel: Math.round(150 * dayScale(z)), iron: Math.round(60 * dayScale(z)) }) },
     { id: 'zone1',   ic: '⌬', name: 'Push the Frontier',  blurb: 'Deploy into {N} different zones',    m: 'zones',  n: () => 3,                                  rw: (l, z) => ({ gold: Math.round(1100 * dayScale(z)), lc: 3 }) },
     { id: 'time1',   ic: '◷', name: 'On Patrol',          blurb: 'Fly {N} minutes of combat',          m: 'mins',   n: () => 15,                                 rw: (l, z) => ({ fuel: Math.round(180 * dayScale(z)) }) },
     { id: 'loot1',   ic: '⬡', name: 'Salvage Run',        blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 12 + Math.min(18, Math.round(l / 4)), rw: (l, z) => ({ iron: Math.round(70 * dayScale(z)), lc: 3 }) },
@@ -45,8 +45,8 @@
     { id: 'time2',   ic: '☉', name: 'Double Shift',       blurb: 'Fly {N} minutes of combat',          m: 'mins',   n: () => 45,                                 rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), fuel: Math.round(200 * dayScale(z)) }) },
     { id: 'loot2',   ic: '❖', name: 'Cargo Bay Bulge',    blurb: 'Pick up {N} pieces of loot',         m: 'loot',   n: (l) => 30 + Math.min(30, Math.round(l / 3)), rw: (l, z) => ({ gold: Math.round(1800 * dayScale(z)), lc: 5 }) },
     // ---- FEATURE-GATED MISSIONS — only issued once the feature is unlocked (req = min level) ----
-    { id: 'gal1',    ic: '⬢', name: 'Land Grab',          blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 2,                                  rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 5 }), req: 25 },
-    { id: 'gal2',    ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 10 }), req: 25 },
+    { id: 'gal1',    retired: true, ic: '⬢', name: 'Land Grab',          blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 2,                                  rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 5 }), req: 25 },
+    { id: 'gal2',    retired: true, ic: '⚑', name: 'Warpath',            blurb: 'Capture {N} galaxy tiles',           m: 'tiles',  n: () => 5,                                  rw: (l, z) => ({ plasma: Math.round(120 * dayScale(z)), lc: 10 }), req: 25 },
     { id: 'moon1',   ic: '☾', name: 'Colony Shipment',    blurb: 'Collect {N} resources from your Moon Colony', m: 'moon', n: (l, z) => Math.round(1500 * dayScale(z)), rw: (l, z) => ({ gold: Math.round(2000 * dayScale(z)), lc: 5 }), req: 30 },
     { id: 'moon2',   ic: '⛏', name: 'Colony Foreman',     blurb: 'Build or upgrade {N} colony structures', m: 'colony', n: () => 3,                              rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 8 }), req: 30 },
     // ---- SPACE CARGO DEFENSE — gated on the event itself (★3), not a level.
@@ -55,8 +55,18 @@
     { id: 'cargo1',  ic: '⛟', name: 'Escort Contract',    blurb: 'Deliver {N} cargo shipment(s) to the Citadel', m: 'cargo', n: () => 1,             rw: (l, z) => ({ gold: Math.round(4000 * dayScale(z)), lc: 15 }), gate: () => cargoOpen() },
     // ---- NANOCORES — gated on the system itself (Lv 50), not a board level.
     { id: 'nano1',   ic: '◈', name: 'Core Requisition',   blurb: 'Open {N} Nanocore Crate(s)',                   m: 'nanoOpen', n: () => 1,   rw: (l, z) => ({ gold: Math.round(5000 * dayScale(z)), lc: 13 }), gate: () => nanoOpen() },
-    { id: 'nano2',   ic: '⬢', name: 'Bench Time',         blurb: 'Land {N} successful core upgrade(s)',          m: 'nanoUp',   n: () => 2,   rw: (l, z) => ({ plasma: Math.round(150 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
+    { id: 'nano2',   retired: true, ic: '⬢', name: 'Bench Time',         blurb: 'Land {N} successful core upgrade(s)',          m: 'nanoUp',   n: () => 2,   rw: (l, z) => ({ plasma: Math.round(150 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
     { id: 'nano3',   ic: '✧', name: 'Spin the Lattice',   blurb: 'Reroll extra buffs {N} time(s)',               m: 'nanoRoll', n: () => 2,   rw: (l, z) => ({ iron: Math.round(180 * dayScale(z)), lc: 10 }), gate: () => nanoOpen() },
+    // ---- 744 — three new orders, each reading a counter that already exists.
+    // RETIRED IN THE SAME PASS: 'gal1'/'gal2' (capture tiles), 'nano2' (core
+    // upgrades) and 'xp1' (gain account levels). They are marked `retired` and
+    // NOT deleted: a board issued before this build still stores their ids and
+    // POOL.find() has to keep resolving them, or a live mission renders blank and
+    // can never be claimed. issue() filters them, so they are never handed out
+    // again — in-flight copies finish normally and then disappear with the period.
+    { id: 'expo1',   ic: '◎', name: 'Survey Order',      blurb: 'Start {N} fleet expedition(s)',                m: 'expo',     n: () => 2,   rw: (l, z) => ({ fuel: Math.round(240 * dayScale(z)), lc: 8 }), gate: () => expoOpen() },
+    { id: 'cmdr1',   ic: '★', name: 'Officer Draft',      blurb: 'Pull {N} commander(s)',                        m: 'cmdrPull', n: () => 3,   rw: (l, z) => ({ plasma: Math.round(140 * dayScale(z)), lc: 10 }), gate: () => cmdrOpen() },
+    { id: 'pnode1',  ic: '⬗', name: 'Neural Rewiring',    blurb: 'Unlock {N} pilot tree node(s)',                m: 'pnode',    n: () => 2,   rw: (l, z) => ({ iron: Math.round(160 * dayScale(z)), lc: 8 }) },
     // ---- THE MECH FOUNDRY — gated on the event, not a level. Its worlds open for
     // one hour in six, so run targets are counted in WORLDS CLEARED and capped
     // against how many windows a dedicated pilot can actually reach in a period.
@@ -71,6 +81,10 @@
   // Nanocores opens at Level 50 — asked through the module so the gate lives in
   // exactly one place (NANO.CFG.gate).
   function nanoOpen() { try { return !!(window.NANO && window.NANO.unlocked()); } catch (e) { return false; } }
+  // Same idiom as nanoOpen(): the gate lives in the owning module, never restated
+  // as a level number here.
+  function expoOpen() { try { return !!(window.EXPO && window.EXPO.unlocked()); } catch (e) { return false; } }
+  function cmdrOpen() { try { return !!(window.COMMANDERS && window.COMMANDERS.unlocked()); } catch (e) { return false; } }
   // The Foundry opens at Level 120 — asked through the module so the gate lives
   // in one place rather than being restated as a number here.
   function mechOpen() { try { return !!(window.MECHF && window.MECHF.unlocked()); } catch (e) { return false; } }
@@ -89,6 +103,12 @@
   // These are hard ceilings per period, applied AFTER tier scaling. They are set
   // from observed rates, not from what looks tidy on a card.
   const RATE_CAP = {
+    // 744 — set from what gates each one, not from what looks tidy: expeditions
+    // are limited by slots and hours, commander pulls by the resource bill (now
+    // ×20), pilot nodes by the one point a level gives you.
+    expo:      { d: 3,  w: 14,  m: 45  },
+    cmdrPull:  { d: 3,  w: 12,  m: 40  },
+    pnode:     { d: 2,  w: 8,   m: 22  },
     tiles:     { d: 10, w: 45,  m: 150 },   // ~50/hr flat out → monthly ≈ 3 hours
     colony:    { d: 3,  w: 12,  m: 30  },   // build costs, not time, are the wall
     nanoOpen:  { d: 1,  w: 4,   m: 10  },   // 30,000 ingots a crate
@@ -158,7 +178,7 @@
   const freshAcc = () => ({ kills: 0, bosses: 0, gold: 0, fuel: 0, iron: 0, plasma: 0, levels: 0, zones: 0, mins: 0, loot: 0, hulls: 0, tiles: 0, moon: 0, colony: 0, cargo: 0, cargoClean: 0, mechRun: 0, mechCore: 0, mechKill: 0, nanoOpen: 0, nanoUp: 0, nanoRoll: 0 });
   function buildList(cfg, tier) {
     const s = G.state, lvl = s.level || 1, z = Math.max(1, s.highestUnlocked || 1);
-    const eligible = POOL.filter((p) => (!p.req || lvl >= p.req) && (!p.gate || p.gate()));
+    const eligible = POOL.filter((p) => !p.retired && (!p.req || lvl >= p.req) && (!p.gate || p.gate()));
     const picks = seededShuffle(eligible, cfg.pk() + ':t' + tier + ':' + (s.playerName || 'cmdr')).slice(0, 10);
     const mult = targetMult(tier) * cfg.tm;
     return picks.map((p) => {
@@ -247,7 +267,16 @@
              hulls: hullLevelSum(), tiles: Object.keys(s.ownedSystems || {}).length, moon: moonLifetimeSum(), colony: colonyLevelSum(),
              cargo: (s.cargo && s.cargo.wins) | 0, cargoClean: (s.cargo && s.cargo.clean) | 0,
              nanoOpen: lifeStat('nanoOpened'), nanoUp: lifeStat('nanoUps'), nanoRoll: lifeStat('nanoRolls'),
-             mechRun: (s.mech && s.mech.runs) | 0, mechCore: Math.floor(Number(s.mech && s.mech.earned) || 0), mechKill: (s.mech && s.mech.kills) | 0 };
+             mechRun: (s.mech && s.mech.runs) | 0, mechCore: Math.floor(Number(s.mech && s.mech.earned) || 0), mechKill: (s.mech && s.mech.kills) | 0,
+    // ---- 744 METRICS ------------------------------------------------------
+    // All three are read from the counter the owning system already keeps, never
+    // a second tally. Boards measure a DELTA against a period baseline and clamp
+    // it with pos(), so a counter that legitimately goes DOWN mid-period simply
+    // scores nothing for that period rather than going negative: `cmdrPull` is
+    // zeroed by the 744 commander re-release, and `pnode` drops on a respec.
+             expo: lifeStat('expoLaunch'),
+             cmdrPull: Math.max(0, Math.floor(Number(s.cmdr && s.cmdr.pulls) || 0)),
+             pnode: Object.keys((s.pilot && s.pilot.nodes) || {}).length };
   }
   function hullLevelSum() { const sl = G.state.shipLevels || {}; let t = 0; for (const k in sl) t += sl[k] || 0; return t; }
   // Nanocore progress is already counted for life once, in nanocores.js — the

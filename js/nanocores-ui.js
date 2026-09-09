@@ -68,7 +68,11 @@
     return '<div class="nc-lock"><div class="nc-lock-ic">◈</div>' +
       '<h3>NANOCORES</h3>' +
       '<p>Opens at <b>Level ' + lv + '</b>. Cores are bought and upgraded with <b>◭ Prism Ingots</b>.</p>' +
-      '<p class="nc-dim">Every hull in the fleet has five cores, one per loot rarity — Common through Legendary. Rarity pays a guaranteed damage, health and speed bonus; everything above Common also carries extra buff slots you unlock and reroll.</p></div>';
+      // COUNTED, NOT WRITTEN OUT (744). This said "five cores, one per loot
+      // rarity — Common through Legendary", which was true until Mythic and
+      // Ancient shipped and then quietly wrong on every hull card. Read from the
+      // rarity table so it cannot drift again the next time a tier is added.
+      '<p class="nc-dim">Every hull in the fleet has ' + N().RAR.length + ' cores, one per loot rarity — Common through ' + N().RAR[N().RAR.length - 1].name + '. Rarity pays a guaranteed damage, health and speed bonus; everything above Common also carries extra buff slots you unlock and reroll.</p></div>';
   }
 
   function rosterHtml(t) {
@@ -240,7 +244,7 @@
     return '<details class="nc-pool"><summary>Buff pool, ranges &amp; roll grades</summary><div class="nc-pool-g">' +
       n.BUF.map((b) => '<div class="nc-pool-i"><span>' + b.name + '</span><b>+' + b.min + '% – ' + b.max + '%</b></div>').join('') +
       '</div><div class="nc-gkey">' + n.RAR.map((r, i) => '<span class="nc-gk" style="--g:' + r.col + '">' + r.name.toUpperCase() + '</span>').join('') + '</div>' +
-      '<p class="nc-dim sm">Values step in ' + n.CFG.step + '% and are weighted toward the floor, so most rolls land Common and a roll in the top 5% of its range grades <b>Legendary</b> — the same bar the Perfect Resonance badge counts.</p></details>';
+      '<p class="nc-dim sm">Values step in ' + n.CFG.step + '% and are weighted toward the floor, so most rolls land Common and a roll in the top 5% of its range grades <b>Ancient</b> — the same bar the Perfect Resonance badge counts.</p></details>';
   }
 
   // ===========================================================================
@@ -311,15 +315,65 @@
   // ===========================================================================
   // WIRING
   // ===========================================================================
+  // WHERE THE CORE LIST WAS (744). Opening a core and pressing ‹ ALL CORES
+  // rebuilt the list from scratch and left the pilot at the TOP of it, so a core
+  // near the bottom of a long hangar cost a fresh scroll every single time. The
+  // list offset is captured on the way IN and restored on the way OUT.
+  //
+  // Set twice — once immediately and once on the next frame — because the list
+  // has not finished laying out when render() returns, and a browser clamps an
+  // offset set against a container that is still short.
+  let _listTop = 0;
+  function coreScroller(from) {
+    for (let n = from; n; n = n.parentElement) {
+      const ov = getComputedStyle(n).overflowY;
+      if (ov === 'auto' || ov === 'scroll') return n;
+      if (n === document.body || n === document.documentElement) break;
+    }
+    return document.scrollingElement || null;
+  }
   function goHome(ship, r) { view = { ship, r }; render(); }
+  // The confirm sheet for the block above. Uses the game's own sheet when it is
+  // available and falls back to a plain confirm when it is not — the one thing
+  // that must never happen is an Ancient roll being replaced with no question
+  // asked, so there is always a question.
+  function confirmTopRoll(list, onYes, onNo) {
+    const n = N(), top = n.RAR[n.RAR.length - 1];
+    const names = list.map((b) => ((n.BY_B[b.k] && n.BY_B[b.k].name) || b.k) + ' +' + b.v + '%').join(' · ');
+    const html = '<div class="sheet-head">Reroll an ' + top.name + ' buff?</div><div class="sheet-body">'
+      + '<p>This core is holding <b style="color:' + top.col + '">' + names + '</b> — an <b>' + top.name.toUpperCase() + '</b> roll, the top 5% of its range.</p>'
+      + '<p>A reroll <b>replaces</b> it and the new roll is the one you keep. Lock it first if you want to keep it and reroll the rest.</p>'
+      + '<div class="sheet-actions"><button class="btn" data-x>Keep it</button><button class="btn gold" data-ok>Reroll anyway</button></div></div>';
+    try {
+      const U = window.UI;
+      if (U && typeof U.showSheet === 'function' && typeof U.closeSheet === 'function') {
+        const sh = U.showSheet(html);
+        const x = sh && sh.querySelector && sh.querySelector('[data-x]');
+        const ok = sh && sh.querySelector && sh.querySelector('[data-ok]');
+        if (x && ok) {
+          x.addEventListener('click', () => { try { U.closeSheet(); } catch (e) {} onNo(); });
+          ok.addEventListener('click', () => { try { U.closeSheet(); } catch (e) {} onYes(); });
+          return;
+        }
+        try { U.closeSheet(); } catch (e) {}
+      }
+    } catch (e) {}
+    if (window.confirm('Reroll your ' + top.name.toUpperCase() + ' buff (' + names + ')? A reroll replaces it and the new roll is what you keep.')) onYes();
+    else onNo();
+  }
   function wire(root) {
     const n = N();
     root.querySelectorAll('[data-nfilter]').forEach((b) => b.onclick = () => { filter = b.dataset.nfilter; render(); });
     root.querySelectorAll('[data-ncore]').forEach((b) => b.onclick = () => {
+      const sc = coreScroller(root); _listTop = sc ? sc.scrollTop : 0;
       const [ship, r] = b.dataset.ncore.split('|');
       goHome(ship, r);
     });
-    root.querySelectorAll('[data-nback]').forEach((b) => b.onclick = () => { view = null; render(); });
+    root.querySelectorAll('[data-nback]').forEach((b) => b.onclick = () => {
+      view = null; render();
+      const sc = coreScroller(root), t = _listTop;
+      if (sc) { sc.scrollTop = t; requestAnimationFrame(() => { sc.scrollTop = t; }); }
+    });
     root.querySelectorAll('[data-nequip]').forEach((b) => b.onclick = () => {
       const [ship, r] = b.dataset.nequip.split('|');
       if (n.equip(ship, r)) { toast(n.BY_R[r].name.toUpperCase() + ' core equipped on the ' + n.shipName(ship), n.BY_R[r].col); render(); }
@@ -333,8 +387,16 @@
       else toast('Upgrade failed at ' + Math.round(res.chance) + '% — next try +' + n.CFG.upgrade.failBonus + '%', '#ff7a8a');
       render();
     });
-    root.querySelectorAll('[data-nroll]').forEach((b) => b.onclick = () => {
-      const [ship, r] = b.dataset.nroll.split('|');
+    // ANCIENT ROLLS ASK FIRST (744). A reroll REPLACES what is in the slot, so
+    // pressing REROLL with an unlocked ANCIENT buff sitting there is one tap from
+    // destroying the rarest roll in the system — about 1 roll in 60 — with no
+    // warning and nothing to undo it with. If the Ancient is LOCKED it is not in
+    // the batch at all, so there is nothing at risk and no sheet is shown.
+    //
+    // The sheet is ASYNC, so it is guarded against firing twice: it can sit open
+    // while a second tap lands, and every roll pays its own price.
+    let _rolling = false;
+    const doRoll = (ship, r) => {
       const res = n.roll(ship, r);
       // Name the BEST grade in the batch — the one thing worth knowing before you
       // read the slots, and it pops in that grade's colour.
@@ -345,6 +407,24 @@
         toast(res.slots.length + ' slot' + (res.slots.length > 1 ? 's' : '') + ' rerolled' + (g ? ' · best ' + g.name.toUpperCase() : ''), g ? g.col : n.BY_R[r].col);
       }
       render();
+    };
+    root.querySelectorAll('[data-nroll]').forEach((b) => b.onclick = () => {
+      if (_rolling) return;
+      const [ship, r] = b.dataset.nroll.split('|');
+      const c = n.coreAt(ship, r);
+      const topKey = n.RKEYS[n.RKEYS.length - 1];
+      const risk = [];
+      if (c && Array.isArray(c.buffs)) {
+        for (let i = 0; i < (c.slots | 0); i++) {
+          const bf = c.buffs[i];
+          if (!bf || bf.lock) continue;
+          const gr = n.grade(bf);
+          if (gr && gr.k === topKey) risk.push(bf);
+        }
+      }
+      if (!risk.length) { doRoll(ship, r); return; }
+      _rolling = true;
+      confirmTopRoll(risk, () => { _rolling = false; doRoll(ship, r); }, () => { _rolling = false; });
     });
     root.querySelectorAll('[data-nlock]').forEach((b) => b.onclick = () => {
       const p = b.dataset.nlock.split('|');

@@ -462,15 +462,38 @@ function mergeSaves(local, cloud) {
     // does nothing and `base.ship` stands. That is the pre-737 behaviour and it is
     // the safe direction: a stale hull costs one tap, a wrong override costs the
     // pilot their flagship on every login. The first switch stamps it forever.
+    // …AND THE CHOICE IS RESOLVED IN BOTH DIRECTIONS (744).
+    //
+    // This read `local` against `base`, so it could only ever push the LOCAL copy's
+    // hull onto the winner. Every other decision receipt in this function is
+    // symmetric, and this one had to be too: when the LOCAL copy wins the base pick
+    // and the CLOUD copy holds the later stamp, the later choice was dropped on the
+    // floor — and `mPick` still max-unioned the cloud's stamp onto the hull that
+    // stayed, so the rejected hull inherited a timestamp it never earned and NO
+    // subsequent merge could ever correct it. It latched.
+    //
+    // Taking a session back off a second device is exactly that case: two real
+    // saves of comparable weight, so the base pick falls through to `lastSave` and
+    // the device that just saved wins it. That is the reported "log in on another
+    // device, take back control on the first, and your ship is a Frigate" — and why
+    // switching back did not stick.
+    //
+    // Reading `other` instead of `local` is the whole fix: when the base pick took
+    // the cloud copy, `other` IS local and the 741 behaviour is unchanged.
     const shipPick = (s) => (Number(s && s.shipPick) > 0 ? Number(s.shipPick) : 0);
-    const lPick = shipPick(local), bPick = shipPick(base);
-    if (lPick > bPick && local.ship && local.ship !== base.ship && base.ownedShips && base.ownedShips[local.ship]) {
-      base.ship = local.ship;
-    }
-    // The stamp is max-unioned like any other decision receipt, or the merged copy
-    // forgets which choice it is carrying and loses the next conflict to a stale
-    // device. Never written when neither copy has one, so saves stay clean.
-    const mPick = Math.max(bPick, shipPick(other));
+    const bPick = shipPick(base), oPick = shipPick(other);
+    // `base.ownedShips` is already unioned above, so the ownership test cannot fail
+    // for a hull the pilot really owns on either copy.
+    const took = !!(oPick > bPick && other.ship && other.ship !== base.ship && base.ownedShips && base.ownedShips[other.ship]);
+    if (took) base.ship = other.ship;
+    // A STAMP MAY ONLY DESCRIBE THE HULL IT IS SITTING ON. Raise it when we just
+    // took the later choice, or when both copies already name the same flagship;
+    // refusing to raise it otherwise is what stops a rejected choice from latching
+    // its timestamp onto the hull that stayed. Leaving the stamps disagreeing is
+    // safe and self-healing — the next merge simply resolves it again, and
+    // `ownedShips` means the hull is in the hangar either way.
+    // Never written when neither copy has one, so saves stay clean.
+    const mPick = (took || base.ship === other.ship) ? Math.max(bPick, oPick) : bPick;
     if (mPick > 0) base.shipPick = mPick;
     // PERMANENT PROGRESSION — monotonic counters can never regress through a
     // stale copy: Home Citadel wave + buildings, lifetime missions, season damage.
@@ -627,8 +650,28 @@ function mergeSaves(local, cloud) {
     if (other.sdread && base.sdread) {
       const b = base.sdread, o = other.sdread;
       b.total = Math.max(b.total || 0, o.total || 0);
-      b.bestEver = Math.max(b.bestEver || 0, o.bestEver || 0);
-      b.bestStage = Math.max(b.bestStage || 0, o.bestStage || 0);
+      // A RECORD ONLY UNIONS AGAINST A RECORD FROM THE SAME SEASON (744). These
+      // two were maxed unconditionally, so a season rollover that zeroed them was
+      // undone by the first merge with a copy still holding the previous season's
+      // figures — the old Best Run and Best Stage came back wearing the new
+      // season's name. The stamp decides: same season, union as before; different
+      // seasons, the LATER season's record stands outright and the older copy is
+      // ignored rather than maxed into it.
+      //
+      // Two unstamped copies (a save that has never rolled over) fall through to
+      // the original max, which is the pre-744 behaviour and the safe direction.
+      // The archive is carried across first so it survives whichever copy won the
+      // base pick, and is never overwritten once present.
+      if (o.arch) { b.arch = b.arch || {}; for (const _k in o.arch) if (!b.arch[_k]) b.arch[_k] = o.arch[_k]; }
+      const _bs = b.bestSeason | 0, _os = o.bestSeason | 0;
+      if (_bs === _os) {
+        b.bestEver = Math.max(b.bestEver || 0, o.bestEver || 0);
+        b.bestStage = Math.max(b.bestStage || 0, o.bestStage || 0);
+      } else if (_os > _bs) {
+        b.bestEver = o.bestEver || 0;
+        b.bestStage = o.bestStage || 0;
+        b.bestSeason = _os;
+      }
       b.shards = Math.max(b.shards || 0, o.shards || 0);
       b.runs = Math.max(b.runs || 0, o.runs || 0);
       b.partDay = Math.max(b.partDay | 0, o.partDay | 0);   // first-fight bonus never pays twice
@@ -1207,16 +1250,43 @@ function mergeSaves(local, cloud) {
       if (!base.cmdr) base.cmdr = other.cmdr;
       else {
         const bc = base.cmdr, oc = other.cmdr;
-        bc.own = bc.own || {};
-        const oo = oc.own || {};
-        for (const id in oo) {
-          const a = bc.own[id], b = oo[id];
-          if (!b) continue;
-          if (!a) bc.own[id] = b;
-          else { a.r = Math.max(a.r | 0, b.r | 0); a.n = Math.max(a.n | 0, b.n | 0); }
+        // ---- THE 744 RE-RELEASE MUST SURVIVE THE MERGE ---------------------
+        // `own` and `pulls` are max-unioned RECORDS, so a second device still
+        // holding the pre-reset collection puts every card straight back at the
+        // next merge — exactly how the mistaken Progenitor grant returned. The
+        // archive is carried across FIRST (it must survive whichever copy won
+        // the base pick, and is never overwritten once present), then the stamp
+        // decides how the collection merges.
+        //
+        // THE TEST IS DISAGREEMENT, NOT PRESENCE. When exactly one copy has been
+        // reset, that copy is authoritative and nothing is unioned — max() would
+        // otherwise keep the old values against the reset copy's zeros. When
+        // BOTH have been reset the collections are ordinary post-reset progress
+        // and union normally, which is what stops this from freezing the system
+        // the moment players start pulling again.
+        if (!bc.arch && oc.arch) bc.arch = oc.arch;
+        const bReset = !!bc.reset744, oReset = !!oc.reset744;
+        if (bReset !== oReset) {
+          bc.reset744 = 1;
+          if (!bReset) {
+            bc.own = oc.own || {};
+            bc.pulls = Math.floor(Number(oc.pulls) || 0);
+            bc.dust = Math.floor(Number(oc.dust) || 0);
+            bc.slots = Array.isArray(oc.slots) ? oc.slots : [];
+            bc.slot = oc.slot || null;
+          }
+        } else {
+          bc.own = bc.own || {};
+          const oo = oc.own || {};
+          for (const id in oo) {
+            const a = bc.own[id], b = oo[id];
+            if (!b) continue;
+            if (!a) bc.own[id] = b;
+            else { a.r = Math.max(a.r | 0, b.r | 0); a.n = Math.max(a.n | 0, b.n | 0); }
+          }
+          bc.pulls = Math.max(bc.pulls | 0, oc.pulls | 0);
+          if (!bc.slot && oc.slot) bc.slot = oc.slot;
         }
-        bc.pulls = Math.max(bc.pulls | 0, oc.pulls | 0);
-        if (!bc.slot && oc.slot) bc.slot = oc.slot;
       }
     }
     // BLUEPRINTS — recovered schematics, never consumed on use. Epoch-guarded

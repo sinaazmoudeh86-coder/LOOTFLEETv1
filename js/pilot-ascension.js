@@ -145,7 +145,54 @@
     if (!s.pasc) s.pasc = { stars: 0, pts: 0, spent: 0, perks: {}, legacy: null, hist: [] };
     if (!s.pasc.perks) s.pasc.perks = {};
     if (!Array.isArray(s.pasc.hist)) s.pasc.hist = [];
+    if (retirePerks(s.pasc)) { try { G().save(); } catch (e) {} }
     return s.pasc;
+  }
+  // ---- BASTION COMMAND IS RETIRED, AND THE POINTS GO BACK (744) ------------
+  // The Home Citadel is gone, and this perk did exactly one thing: multiply Home
+  // Citadel tower damage. It is now a stat that cannot move anything in the game
+  // — and pilots BOUGHT its ranks with ascension points, so quietly deleting it
+  // would be taking that investment off them. Silent removal of something a
+  // player is holding reads exactly like a bug.
+  //
+  // THE REFUND IS DERIVED FROM THE RANK HELD, never from `p.spent` — the same
+  // rule the respec follows and for the same reason: a running tally can drift
+  // out of step with the ranks actually held, and paying off a drifted number
+  // either robs the pilot or mints points from nothing. The rank IS the receipt.
+  // Priced with the same triangle() the respec uses, so a retirement and a respec
+  // can never disagree about what a rank was worth, and clamped to MAX_RANK so a
+  // corrupted rank refunds what rank 25 is worth rather than millions.
+  //
+  // SPLIT LIKE progUnwind(), AND FOR THE SAME REASON. The REFUND is stamped and
+  // pays exactly once; the RANK REMOVAL re-applies on EVERY load. `pasc.perks`
+  // can be handed back by a merge with a device still on an older build, and
+  // clearing a rank the pilot has already been paid for cannot cost them
+  // anything — whereas a repeated refund would be a points faucet. That
+  // asymmetry is the whole reason this is two steps and not one, and it is also
+  // why it needs no change in mergeSaves() to be safe.
+  //
+  // The perk DEFINITION stays in PERKS, marked `retired`, so a legacy rank can
+  // still be named and priced; it is filtered out of everything that offers it.
+  const RETIRED_PERKS = { tower: 1 };
+  function retirePerks(p) {
+    if (!p || !p.perks) return false;
+    let refund = 0, held = false;
+    for (const k in RETIRED_PERKS) {
+      if (p.perks[k] == null) continue;
+      held = true;
+      const r = Math.max(0, Math.min(MAX_RANK, Math.floor(Number(p.perks[k]) || 0)));
+      if (r > 0) refund += triangle(r);
+      delete p.perks[k];
+    }
+    const first = !p.retire744;
+    if (first && refund > 0) {
+      p.pts = Math.max(0, Math.floor(Number(p.pts) || 0)) + refund;
+      // `spent` described ranks that no longer exist. REDUCED, never zeroed —
+      // other perks may still be held and their investment is still real.
+      p.spent = Math.max(0, Math.floor(Number(p.spent) || 0) - refund);
+    }
+    if (first) p.retire744 = 1;
+    return held || first;
   }
   const stars = () => { const p = st(); return p ? (p.stars | 0) : 0; };
   const points = () => { const p = st(); return p ? (p.pts | 0) : 0; };
@@ -209,7 +256,7 @@
     { k: 'boss',  ic: '☠', name: 'Siege Protocols',  sub: 'Boss Damage',     per: 12, col: '#ff6b78', desc: 'Bonus damage to bosses, dreadnaughts, citadels and clone fleets.' },
     { k: 'mine',  ic: '⛏', name: 'Deep Core Drills', sub: 'Mining Speed',    per: 10, col: '#ff2a2f', desc: 'Prism rigs refine faster in every field.' },
     { k: 'rare',  ic: '✦', name: 'Fortune Lattice',  sub: 'Rare Drop Chance',per: 5,  col: '#c07bff', desc: 'Shifts the whole rarity table upward — the only way to make the ascension tiers realistic.' },
-    { k: 'tower', ic: '⚡', name: 'Bastion Command',  sub: 'Tower Damage',    per: 12, col: '#9fd6ff', desc: 'Home Citadel defence towers hit harder on every pad.' },
+    { k: 'tower', ic: '⚡', name: 'Bastion Command',  sub: 'Tower Damage',    per: 12, col: '#9fd6ff', retired: true, desc: 'Retired — the Home Citadel it defended is gone. Every point invested here has been returned to your bank.' },
     { k: 'fleet', ic: '➤', name: 'Wing Tactics',     sub: 'Fleet Damage',    per: 10, col: '#ffab4a', desc: 'Escort hulls and drones in your wing deal more damage.' },
     // ---- ◉ BEACON PERKS — deliberately the strongest thing points can buy ----
     // The beacon is the one system a player triggers by hand, so making it the
@@ -522,7 +569,7 @@
   // ---- TAB 2 · PERKS ---------------------------------------------------------
   function perksTab() {
     const p = st(), avail = points();
-    const cards = PERKS.map((d) => {
+    const cards = PERKS.filter((d) => !d.retired).map((d) => {
       const r = rank(d.k), maxed = r >= MAX_RANK, cost = rankCost(r);
       const can = !maxed && avail >= cost;
       return '<div class="pa-perk' + (r ? ' owned' : '') + '" style="--pc:' + d.col + '">' +

@@ -1314,12 +1314,18 @@
     emb1:1, emb2:1.6, emb3:2.3, emb4:3.2, emb5:4.4,
     titanaquila:4.5, corvus:5,
     // THE XYN — THE LARGEST THING THAT FLIES, and the number is the feature.
-    // The Corvus is 5 and the Progenitor above it; the Xyn is 9, drawn nearly twice
-    // any hull in the game. That alone is not enough to read as MASSIVE, because a
-    // sprite can only ever be big relative to what is beside it — so flying it also
-    // pulls the zone camera out (see xynZoom in game-v93). Scale up the ship AND
-    // shrink the world: either one alone just looks like a bigger ship.
-    xyn:9,
+    // A sprite can only ever be big relative to what is beside it, so this is set
+    // against its neighbours: the Corvus is 5, the Eternum 5.2, the Progenitor 5.6.
+    //
+    // 9 → 6.4 (744, operator's call: "takes up way too much space on screen…
+    // maybe 50% of that"). 6.4 is HALF THE SCREEN AREA of 9 — area is what
+    // "space on screen" means, and 0.707 linear is half the pixels. Taking it to
+    // 4.5 instead (half the LINEAR size) would have dropped it below the Corvus,
+    // the Eternum AND the Progenitor, inverting the ladder for the one class that
+    // sits above Celestial — so it stays the biggest hull in the game, by a clear
+    // margin, at half the footprint. 5.6 is the floor before it stops reading as
+    // the largest thing that flies.
+    xyn:6.4,
     // THE PROGENITOR — a mothership, and the largest hull in the game. Above the
     // Eternum (5.2) on purpose: it is the world boss you fought, flown. Missing
     // from this table it defaulted to 1 and drew at FRIGATE size in battle.

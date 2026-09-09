@@ -61,9 +61,9 @@
 (function () {
   'use strict';
 
-  const BUILD = 744;
+  const BUILD = 745;
   const NOTES = {
-    build: 744,
+    build: 745,
     title: 'BUILD 744',
     sub: 'The ten latest changes.',
     groups: [

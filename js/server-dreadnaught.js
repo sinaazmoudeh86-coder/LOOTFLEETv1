@@ -155,6 +155,39 @@
       s.hist.unshift({ d: Date.now(), s: 0, txt: '⚖ SEASON REBALANCED — damage and HP were scaled down galaxy-wide, so the season board restarted for everyone on the new numbers. Coins, parts and prizes already paid are untouched.' });
       try { g.save(); } catch (e) {}
     }
+    // ---- ONE-TIME: PROGENITOR BOARD RESET (744) ----------------------------
+    // The same shape as `rebal4` above, and for the same reason. The server board
+    // is zeroed by supabase/progenitor-season-reset.sql because those standings
+    // were set while the Lance's fracture lane and the world-boss repair pass were
+    // both live. But THE BOARD IS A CACHE OF WHAT EACH CLIENT PUBLISHES, and
+    // sdread_upsert() is RATCHETED — total and stage only ever climb. So the SQL
+    // on its own resets NOTHING: the first heartbeat from every pilot re-publishes
+    // the local figure and the bugged standings come straight back. Both halves
+    // have to agree, and this is the client half. Do not run one without the other.
+    //
+    // ARCHIVE BEFORE YOU ZERO. The figures move to `arch.s2bug` and stay there.
+    // `bestSeason` is stamped so mergeSaves() treats this copy as authoritative —
+    // a device that has not updated cannot max the old total back over it.
+    //
+    // `att` AND `buys` ARE DELIBERATELY NOT RESET. `buys` prices the attempt
+    // ladder (100 × 3^buys LootCoins); zeroing it would hand back the cheap end of
+    // a ladder the pilot has already paid up, which is the exact re-arming bug the
+    // device-clock fix closed. Coins, parts, claims and prize history are likewise
+    // untouched: this resets the SCORE, not the account.
+    if (!s.progBoard744) {
+      s.progBoard744 = 1;
+      if (!s.arch || typeof s.arch !== 'object') s.arch = {};
+      if (!s.arch.s2bug) {
+        s.arch.s2bug = { total: Math.floor(Number(s.total) || 0), best: Math.floor(Number(s.bestEver) || 0),
+                         stage: s.bestStage | 0, day: Math.floor(Number(s.bestDay) || 0), label: SEASON.label };
+      }
+      s.total = 0; s.bestDay = 0; s.bestEver = 0; s.bestStage = 0;
+      s.lbRank = null; s.lbSeasonRank = null;
+      s.bestSeason = SEASON.num;
+      if (!s.hist) s.hist = [];
+      s.hist.unshift({ d: Date.now(), s: 0, txt: '⚖ SEASON BOARD RESET — the standings were set while two damage bugs were live, and the board only ever climbs, so they would have stood unbeatable for good. Coins, parts and anything already paid or owed are untouched.' });
+      try { g.save(); } catch (e) {}
+    }
     // SEASON 1 → 2 ROLLOVER. Runs once, on the first load of the build that
     // brought the Mothership. It SETTLES the Voidmaw season the player actually
     // played — stages their final prize as a claim and mails it — and only then

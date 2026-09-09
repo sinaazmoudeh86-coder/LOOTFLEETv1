@@ -649,25 +649,31 @@ function mergeSaves(local, cloud) {
     // the base copy: it holds unspent prizes, and unioning it can pay twice.
     if (other.sdread && base.sdread) {
       const b = base.sdread, o = other.sdread;
-      b.total = Math.max(b.total || 0, o.total || 0);
       // A RECORD ONLY UNIONS AGAINST A RECORD FROM THE SAME SEASON (744). These
-      // two were maxed unconditionally, so a season rollover that zeroed them was
+      // were maxed unconditionally, so a season rollover that zeroed them was
       // undone by the first merge with a copy still holding the previous season's
       // figures — the old Best Run and Best Stage came back wearing the new
       // season's name. The stamp decides: same season, union as before; different
       // seasons, the LATER season's record stands outright and the older copy is
       // ignored rather than maxed into it.
       //
-      // Two unstamped copies (a save that has never rolled over) fall through to
-      // the original max, which is the pre-744 behaviour and the safe direction.
-      // The archive is carried across first so it survives whichever copy won the
-      // base pick, and is never overwritten once present.
+      // `total` IS IN HERE TOO, and it has to be. It is the figure the season
+      // board ranks on and the one the 744 board reset zeroes — max-unioning it
+      // across a reset boundary is exactly how a device that has not updated
+      // restores the standings the reset existed to clear.
+      //
+      // Two unstamped copies (a save that has never rolled over or been reset)
+      // fall through to the original max, which is the pre-744 behaviour and the
+      // safe direction. The archive is carried across first so it survives
+      // whichever copy won the base pick, and is never overwritten once present.
       if (o.arch) { b.arch = b.arch || {}; for (const _k in o.arch) if (!b.arch[_k]) b.arch[_k] = o.arch[_k]; }
       const _bs = b.bestSeason | 0, _os = o.bestSeason | 0;
       if (_bs === _os) {
+        b.total = Math.max(b.total || 0, o.total || 0);
         b.bestEver = Math.max(b.bestEver || 0, o.bestEver || 0);
         b.bestStage = Math.max(b.bestStage || 0, o.bestStage || 0);
       } else if (_os > _bs) {
+        b.total = o.total || 0;
         b.bestEver = o.bestEver || 0;
         b.bestStage = o.bestStage || 0;
         b.bestSeason = _os;

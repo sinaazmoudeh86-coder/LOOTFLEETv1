@@ -281,11 +281,31 @@
   }
   function redrawAssign(m) {
     const host = $('ex-assign-live'); if (!host) return;
-    // STAY WHERE THE PILOT WAS. This host holds the whole hull list, so replacing
-    // it emptied the sheet for an instant, the scroll height collapsed, and the
-    // browser clamped the offset to 0 — picking a hull from the bottom of a long
-    // hangar threw you back to the top, on every single pick. Nothing above the
-    // list changes height, so the old offset is still the right one.
+    // DO NOT REBUILD THE LIST THE PILOT IS SCROLLING (745). Two passes have now
+    // tried to RESTORE the scroll offset after replacing the whole live block, and
+    // it still threw the pilot to the top, because the offset was never the real
+    // problem: the list is built from <img> hull art with no intrinsic size, so on
+    // the frame the markup is replaced the cards have no height, the scroller
+    // collapses, and the browser CLAMPS the assignment to whatever fits — the
+    // restore writes 4,000 and reads back 0. Putting it back later is a race the
+    // decode always wins.
+    //
+    // So stop replacing it. Nothing in a pick card depends on the selection except
+    // the `on` class — contribution(), canAssign() and the stat line all read the
+    // hull and the mission type, never `_pick` — so a tap is a class toggle on DOM
+    // that never moves. Only the block BELOW the list (formation, verdict, notes,
+    // launch button) is re-rendered, and nothing above it changes height.
+    //
+    // The picks are delegated off the sheet root, so keeping the nodes keeps them
+    // live. The old whole-block path stays as the fallback for the first paint.
+    const rest = $('ex-assign-rest'), list = host.querySelector('.ex-picklist');
+    if (rest && list) {
+      list.querySelectorAll('[data-pick]').forEach((b) => b.classList.toggle('on', _pick.indexOf(b.dataset.pick) !== -1));
+      const hosts = scrollHosts(rest), tops = hosts.map((n) => n.scrollTop);
+      rest.innerHTML = assignRest(m);
+      hosts.forEach((n, i) => { if (n.scrollTop !== tops[i]) n.scrollTop = tops[i]; });
+      return;
+    }
     const hosts = scrollHosts(host), tops = hosts.map((n) => n.scrollTop);
     host.innerHTML = assignLive(m);
     hosts.forEach((n, i) => { if (n.scrollTop !== tops[i]) n.scrollTop = tops[i]; });
@@ -293,6 +313,13 @@
   function assignLive(m) {
     const t = X().TYPE_BY_K[m.t];
     const av = X().available();
+    return '<div class="ex-picklist">' + av.map((s) => pickCard(s, t, m)).join('') + '</div>'
+      + '<div id="ex-assign-rest">' + assignRest(m) + '</div>';
+  }
+  // Everything that DOES move when a hull is picked. Kept below the list on
+  // purpose: it may change height freely without disturbing the scroll above it.
+  function assignRest(m) {
+    const t = X().TYPE_BY_K[m.t];
     const rating = X().fleetRating(_pick, t);
     const est = X().estimate(rating, m.req);
     const cost = X().fuelCost(m, _pick.length);
@@ -310,9 +337,7 @@
     const over = est.ratio >= X().OVERKILL && _pick.length > 1;
     const short = cost > fuel;
 
-    let h = '<div class="ex-picklist">' + av.map((s) => pickCard(s, t, m)).join('') + '</div>';
-
-    h += formationBlock();
+    let h = formationBlock();
 
     h += '<div class="ex-verdict ' + est.k + '">'
       + '<div class="ex-v-row"><span>FLEET EXPLORATION RATING</span><b>' + fmt(rating) + '</b></div>'

@@ -299,7 +299,14 @@
     // (389 / 1.15 = 338, plus the 7.8k already held). The multiplier now lives on
     // the colony until collect clears it, so what the card shows is what is paid.
     const radj = mm.radj = clampAdj(mm.radj);
-    Object.keys(mm.stored).forEach((k) => { mm.stored[k] = (r[k] || 0) * effH * radj; });
+    // ASCENSION perk: Regolith Contracts (746). Folded into the ASSIGNMENT, not
+    // added to a running total — `mm.stored[k]` is recomputed from scratch against
+    // lastCollect on every accrual, which is the property that makes this colony
+    // immune to the clock exploit. A perk applied as `+=` would compound every
+    // double-tick into permanent value; applied here it simply re-derives, so the
+    // uncollected shipment already sitting on the pad also pays the new rate.
+    const _asc = (() => { try { return (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('regolith') : 1; } catch (e) { return 1; } })();
+    Object.keys(mm.stored).forEach((k) => { mm.stored[k] = (r[k] || 0) * effH * radj * _asc; });
     mm._idle = dtH >= capH;
     if (now > mm.nextRaid && buildings(mm).length) {
       const rating = defenseRating(mm);

@@ -224,6 +224,12 @@
     // even a save that predates the key arms itself; this line is what preserves
     // a deliberate OFF.
     'autoBeacon',
+    // AUTO RE-ZONE's ARMED FLAG, here for exactly the reason above and on the day
+    // it ships. The RECEIPT is `purchases.autorezone` (already covered by the
+    // `purchases` line); this is the toggle, and it reads true-unless-false, so
+    // the only thing this line can preserve is a DELIBERATE OFF \u2014 which is
+    // precisely what an ascension must not silently undo.
+    'autoReZone',
     // GOLD AND GALAXY RESOURCES SURVIVE ASCENSION (Aug 2026). Both used to be
     // zeroed, and both zeroings had stopped making sense:
     //   • GALAXY RESOURCES are produced by TERRITORY, and territory explicitly
@@ -675,6 +681,19 @@
   // --------------------------------------------------------------------------
   // DERIVED STATS
   // --------------------------------------------------------------------------
+  // ---- ASCENSION PERK READERS (746) -----------------------------------------
+  // ONE guarded accessor per shape, so no hook site in this file hand-rolls its
+  // own try/catch and none of them can disagree about the fallback. PASCEND may
+  // legitimately be absent — it loads after this file — and every reader returns
+  // the identity value in that case, so a perk never changes a number before the
+  // module that owns it is up.
+  function ascMul(k) { try { return (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult(k) : 1; } catch (e) { return 1; } }
+  function ascFlat(k) { try { return (window.PASCEND && window.PASCEND.flat) ? window.PASCEND.flat(k) | 0 : 0; } catch (e) { return 0; } }
+  // AUTOPILOT DISCIPLINE. The clamp lives in PASCEND (the cut can never exceed
+  // the penalty, so this can never exceed 1); the literal here only supplies the
+  // un-perked value for the frames before PASCEND is up.
+  function autoDmgMul() { try { return (window.PASCEND && window.PASCEND.autoDmgMul) ? window.PASCEND.autoDmgMul() : 0.8; } catch (e) { return 0.8; } }
+
   function computeStats() {
     const s = {
       attackDamage: C.playerBaseStat('attackDamage', state.level),
@@ -796,6 +815,13 @@
     if (s.multiShot > 100) { s.attackDamage *= (1 + s.multiShot / 100 * 0.6) / 1.6; s.multiShot = 100; }
     s.lifeSteal = Math.min(19, s.lifeSteal);   // global ceiling — was 95 before the 80% sustain cut
     s.multiShot = Math.min(100, s.multiShot);
+    // ---- ASCENSION PERKS ON DERIVED STATS (746) ------------------------------
+    // APPLIED AFTER THE CLAMPS, DELIBERATELY. lifeSteal and multiShot are capped
+    // above and no perk points at either — a rank that buys into a ceiling pays
+    // a maxed pilot nothing, which is the broken promise the Juno card made.
+    // These two stats have no ceiling, so a rank here is always worth its points.
+    s.critDamage *= ascMul('crit');    // KILLING EDGE
+    s.health *= ascMul('tough');       // ABLATIVE PLATING
     s.maxHp = s.health;
     // MOVE SPEED CAP — +1000% (×10 base). FrostSkull hit 3541%: at 5× game speed and
     // a stalled frame's catch-up dt that is a ~65,000px jump in one tick — the ship
@@ -809,7 +835,7 @@
     // whatever else is stacking speed — and can never drive the value negative.
     s.moveSpeedPx = 92 * (s.moveSpeed / 100) * ((C.SHIP_BY_KEY[state.ship] || {}).speedMult || 1);
     // weapon range — hull mod + fleet share + Warden aura all extend it
-    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0) + (m.rangePct || 0)) / 100);
+    s.fireRange = FIRE_RANGE * (1 + ((sm.rangePct || 0) + fs.rangePct + (aura ? aura.rangePct * aMul : 0) + (pm.rangePct || 0) + (am.rangePct || 0) + (m.rangePct || 0)) / 100) * ascMul('range');   // ASCENSION: Targeting Uplink
     // THE SAME MULTIPLIER, EXPOSED. Weapon Range comes from the skill tree, the
     // pilot tree, hull mods, gear and the Warden aura, and every one of them was
     // reaching a cannon and nothing else. A Fighter Carrier's reach IS its
@@ -1038,7 +1064,15 @@
     const flat = C.enemyXp(zone);
     const z = zone || state.currentDungeon || 1;
     const appropriate = Math.max(0.05, Math.min(1, z / Math.max(1, state.level)));
-    const fraction = C.xpToNext(state.level) / xpKillsPerLevel(state.level) * appropriate;
+    // THE LATE SURCHARGE IS DIVIDED BACK OUT HERE. This line pays a fixed share
+    // of the wall, so any multiplier added to xpToNext() lands on both sides of
+    // the division and nets to nothing — a taller wall with proportionally
+    // bigger payouts is the same climb. Dividing it out is what makes the wall
+    // real: the kill pays exactly what it paid before, and the level costs more.
+    // Falls back to 1 against a stale cached config, which reproduces the old
+    // behaviour on both sides rather than half of it.
+    const surcharge = (C.xpLateSurcharge ? C.xpLateSurcharge(state.level) : 1) || 1;
+    const fraction = C.xpToNext(state.level) / surcharge / xpKillsPerLevel(state.level) * appropriate;
     return Math.max(flat, Math.floor(fraction));
   }
   // ---- FLEET XP RATE ----------------------------------------------------------
@@ -1340,14 +1374,27 @@
   // a tool — it is a way to die without understanding why. Held back to 30, the
   // same gate as the Pilot Tree, which is where its perks live anyway.
   const BEACON_LV = 30;
-  function beaconVisible() {
-    if ((state.level | 0) < BEACON_LV) return false;       // not yours yet
+  // ONE DEFINITION OF "AN ORDINARY ZONE GRIND, WITH NOTHING SPECIAL RUNNING".
+  //
+  // The beacon and AUTO RE-ZONE both need exactly this test, and a hand-copied
+  // second list is how a new event mode ends up protected in one feature and not
+  // the other (the same failure shape as sw.js CORE's half-applied path split).
+  // ADD A RUN TYPE HERE AND BOTH FEATURES HONOUR IT.
+  //
+  // This body is beaconVisible()'s former body verbatim, minus the level gate —
+  // the two features gate at the same level today but for different reasons, so
+  // each keeps its own constant.
+  function inFreePlayGrind() {
     if (state.currentSystem) return false;                 // galaxy / void tile
     if (state.currentDungeon < 1) return false;            // safe hangar
     if (state.dreadRun || rt.sdrun || rt.hcrun || rt.cgrun) return false;
     if (state.prismRun && state.prismRun.active) return false;
     if (rt.siege || rt.waves) return false;                // capture / clone fight
     return true;
+  }
+  function beaconVisible() {
+    if ((state.level | 0) < BEACON_LV) return false;       // not yours yet
+    return inFreePlayGrind();
   }
   function beaconAllowed() {
     if (!beaconVisible()) return false;
@@ -1603,7 +1650,7 @@
     const crit = Math.random() * 100 < s.critChance;
     let dmg = s.attackDamage * (0.92 + Math.random() * 0.16);
     if (crit) dmg *= 1 + s.critDamage / 100;
-    if (state.auto) dmg *= 0.8; // auto-mode (hands-off) deals 20% less damage
+    if (state.auto) dmg *= autoDmgMul(); // auto-mode (hands-off) damage penalty — buyable off via Autopilot Discipline
     return { dmg: Math.max(1, Math.round(dmg)), crit };
   }
   // Cycle the volley through EVERY equipped weapon hardpoint — each shot
@@ -1878,6 +1925,10 @@
     if (_elite && window.DREAD && window.DREAD.dmgVs) _dmg *= window.DREAD.dmgVs(e);
     // ASCENSION: Siege Protocols — bonus damage vs boss-class targets
     if (window.PASCEND && _elite) _dmg *= window.PASCEND.mult('boss');
+    // ASCENSION: Breach Rounds — the other half of the same split. Boss-class
+    // targets take Siege Protocols; everything else takes this, and no target can
+    // ever take both (the `_elite` test is the same one, inverted).
+    if (!_elite) _dmg *= ascMul('trash');
     // AEGIS VENOM LATTICE — hostiles standing in the haze take MORE damage from
     // every source. Applied HERE, at the one point every damage path converges,
     // so bolts, fighters, drones, escorts, prism splash and the plague tick all
@@ -2210,7 +2261,7 @@
   // deep hoarding is a luxury you grind for. When the hold is full, new loot
   // pickups are auto-scrapped into Galaxy Resources (with a periodic warning).
   const INV_BASE_CAP = 100, INV_STEP = 100, INV_COST_BASE = 10e6, INV_COST_MULT = 25;
-  function invCap() { return INV_BASE_CAP + (state.invSlotsBought || 0) * INV_STEP; }
+  function invCap() { return INV_BASE_CAP + (state.invSlotsBought || 0) * INV_STEP + ascFlat('hold'); }   // + ASCENSION: Hold Expansion
   function invSlotCost() { return Math.floor(INV_COST_BASE * Math.pow(INV_COST_MULT, state.invSlotsBought || 0)); }
   function buyInvSlots() {
     const c = invSlotCost();
@@ -2434,7 +2485,23 @@
   // hands out the empty slots itself, one item each. See it for the quota.
   function isPickupUpgrade(item, strict, skipHangar) {
     const targets = slotsForBase(item.slot);
-    if (!targets.length) return false;
+    // THE FLAGSHIP IS NOT THE ACCOUNT (745). This bailed out the moment the HULL
+    // BEING FLOWN had no hardpoint of the item's base type — before the fleet loop
+    // and before the hangar loop, the two branches that exist precisely to answer
+    // for the hulls the flagship is not.
+    //
+    // Bay slots are exposed by `fighterCapacity`, so on ANY non-carrier flagship
+    // `slotsForBase('fighter')` is empty and every Fighter Bay in the game answered
+    // "not an upgrade": collect() auto-sold each one on contact and autoSellSweep()
+    // scrapped the ones already in the hold. A pilot flying a battleship with a
+    // Vanguard in an ESCORT slot therefore could not improve that carrier's wing by
+    // farming, however long they farmed — the reported "fighters still don't drop
+    // if a fighter ship is in an escort slot; after a whole night my Vanguard still
+    // has zone 428 commons". The bays were dropping. They were being sold.
+    //
+    // Nothing replaces the guard, because each branch already tests its own hull:
+    // with `targets` empty the flagship comparison is skipped outright, and the
+    // fleet and hangar loops read `C.shipSlots(sh.key)` for themselves.
     // CAN THE HULL BEING FLOWN EVEN MOUNT IT?
     //
     // The flagship test below is a POWER comparison against whatever sits in the
@@ -2449,7 +2516,7 @@
     //
     // The fleet loop below already asked this question. The flagship never did.
     const flagOk = canMountWeapon(item, state.ship);
-    if (flagOk) {
+    if (flagOk && targets.length) {
       let weakest = Infinity, empty = false;
       targets.forEach((t) => { const e = state.equipped[t]; if (!e) empty = true; else weakest = Math.min(weakest, I.itemPower(e)); });
       // itemPower > Infinity is false, so an all-empty target set correctly
@@ -2898,6 +2965,9 @@
       const cgd = rt._cgDt; rt._cgDt = 0;
       if (rt.cgrun && rt.cgrun.active && window.CARGO && window.CARGO.engineTick) { try { window.CARGO.engineTick(cgd, rt); } catch (e) {} }
     }
+    // ⇱ AUTO RE-ZONE — the one point in the frame where swapping the world is
+    // safe: every sub-step is done and nothing below this line holds an entity.
+    if (rt._rzGo) { try { autoReZoneFlush(); } catch (e) { rt._rzGo = 0; } }
     // RENDER GATE — the simulation above always runs (so idle farming, boss
     // timers and offline progress are never starved), but we only PAINT when the
     // canvas is actually on-screen: skip drawing while the tab is hidden or while
@@ -3157,6 +3227,9 @@
     stormTick(dt);
     // ◉ BEACON — cooldown + swarm lifetime
     beaconTick(dt);
+    // ⇱ AUTO RE-ZONE — raises a request only; step() performs the warp once per
+    // frame, after every sub-step has finished with the current world.
+    autoReZoneTick();
     // VOIDMAW: black holes drag and grind everything caught inside
     singularityTick(dt);
     // ✦ AETERNUM: lance cycle, the shot, and every burning fracture lane
@@ -4112,7 +4185,10 @@
     const s = C.salvage(item); if (!s) return;
     if (!state.resources) state.resources = { fuel: 80, iron: 0, plasma: 0 };
     for (const k in s) {
-      const amt = Math.max(1, Math.round(s[k] * SELL_RES_MULT));
+      // ASCENSION: Scrapper's Cut. Inside the same Math.max(1, round()) the base
+      // yield already used, so a perked scrap can never pay LESS than an unperked
+      // one and the floor of 1 still holds.
+      const amt = Math.max(1, Math.round(s[k] * SELL_RES_MULT * ascMul('scrap')));
       state.resources[k] = (state.resources[k] || 0) + amt;
       if (acc) acc[k] = (acc[k] || 0) + amt;
     }
@@ -4497,7 +4573,7 @@
     if (window.UI) window.UI.refreshAll(); save();
     return true;
   }
-  function shipDroneCount() { const s = C.SHIP_BY_KEY[state.ship]; return s ? (s.drones || 0) : 0; }
+  function shipDroneCount() { const s = C.SHIP_BY_KEY[state.ship]; return (s ? (s.drones || 0) : 0) + ascFlat('drone'); }   // + ASCENSION: Drone Lattice
   // A GUN-LESS CARRIER — bays and NO cannon hardpoint. Its damage leaves the ship.
   //
   // This used to be "has bays", which was true when the Vanguard (weapons: 0) was
@@ -4630,7 +4706,7 @@
         // path never applied it. Escort hulls did, fighters now do, drones do.
         if (window.PASCEND) dmg *= window.PASCEND.mult('fleet');
         if (crit) dmg *= 1 + s.critDamage / 100;
-        if (state.auto) dmg *= 0.8;
+        if (state.auto) dmg *= autoDmgMul();
         p.damage = Math.max(1, Math.round(dmg * (crowd2 ? 2 : 1))); p.crit = crit; p.drone = true;
         p.angle = Math.atan2(best.y - dr.y, best.x - dr.x);
         // CAP (Aug 2026, the siege crash). Drone fire had NO ceiling — player shots
@@ -4778,7 +4854,7 @@
         let dmg = s.attackDamage * C.FLEET.escortDmgFrac * (0.9 + Math.random() * 0.2);
         if (window.PASCEND) dmg *= window.PASCEND.mult('fleet');   // ASCENSION: Wing Tactics
         if (crit) dmg *= 1 + s.critDamage / 100;
-        if (state.auto) dmg *= 0.8;
+        if (state.auto) dmg *= autoDmgMul();
         p.damage = Math.max(1, Math.round(dmg)); p.crit = crit;
         p.wtype = ESCORT_WTYPE[es.cls] || 'gatling';
         p.angle = Math.atan2(best.y - es.y, best.x - es.x);
@@ -8240,6 +8316,12 @@
       if (q.void) { r.fuel += q.perHour; r.iron += q.perHour; r.plasma += q.perHour; r.gold = (r.gold || 0) + q.gold; return; }
       r[q.res] += q.perHour;
     });
+    // ASCENSION: Standing Orders. Applied to the ASSEMBLED rate, once, at the one
+    // exit every caller reads — accrueResources(), computeOffline() and the UI
+    // rate pills all come through here, so the perk can never show on a card and
+    // be missing from the payout, or the reverse.
+    const so = ascMul('offline');
+    if (so !== 1) for (const k in r) r[k] *= so;
     return r;
   }
   // OFFLINE CAP — VIP levels 6, 9 and 13 each sell "Offline earnings cap +Nh".
@@ -8500,6 +8582,142 @@
       if (ttk < 1.1 && survivable) ceiling = d;   // must shred enemies (was 2.2)
     }
     return Math.max(1, ceiling - 2);
+  }
+
+  // ---- AUTO RE-ZONE — a one-time 25,000-LootCoin operations unlock ----------
+  // WHAT IT BUYS: while you are grinding, the fleet follows the ★ on its own. The
+  // moment your power lifts the recommended zone above the one you are sitting
+  // in, it warps you up. That is the whole feature — it is the Auto Beacon's
+  // bargain (an idle game should not need you present to press one button) applied
+  // to the other thing an AFK pilot has to come back and do by hand.
+  //
+  // IT ONLY EVER GOES UP. Never down, not once, for any reason. Depth is
+  // something the pilot pushed for, and a paid feature that quietly walks them
+  // back down the board — because a fitting broke, an escort died, or the
+  // recommendation wobbled — reads exactly like theft. "This zone is dangerous"
+  // stays the pilot's call and the advice line still says it.
+  //
+  // `autorezone` IS THE SKU AND IT IS A RECEIPT. It rides in `purchases`, which
+  // mergeSaves() deep-unions key-by-key and ASC_KEEP preserves, so the unlock
+  // survives ascension, a device swap and any merge with no changes there.
+  // Never rename it.
+  //
+  // THE ARMED FLAG IS A SETTING, NOT THE RECEIPT — `state.autoReZone`, true unless
+  // explicitly false, in ASC_KEEP beside `autoBeacon` for the same reason: without
+  // it an ascension silently switches a 25,000-LootCoin feature off.
+  const REZONE_LC = 25000;
+  const REZONE_LV = 30;
+  const REZONE_CD = 20;     // SIM-seconds between automatic warps
+  function hasAutoReZone() { return !!(state.purchases && state.purchases.autorezone); }
+  function autoReZoneOn() { return hasAutoReZone() && state.autoReZone !== false; }
+  function setAutoReZone(v) {
+    if (!hasAutoReZone()) return false;
+    state.autoReZone = !!v;
+    save();
+    if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    return true;
+  }
+  // A WARP MUST NEVER LAND ON TOP OF SOMETHING THE PILOT STARTED.
+  //
+  // inFreePlayGrind() already rules out galaxy tiles, the hangar, the Dreadnaught
+  // Hunt, the Server Dreadnaught, Home Citadel, Cargo Defense, a Prism run and any
+  // siege or wave fight. The extra guards here are the ones re-zoning needs and
+  // the beacon does not: firing a flare into a boss is merely wasteful, whereas
+  // WARPING during one ends the fight and destroys the run.
+  function rezoneAllowed() {
+    if ((state.level | 0) < REZONE_LV) return false;
+    if (!inFreePlayGrind()) return false;
+    if (state.mechRun && state.mechRun.active) return false;
+    if (state.prismFleetRun && state.prismFleetRun.active) return false;
+    if (rt.kothrun || rt.alrun) return false;
+    if (rt.bossAlive) return false;                        // never mid-boss
+    if (rt.archer && rt.archer.dead) return false;         // never warp a wreck
+    if (rt.awaitingRespawn) return false;
+    return true;
+  }
+  // THE TARGET IS THE ★, STEPPED DOWN PAST ANYTHING THAT IS A RUN RATHER THAN A
+  // GRIND. Wave zones (every 11th) and citadel zones are 25-wave gauntlets and
+  // sieges — they are STARTED, not farmed, and dropping an unattended fleet into
+  // one is not what this button promises. So the warp takes the deepest ORDINARY
+  // zone at or below the recommendation; the ★ itself is still one tap away and
+  // the store card says this out loud.
+  //
+  // Returns 0 for "nothing to do", which includes every case where the stepped-down
+  // target is not strictly deeper than where the fleet already is.
+  function rezoneTarget() {
+    const cur = state.currentDungeon | 0;
+    let z = Math.min(recommendedZone() | 0, state.highestUnlocked | 0);
+    while (z > cur && (isWaveZone(z) || isCitadelZone(z))) z--;
+    return z > cur ? z : 0;
+  }
+  // REQUESTED IN THE SUB-STEP, PERFORMED ONCE PER FRAME.
+  //
+  // update() runs up to sixteen times a frame and selectDungeon() swaps rt.enemies,
+  // rt.projectiles and rt.ground wholesale and repositions the hull — doing that
+  // halfway through a sub-step leaves every pass after it in the frame working on
+  // a world that no longer exists. So the tick only ever sets a request and step()
+  // flushes it after the sub-step loop, the same coalescing the Cargo escort uses.
+  //
+  // THE COOLDOWN IS ON rt.time, THE SIM CLOCK — not Date.now(), which is
+  // player-controlled, and not performance.now(), which keeps running while the
+  // game is paused. rt.time starts at 0, so the first warp of a session cannot
+  // happen inside the first REZONE_CD seconds: arriving somewhere is not the same
+  // as being ready to leave it.
+  function autoReZoneTick() {
+    if (!autoReZoneOn() || !rezoneAllowed()) return;
+    if (rt.time - (rt._rzT || 0) < REZONE_CD) return;
+    const z = rezoneTarget();
+    if (z) rt._rzGo = z;
+  }
+  function autoReZoneFlush() {
+    const z = rt._rzGo | 0;
+    rt._rzGo = 0;
+    if (!z) return;
+    // RE-CHECK AT THE MOMENT OF THE WRITE. The request was raised in a sub-step;
+    // a boss can have spawned, the hull can have died and the recommendation can
+    // have moved since. Nothing here is a spend, but the same rule applies — the
+    // state that authorised the action has to still be true when it happens.
+    if (!autoReZoneOn() || !rezoneAllowed()) return;
+    if (z !== rezoneTarget()) return;
+    // STAMPED BEFORE THE ATTEMPT, NOT AFTER. selectDungeon() refuses a citadel on
+    // cooldown and returns silently; without the stamp a refused warp would be
+    // retried on every single frame for as long as the condition held.
+    rt._rzT = rt.time;
+    const from = state.currentDungeon | 0;
+    selectDungeon(z);
+    if ((state.currentDungeon | 0) !== z) return;          // refused — leave it alone
+    const a = rt.archer;
+    rt.floats.push(new E.FloatText(a.x, a.y - 34, '⇱ AUTO RE-ZONE — ZONE ' + z, { color: '#7cd4ff', size: 26, vy: -30, life: 1.8 }));
+    if (window.UI && window.UI.unlockToast) window.UI.unlockToast('⇱ Auto Re-Zone — Zone ' + from + ' → ' + z);
+  }
+  let _rzBusy = false;
+  function buyAutoReZone() {
+    if (_rzBusy) return { ok: false, reason: 'busy' };
+    if (hasAutoReZone()) return { ok: false, reason: 'owned' };
+    if ((state.level | 0) < REZONE_LV) return { ok: false, reason: 'level', need: REZONE_LV };
+    // Math.floor(Number(x) || 0), never `| 0` — a wallet past 2.1 billion wraps
+    // negative through a bitwise coercion and the check would pass for someone
+    // rich rather than poor.
+    const bal = Math.floor(Number(state.credits) || 0);
+    if (bal < REZONE_LC) return { ok: false, reason: 'credits', short: REZONE_LC - bal };
+    _rzBusy = true;
+    try {
+      state.credits = bal - REZONE_LC;             // paid…
+      if (!state.purchases) state.purchases = {};
+      state.purchases.autorezone = true;           // …then delivered, synchronously
+      state.autoReZone = true;                     // armed on purchase — that is what they bought
+      save();
+      try { if (window.ACCOUNT && window.ACCOUNT.flushNow) window.ACCOUNT.flushNow(); } catch (e) {}
+      if (window.UI && window.UI.refreshAll) window.UI.refreshAll();
+    } finally { _rzBusy = false; }
+    return { ok: true };
+  }
+  // For the store card: everything it needs to describe the feature without
+  // restating a single constant of its own.
+  function rezoneState() {
+    return { owned: hasAutoReZone(), armed: autoReZoneOn(), price: REZONE_LC,
+             needLv: REZONE_LV, locked: (state.level | 0) < REZONE_LV,
+             rec: recommendedZone(), cur: state.currentDungeon | 0, cd: REZONE_CD };
   }
   // FrostyFrost anywhere in the fleet (flagship or escort) — memoized 500ms
   // MEMOISED ON THE SIM CLOCK, NOT THE WALL CLOCK. Both of these are called from
@@ -10093,6 +10311,8 @@
     setGameSpeed, hasSpeed, purchase, buySpeed4, buyShipLC, isPro, proMods, grantPro, respawnAt,
     // AUTO BEACON — the 25,000-LootCoin operations unlock and its arm/disarm flag
     AUTO_BEACON_LC, buyAutoBeacon, hasAutoBeacon, autoBeaconOn, setAutoBeacon,
+    // ⇱ AUTO RE-ZONE — the 25,000-LootCoin follow-the-★ unlock and its arm flag
+    REZONE_LC, buyAutoReZone, hasAutoReZone, autoReZoneOn, setAutoReZone, rezoneState,
     resizeCanvas: () => { try { rt.portW = 0; rt.portH = 0; resize(); } catch (e) {} },
     buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,

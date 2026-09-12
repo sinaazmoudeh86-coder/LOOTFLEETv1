@@ -86,13 +86,37 @@
     // mult()/perkPct(), so this reads the perk table and maps only the ranks that
     // land on a combat stat this panel explains. A perk with no combat key (gold,
     // XP, AFK) is real but belongs to the multiplier pills below, not here.
+    //
+    // A `postMul` PERK IS EXCLUDED ON PURPOSE, and the guard is explicit rather
+    // than incidental. Killing Edge, Ablative Plating and Targeting Uplink
+    // multiply a derived stat AFTER computeStats() sums the pool, so adding them
+    // as pool members would over-report every axis they touch and break the
+    // share arithmetic below. They are applied where the engine applies them —
+    // see postMul() and the headline — and they get their own row there.
+    //
+    // MEMBERSHIP IS DECLARED (`pool`), NEVER INFERRED FROM THE PERK KEY. This
+    // block used to test `STAT_BY_K[d.k]` — the PERK namespace against the STAT
+    // namespace — and no perk key has ever equalled a stat key, so it could not
+    // fire and quietly read as working code. The hazard is the day someone names
+    // a perk `critChance` or `hpPct`: it would have fallen into the pool by
+    // NAME COINCIDENCE and over-reported that axis, which is the same class of
+    // defect as the post-pool under-report. A perk enters this pool only by
+    // saying so.
+    //
+    // NOTHING DECLARES `pool` TODAY, AND THAT IS CORRECT. No live perk is an
+    // additive pool member: Wing Tactics multiplies escort and drone damage at
+    // the call sites, it is not summed into `dmgPct`, so listing it here would
+    // claim a share of a pool it never joins.
     const paMods = safe(() => {
       const P = window.PASCEND; if (!P || !P.PERKS || !P.perkPct) return null;
       const m = {};
       P.PERKS.forEach((d) => {
+        if (d.postMul || d.retired) return;
+        const key = d.pool;
+        if (!key || !STAT_BY_K[key]) return;
         const v = num(P.perkPct(d.k));
-        if (!v || !STAT_BY_K[d.k]) return;
-        m[d.k] = (m[d.k] || 0) + v;
+        if (!v) return;
+        m[key] = (m[key] || 0) + v;
       });
       return Object.keys(m).length ? m : null;
     }, null);
@@ -182,10 +206,35 @@
   // ---- THE PANEL --------------------------------------------------------------
   let _open = false, _stat = 'dmgPct';
 
+  // POST-POOL MULTIPLIERS, read live from PASCEND. A perk here multiplies the
+  // stat AFTER the pool resolves, exactly as computeStats() does — so the panel
+  // reports what the engine uses instead of quietly stopping at the pool.
+  // Returns null for an axis nothing multiplies, which is the common case.
+  function postMul(statKey) {
+    return safe(() => {
+      const P = window.PASCEND;
+      if (!P || !P.postMuls) return null;
+      const o = P.postMuls()[statKey];
+      return (o && isFinite(o.m) && o.m !== 1) ? o : null;
+    }, null);
+  }
+
   function html() {
     const srcs = sources();
     const t = totals(srcs);
-    const live = STATS.filter((st) => Math.abs(t[st.k]) > 0.05);
+    // AN AXIS IS LIVE IF ANYTHING MOVES IT, POOL OR PERK. `totals()` sums source
+    // mods only, and postMuls() deliberately contributes nothing to that sum — so
+    // filtering on the pool alone hid a post-pool perk on any axis with no
+    // additive source behind it. `rangePct` and `critDamage` are both routinely
+    // zero (they come from some hull mods, the trees, gear and the Warden aura,
+    // none guaranteed), so Targeting Uplink and Killing Edge would have gone
+    // invisible again — via this filter instead of via STAT_BY_K. Only `hpPct` is
+    // near-certain to be non-zero, because Hull Upgrades always feed it.
+    //
+    // Downstream is already safe at total === 0: the stack divides by
+    // Math.max(1, total) and the share row guards on total > 0, so the equation
+    // reads BASE × ( 1 + 0 ÷ 100 ) × ✧ ×2.5 = ×2.5 — which is exactly right.
+    const live = STATS.filter((st) => Math.abs(t[st.k]) > 0.05 || !!postMul(st.k));
     if (!live.length) {
       return '<div class="fd-wrap"><div class="fd-head"><span class="fd-t">MY FLEET DEEP DETAILS</span>'
         + '<span class="fd-s">No bonuses yet — fit gear, level your hull or seat a Commander and the breakdown appears here.</span></div></div>';
@@ -193,6 +242,7 @@
     if (!live.some((st) => st.k === _stat)) _stat = live[0].k;
     const st = STAT_BY_K[_stat];
     const total = t[_stat];
+    const pm = postMul(_stat);
 
     // Contributions to the SELECTED stat, biggest first — the question a player
     // is actually asking is "what is doing the work here".
@@ -203,8 +253,12 @@
     const peak = rows.reduce((m, r) => Math.max(m, Math.abs(r.v)), 1);
 
     // The real multiplier this pool produces, and the honest headline: a stat is
-    // base × (1 + pool/100), so this is the number the engine actually uses.
-    const mult = 1 + total / 100;
+    // base × (1 + pool/100), then × any post-pool perk multiplier — which is the
+    // order computeStats() applies them in. Leaving the perk factor out of this
+    // number is what made the panel under-report Crit Damage by 2.5× at a maxed
+    // Killing Edge while its own header promised nothing was recomputed a second
+    // way.
+    const mult = (1 + total / 100) * (pm ? pm.m : 1);
 
     return '<div class="fd-wrap' + (_open ? ' open' : '') + '">'
       + '<button class="fd-head" data-fd-toggle>'
@@ -217,17 +271,23 @@
       + '<span class="fd-big" style="--c:' + st.col + '">×' + (Math.round(mult * 100) / 100) + '</span>'
       + '<span class="fd-caret">' + (_open ? '▲' : '▼') + '</span>'
       + '</button>'
-      + (_open ? body(live, t, st, rows, peak, total, mult) : '')
+      + (_open ? body(live, t, st, rows, peak, total, mult, pm) : '')
       + '</div>';
   }
 
-  function body(live, t, st, rows, peak, total, mult) {
+  function body(live, t, st, rows, peak, total, mult, pm) {
+    const pf = pm ? pm.m : 1;
     return '<div class="fd-body">'
       // ---- stat selector -----------------------------------------------------
-      + '<div class="fd-tabs">' + live.map((x) =>
-          '<button class="fd-tab' + (x.k === _stat ? ' on' : '') + '" data-fd-stat="' + x.k + '" style="--c:' + x.col + '">'
+      + '<div class="fd-tabs">' + live.map((x) => {
+          const xp = postMul(x.k);
+          return '<button class="fd-tab' + (x.k === _stat ? ' on' : '') + '" data-fd-stat="' + x.k + '" style="--c:' + x.col + '">'
           + '<i>' + x.ic + '</i><b>' + esc(x.name) + '</b>'
-          + '<em>+' + pct(t[x.k]) + (x.unit === '×' ? '' : '%') + '</em></button>').join('')
+          + '<em>+' + pct(t[x.k]) + (x.unit === '×' ? '' : '%')
+          // A tab that shows only the pool would disagree with the headline the
+          // moment that axis is perked, so the factor rides along on the label.
+          + (xp ? ' · ×' + (Math.round(xp.m * 100) / 100) : '') + '</em></button>';
+        }).join('')
       + '</div>'
       // ---- the equation ------------------------------------------------------
       // Stated as the engine states it, because the compounding assumption is the
@@ -235,11 +295,19 @@
       + '<div class="fd-eq">'
       + '<span class="fd-eq-p">BASE</span><span class="fd-eq-o">×</span>'
       + '<span class="fd-eq-p">( 1 + <b style="color:' + st.col + '">' + pct(total) + '</b> ÷ 100 )</span>'
+      + (pm ? '<span class="fd-eq-o">×</span><span class="fd-eq-p">' + pm.ic + ' <b style="color:' + pm.col + '">×' + (Math.round(pm.m * 100) / 100) + '</b></span>' : '')
       + '<span class="fd-eq-o">=</span>'
       + '<span class="fd-eq-r" style="color:' + st.col + '">×' + (Math.round(mult * 100) / 100) + '</span>'
       + '</div>'
       + '<div class="fd-note">Every source below <b>adds into one pool</b>, then that pool multiplies your base <b>once</b>. '
-      + 'They do not compound with each other — which is why a big percentage on a deep account moves the final number less than it reads.</div>'
+      + 'They do not compound with each other — which is why a big percentage on a deep account moves the final number less than it reads.'
+      // THE ONE THING ON THIS PANEL THAT DOES COMPOUND, named where the claim
+      // above is made rather than in a footnote. A pilot who buys Killing Edge
+      // and finds it absent from the list below has been told the panel explains
+      // every point, which was the defect.
+      + (pm ? ' <b style="color:' + pm.col + '">' + pm.ic + ' ' + esc(pm.name) + '</b> is the exception — an ascension perk, applied <b>on top of the finished pool</b> at <b>×'
+            + (Math.round(pm.m * 100) / 100) + '</b>, so it is not one of the sources below and it <b>does</b> compound with all of them.' : '')
+      + '</div>'
       + radar(t, live)
       // ---- the stacked bar ---------------------------------------------------
       + '<div class="fd-stack">' + rows.map((r, i) =>
@@ -259,8 +327,8 @@
             // system holding 18% of the points is worth far less than 18% of your
             // damage once the base multiplier is accounted for, and that gap is
             // exactly what people get wrong comparing two upgrades.
-            + '<span class="fd-r-w">without<b>\u00d7' + (Math.round((1 + (total - r.v) / 100) * 100) / 100) + '</b>'
-            + '<em>\u2212' + (Math.round((1 - (1 + (total - r.v) / 100) / mult) * 1000) / 10) + '%</em></span>'
+            + '<span class="fd-r-w">without<b>\u00d7' + (Math.round((1 + (total - r.v) / 100) * pf * 100) / 100) + '</b>'
+            + '<em>\u2212' + (Math.round((1 - ((1 + (total - r.v) / 100) * pf) / mult) * 1000) / 10) + '%</em></span>'
             + '</div>';
         }).join('')
       + '</div>'

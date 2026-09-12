@@ -39,7 +39,7 @@
   function fmt(n) { if (!Number.isFinite(n)) return '—'; try { return G().formatNum(Math.floor(n)); } catch (e) { return Math.floor(n) + ''; } }
 
   const BOOST = ['attackDamage', 'health', 'attackSpeed', 'critDamage', 'moveSpeed'];
-  const MAX_LV = 15, SLIP_FLOOR = 10, PRISTINE = 125, PCT_PER_LV = 6;
+  const MAX_LV = 15, SLIP_FLOOR = 10, PRISTINE = 125, PUR_MAX = 130, PCT_PER_LV = 6;
   const SLOT_ORDER = ['bow', 'bow2', 'arrows', 'arrows2', 'armor', 'boots', 'gloves', 'amulet'];
   function bank(res) { const st = G().state; return res === 'gold' ? (st.gold || 0) : ((st.resources || {})[res] || 0); }
 
@@ -339,32 +339,42 @@
   function purityPanel(k, e) {
     const c = costR(k), afford = bank('plasma') >= c.plasma;
     const fl = purFloor(e);
-    // PRISTINE IS THE END OF THE ROAD, AND IT SAYS SO NOW (744). reroll() breaks out
-    // on the first iteration at PRISTINE, so ↻ REROLL was an ENABLED button that
-    // silently did nothing — the dead-button trap this codebase has been bitten by
-    // before — while ×10/×100 went dark with no reason and read as a bug. All three
-    // are disabled together at 125%+ and the note states why. Whether a pristine
-    // pilot should be allowed to gamble 125 → 130 is a design call, not this fix:
-    // every roll REPLACES the last, so opening it up hands them a button whose most
-    // likely outcome is losing the roll they paid for.
+    // PRISTINE IS A BADGE, NOT A WALL (745). 744 disabled all three buttons at
+    // 125% on the reasoning that a reroll most likely loses the roll you paid for.
+    // That is true and it is the PLAYER'S gamble to take: the band runs to 130%,
+    // so a pristine hardpoint still has five points of purity on the table and
+    // locking the controls read as the feature being broken — "if you roll 125% or
+    // more the game doesn't let you reroll again, all the buttons are greyed out".
+    //
+    // Reopened deliberately, with the risk stated rather than the button removed:
+    //   • the SINGLE reroll is live until the 130% ceiling, where a roll genuinely
+    //     cannot improve anything and the control would be a lie;
+    //   • rolling away a PRISTINE asks first (the same sheet the Ancient nanocore
+    //     reroll uses) — one tap must not destroy it silently;
+    //   • ×10/×100 STAY closed at 125%+. A batch that starts pristine ends on
+    //     whatever the last roll happened to be, and the pilot would watch it
+    //     happen with no way to stop — that is not a gamble, it is a forfeit.
     const pris = e.pur >= PRISTINE;
-    const pos = clamp((e.pur - 60) / (130 - 60) * 100, 0, 100);
+    const capped = e.pur >= PUR_MAX;
+    const pos = clamp((e.pur - 60) / (PUR_MAX - 60) * 100, 0, 100);
     const inner =
-      '<div class="fg-pur' + (e.pur >= PRISTINE ? ' pris' : '') + '"><b>' + e.pur + '%</b><span>' + (e.pur >= PRISTINE ? '✦ PRISTINE' : 'forge purity') + '</span></div>' +
+      '<div class="fg-pur' + (pris ? ' pris' : '') + '"><b>' + e.pur + '%</b><span>' + (pris ? '✦ PRISTINE' : 'forge purity') + '</span></div>' +
       '<div class="fg-purbar"><i class="fg-pfloor" style="left:' + clamp((fl - 60) / 70 * 100, 0, 100) + '%"></i><i class="fg-ppris"></i><b style="left:' + pos + '%"></b></div>' +
       '<div class="fg-next">effective <b>+' + (PCT_PER_LV * e.pur / 100).toFixed(1) + '%</b> per temper level</div>' +
-      (c.plasma > 0 ? '<div class="fg-cost"><span style="color:#c07bff' + (afford ? '' : ';opacity:.45') + '">✦ ' + fmt(c.plasma) + '</span></div>' : '') +
+      (c.plasma > 0 && !capped ? '<div class="fg-cost"><span style="color:#c07bff' + (afford ? '' : ';opacity:.45') + '">✦ ' + fmt(c.plasma) + '</span></div>' : '') +
       '<div class="fg-btns">' +
-        '<button class="fg-btn pur" data-reroll="' + k + ':1"' + (afford && !pris ? '' : ' disabled') + '>↻ REROLL</button>' +
+        '<button class="fg-btn pur" data-reroll="' + k + ':1"' + (afford && !capped ? '' : ' disabled') + '>↻ REROLL</button>' +
         BATCH.map((n) => {
           const b = batchR(k, n);
-          return '<button class="fg-btn pur bulk" data-reroll="' + k + ':' + n + '"' + (afford && !pris && b.n > 0 ? '' : ' disabled') + '>' +
+          return '<button class="fg-btn pur bulk" data-reroll="' + k + ':' + n + '"' + (afford && !pris && b.n > 0 ? '' : ' disabled') +
+            (pris && !capped ? ' title="A bulk run from PRISTINE would end on a random roll — reroll one at a time up here"' : '') + '>' +
             '×' + n + '<i>≤ ✦ ' + fmt(b.plasma) + '</i></button>';
         }).join('') +
       '</div>' +
-      (afford || pris ? '' : '<div class="fg-short">Need <span style="color:#c07bff">✦ ' + fmt(c.plasma - bank('plasma')) + '</span> more plasma</div>') +
-      (pris ? '<div class="fg-short">✦ <b>PRISTINE</b> — this hardpoint is done. A reroll REPLACES the roll you paid for, so there is nothing left to buy here.</div>' : '') +
-      '<div class="fg-note">New roll REPLACES the old · minimum roll ' + fl + '% (creeps +1 per reroll, to 95%) · 125%+ is PRISTINE</div>' +
+      (afford || capped ? '' : '<div class="fg-short">Need <span style="color:#c07bff">✦ ' + fmt(c.plasma - bank('plasma')) + '</span> more plasma</div>') +
+      (capped ? '<div class="fg-short">✦ <b>' + PUR_MAX + '% — THE CEILING.</b> No roll can beat this one, so there is nothing left to buy here.</div>'
+        : pris ? '<div class="fg-short">✦ <b>PRISTINE.</b> You can keep rolling for the last few points, but a roll <b>replaces</b> this one and can drop you to ' + fl + '%. Single rolls only up here — it will ask first.</div>' : '') +
+      '<div class="fg-note">New roll REPLACES the old · minimum roll ' + fl + '% (creeps +1 per reroll, to 95%) · 125%+ is PRISTINE · ' + PUR_MAX + '% is the ceiling</div>' +
       '<div class="fg-note">×10/×100 keep rolling until <b>PRISTINE</b> or you run dry — and the <b>LAST</b> roll is the one you keep, exactly as with a single reroll. The floor you buy on the way up is kept whatever happens.</div>';
     return '<div class="fg-panel" id="fg-purity"><div class="fg-panel-h">✦ PURITY</div>' + inner + '</div>';
   }
@@ -423,10 +433,45 @@
     });
   }
 
-  function reroll(k, count) {
+  // ROLLING A PRISTINE AWAY ASKS FIRST (745). Above 125% a reroll is far more
+  // likely to cost the pilot the roll they paid for than to beat it, so the sheet
+  // states the floor it can fall to before anything is charged. Same control the
+  // Ancient-nanocore reroll uses; falls back to confirm() only if the UI layer is
+  // not up yet, and NEVER proceeds by default — a missing dialog cancels.
+  function confirmPristine(k, e, onYes) {
+    const fl = purFloor(e);
+    const html = '<div class="sheet-head">Reroll a PRISTINE hardpoint?</div><div class="sheet-body">'
+      + '<p>' + slotName(k) + ' is at <b style="color:#7df3ff">' + e.pur + '% purity</b> — <b>PRISTINE</b>. The ceiling is <b>' + PUR_MAX + '%</b>.</p>'
+      + '<p>A reroll <b>replaces</b> this one and the new roll is what you keep. It can land as low as <b>' + fl + '%</b>.</p>'
+      + '<div class="sheet-actions"><button class="btn" data-x>Keep ' + e.pur + '%</button><button class="btn gold" data-ok>Roll anyway</button></div></div>';
+    try {
+      const U = window.UI;
+      if (U && typeof U.showSheet === 'function' && typeof U.closeSheet === 'function') {
+        const sh = U.showSheet(html);
+        const x = sh && sh.querySelector && sh.querySelector('[data-x]');
+        const ok = sh && sh.querySelector && sh.querySelector('[data-ok]');
+        if (x && ok) {
+          x.addEventListener('click', () => { try { U.closeSheet(); } catch (er) {} });
+          ok.addEventListener('click', () => { try { U.closeSheet(); } catch (er) {} onYes(); });
+          return;
+        }
+        try { U.closeSheet(); } catch (er) {}
+      }
+    } catch (er) {}
+    if (window.confirm('Reroll ' + slotName(k) + '? It is PRISTINE at ' + e.pur + '% and a new roll replaces it — it can land as low as ' + fl + '%.')) onYes();
+  }
+
+  function reroll(k, count, confirmed) {
     if (busy) return;
     const st = G().state, e = fs(k);
     const n = Math.max(1, count | 0);
+    // RE-CHECKED AT THE MOMENT OF THE WRITE, not when the button was drawn. The
+    // confirm sheet below is async, so purity, the ceiling and the wallet are all
+    // read again on the way back in — the recursive call re-enters here.
+    if (e.pur >= PUR_MAX) return;                 // nothing a roll could improve
+    const startPris = e.pur >= PRISTINE;
+    if (startPris && n > 1) return;               // bulk stays closed above PRISTINE — see purityPanel
+    if (startPris && !confirmed) { confirmPristine(k, e, () => reroll(k, 1, true)); return; }
     const old = e.pur;
     let rolls = 0;
     // A BATCH STOPS THE MOMENT IT WINS. Every roll REPLACES the last, so a run that
@@ -434,15 +479,19 @@
     // reach — and they would have watched it happen with no way to stop. Reaching
     // 125% ends the run; short of that the last roll stands, exactly as it does on
     // a single reroll, which is the mechanic and is stated on the panel.
+    //
+    // A run that STARTED pristine is the pilot's own single, confirmed gamble and
+    // is not stopped by the line it is already past.
     for (let i = 0; i < n; i++) {
-      if (e.pur >= PRISTINE) break;
+      if (!startPris && e.pur >= PRISTINE) break;
+      if (e.pur >= PUR_MAX) break;
       const c = costR(k);
       if (bank('plasma') < c.plasma) break;
       st.resources = st.resources || { fuel: 0, iron: 0, plasma: 0 };
       st.resources.plasma -= c.plasma;
       e.rr++;
       const fl = purFloor(e);
-      e.pur = Math.round(fl + Math.random() * (130 - fl));
+      e.pur = Math.round(fl + Math.random() * (PUR_MAX - fl));
       rolls++;
     }
     if (!rolls) return;
@@ -450,8 +499,10 @@
     finish('fg-purity', () => {
       const up = e.pur >= old;
       flashText('fg-purity', up, (rolls > 1 ? '×' + rolls + ' · ' : '') + old + '% → ' + e.pur + '%' + (e.pur >= PRISTINE ? ' ✦ PRISTINE' : ''));
-      if (e.pur >= PRISTINE) { try { G().bumpLife('pristine', 1); G().save(); } catch (x) {} }      // PRISTINE FORGE badge
-      if (e.pur >= PRISTINE) showCine(k, '✦ ' + e.pur + '% PURITY', 'PRISTINE FORGE', '#7df3ff');
+      // The badge and the cinematic fire on CROSSING the line, not on standing
+      // past it — a 128 → 126 roll is still pristine and is not an achievement.
+      if (e.pur >= PRISTINE && old < PRISTINE) { try { G().bumpLife('pristine', 1); G().save(); } catch (x) {} }      // PRISTINE FORGE badge
+      if (e.pur >= PRISTINE && old < PRISTINE) showCine(k, '✦ ' + e.pur + '% PURITY', 'PRISTINE FORGE', '#7df3ff');
     });
   }
 

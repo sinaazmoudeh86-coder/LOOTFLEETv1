@@ -255,6 +255,7 @@
     // Autopilot and the joystick are STATE, not paint — they resolve on the tap.
     if (name === 'battle') {
       try {
+        clearStaleAutoVeil();
         const rt = G.rt || {};
         const evt = document.getElementById('app').classList.contains('sd-noauto') ||   // Voidmaw / alliance raid
                     (rt.cgrun && rt.cgrun.active);                                      // cargo escort
@@ -284,6 +285,52 @@
       });
     }
   }
+
+  // ---- THE MANUAL-FLIGHT VEIL IS DERIVED STATE, SO DERIVE IT (745) ----------
+  //
+  // `sd-noauto` on #app hides the AUTO pill for the duration of an event run and
+  // is the veto in showScreen('battle') above. It is added by the module that
+  // starts a run and removed by the module that ends one — and there are a dozen
+  // places that end a run WITHOUT going through the module. game-v93's death path
+  // nulls `rt.sdrun`/`rt.alrun` and respawns you (line ~3269); selectDungeon,
+  // respawnAt, resetZone, startKoth and every other event start null the previous
+  // run object outright. In all of those the module's own end() never runs, the
+  // class is never removed, and it is a DOM class so nothing else clears it:
+  //
+  //   • the AUTO pill stays hidden for the rest of the session, and
+  //   • the re-arm above is permanently vetoed, so autopilot never comes back.
+  //
+  // That is "autopilot will still not work sometimes" — it is not intermittent,
+  // it is every session in which an event ended any way other than cleanly, and
+  // only a reload cleared it (boot forces state.auto = true).
+  //
+  // A veil that means "an event owns the arena" must be able to PROVE an event
+  // owns the arena. If no run object is live, the veil is stale: drop it and put
+  // the pilot back on autopilot unless they switched it off by hand. Runtime and
+  // paint only — setAuto writes state.auto, which every session already boots to
+  // true, and nothing here touches a stored shape.
+  function eventRunLive() {
+    try {
+      const rt = G.rt || {};
+      return !!((rt.sdrun && rt.sdrun.active) || (rt.alrun && rt.alrun.active) ||
+                (rt.hcrun && rt.hcrun.active) || (rt.cgrun && rt.cgrun.active) ||
+                (rt.kothrun && rt.kothrun.active));
+    } catch (e) { return true; }   // on any doubt, leave the veil alone
+  }
+  function clearStaleAutoVeil() {
+    try {
+      const app = document.getElementById('app');
+      if (!app || !app.classList.contains('sd-noauto')) return false;
+      if (eventRunLive()) return false;
+      app.classList.remove('sd-noauto');
+      if (!G.state.autoManual && (G.state.currentDungeon | 0) >= 1 && !G.getAuto()) G.setAuto(true);
+      syncAuto();
+      return true;
+    } catch (e) { return false; }
+  }
+  // Not only on a screen change: a pilot who dies inside an event is towed to the
+  // arena by the engine and may never navigate again.
+  setInterval(clearStaleAutoVeil, 1500);
 
   // What a screen has to BUILD. Never call this directly to navigate — go
   // through showScreen so the shell paints first.
@@ -4613,7 +4660,9 @@
         const needLv = bs ? bs.needLv : 30;
         const lvOk = (G.state.level | 0) >= needLv;
         const afford = bal >= price;
-        html += `<div class="store-sec">${storeHead('◉', 'Operations · one-time unlocks', own ? 'AUTO BEACON OWNED' : '')}`;
+        const rz = G.rezoneState ? G.rezoneState() : null;
+        const nOwn = (own ? 1 : 0) + (rz && rz.owned ? 1 : 0);
+        html += `<div class="store-sec">${storeHead('◉', 'Operations · one-time unlocks', nOwn ? nOwn + ' / 2 OWNED' : '')}`;
         html += `<div class="sec-blurb-anchor"></div><div class="sec-blurb">Permanent account unlocks. Bought once, never again.</div>`;
         // The three facts this card owes the player are the recharge, where it
         // applies, and the boss exclusion. They were a 45-word paragraph; they are
@@ -4654,7 +4703,46 @@
             : `<div class="ab-pay"><button class="ab-cta" data-abbuy="1" ${(!lvOk || !afford) ? 'disabled' : ''}>${window._lcIcon()}${price.toLocaleString()} · UNLOCK</button>
                ${!lvOk ? `<div class="ab-short lock">Opens at <b>Level ${needLv}</b></div>`
                        : !afford ? `<div class="ab-short">You hold ${window._lcIcon()}<b>${bal.toLocaleString()}</b> — ${(price - bal).toLocaleString()} short</div>` : ''}</div>`}
-        </div></div>`;
+        </div>`;
+        // ⇱ AUTO RE-ZONE — the second Operations unlock, and deliberately the SAME
+        // card shape as the beacon: one section, one visual language, and every
+        // .ab-* rule reused as-is so this added no CSS.
+        //
+        // The first chip is LIVE, not copy. "Follows the ★" is an abstraction; the
+        // zone number the fleet would move to right now is the actual promise, and
+        // a player deciding whether 25,000 LootCoins is worth it should be able to
+        // read it off the card.
+        if (rz) {
+          const rzOk = !rz.locked, rzAfford = bal >= rz.price, rzLive = rz.owned && rz.armed;
+          html += `<div class="store-card ab-card${rzLive ? ' live' : ''}">
+          <div class="ab-top">
+            <div class="sc-ico">⇱</div>
+            <div class="sc-main" style="min-width:0"><div class="sc-name">Auto Re-Zone</div>
+              <div class="sc-desc">Your fleet follows the ★ as you level</div></div>
+            ${rz.owned ? '<span class="ic-tag up" style="flex:0 0 auto">OWNED</span>' : ''}
+          </div>
+          <div class="ab-chips">
+            ${abChip('FOLLOWS', '★ Zone ' + rz.rec, 'hot')}
+            ${abChip('WARPS', 'Deeper only')}
+            ${abChip('SKIPS', 'Wave · Citadel', 'off')}
+          </div>
+          <div class="ab-note">Grind AFK and the fleet re-deploys itself the moment your power opens a deeper zone. It never moves you back down, never leaves a boss fight or an event, and never starts a wave gauntlet or a citadel siege for you — those stay your call.</div>
+          ${rz.owned
+            ? `<button class="ab-trig ${rz.armed ? 'on' : 'off'}" data-rztoggle="1" role="switch" aria-checked="${rz.armed ? 'true' : 'false'}">
+                 <span class="ab-led"></span>
+                 <span class="ab-tx">
+                   <span class="ab-tk">RE-ZONE</span>
+                   <span class="ab-tv">${rz.armed ? 'ARMED' : 'DISARMED'}</span>
+                   <span class="ab-ts">${rz.armed ? 'Warps up whenever the ★ moves' : 'You pick your own zones again'}</span>
+                 </span>
+                 <span class="ab-sw"></span>
+               </button>`
+            : `<div class="ab-pay"><button class="ab-cta" data-rzbuy="1" ${(!rzOk || !rzAfford) ? 'disabled' : ''}>${window._lcIcon()}${rz.price.toLocaleString()} · UNLOCK</button>
+               ${!rzOk ? `<div class="ab-short lock">Opens at <b>Level ${rz.needLv}</b></div>`
+                       : !rzAfford ? `<div class="ab-short">You hold ${window._lcIcon()}<b>${bal.toLocaleString()}</b> — ${(rz.price - bal).toLocaleString()} short</div>` : ''}</div>`}
+        </div>`;
+        }
+        html += '</div>';
       }
       const sh = G.getShop(); const tl = G.shopTimeLeft(); const mm = Math.floor(tl/60), ss = tl%60;
       const price = sh.price != null ? sh.price : G.shopItemPrice();
@@ -4696,6 +4784,21 @@
       const on = G.autoBeaconOn();
       G.setAutoBeacon(!on);
       toast(on ? '○ Auto Beacon disarmed — the button is yours again' : '◉ Auto Beacon armed', on ? '#8b95a6' : '#ff8a3d');
+      renderStore();
+    }));
+    // ⇱ AUTO RE-ZONE — same two handlers, same re-render rule: the card's state
+    // and the wallet chip must agree with the write that just happened.
+    el['store-body'].querySelectorAll('[data-rzbuy]').forEach((b) => b.addEventListener('click', () => {
+      const r = G.buyAutoReZone();
+      if (r.ok) { toast('⇱ Auto Re-Zone unlocked — your fleet follows the ★ from now on', '#7cd4ff'); renderStore(); }
+      else if (r.reason === 'credits') { toast('Need ◈ ' + (r.short || 0).toLocaleString() + ' more LootCoins', '#e23b4e'); openCredits(); }
+      else if (r.reason === 'level') toast('Auto Re-Zone opens at Level ' + r.need, '#e23b4e');
+      else renderStore();
+    }));
+    el['store-body'].querySelectorAll('[data-rztoggle]').forEach((b) => b.addEventListener('click', () => {
+      const on = G.autoReZoneOn();
+      G.setAutoReZone(!on);
+      toast(on ? '○ Auto Re-Zone disarmed — you pick your own zones again' : '⇱ Auto Re-Zone armed', on ? '#8b95a6' : '#7cd4ff');
       renderStore();
     }));
     // render each card's icon as the ACTUAL battle hull (same renderer as combat)

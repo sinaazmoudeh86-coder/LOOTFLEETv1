@@ -21,12 +21,18 @@
    WHEN A BUILD SHIPS: add its rows at the TOP and drop as many off the BOTTOM as
    you added. Never let it grow past ten. The full changelog lives on the site.
 
-   THIS CARD IS STAMPED 740 BY OPERATOR REQUEST, AND IT CARRIES THREE CUTS.
-   740, 741 and 743 were each cut without being pushed; the live population is on
-   739 and has seen none of them. The number was set back to 740 deliberately so
-   the population's next build is 739 + 1 — see DEPLOY-v268.md. The ROWS are the
-   743 set unchanged, because the rows are chosen by what the POPULATION has not
-   seen, and that answer does not change when the stamp does.
+   THIS CARD IS STAMPED 745 AND IT CARRIES EVERY UNPUSHED CUT.
+   740, 741, 743 and 744 were each cut without being pushed; the live population
+   is on 739 and has seen none of them. The ROWS are chosen by what the
+   POPULATION has not seen, and that answer does not change when the stamp does —
+   so a cut that only fixes bugs still re-stamps the card, because the card is
+   keyed on LF_BUILD and a stale stamp means the notes never open.
+
+   THE STAMP IS THE BUILD, ALWAYS. `BUILD`, `NOTES.build` and `NOTES.title` are
+   three statements of one number and they are checked against game.html's
+   LF_BUILD at cut time. They were found disagreeing once (root 744, folder 745,
+   title 744) and that is a card that either never fires or fires under the wrong
+   name; if you change one, change all three.
 
    WHICH ROWS SURVIVE A TRIM: the ones the POPULATION HAS NOT SEEN. This card kept
    the never-pushed rows from all three cuts and dropped the six that went live in
@@ -43,6 +49,15 @@
    who flies across timezones was getting cargo dailies early without ever knowing
    why, and losing that silently is indistinguishable from a bug.
 
+   745 PUT TWO IN AND TOOK TWO OUT. In: fighter bays being auto-sold (an escort
+   carrier could never be upgraded by farming, and nothing on screen said why) and
+   autopilot staying dead after an event (the pilot cannot see the cause and a
+   reload was the only cure). Out: the high-tier hull upgrade price cut and the
+   flagship-survives-a-logout fix — both real, both PROVED BY LOOKING, which is
+   the test. Three other 745 fixes earned no row for the same reason: the Starforge
+   purity buttons work when you press them, the Armada raid lands you back on the
+   Alliance, and the expedition list stays where you left it.
+
    THE `NEW` GROUP LEADS THE CARD. Three additions went in at the
    top — the Artery, the Xyn, the two Nanocore tiers — so three came off the bottom
    of FIXED (Omega Cargo V's core range, Delete Account, and the world-boss guard).
@@ -50,6 +65,16 @@
    who opens the cargo manifest, deletes an account or fights the Progenitor sees
    the corrected behaviour directly. A whole region past the rim and a hull class
    that did not exist before are the opposite — nobody finds those by accident.
+
+   AUTO RE-ZONE TOOK THE AUTOPILOT ROW'S SEAT, and the trade is the editorial test
+   doing its job twice over. A paid feature sitting in a store section the player
+   already owns half of is the single easiest thing in a build to never discover —
+   and it is bought with LootCoins, so a player who never learns it exists cannot
+   choose it. The autopilot fix is the opposite: the symptom was the AUTO pill
+   missing, the cure is automatic, and anyone who was affected sees it working the
+   next time they look. PROVED BY LOOKING is exactly what already cost the hull
+   price cut and the flagship-logout fix their seats. The clock row stays where it
+   is — it is a nerf disclosure and those lead, never trail.
 
    TONE: one short sentence per row. A player reads this in fifteen seconds
    standing in a queue. If a row needs a paragraph, it needs a site post instead.
@@ -61,10 +86,10 @@
 (function () {
   'use strict';
 
-  const BUILD = 745;
+  const BUILD = 746;
   const NOTES = {
-    build: 745,
-    title: 'BUILD 744',
+    build: 746,
+    title: 'BUILD 746',
     sub: 'The ten latest changes.',
     groups: [
       // A REMOVAL LEADS THE CARD. Taking a system off accounts that were using it is
@@ -79,6 +104,8 @@
       // past the rim, a hull class that did not exist, and two core tiers above the
       // one that used to be the top. That is exactly the file's editorial test.
       { k: 'NEW', c: '#7cd4ff', rows: [
+        ['✦', 'Pilot Ascension: 14 new perks', 'The perk board goes from <b>11 to 25</b>, grouped into Combat, Wing, Salvage, Deep Systems and Ascension itself. <b>Autopilot Discipline</b> buys off the <b>20% auto-battle damage penalty</b>; <b>Ascendant Dividend</b> pays <b>+20%</b> from every future ascension. <b>Nothing you already bought changed price, rank or value.</b>'],
+        ['⇱', 'AUTO RE-ZONE — your fleet follows the ★', 'A one-time <b>◈ 25,000</b> unlock in <b>Store › Operations</b>, beside the Auto Beacon. Grind AFK and the fleet <b>re-deploys itself</b> the moment your power opens a deeper zone. It only ever moves you <b>deeper</b> — never back down — and it will not leave a boss fight or an event, or start a <b>wave gauntlet or citadel siege</b> for you. Arm or disarm any time.'],
         ['◈', 'THE ARTERY — a new Lv 500+ region', 'A filament of <b>fourteen systems</b> off the eastern rim, paying <b>×3</b> the best ground in the galaxy and holding <b>five fortresses</b>. <b>One tile wide, one entrance</b>: you can only take a system whose neighbour toward the mouth you already hold, so everyone enters at <b>Lancet</b> and fights inward. Nothing out there can ever be sealed.'],
         ['◈', 'THE XYN — Super Fighter class', 'A new hull class <b>above Celestial</b>. <b>22 fighter bays</b>, double the Celestial Corvus, on the same combat sheet — and the slowest, largest thing that flies. It is the boss of <b>Xyn Prime</b> at the end of the Artery: own that system, beat it, and every defeat rolls a <b>1 in 1,000,000</b> chance at the hull.'],
         ['◈', 'Nanocores: Mythic and Ancient', 'Two tiers above Legendary — <b>6 and 7 buff slots</b>, up to <b>+60% damage and health</b>. Very rare and very expensive: an Ancient is about <b>one crate in 1,700</b>. <b>No existing tier got more expensive</b>, and Legendary duplicates now trade <b>up</b> into Mythic instead of sideways.'],
@@ -86,12 +113,10 @@
       { k: 'CHANGED', c: '#ffcf4d', rows: [
         ['✧', 'The Event Horizon Lance is one shot again', 'The rift it left behind was <b>burning harder than the beam itself</b> — sitting in the lane did more damage than being hit by it. The rift no longer burns at all, the shot is <b>one bounded hit</b>, and the rift still pays its <b>4× loot</b>.'],
         ['◇', 'Top-tier drop rates corrected', 'Primordial, Relic and Artifact were dropping more often than <b>Eternal</b>, three tiers below them. Back on the curve — <b>nothing you already own changed grade</b>.'],
-        ['⚙', 'High-tier hull upgrades cost far less', 'Each level was multiplying by up to <b>3.4×</b> the one before it, which put Level 20 out of reach on 22 hulls. Now a flat <b>×1.8 plasma</b> per level on every hull. <b>Nothing got more expensive.</b>'],
         ['◈', 'Kaevith Sovereign and Godshard are deep-space prizes', 'Once the three common chassis were in your hangar, the apex pair were the <b>only two left in the pool</b> — so they split it evenly on <b>any</b> invaded zone, ring 1 included. The Sovereign now drops only from <b>Lv 250+</b> systems, the Godshard from <b>Lv 300+</b>. <b>A hull you already earned is yours.</b>'],
       ] },
       { k: 'FIXED', c: '#7ce0a0', rows: [
-        ['◷', 'Daily resets follow the calendar, not your device', 'Changing your device clock — or just flying across timezones — could roll cargo runs and event attempts over early, and could drop extra runs you’d paid for mid-day. Dailies now only ever move <b>forward</b>. <b>Nothing already earned has been taken back.</b>'],
-        ['⚑', 'Your flagship survives a logout', 'Logging back in put you in the <b>Frigate</b> and left your real hull sitting in the hangar. The hull you pick is the hull you keep, on every device.'],
+        ['≺', 'Fighter bays were being sold out from under your carriers', 'If the hull you were flying had no bays of its own, <b>every Fighter Bay that dropped</b> counted as junk — auto-sold on pickup and scrapped out of your hold — so a carrier in an <b>escort slot</b> could never be upgraded by farming, however long you farmed. Bays are now kept for <b>any hull in your fleet or hangar that can fly them</b>.'],
       ] },
     ],
   };

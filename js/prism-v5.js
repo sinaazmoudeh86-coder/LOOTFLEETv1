@@ -90,12 +90,17 @@
   function vipPrism() { const lv = window.VIP ? window.VIP.level() : 0; return 1 + Math.max(0, lv - 7) * 0.02; }
   // ASCENSION perk: Deep Core Drills — permanent mining speed
   function ascMine() { return window.PASCEND ? window.PASCEND.mult('mine') : 1; }
+  // ASCENSION perk: Refinery Yield — the per-kill refine faucet, deliberately a
+  // DIFFERENT perk from Deep Core Drills. Drills speed the RIGS up (ratePerSec);
+  // this pays out what the fleet refines by fighting, so the two never double up
+  // on the same number and a pilot can tell which one they are buying.
+  function ascRefine() { try { return (window.PASCEND && window.PASCEND.mult) ? window.PASCEND.mult('refine') : 1; } catch (e) { return 1; } }
   function ratePerSec(tier) { let r = 0; P().miners.forEach((m) => r += MINERS[m.type].rate); return r * tierMult(tier) * coreMult() * refMult() * MINE_SPEED * vipPrism() * ascMine(); }
 
   // per-kill refine bonus (secondary faucet; mining is primary)
   function killYield(dungeon, isBoss) {
     const tier = (G().state.prismRun && G().state.prismRun.tier) || 1;
-    let y = 0.25 * tier * coreMult() * refMult();
+    let y = 0.25 * tier * coreMult() * refMult() * ascRefine();
     if (isBoss) y *= 30;
     return y;
   }

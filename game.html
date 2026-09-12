@@ -1203,7 +1203,7 @@ window.__lfErr=[];
 
 <div id="modal-root"></div>
 
-<script src="js/config-v2.js?v=745"></script>
+<script src="js/config-v2.js?v=746"></script>
 <script src="js/items.js?v=745"></script>
 <script src="js/entities.js?v=745"></script>
 <script src="js/render.js?v=745"></script>
@@ -1219,7 +1219,7 @@ window.__lfErr=[];
 <script src="js/vip.js?v=745"></script>
 <script src="js/territory.js?v=738"></script>
 <script src="js/payments-v91.js?v=725"></script>
-<script src="js/game-v93.js?v=745"></script>
+<script src="js/game-v93.js?v=746"></script>
 <script src="js/ui-v94.js?v=745"></script>
 <script src="js/fx-cinematic.js?v=725"></script>
 <script src="js/fx-primordial.js?v=725"></script>
@@ -1227,7 +1227,7 @@ window.__lfErr=[];
 <script src="js/perf-tier.js?v=725"></script>
 <script src="js/fit-audit.js?v=731"></script>
 <script src="js/moon-scene.js?v=745"></script>
-<script src="js/moon-colony.js?v=745"></script>
+<script src="js/moon-colony.js?v=746"></script>
 <script src="js/expedition.js?v=745"></script>
 <script src="js/expedition-ui.js?v=745"></script>
 <script src="js/koth.js?v=727"></script>
@@ -1236,14 +1236,14 @@ window.__lfErr=[];
 <script src="js/missions.js?v=745"></script>
 <script src="js/achievements.js?v=745"></script>
 <script src="js/coach-v89.js?v=745"></script>
-<script src="js/prism-v5.js?v=745"></script>
+<script src="js/prism-v5.js?v=746"></script>
 <script src="js/prism-fleet.js?v=745"></script>
 <script src="js/dreadnaught.js?v=734"></script>
 <script src="js/server-dreadnaught.js?v=745"></script>
 <script src="js/galaxy-box.js?v=725"></script>
 <script src="js/shipworks.js?v=739"></script>
 <script src="js/starforge.js?v=745"></script>
-<script src="js/pilot-ascension.js?v=745"></script>
+<script src="js/pilot-ascension.js?v=746"></script>
 <script src="js/season-pass.js?v=725"></script>
 <script src="js/sim-pilots.js?v=725"></script>
 <script src="js/ranks-boards.js?v=745"></script>
@@ -1252,7 +1252,7 @@ window.__lfErr=[];
 <script src="js/onboard.js?v=725"></script>
 <script src="js/pro-offer.js?v=725"></script>
 <script src="js/ship-panels.js?v=745"></script>
-<script src="js/fleet-deep.js?v=725"></script>
+<script src="js/fleet-deep.js?v=746"></script>
 <script src="js/paragon-cannon.js?v=725"></script>
 <script src="js/social.js?v=745"></script>
 <script src="js/chat.js?v=729"></script>
@@ -1264,7 +1264,7 @@ window.__lfErr=[];
 <script src="js/cargo-defense.js?v=745"></script>
 <script src="js/xyn.js?v=745"></script>
 <script src="js/nanocores.js?v=745"></script>
-<script src="js/fighters.js?v=729"></script>
+<script src="js/fighters.js?v=746"></script>
 <script src="js/bridge.js?v=731"></script>
 <script src="js/fighter-ascension.js?v=745"></script>
 <script src="js/fighter-ascension-ui.js?v=729"></script>
@@ -1280,7 +1280,7 @@ window.__lfErr=[];
 <script src="js/casino-citadels.js?v=725"></script>
 <script src="js/redeem.js?v=745"></script>
 <script src="js/auth.js?v=745"></script>
-<script src="js/patch-notes.js?v=745"></script>
+<script src="js/patch-notes.js?v=746"></script>
 <script src="js/update-gate.js?v=745"></script>
 <script id="version-gate">
   // BUILD STAMP + UPDATE GATE — version.json (network, never cached) is the
@@ -1288,7 +1288,7 @@ window.__lfErr=[];
   // Behind is the obvious case; ahead is the internal one, a device left on a cut
   // that was never pushed. Both fork saves between iPad and PC the same way, so
   // the test is equality, not "newer".
-  window.LF_BUILD = 745;
+  window.LF_BUILD = 746;
   (function(){
     var b=document.getElementById('lg-build'); if(b) b.textContent='BUILD '+window.LF_BUILD;
     function gate(latest){
@@ -1490,7 +1490,11 @@ window.__lfErr=[];
     // STAR-GATED CARDS. A few systems are gated by PILOT ASCENSION, not level —
     // they must never be measured against L or they read "unlocks at Level 20"
     // to a Level 400 pilot who has never ascended.
-    const STAR_LOCKS={ cargo:3, fasc:10 };
+    // COMMANDERS BELONGS HERE AND WAS MISSING (745). Its gate is ★5
+    // (COMMANDERS.GATE_STARS) and the card carried no gate at all, so it read as
+    // open on every account: a pilot tapped it, hit a full-screen lock, and had no
+    // way to know from the menu that it was coming or what it cost.
+    const STAR_LOCKS={ cargo:3, cmdr:5, fasc:10 };
     function pStars(){ try{ if(window.PASCEND&&PASCEND.stars) return PASCEND.stars()|0; }catch(e){} return 0; }
     // Locked cards are DIMMED, NEVER HIDDEN. Seeing the whole map of the game
     // with a level on each lock reads as a promise and makes the game look deep;
@@ -1728,6 +1732,7 @@ window.__lfErr=[];
     document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&mega.classList.contains('open')) close(); });
     mega.querySelectorAll('[data-go]').forEach(c=>c.addEventListener('click',()=>{
       const to=c.dataset.go;
+      clearNew(c);   // visiting it is what makes it no longer new
       // Cards navigate by clicking the matching (usually hidden) nav button. A
       // screen that has NO nav button used to fall through this handler in
       // silence: the sheet closed and whatever screen was already open stayed
@@ -1744,6 +1749,7 @@ window.__lfErr=[];
       const on=document.querySelector('#screen-pasc.active,#screen-forge.active,#screen-galaxy.active,#screen-skills.active,#screen-prism.active,#screen-dread.active,#screen-sdread.active,#screen-pilot.active,#screen-boxes.active,#screen-shipworks.active,#screen-crates.active,#screen-nano.active,#screen-ascend.active,#screen-fasc.active,#screen-casino.active,#screen-cargo.active,#screen-expo.active,#screen-koth.active');
       cmd.classList.toggle('active', !!on);
       syncDock();
+      syncUnlocks();
     },500);
     // DOCK / PILL STATE must not depend on the Command menu ever being opened —
     // sync() only ran from open(), so the battle-screen Ascend button stayed
@@ -1760,6 +1766,78 @@ window.__lfErr=[];
     syncDock();
     document.addEventListener('DOMContentLoaded', syncDock);
     setTimeout(syncDock, 1200);
+    // ---- A SYSTEM THAT OPENS SHOULD SAY SO (745) ---------------------------
+    //
+    // sync() only ever ran from open(), so the Command menu was the only thing
+    // that knew a gate had been passed — and it only knew while you were looking
+    // at it. Cross ★ 5 and Commanders opens; hit Level 50 and Prism Fleet opens;
+    // nothing anywhere changes, no toast, no mark on the Command button, and the
+    // player finds out whenever they next happen to browse the menu. That is the
+    // reported "commanders and prism fleet don't show when they unlock until you
+    // click on the tab": the systems were open, the game just never mentioned it.
+    //
+    // Same fix shape as syncDock above — the state is evaluated on the standing
+    // tick instead of on open — plus a mark that survives until the card is
+    // actually visited.
+    //
+    // NO SAVE FOOTPRINT. Which unlocks a device has already announced is a device
+    // fact, exactly like lf_cmd_folded beside it: localStorage only, never `state`,
+    // never saveWeight(), never ASC_KEEP.
+    const OPEN_LS='lf_cmd_opened';
+    let _seen=null, _t0=0;
+    try{ _t0=performance.now(); }catch(e){ _t0=0; }
+    function ready(){ try{ return !!(window.GAME&&GAME.state&&(GAME.state.level|0)>0); }catch(e){ return false; } }
+    function openIds(){
+      const L=lvl(), s=pStars(), out=[];
+      mega.querySelectorAll('.mega-grid [data-go]').forEach(c=>{
+        const id=c.dataset.go;
+        if(BETA[id]&&!BETA[id]()) return;                       // not shipped yet: not an unlock
+        const starNeed=STAR_LOCKS[id];
+        if(starNeed){ if(s>=starNeed) out.push(id); return; }
+        const need=id==='pasc'?pascGate():LOCKS[id];
+        if(!need||L>=need) out.push(id);
+      });
+      return out;
+    }
+    function cardName(c){ const n=c&&c.querySelector('.mc-n'); return n?(n.textContent||'').replace(/\s+/g,' ').trim():''; }
+    function markNew(id,quiet){
+      const c=cardById(id); if(!c) return '';
+      if(!c.querySelector('.mc-new')){ const b=document.createElement('span'); b.className='mc-new'; b.textContent='NEW'; c.appendChild(b); }
+      c.classList.add('is-new'); cmd.classList.add('has-new');
+      const nm=cardName(c);
+      if(!quiet&&nm){ try{ if(window.UI&&UI.unlockToast) UI.unlockToast('◈ '+nm.toUpperCase()+' UNLOCKED — open Command'); }catch(e){} }
+      return nm;
+    }
+    function clearNew(c){
+      if(!c) return;
+      c.classList.remove('is-new');
+      const b=c.querySelector('.mc-new'); if(b) b.remove();
+      if(!mega.querySelector('.mega-card.is-new')) cmd.classList.remove('has-new');
+    }
+    function saveSeen(){ try{ localStorage.setItem(OPEN_LS,JSON.stringify([..._seen])); }catch(e){} }
+    function syncUnlocks(){
+      // WAIT FOR THE REAL ACCOUNT. Before the save loads, lvl() is 1 and pStars()
+      // is 0, so seeding the baseline then would record "nothing is open" and then
+      // announce the pilot's entire game to them one card at a time. The delay also
+      // lets the cloud pull land, so a device that signs in behind its own progress
+      // does not celebrate systems it has had for months.
+      if(!ready()) return;
+      let now=0; try{ now=performance.now(); }catch(e){ now=_t0+9000; }
+      if(now-_t0<8000) return;
+      const open=openIds();
+      if(!_seen){
+        try{ const raw=localStorage.getItem(OPEN_LS); if(raw) _seen=new Set(JSON.parse(raw)||[]); }catch(e){}
+        if(!_seen){ _seen=new Set(open); saveSeen(); return; }   // first run: baseline in silence
+      }
+      const fresh=open.filter(id=>!_seen.has(id));
+      if(!fresh.length) return;
+      // A BADGE ALWAYS, A TOAST ONLY WHEN IT IS NEWS. Several at once means a
+      // migration or a big ascension, not a moment — mark them and stay quiet.
+      const quiet=fresh.length>3;
+      fresh.forEach(id=>{ _seen.add(id); markNew(id,quiet); });
+      saveSeen();
+    }
+    setTimeout(syncUnlocks,1500);
   })();
 </script>
 <script>
@@ -1783,6 +1861,15 @@ window.__lfErr=[];
    3. Count badges hide while locked: a queue count on a system you can't open
       is noise, and it shared the lock's corner.                              */
 .mega-card .mc-lock{ display:none !important; }
+/* NEW-SYSTEM MARK — a card that opened since you last looked, and a dot on the
+   Command button so the menu itself is worth opening. Cleared on visit. */
+.mega-card .mc-new{ position:absolute; top:6px; right:8px; z-index:3; font-family:'Rajdhani',sans-serif; font-weight:800;
+  font-size:9px; letter-spacing:.1em; color:#08120c; background:linear-gradient(180deg,#8ff2c0,#2ee6a0);
+  border-radius:6px; padding:1px 5px; line-height:1.6; box-shadow:0 0 10px -2px rgba(46,230,160,.9); }
+.mega-card.locked .mc-new{ display:none; }
+.mega-card.is-new{ border-color:rgba(46,230,160,.5); }
+#nav-command.has-new::after{ content:''; position:absolute; top:5px; right:50%; margin-right:-16px; width:7px; height:7px;
+  border-radius:50%; background:#2ee6a0; box-shadow:0 0 8px #2ee6a0; }
 .mega-card.locked .cmd-cardbadge,.mega-card.locked .badge{ display:none !important; }
 .mega-card.locked .mc-s{ display:flex !important; flex-wrap:nowrap; align-items:center; gap:6px;
   overflow:hidden; -webkit-line-clamp:none; margin-top:3px; }

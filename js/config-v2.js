@@ -296,6 +296,18 @@
   // 150 + 50/star, so the 100s band is where most pilots live and the deep bands
   // are already gated behind ascension stars.
   const LVL_STEEP = [0, 0.045, 0.055, 0.065, 0.075, 0.085];   // extra growth PER LEVEL, by century
+  // LATE-GAME SURCHARGE. At and above LATE_LVL a level costs LATE_MUL× the XP.
+  //
+  // KEPT AS ITS OWN EXPORTED FUNCTION ON PURPOSE, not inlined into xpToNext().
+  // Kill XP is a fixed FRACTION of xpToNext() — killXpFor() divides the wall by
+  // a kills-per-level figure — so a surcharge applied only here is multiplied
+  // into the payout as well and cancels itself out before it ever reaches the
+  // player. That is precisely how the century steepening was neutralised by the
+  // old fixed 18,000 kills/level. The payout side divides this back out, and it
+  // divides out THIS function rather than a hand-copied literal, so the two can
+  // never drift apart (the nowMs() rule).
+  const LATE_LVL = 800, LATE_MUL = 3;
+  function xpLateSurcharge(level) { return (Math.floor(Number(level) || 0) >= LATE_LVL) ? LATE_MUL : 1; }
   function centuryGrowth(level) {
     if (level < 100) return 1;
     let m = 1;
@@ -314,6 +326,7 @@
     if (level >= 100) xp *= 20 * Math.pow(3, band - 1);   // 20× past 100, 60× past 200, 180× past 300…
     xp *= centuryGrowth(level);         // Aug 2026: the gap widens EVERY level past 100
                                         // (supersedes the old flat [1,2,3,6,10,10] band pass)
+    xp *= xpLateSurcharge(level);
     return Math.floor(xp);
   }
 
@@ -506,7 +519,16 @@
   function sellValue(item) {
     const r = RARITY[item.rarity];
     const d = item.dungeon || 1;
-    return Math.floor(10 * Math.pow(dungeonScale(d), 0.7) * (r.tier + 1) * 0.8 + 6);
+    const base = Math.floor(10 * Math.pow(dungeonScale(d), 0.7) * (r.tier + 1) * 0.8 + 6);
+    // ASCENSION: Prize Negotiation (746). APPLIED HERE, not at the two sell call
+    // sites, because this function is also what every price LABEL is drawn from —
+    // the inventory row, the auto-sell float and the sell confirm all read it. A
+    // perk applied only at payout would under-quote every one of them, which is
+    // the same defect as the Omega Cargo card promising "2 – 4" and paying 5.
+    // floor(Number(x)||0) and never `| 0`: a deep-zone Artifact's price runs past
+    // 2^31 and a bitwise coercion would wrap it negative.
+    let m = 1; try { if (window.PASCEND && window.PASCEND.mult) m = window.PASCEND.mult('haggle'); } catch (e) {}
+    return Math.floor(Number(base * m) || 0);
   }
 
   // ---------------------------------------------------------------------------
@@ -1371,7 +1393,7 @@
     DREAD_CORE_RATE, coreYield,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE, liveRarityMax,
     SHIPS, SHIP_BY_KEY, MECHS, MECH_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
-    xpToNext, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
+    xpToNext, xpLateSurcharge, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
     levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,
     ascRarityCap, ascTopBoost, TOP_TIER,

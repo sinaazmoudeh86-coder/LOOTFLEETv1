@@ -133,6 +133,15 @@
     return pool[hash32(String(item.name || '') + '#' + (item.id | 0)) % pool.length];
   }
   const DOCKED = 0, LAUNCH = 1, INTERCEPT = 2, ORBIT = 3, RETURN = 4;
+  // ASCENSION perk: Sortie Tempo (746). Divides the launch wait and the per-bay
+  // stagger, so a full bank of bays gets its whole wing airborne sooner.
+  // CLAMPED AT >= 1 so a malformed or negative rank can never make the wait
+  // LONGER than an unperked carrier's — a perk must not be able to nerf the thing
+  // it is sold as improving.
+  function sortieMul() {
+    let m = 1; try { if (window.PASCEND && window.PASCEND.mult) m = window.PASCEND.mult('sortie'); } catch (e) {}
+    return isFinite(m) && m > 1 ? m : 1;
+  }
 
   function host() { try { return window.GAME && window.GAME._fx ? window.GAME._fx() : null; } catch (e) { return null; } }
 
@@ -537,11 +546,11 @@
         // angle derived from the flagship's bay count and stagger them by it too.
         const bi = f.i - (w ? w.at : 0);
         if (any && f.wait <= 0) {
-          f.st = LAUNCH; f.wait = F.launchTime;
+          f.st = LAUNCH; f.wait = F.launchTime / sortieMul();
           const ang = -Math.PI / 2 + (bi - (w ? w.cap - 1 : 0) / 2) * 0.5;
           f.vx = Math.cos(ang) * sp.speed * 0.8; f.vy = Math.sin(ang) * sp.speed * 0.8;
           f.face = ang;
-        } else if (!any) { f.wait = bi * F.launchStagger; }
+        } else if (!any) { f.wait = bi * F.launchStagger / sortieMul(); }
         continue;
       }
       if (f.st === LAUNCH) {

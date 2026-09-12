@@ -233,19 +233,28 @@
     let foreign = false;
     try { const grt = G().rt; foreign = !!(grt && ((grt.sdrun && grt.sdrun.active) || (grt.hcrun && grt.hcrun.active))); } catch (e) {}
     if (!foreign) {
-      // BACK TO THE ALLIANCE, NOT YOUR OWN SHIP (744). goSafeHangar() is a
-      // SAFE-STATE call — it parks the hull out of combat, which must still
-      // happen — but it also lands the pilot on the Hangar screen. So finishing
-      // an Armada raid dropped you on your own ship page, with no route back to
-      // the board you had just been fighting for. The safe-state call stays; the
-      // screen it leaves you on does not.
-      try { if (G().goSafeHangar) G().goSafeHangar(); } catch (e) {}
-      // Tried in order, first one that exists wins, so a nav rename can never
-      // silently strand the player here again.
+      // BACK TO THE ALLIANCE, NOT YOUR OWN SHIP. goSafeHangar() is a SAFE-STATE
+      // call — it parks the hull out of combat, which must still happen — but it
+      // also lands the pilot somewhere, and its default is the Hangar. So finishing
+      // an Armada raid dropped you on your own ship page with no route back to the
+      // board you had just been fighting for.
+      //
+      // 744 tried to correct that by clicking a nav button afterwards and IT NEVER
+      // FIRED: there is no `.nav-btn[data-screen="social"]` and no `"alliance"` one
+      // either — Alliance is a TAB of the social screen (see HANGAR_TABS in
+      // ui-v94.js), reached with SOCIAL.setTab('alliance') + showScreen('social'),
+      // and the nav itself only carries `store`. The lookup found nothing, the
+      // ALLIANCE.open fallback does not exist, and the pilot was left on whatever
+      // goSafeHangar() had already navigated to — the Hangar. Exactly the reported
+      // symptom, unchanged by the fix.
+      //
+      // ONE CALL NOW, THROUGH THE ROUTER THE REST OF THE GAME USES. goSafeHangar
+      // takes the destination, so the safe-state work and the screen it lands on
+      // are the same decision and cannot disagree.
+      try { if (window.SOCIAL && window.SOCIAL.setTab) window.SOCIAL.setTab('alliance'); } catch (e) {}
       try {
-        const back = ['social', 'alliance'].map((k) => document.querySelector('.nav-btn[data-screen="' + k + '"]')).filter(Boolean)[0];
-        if (back) back.click();
-        else if (window.ALLIANCE && window.ALLIANCE.open) window.ALLIANCE.open();
+        if (G().goSafeHangar) G().goSafeHangar('social');
+        else if (window.UI && window.UI.showScreen) window.UI.showScreen('social');
       } catch (e) {}
     }
     banner(killed ? '☠ ARMADA Mk-' + r.n + ' DESTROYED' : r.died ? '✝ FLEET LOST — partial damage logged' : '⌛ RAID WINDOW CLOSED',

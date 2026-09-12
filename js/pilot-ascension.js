@@ -21,8 +21,12 @@
        any zone, from any boss, out of any crate.
      • The PILOT TREE and its ◇ Dread Cores SURVIVE the reset (Aug 2026) — the
        nodes are weekly-raid currency, not pilot level, so they carry across.
-     • PERKS spend points on eight permanent multipliers that apply to every
-       future run.
+     • PERKS spend points on permanent multipliers that apply to every future
+       run. Twenty-five of them as of build 746, grouped on the board into the
+       spine, the beacon block, combat, wing, salvage, deep systems and ascension
+       itself. Two rules govern what is allowed in: a perk never ships without a
+       live consumer outside this file (that is what Bastion Command's retirement
+       cost), and a perk never points at a clamped stat.
 
    Nothing here is reversible, so the confirm gate is deliberately heavy: an
    itemised keep/lose ledger, the exact point total, the hull you start the next
@@ -180,7 +184,7 @@
     for (const k in RETIRED_PERKS) {
       if (p.perks[k] == null) continue;
       held = true;
-      const r = Math.max(0, Math.min(MAX_RANK, Math.floor(Number(p.perks[k]) || 0)));
+      const r = Math.max(0, Math.min(maxRank(k), Math.floor(Number(p.perks[k]) || 0)));
       if (r > 0) refund += triangle(r);
       delete p.perks[k];
     }
@@ -244,6 +248,9 @@
   // ---- PERKS -----------------------------------------------------------------
   // Eight permanent multipliers. Rank cost = rank number (1,2,3…), so rank 25
   // costs 25 points and a fully-maxed perk is 325 points — many ascensions deep.
+  //
+  // BUILD 746: twenty-five of them. The rank-cost rule is unchanged and universal
+  // — see the block above the new entries for the two rules that gate additions.
   const PERKS = [
     // PROGRESSION NOTE (Aug 2026) — 8 → 5 per rank. XP bonuses were cut across the
     // whole game so the summed bonus lands near +400 for a maxed account instead
@@ -268,10 +275,148 @@
     { k: 'bcLife', ic: '◎', name: 'Sustained Signal',  sub: 'Beacon Duration',   per: 8,   col: '#ff6b78', beacon: true, desc: 'The beacon keeps calling for far longer — stacks on top of your Defense ranks. Capped so a third of the cycle stays quiet.' },
     { k: 'bcSize', ic: '✹', name: 'Wideband Broadcast', sub: 'Beacon Swarm Size', per: 8, col: '#ffd24d', beacon: true, desc: 'More hostiles answer every call, up to what the sector can hold.' },
     { k: 'bcLoot', ic: '◈', name: 'Wreckfield Tithe',  sub: 'Beacon Kill Value', per: 10,  col: '#7ce0a0', beacon: true, desc: 'Beacon-summoned kills pay extra gold, XP and loot — the swarm becomes your best farm.' },
+
+    // =========================================================================
+    // BUILD 746 — THE TREE WIDENS. 14 new perks.
+    // -------------------------------------------------------------------------
+    // TWO RULES GOVERNED WHAT WAS ALLOWED IN, and both come out of Bastion
+    // Command's retirement one build ago:
+    //
+    //   1. NO PERK SHIPS WITHOUT ITS HOOK. A rank that multiplies nothing is a
+    //      point sink that reads as a bug and has to be refunded later. Every
+    //      entry below has a live consumer in this build — the audit harness
+    //      asserts each `k` is read somewhere outside this file.
+    //   2. NO PERK POINTS AT A CLAMPED STAT. lifeSteal (ceiling 19), multiShot
+    //      (100) and moveSpeed (+1000%) were all considered and REJECTED: a
+    //      maxed pilot buying into a clamp gets nothing, which is the same
+    //      broken promise the Juno card made about additive pools.
+    //
+    // EVERYTHING HERE IS A RUNTIME MULTIPLIER. No entry adds a stored field, and
+    // ranks continue to live in the existing `pasc.perks` map under the existing
+    // merge union — so this is a code change, not a data change.
+    //
+    // AND THERE IS STILL NO `costMul`. Rank n costs n points, universally, which
+    // is the only reason spentFromRanks() can derive a refund from the ranks held.
+    // A perk that should be expensive gets a LOW `max`, never a priced-up rank.
+    // -------------------------------------------------------------------------
+
+    // ---- COMBAT ----
+    // AUTOPILOT DISCIPLINE is a REDUCTION, like Distress Relay: `per` is in
+    // percentage POINTS off the 20% auto-battle damage penalty, so rank 25 lands
+    // on exactly 20 and retires it. It can never overshoot into a BONUS for
+    // playing hands-off — autoDmgMul() clamps the cut at the penalty itself.
+    { k: 'auto',  ic: '◐', name: 'Autopilot Discipline', sub: 'Auto-Battle Penalty', per: 0.8, col: '#8ad8ff', kind: 'red', grp: 'combat', desc: 'Auto-battle costs you 20% of your damage. Every rank buys 0.8% of that back; rank 25 retires the penalty outright and hands-off fleets hit as hard as piloted ones.' },
+    { k: 'crit',  ic: '✧', name: 'Killing Edge',      sub: 'Crit Damage',      per: 6,  col: '#ffd24d', grp: 'combat', stat: 'critDamage', postMul: true, desc: 'Raises how hard a crit lands. Crit <b>chance</b> is a pooled stat with a ceiling; crit <b>damage</b> is not, so this is real headroom at any fleet size.' },
+    { k: 'tough', ic: '⬡', name: 'Ablative Plating',  sub: 'Fleet Hull',       per: 5,  col: '#9fd6ff', grp: 'combat', stat: 'hpPct', postMul: true, desc: 'More effective hull on the whole fleet. The only defensive line points can buy — deep zones out-damage you long before they out-live you.' },
+    { k: 'trash', ic: '☄', name: 'Breach Rounds',     sub: 'Damage vs Trash',  per: 6,  col: '#ff9a70', grp: 'combat', desc: 'Bonus damage to everything that is <b>not</b> boss-class. Siege Protocols covers the big targets; this is what clears the zone between them.' },
+    { k: 'range', ic: '⌖', name: 'Targeting Uplink',  sub: 'Weapon Range',     per: 4,  col: '#7ce0ff', grp: 'combat', stat: 'rangePct', postMul: true, desc: 'Every weapon on every hull reaches further, so the fleet opens fire first and spends less of the run closing distance.' },
+
+    // ---- WING ----
+    // DRONE LATTICE is a COUNT, not a percentage: `per` 0.2 = one extra drone
+    // every five ranks, floored. A count perk is deliberately the one thing in
+    // this list the player can SEE on screen.
+    { k: 'drone',  ic: '◇', name: 'Drone Lattice',  sub: 'Carrier Drones',  per: 0.2, col: '#c07bff', kind: 'flat', unit: 'drone', grp: 'wing', desc: 'One extra drone every five ranks, on top of whatever your hull carries. Drones inherit Wing Tactics, so the two stack.' },
+    { k: 'sortie', ic: '✈', name: 'Sortie Tempo',   sub: 'Fighter Launch Rate', per: 5, col: '#ffab4a', grp: 'wing', desc: 'Fighter bays launch and re-arm faster. Now that carriers arrive with their bays already crewed, the wing is worth investing in.' },
+
+    // ---- SALVAGE ----
+    // HOLD EXPANSION exists because a full hold SCRAPS on contact — the pilot
+    // reading "barely any loot dropping" was losing it at the door, not at the
+    // roll. +2 slots a rank, floored, against a 100 base.
+    { k: 'hold',   ic: '▤', name: 'Hold Expansion',     sub: 'Inventory Slots', per: 2, col: '#c3cfdd', kind: 'flat', unit: 'slot', grp: 'salvage', desc: 'Two more inventory slots a rank. A full hold scraps new drops on contact, so this is the cheapest way to stop losing loot you already earned.' },
+    { k: 'scrap',  ic: '⚙', name: 'Scrapper’s Cut',     sub: 'Salvage Yield',   per: 8, col: '#7ce0a0', grp: 'salvage', desc: 'More fuel, iron and plasma out of everything you scrap — including what a full hold scraps for you.' },
+    { k: 'haggle', ic: '⇄', name: 'Prize Negotiation',  sub: 'Sell Price',      per: 8, col: '#f2b24b', grp: 'salvage', desc: 'Every item sells for more. Prize Courts pays you for kills; this pays you for the hold.' },
+
+    // ---- DEEP SYSTEMS ----
+    // Each of these multiplies a faucet that RECOMPUTES from a collect stamp
+    // rather than accumulating against a clock — the Moon Base pattern. A perk
+    // on an accumulator would compound every double-tick into permanent value.
+    { k: 'refine',   ic: '◭', name: 'Refinery Yield',     sub: 'Prism Refine Bonus', per: 7, col: '#5fe0c8', grp: 'deep', desc: 'Kills refine more Prism. Deep Core Drills speeds the <b>rigs</b> up; this pays out the secondary faucet your fleet feeds by fighting.' },
+    { k: 'regolith', ic: '⌾', name: 'Regolith Contracts', sub: 'Moon Colony Rate',   per: 7, col: '#d0a060', grp: 'deep', desc: 'Every moon produces more per hour. Applies to the shipment you have not collected yet, not just to future ones.' },
+    { k: 'offline',  ic: '☾', name: 'Standing Orders',    sub: 'Territory Income',   per: 6, col: '#9aa7b8', grp: 'deep', desc: 'Your claimed systems pay more fuel, iron, plasma and gold every hour — while you are flying and while you are away.' },
+
+    // ---- META ----
+    // THE CAPSTONE, AND THE ONLY REASON A WIDE TREE IS WORTH FILLING. Max 10 on
+    // purpose: +20% is a real capstone, and at `per` 2 the whole perk costs 55
+    // points rather than 325.
+    //
+    // FUTURE ASCENSIONS ONLY, and that is a data decision rather than a balance
+    // one. Paying it retroactively would mean recomputing and topping up every
+    // star already banked — a migration that writes to a points balance, off a
+    // history this build has no trustworthy record of. It is applied inside
+    // preview(), the ONE function that both displays and grants the payout, so
+    // the number on the card and the number banked can never disagree.
+    { k: 'dividend', ic: '★', name: 'Ascendant Dividend', sub: 'Ascension Points', per: 2, max: 10, col: '#f2a93c', grp: 'meta', desc: 'Every <b>future</b> ascension pays more points — +2% a rank, to +20% at rank 10. Stars already banked are not recalculated.' },
+  ];
+  // GROUP ORDER AND HEADINGS. 25 live cards is a wall; a heading every few rows
+  // is what makes it readable, and it costs no CSS — `pa-card-h` and `pa-perks`
+  // already exist. Existing perks carry no `grp`, so they default into `core`
+  // and the beacon block keeps its own section without any edit to those rows.
+  const GRP_OF = (d) => d.grp || (d.beacon ? 'beacon' : 'core');
+  const GROUPS = [
+    { g: 'core',    h: 'THE SPINE' },
+    { g: 'beacon',  h: '◉ BEACON — the strongest thing points can buy' },
+    { g: 'combat',  h: 'COMBAT' },
+    { g: 'wing',    h: 'WING' },
+    { g: 'salvage', h: 'SALVAGE & HOLD' },
+    { g: 'deep',    h: 'DEEP SYSTEMS' },
+    { g: 'meta',    h: 'ASCENSION ITSELF' },
   ];
   const PERK_BY_K = {}; PERKS.forEach((p) => PERK_BY_K[p.k] = p);
-  const rank = (k) => { const p = st(); return p ? (p.perks[k] | 0) : 0; };
+  // A RANK IS READ THROUGH ITS CEILING, ALWAYS.
+  //
+  // The REFUND path already clamped (spentFromRanks, retirePerks) and the EFFECT
+  // path did not, so the two disagreed about what a rank was: a `dividend` rank
+  // of 25 against `max: 10` paid +50% on every ascension for ever and handed
+  // back 55 points at respec. That asymmetry MINTS value, which is the one
+  // direction a refund rule must never be wrong in. Clamping at the read makes
+  // the card, the engine and the refund quote ONE number.
+  //
+  // AND NEVER `| 0`. A rank past 2^31 wrapped NEGATIVE, and a negative rank does
+  // not pay nothing — it INVERTS: mult() drops below 1 (Killing Edge nerfs crit
+  // damage, Regolith Contracts assigns a negative shipment onto the pad) and
+  // flat() goes negative (the hold caps BELOW its 100 base, and a full hold
+  // scraps new drops on contact). `Math.floor(Number(x) || 0)` is the same rule
+  // the wallets follow.
+  //
+  // THIS ONLY EVER REDUCES, so it cannot mint anything, and it writes nothing:
+  // an out-of-range value stays in `pasc.perks` untouched for whatever build put
+  // it there to read back.
+  const rank = (k) => {
+    const p = st(); if (!p) return 0;
+    return Math.max(0, Math.min(maxRank(k), Math.floor(Number(p.perks[k]) || 0)));
+  };
   const rankCost = (r) => r + 1;                       // next rank costs (current+1)
+  // PER-PERK CEILING. Defaults to MAX_RANK, so every perk that shipped before
+  // build 746 is unaffected and no refund it has ever paid changes value.
+  //
+  // AN UNKNOWN KEY FALLS BACK TO MAX_RANK, NOT TO ZERO. `pasc.perks` can carry a
+  // key this build has never heard of — a device on a newer build merged into an
+  // older one — and pricing it at 0 would refund nothing for ranks the pilot
+  // really bought. 25 is what that key would have been worth here, which is the
+  // safe direction: the only way to be wrong is to under-pay a perk a FUTURE
+  // build raises past 25, and no perk does today.
+  const maxRank = (k) => { const d = PERK_BY_K[k]; return Math.max(1, (d && d.max) || MAX_RANK); };
+  // THE DISPLAY AND EFFECT NUMBER FOR ONE PERK, in whatever unit it deals in.
+  // `flat` perks floor — half a drone is not a drone, and the effect side floors
+  // identically, so the card can never promise a slot the hold does not get.
+  function perkVal(k) {
+    const d = PERK_BY_K[k]; if (!d) return 0;
+    const r = rank(k);
+    return d.kind === 'flat' ? Math.floor(r * d.per) : Math.round(r * d.per * 10) / 10;
+  }
+  function valText(d, r) {
+    if (!r) return '<span>not invested</span>';
+    if (d.kind === 'flat') { const n = perkVal(d.k); return '<b>+' + n + ' ' + d.unit + (n === 1 ? '' : 's') + '</b> now'; }
+    if (d.kind === 'red') return '<b>−' + perkPct(d.k) + '%</b> of the penalty retired';
+    return '<b>+' + perkPct(d.k) + '%</b> now';
+  }
+  function nextText(d, r) {
+    if (d.kind === 'flat') {
+      const now = Math.floor(r * d.per), then = Math.floor((r + 1) * d.per);
+      return then > now ? '<em>→ +' + then + ' ' + d.unit + (then === 1 ? '' : 's') + ' next</em>' : '';
+    }
+    return '<em>→ ' + (d.kind === 'red' ? '−' : '+') + Math.round((r + 1) * d.per * 10) / 10 + '% next</em>';
+  }
   // ---- RESPEC ----------------------------------------------------------------
   // WHAT A RANK ACTUALLY COST, derived from the rank itself: ranks are bought at
   // 1, 2, 3 … n, so a perk sitting at rank n consumed n(n+1)/2 points.
@@ -282,14 +427,16 @@
   // that disagrees with the board either robs the player or mints points from
   // nothing. The ranks ARE the receipt.
   //
-  // Every rank is clamped to MAX_RANK before it is priced, so a corrupted rank of
-  // 9,999 refunds what rank 25 is worth and not 50 million points.
+  // Every rank is clamped to its PERK'S ceiling before it is priced, so a
+  // corrupted rank of 9,999 refunds what that perk's top rank is worth and not 50
+  // million points — and a perk capped at 10 can never refund 25 ranks of value.
+  // maxRank() falls back to MAX_RANK for an unrecognised key; see the note there.
   const triangle = (n) => (n * (n + 1)) / 2;
   function spentFromRanks() {
     const p = st(); if (!p || !p.perks) return 0;
     let total = 0;
     for (const k in p.perks) {
-      const r = Math.max(0, Math.min(MAX_RANK, Math.floor(Number(p.perks[k]) || 0)));
+      const r = Math.max(0, Math.min(maxRank(k), Math.floor(Number(p.perks[k]) || 0)));
       total += triangle(r);
     }
     return total;
@@ -298,6 +445,41 @@
   const perkPct = (k) => { const d = PERK_BY_K[k]; return d ? Math.round(rank(k) * d.per * 10) / 10 : 0; };
   // the one function the rest of the game calls
   function mult(k) { return 1 + perkPct(k) / 100; }
+  // FLAT-COUNT PERKS (drones, hold slots) read through here, so the number the
+  // card printed and the number the engine adds come from one expression.
+  function flat(k) { const d = PERK_BY_K[k]; return d && d.kind === 'flat' ? perkVal(k) : 0; }
+  // ---- AUTOPILOT DISCIPLINE --------------------------------------------------
+  // The multiplier auto-battle applies to damage. THE CUT IS CLAMPED AT THE
+  // PENALTY, so the worst a corrupted or future-build rank can do is retire the
+  // penalty completely — it can never turn hands-off play into a damage BONUS,
+  // which would make auto strictly better than piloting and invert the whole
+  // point of the mode. Returns exactly 1 when the penalty is fully bought off.
+  const AUTO_PEN = 0.20;
+  function autoDmgMul() {
+    const cut = Math.max(0, Math.min(AUTO_PEN, perkPct('auto') / 100));
+    return 1 - (AUTO_PEN - cut);
+  }
+  // ---- POST-POOL MULTIPLIERS -------------------------------------------------
+  // Keyed by the stat key the fleet deep panel explains, NOT by the perk key.
+  //
+  // These three perks multiply a DERIVED stat after computeStats() has finished
+  // summing its additive pool, which makes them a different KIND of number from
+  // everything on that panel. They must never be added INTO the pool — that
+  // would make the panel's arithmetic disagree with the engine in the other
+  // direction, over-reporting instead of under-reporting. They are published
+  // here so the panel can apply them where the engine applies them: on top.
+  //
+  // Returns only what is actually held, so a perk at rank 0 produces no row.
+  function postMuls() {
+    const o = {};
+    PERKS.forEach((d) => {
+      if (!d.postMul || !d.stat || d.retired) return;
+      const m = mult(d.k);
+      if (!isFinite(m) || m === 1) return;
+      o[d.stat] = { k: d.k, ic: d.ic, name: d.name, col: d.col, m };
+    });
+    return o;
+  }
   // BEACON hooks read by game-v93's beaconStats(): recharge is a reduction, the
   // other three are multipliers.
   function beaconMods() {
@@ -335,7 +517,17 @@
     // an ascension funds real perk buying instead of a single rank. Caps scale with
     // it, and the note text is rewritten from the same multiplier.
     rows.forEach((r) => { r.pts *= PT_MULT; if (r.cap) r.cap *= PT_MULT; });
-    const total = rows.reduce((a, r) => a + r.pts, 0);
+    let total = rows.reduce((a, r) => a + r.pts, 0);
+    // ASCENDANT DIVIDEND — shown as its own line rather than folded silently into
+    // the total, because a payout the pilot cannot see them earning is decoration.
+    // Computed HERE, in the one function that both renders the ledger and feeds
+    // the grant, so the figure on the card is the figure banked.
+    const divPct = perkPct('dividend');
+    if (divPct > 0 && total > 0) {
+      const bonus = Math.floor(total * divPct / 100);
+      rows.push({ label: 'Ascendant Dividend', detail: '★ perk rank ' + rank('dividend'), pts: bonus, note: '+' + divPct + '% on the lines above' });
+      total += bonus;
+    }
     // THREE GATES: the level gate, the weekly star ceiling, and a verified clock.
     // The clock is a gate because a star is permanent and the ceiling is the only
     // thing pacing it — granting one against an unverified clock is exactly the
@@ -569,28 +761,39 @@
   // ---- TAB 2 · PERKS ---------------------------------------------------------
   function perksTab() {
     const p = st(), avail = points();
-    const cards = PERKS.filter((d) => !d.retired).map((d) => {
-      const r = rank(d.k), maxed = r >= MAX_RANK, cost = rankCost(r);
+    const card = (d) => {
+      const mx = maxRank(d.k);
+      const r = rank(d.k), maxed = r >= mx, cost = rankCost(r);
       const can = !maxed && avail >= cost;
       return '<div class="pa-perk' + (r ? ' owned' : '') + '" style="--pc:' + d.col + '">' +
         '<div class="pa-perk-top">' +
           '<span class="pa-perk-ic">' + d.ic + '</span>' +
           '<span class="pa-perk-n"><b>' + d.name + '</b><em>' + d.sub + '</em></span>' +
-          '<span class="pa-perk-r">' + r + '<i>/' + MAX_RANK + '</i></span>' +
+          '<span class="pa-perk-r">' + r + '<i>/' + mx + '</i></span>' +
         '</div>' +
-        '<div class="pa-perk-bar"><i style="width:' + (r / MAX_RANK * 100) + '%"></i></div>' +
-        '<div class="pa-perk-val">' + (r ? '<b>+' + perkPct(d.k) + '%</b> now' : '<span>not invested</span>') +
-          (maxed ? '' : ' <em>→ +' + ((r + 1) * d.per) + '% next</em>') + '</div>' +
+        '<div class="pa-perk-bar"><i style="width:' + (r / mx * 100) + '%"></i></div>' +
+        '<div class="pa-perk-val">' + valText(d, r) + (maxed ? '' : ' ' + nextText(d, r)) + '</div>' +
         '<div class="pa-perk-d">' + d.desc + '</div>' +
         (maxed
           ? '<div class="pa-perk-max">★ MAXED</div>'
           : '<button class="pa-perk-buy" data-perk="' + d.k + '"' + (can ? '' : ' disabled') + '>' +
               (can ? 'BUY RANK ' + (r + 1) + ' · ' + cost + ' pt' + (cost === 1 ? '' : 's') : 'NEEDS ' + cost + ' pt' + (cost === 1 ? '' : 's')) + '</button>') +
       '</div>';
+    };
+    // ONE SECTION PER GROUP, and a group with nothing live in it renders nothing
+    // at all — that is what keeps the retired Bastion Command row from leaving an
+    // empty heading behind, and what will keep the next retirement tidy too.
+    const live = PERKS.filter((d) => !d.retired);
+    const sections = GROUPS.map((s) => {
+      const own = live.filter((d) => GRP_OF(d) === s.g);
+      if (!own.length) return '';
+      const inv = own.reduce((a, d) => a + rank(d.k), 0);
+      return '<div class="pa-card-h">' + s.h + (inv ? ' · <b>' + inv + '</b> rank' + (inv === 1 ? '' : 's') : '') + '</div>' +
+             '<div class="pa-perks">' + own.map(card).join('') + '</div>';
     }).join('');
     return '<div class="pa-bank"><span>UNSPENT</span><b>' + fmt(avail) + '</b><em>ascension point' + (avail === 1 ? '' : 's') + ' · ' + fmt(spentFromRanks()) + ' invested</em></div>' +
-      '<p class="pa-note">Perks are <b>permanent</b>. They survive every future ascension and apply to every run from here on. Rank <i>n</i> costs <i>n</i> points.</p>' +
-      '<div class="pa-perks">' + cards + '</div>' + respecCardHTML();
+      '<p class="pa-note">Perks are <b>permanent</b>. They survive every future ascension and apply to every run from here on. Rank <i>n</i> costs <i>n</i> points — every perk, no exceptions.</p>' +
+      sections + respecCardHTML();
   }
 
   // ---- TAB 3 · LOOT TIERS ----------------------------------------------------
@@ -722,7 +925,9 @@
       return;
     }
     const refund = spentFromRanks();
-    const ranks = (() => { const p = st(); let n = 0; for (const k in p.perks) n += Math.max(0, Math.floor(Number(p.perks[k]) || 0)); return n; })();
+    // Counted through the same ceiling the refund is priced through, so the sheet
+    // cannot say "clearing 99 ranks" beside a figure that paid for 10.
+    const ranks = (() => { const p = st(); let n = 0; for (const k in p.perks) n += Math.max(0, Math.min(maxRank(k), Math.floor(Number(p.perks[k]) || 0))); return n; })();
     const body = 'Every perk drops to <b>rank 0</b> and <b>' + fmt(refund) + '</b> ascension point'
       + (refund === 1 ? '' : 's') + ' return to your bank, ready to spend again.'
       + '<br><br>You are clearing <b>' + fmt(ranks) + '</b> rank' + (ranks === 1 ? '' : 's')
@@ -755,8 +960,8 @@
   }
 
   function buyPerk(k) {
-    const p = st(), d = PERK_BY_K[k]; if (!p || !d) return;
-    const r = rank(k); if (r >= MAX_RANK) return;
+    const p = st(), d = PERK_BY_K[k]; if (!p || !d || d.retired) return;
+    const r = rank(k); if (r >= maxRank(k)) return;
     const cost = rankCost(r);
     if (p.pts < cost) return;
     p.pts -= cost; p.spent = (p.spent | 0) + cost; p.perks[k] = r + 1;
@@ -766,8 +971,7 @@
     // so without this the bank and every "rank n costs n" line keep showing the
     // pre-purchase figures until the tab is left and re-entered.
     render();
-    toast(d.ic + ' ' + d.name + ' → rank ' + (r + 1) + ' (+' + perkPct(k) + '%)', d.col);
-    render();
+    toast(d.ic + ' ' + d.name + ' → rank ' + (r + 1) + ' (' + String(valText(d, r + 1)).replace(/<[^>]+>/g, '') + ')', d.col);
   }
   function toast(m, c) { try { window.UI.toast ? window.UI.toast(m, c) : window.UI.unlockToast(m); } catch (e) {} }
 
@@ -988,8 +1192,8 @@
   window.PASCEND = {
     starCap, starsLeft, atStarCap, nextCap, nextRaiseAt, untilRaise, capWeeks,
     clockTrusted, clockUsable, clockMode, serverNow: tnow, weekPct,
-    render, stars, points, mult, preview, PERKS, rank, perkPct,
-    beaconMods,
+    render, stars, points, mult, preview, PERKS, rank, perkPct, perkVal, maxRank,
+    beaconMods, autoDmgMul, flat, postMuls,
     badge, plain, tierOf, starOf, tierDef, gateLv, capLv,
     unlockedTiers: () => ascTiers().filter((r) => stars() >= r.ascReq).map((r) => r.key),
     nameSuffix: () => plain(),

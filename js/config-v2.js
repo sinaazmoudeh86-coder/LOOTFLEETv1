@@ -1107,11 +1107,56 @@
     if (s.reqKills) s.reqKills = Math.round(s.reqKills * 5);
     if (s.resPrice) for (const k in s.resPrice) s.resPrice[k] = Math.round(s.resPrice[k] * 3);
   });
+  // BUILD 747 — THE EARLY LADDER, EASED (operator request). Frigate → Super
+  // Carrier only. Titan Carrier, Mothership, every Dread, every Titan-/Celestial-
+  // class hull and the Super Fighter line are NOT in this table and are untouched.
+  // Final values, applied AFTER the ×3 / ×5 economy pass above, so they are read
+  // exactly as the player sees them: [gold, total kills, blueprint zone].
+  //   was →  75K/3K/Z9 · 450K/7.5K/Z18 · 2.25M/15K/Z30 · 9M/27K/Z42 · 36M/45K/Z55
+  //          150M/75K/Z68 · 600M/120K/Z80 · 1.05B/130K/Z84 · 2.7B/195K/Z90
+  // Gold and kills roughly halved across the band (the first hull by two-thirds,
+  // because it is the one that decides whether a new pilot stays); blueprint
+  // zones pulled ~25% shallower, still strictly increasing and still below the
+  // Titan's Z98. STRICTLY A REDUCTION on all three axes for every hull listed —
+  // nothing any pilot holds moves, and nothing anyone already paid is clawed
+  // back or refunded (a price cut takes nothing off an account).
+  const SHIP_EASE_747 = {
+    // 747.1 — THE FIRST FIVE, EASED AGAIN (operator request). Gold was the wall,
+    // not kills: at base enemyGold() the Interceptor cost ~2,700 kills of gold
+    // against a 1,000-kill requirement. Gold is now set to ~1.5× the kill
+    // requirement's worth of gold at the hull's own zone, so the two bars fill
+    // together. (747.0 values: 30K/1K/Z5 · 200K/3K/Z12 · 1M/7K/Z22 · 4.5M/14K/Z32
+    // · 18M/24K/Z44.)
+    interceptor:  [8000,       400,    3],
+    cruiser:      [35000,      1200,   7],
+    heavycruiser: [150000,     3000,   13],
+    destroyer:    [450000,     6000,   20],
+    battleship:   [1600000,    11000,  28],
+    dreadnought:  [75000000,   40000,  56],
+    carrier:      [300000000,  65000,  68],
+    aegis:        [525000000,  70000,  72],
+    supercarrier: [1350000000, 105000, 82],
+  };
+  SHIPS.forEach((s) => {
+    const e = SHIP_EASE_747[s.key]; if (!e) return;
+    // SALVAGE KEEPS ITS OLD BASIS. Shipworks pays a spare part 2% of its hull's
+    // gold price, so cutting the price would silently devalue parts players are
+    // already HOLDING — a nerf on owned items. salvageBase pins the pre-747 price.
+    // Parts come only from crates and exchange, never from buying a hull, so a
+    // cheaper hull cannot be turned into old-value parts.
+    if (s.salvageBase == null) s.salvageBase = s.price;
+    if (e[0] < s.price) s.price = e[0];          // min(): can only ever lower
+    if (e[1] < s.reqKills) s.reqKills = e[1];
+  });
   const SHIP_BY_KEY = {}; SHIPS.forEach((s, i) => { s.tier = i; SHIP_BY_KEY[s.key] = s; });
   // BLUEPRINTS — a hull's buy option stays locked until you recover its
   // blueprint by defeating the BOSS in a specific zone. Staggered ever deeper
   // so each hull is a real expedition to find.
-  const SHIP_BP_ZONE = { interceptor:9, cruiser:18, heavycruiser:30, destroyer:42, battleship:55, dreadnought:68, carrier:80, aegis:84, supercarrier:90, titan:98 };
+  // 747: the eased band reads its zone from SHIP_EASE_747; titan keeps Z98.
+  // (was interceptor 9, cruiser 18, heavycruiser 30, destroyer 42, battleship 55,
+  //  dreadnought 68, carrier 80, aegis 84, supercarrier 90)
+  const SHIP_BP_ZONE = { titan:98 };
+  for (const k in SHIP_EASE_747) SHIP_BP_ZONE[k] = SHIP_EASE_747[k][2];
   SHIPS.forEach((s) => { s.bpZone = SHIP_BP_ZONE[s.key] || 0; });
   // Previous hull in the upgrade chain. `side` hulls (Aegis) are optional
   // branches: they hang off the chain but are never required by later hulls.
@@ -1392,7 +1437,7 @@
     PLAYER_BASE, ARENA, TOTAL_DUNGEONS, ZONE_BLOCK, zoneCap, SCALE_BASE, OLD_SCALE_BASE, SKILLS, SHOP,
     DREAD_CORE_RATE, coreYield,
     SPECIALS, MULTISHOT_MAX_TARGETS, SPEED_TIERS, STORE, liveRarityMax,
-    SHIPS, SHIP_BY_KEY, MECHS, MECH_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
+    SHIPS, SHIP_BY_KEY, SHIP_EASE_747, MECHS, MECH_BY_KEY, DRONE, FIGHTER, FLEET, shipSlots, slotBase, shipPrevKey, blueprintForZone,
     xpToNext, xpLateSurcharge, dungeonEnemyLevel, zoneCombatLevel, dungeonScale, dungeonScaleLegacy, enemyHp, enemyDamage, enemyXp, enemyGold,
     dropChance, playerBaseStat, sellValue, salvage, rollLifeSteal, rollMultiShot, rollShopRarity, shopPrice, rarityCap, COSMETICS,
     levelCap, LEVEL_CAP_BASE, LEVEL_CAP_PER_STAR,

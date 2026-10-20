@@ -511,8 +511,10 @@
     // EVENT DEPLOYMENTS — the zone chip + advice + boss meter belong to the zone
     // grind; Home Citadel / Voidmaw runs own the arena and show their own HUD.
     const evRun = G.rt && (G.rt.hcrun || G.rt.sdrun);
-    el['zb-name'].textContent = evRun ? (G.rt.hcrun ? '🏰 Home Zone' : '❖ Progenitor') : (safe ? '⌂ Hangar' : sysName);
-    el['zb-sub'].textContent = evRun ? (G.rt.hcrun ? 'Citadel defense' : 'World boss') : (safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : '')));
+    // Zone banner is a BUTTON: write only on change (Safari drops a click whose
+    // target was mutated mid-press — see the FLY NOW note below).
+    { const _zn = evRun ? (G.rt.hcrun ? '🏰 Home Zone' : '❖ Progenitor') : (safe ? '⌂ Hangar' : sysName); if (el['zb-name'].textContent !== _zn) el['zb-name'].textContent = _zn; }
+    { const _zs = evRun ? (G.rt.hcrun ? 'Citadel defense' : 'World boss') : (safe ? 'Home bay' : ('Lv ' + s.currentDungeon + (sys && G.isOwned && G.isOwned(s.currentSystem) ? ' · owned' : ''))); if (el['zb-sub'].textContent !== _zs) el['zb-sub'].textContent = _zs; }
     const adv = G.zoneAdvice();
     // advice shows only when it adds info: deploy prompt in safe zone, or a
     // push-up / back-off recommendation. Hidden when the current zone is fine.
@@ -532,15 +534,22 @@
       const rec = Math.max(1, adv.rec || 1);
       fn.classList.toggle('show', !!(safe && !evRun));
       if (safe && !evRun) {
+        // WRITE ONLY ON CHANGE. This runs every HUD tick (~40/s). Assigning
+        // textContent replaces the label's text node even when the string is
+        // identical, and Safari drops a click whose press target was mutated
+        // between mousedown and mouseup — so FLY NOW needed 3–4 presses before
+        // one landed in a gap between rewrites. Same string, no write.
         const fz = document.getElementById('fly-now-zone');
-        if (fz) fz.textContent = 'ZONE ' + rec + ' — ' + zoneName(rec).toUpperCase();
-        fn.dataset.rec = rec;
+        const zt = 'ZONE ' + rec + ' — ' + zoneName(rec).toUpperCase();
+        if (fz && fz.textContent !== zt) fz.textContent = zt;
+        if (fn.dataset.rec !== String(rec)) fn.dataset.rec = rec;
         // Measure the nav rather than restate its height — the button sits in one
         // fixed dock above it (see the #fly-now rule in game.html), and #nav
         // changes height at four breakpoints plus the safe-area inset.
         try {
           const nv = document.getElementById('nav');
-          fn.style.setProperty('--fly-nav', ((nv && nv.offsetHeight) || 60) + 'px');
+          const fv = ((nv && nv.offsetHeight) || 60) + 'px';
+          if (fn.style.getPropertyValue('--fly-nav') !== fv) fn.style.setProperty('--fly-nav', fv);
         } catch (e) {}
       }
     }

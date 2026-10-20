@@ -86,10 +86,10 @@
 (function () {
   'use strict';
 
-  const BUILD = 746;
+  const BUILD = 747;
   const NOTES = {
-    build: 746,
-    title: 'BUILD 746',
+    build: 747,
+    title: 'BUILD 747',
     sub: 'The ten latest changes.',
     groups: [
       // A REMOVAL LEADS THE CARD. Taking a system off accounts that were using it is

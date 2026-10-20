@@ -4271,13 +4271,37 @@
   function shipKillsFor(key) { return state.shipKills[key] || 0; }
   function hasBlueprint(key) { const s = C.SHIP_BY_KEY[key]; return !s || s.tier === 0 || !s.bpZone || !!(state.blueprints && state.blueprints[key]); }
   // Award a hull blueprint when its zone's boss is defeated (once).
+  // 747 CATCH-UP. The eased band (C.SHIP_EASE_747) moved its blueprint zones
+  // SHALLOWER, and the drop is an exact-zone match — so a pilot already past a
+  // hull's new zone (e.g. Interceptor 9 → 5, pilot sitting in Zone 7) could only
+  // collect it by flying back down. Any boss at or beyond the zone now pays every
+  // eased blueprint it covers. A pure grant: only ever sets `true` on a key that
+  // is missing, idempotent, one save. Hulls outside the band (Titan and up) keep
+  // the exact-match rule untouched.
   function grantBlueprintFor(zone) {
-    const key = C.blueprintForZone(zone);
-    if (!key) return;
+    const z = Math.floor(Number(zone) || 0); if (z < 1) return;
+    const got = [];
+    const key = C.blueprintForZone(z);
     if (!state.blueprints) state.blueprints = {};
-    if (state.blueprints[key]) return;
-    state.blueprints[key] = true; save();
-    if (window.UI) window.UI.blueprintEvent(C.SHIP_BY_KEY[key]);
+    if (key && !state.blueprints[key]) got.push(key);
+    const ease = C.SHIP_EASE_747 || {};
+    for (const k in ease) {
+      const s = C.SHIP_BY_KEY[k];
+      if (!s || !s.bpZone || s.bpZone > z || state.blueprints[k] || got.indexOf(k) >= 0) continue;
+      if (state.ownedShips && state.ownedShips[k]) continue;   // owned already implies it
+      got.push(k);
+    }
+    if (!got.length) return;
+    got.forEach((k) => { state.blueprints[k] = true; });
+    save();
+    if (!window.UI) return;
+    // one ceremony, not a stack of modals: the deepest hull gets the event,
+    // the rest a toast each
+    got.sort((a, b) => C.SHIP_BY_KEY[b].bpZone - C.SHIP_BY_KEY[a].bpZone);
+    try { window.UI.blueprintEvent(C.SHIP_BY_KEY[got[0]]); } catch (e) {}
+    for (let i = 1; i < got.length; i++) {
+      try { if (window.UI.unlockToast) window.UI.unlockToast('\u2605 ' + C.SHIP_BY_KEY[got[i]].name + ' BLUEPRINT recovered!'); } catch (e) {}
+    }
   }
   function shipUnlocked(key) {
     const ship = C.SHIP_BY_KEY[key]; if (!ship) return false;
@@ -4542,9 +4566,12 @@
     if (rq.ship && !miss.ship) need.push({ k: 'ship', have: 0, want: 1, ship: rq.ship });
     return { ok: !need.length, need, req: rq, have: miss };
   }
-  function switchShip(key) {
+  // opts.quiet — a SYSTEM correction (a migration handing back a hull), not a
+  // pilot's choice: no 'lf:shipswitch' event, so nothing offers to move gear.
+  function switchShip(key, opts) {
     if (!state.ownedShips[key] || key === state.ship) return false;
     if (!canFlyShip(key).ok) return false;
+    const fromShip = state.ship;
     // stash current fitting, then load (or init) the target ship's fitting
     state.fittings[state.ship] = state.equipped;
     const next = state.fittings[key] || {};
@@ -4571,7 +4598,102 @@
     loadDroneBay(key);   // the hull's own bay, stashed by clampDrones() when it was last flown
     refreshStats(); spawnDrones();
     if (window.UI) window.UI.refreshAll(); save();
+    // ONE SIGNAL FOR EVERY FLAGSHIP CHANGE. Fired from inside switchShip itself —
+    // not from a wrapper on GAME.switchShip — because the hangar-bay canvas tap
+    // calls this closure directly and a wrapper never saw it. Listeners run after
+    // the save, so nothing they do can strand the switch.
+    if (!(opts && opts.quiet)) { try { window.dispatchEvent(new CustomEvent('lf:shipswitch', { detail: { from: fromShip, to: key } })); } catch (e) {} }
     return true;
+  }
+  // ---- GEAR CARRY (747) -------------------------------------------------------
+  // After a switch, build the BEST loadout for the hull you are now flying out of
+  // EVERY other hull's stored fitting. Two halves, deliberately split:
+  //   gearCarryPlan() — READ-ONLY. Proposes moves; writes nothing.
+  //   carryGear(moves, toKey) — the one write, run only on the pilot's approval.
+  // SOURCES: every owned hull's saved fitting EXCEPT the flagship itself and any
+  // hull currently flying as an ESCORT (state.fleet) — an escort's gear is a live
+  // loadout and stripping it would weaken a ship the pilot is fighting with.
+  // NOTHING IS DELETED, SOLD OR SCRAPPED. An item moves from a parked hull's
+  // fitting into a slot on the flagship; whatever that slot held goes to the bag
+  // with state.inventory.push — NEVER addToInventory(), which scraps on a full
+  // hold. The UI warns before you confirm if the bag will run over.
+  function gearSources() {
+    const fl = Array.isArray(state.fleet) ? state.fleet : [];
+    const own = state.ownedShips || {};
+    return Object.keys(state.fittings || {}).filter((k) =>
+      k !== state.ship && own[k] && fl.indexOf(k) < 0 && state.fittings[k] && typeof state.fittings[k] === 'object');
+  }
+  function gearCarryPlan() {
+    const pw = (it) => { try { return Number(I.itemPower(it)) || 0; } catch (e) { return 0; } };
+    const slots = activeSlots();
+    // An item object that is already on the flagship must never be offered again
+    // from a stale copy of a fitting; and one object seen in two parked fittings
+    // is offered once.
+    const seen = new Set(slots.map((t) => state.equipped[t]).filter(Boolean));
+    // ...and by ID: a save round-trip turns one shared object into two equal
+    // copies, so identity alone cannot stop an item already on the flagship (or
+    // already offered from another hull) being offered a second time.
+    const seenId = new Set([...seen].map((it) => it && it.id).filter((x) => x != null));
+    const pool = [];
+    gearSources().forEach((ship) => {
+      const fit = state.fittings[ship];
+      Object.keys(fit).forEach((sk) => {
+        const it = fit[sk];
+        if (!it || typeof it !== 'object' || seen.has(it)) return;
+        if (it.id != null && seenId.has(it.id)) return;
+        seen.add(it); if (it.id != null) seenId.add(it.id);
+        pool.push({ ship, sk, it, p: pw(it) });
+      });
+    });
+    const moves = [];
+    C.SLOT_KEYS.forEach((base) => {
+      const targets = slots.filter((sk) => C.slotBase(sk) === base);
+      if (!targets.length) return;
+      const cur = targets.map((t) => ({ t, it: state.equipped[t] || null }))
+        .map((x) => ({ t: x.t, it: x.it, p: x.it ? pw(x.it) : -Infinity }))
+        .sort((a, b) => a.p - b.p);                     // weakest slot first
+      const cands = pool.filter((c) => c.it.slot === base && canMountWeapon(c.it, state.ship))
+        .sort((a, b) => b.p - a.p);                     // strongest candidate first
+      for (let i = 0; i < cur.length && i < cands.length; i++) {
+        if (!(cands[i].p > cur[i].p)) break;            // strictly better, or stop
+        moves.push({ fromShip: cands[i].ship, fromSlot: cands[i].sk, toSlot: cur[i].t, item: cands[i].it, displaced: cur[i].it,
+                     power: cands[i].p, was: cur[i].it ? cur[i].p : 0 });
+      }
+    });
+    return moves;
+  }
+  function carryGear(moves, toKey) {
+    // RE-CHECK EVERYTHING AT THE MOMENT OF THE WRITE. The approval sheet is async:
+    // the pilot may have switched again, equipped by hand, ascended, put a hull in
+    // a fleet slot, or had a cloud pull replace `state`. Each move must still be
+    // exactly true — the SAME item object still in its source slot on a hull that
+    // is still a legal source, the target slot still on this hull, still mountable —
+    // or that move is dropped. A second tap finds every source empty and no-ops.
+    if (!Array.isArray(moves)) return { ok: false, moved: 0 };
+    if (toKey && toKey !== state.ship) return { ok: false, moved: 0 };
+    const legal = new Set(gearSources());
+    const slots = activeSlots(), seenTo = {}, seenIt = new Set(), ok = [];
+    moves.forEach((m) => {
+      if (!m || !m.item || !legal.has(m.fromShip) || seenTo[m.toSlot] || seenIt.has(m.item)) return;
+      const src = state.fittings[m.fromShip];
+      if (!src || src[m.fromSlot] !== m.item) return;
+      if (slots.indexOf(m.toSlot) < 0 || C.slotBase(m.toSlot) !== m.item.slot) return;
+      if (!canMountWeapon(m.item, state.ship)) return;
+      seenTo[m.toSlot] = 1; seenIt.add(m.item); ok.push(m);
+    });
+    if (!ok.length) return { ok: false, moved: 0 };
+    let bagged = 0;
+    ok.forEach((m) => {
+      const out = state.equipped[m.toSlot] || null;     // what the slot holds NOW
+      state.equipped[m.toSlot] = m.item;
+      state.fittings[m.fromShip][m.fromSlot] = null;
+      if (out) { state.inventory.push(out); bagged++; }
+    });
+    refreshStats();
+    try { spawnDrones(); } catch (e) {}
+    if (window.UI) window.UI.refreshAll();
+    save();
+    return { ok: true, moved: ok.length, bagged, ships: [...new Set(ok.map((m) => m.fromShip))].length };
   }
   function shipDroneCount() { const s = C.SHIP_BY_KEY[state.ship]; return (s ? (s.drones || 0) : 0) + ascFlat('drone'); }   // + ASCENSION: Drone Lattice
   // A GUN-LESS CARRIER — bays and NO cannon hardpoint. Its damage leaves the ship.
@@ -7136,6 +7258,13 @@
     } else {
       if (!state.citadelCd) state.citadelCd = {};
       state.citadelCd[zone] = Date.now() + 15 * 60 * 1000;
+      // 747.5 — A GRIND CITADEL IS ITS ZONE'S BOSS. Citadel zones (…7) never spawn
+      // a roaming boss, and 747.1 put the Cruiser blueprint on Zone 7 — so the one
+      // place the Next Ship sheet sent a pilot could never pay it. Razing the
+      // citadel now counts as beating that zone's boss for blueprints. Pure grant,
+      // idempotent (grantBlueprintFor only sets missing keys), grind zones only —
+      // claimed galaxy tiles take the branch above.
+      try { grantBlueprintFor(zone); } catch (e) {}
     }
     if (window.UI) window.UI.siegeEvent('citadeldown', {});
     buildBlueprintDropFromCitadel(zone);     // ultra-rare Oblivion-class blueprint
@@ -10314,7 +10443,7 @@
     // ⇱ AUTO RE-ZONE — the 25,000-LootCoin follow-the-★ unlock and its arm flag
     REZONE_LC, buyAutoReZone, hasAutoReZone, autoReZoneOn, setAutoReZone, rezoneState,
     resizeCanvas: () => { try { rt.portW = 0; rt.portH = 0; resize(); } catch (e) {} },
-    buyShip, switchShip, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
+    buyShip, switchShip, gearCarryPlan, carryGear, grantShip, seedFighterBays, shipUnlocked, shipBuyState, hasBlueprint, defenseSnapshot,
     buildShipInfo, startBuildShip, checkConstruction, getConstruction: () => state.construction || null,
     kothCrowns, addKothCrowns, setKothCrowns, syncCrownBlueprints,
     lanceState,

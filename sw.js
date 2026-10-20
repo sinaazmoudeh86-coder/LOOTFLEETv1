@@ -6,7 +6,7 @@
    Google Fonts) always go to the network and are never cached.
    Bump CACHE on every release to invalidate old assets.
    ============================================================================= */
-const CACHE = 'lootfleet-v746';
+const CACHE = 'lootfleet-v747';
 const CORE = [
   './', 'index.html', 'game.html', 'brand.html', 'guides.html', 'manifest.json',
   'support.html', 'privacy.html', 'terms.html', 'features.html',
@@ -86,6 +86,10 @@ const CORE = [
   'ships/ship-xyn.png',
   'ships/fighter-m01.png', 'ships/fighter-m02.png', 'ships/fighter-m03.png', 'ships/fighter-m04.png', 'ships/fighter-m05.png',
   'ships/fighter-m06.png', 'ships/fighter-m07.png', 'ships/fighter-m08.png', 'ships/fighter-m09.png', 'ships/fighter-m10.png',
+  // NEW IN 747 — Command card status lines, the Next Ship row + Command restyle,
+  // and gear carry. All three are referenced by game.html; without an entry here
+  // an installed PWA falls back to the network for them offline.
+  'js/cmd-status.js', 'js/ui-polish-747.js', 'js/gear-carry.js',
 ];
 
 self.addEventListener('install', (e) => {

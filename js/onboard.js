@@ -67,12 +67,18 @@
       read: () => hullLevels(),
       done: (now, base) => now > base,
     },
+    // 747.1 — WAS "Put a second hull in the air … buy one from the Hangar". It
+    // could not be done: the first hull needs a Zone 3 boss blueprint and 400
+    // kills, the first boss is 5+ minutes away and this whole sequence has a
+    // 4-minute ceiling — so every new pilot timed out here, pointed at a locked
+    // hull, and never saw step 5. (Escorts also unlock at Lv 100, not now.) Same
+    // index, same stored number; the step now asks for something they can do.
     {
-      id: 'ship',
-      title: 'Put a second hull in the air',
-      body: 'Escorts fight beside you and never stop. Buy one from the Hangar.',
-      target: '[data-ht="ships"], [data-go="shipworks"]',
-      read: (s) => Object.keys(s.ownedShips || {}).length,
+      id: 'deeper',
+      title: 'Go one zone deeper',
+      body: 'Deeper zones pay more gold per kill. Open Zone Grind and pick the next zone.',
+      target: '.nav-btn[data-screen="zones"]',
+      read: (s) => s.highestDungeonReached | 0,
       done: (now, base) => now > base,
     },
     {
@@ -140,8 +146,76 @@
     return false;
   }
 
+  // ---- first flight: fly by auto, or fly by wire (747) -----------------------
+  // Shown once, the first time a brand-new pilot (onboard step 0) is actually in
+  // the arena. NO NEW SAVE KEY: "seen" lives in localStorage under a key only
+  // this block writes, and the choice goes through exactly the writes the AUTO
+  // pill makes (setAuto + the session-scoped autoManual latch). If storage is
+  // unreadable the guide is skipped — it fails open like everything else here.
+  const FG_KEY = 'lf-flight-guide';
+  let fg = null;
+  function fgDone() { try { return localStorage.getItem(FG_KEY) === '1'; } catch (e) { return true; } }
+  function fgMark() { try { localStorage.setItem(FG_KEY, '1'); } catch (e) {} }
+  function inArena() {
+    const s = S();
+    return !!s && (s.currentDungeon | 0) >= 1 && !gated() &&
+      !document.querySelector('.screen.overlay.active') && !(G().getHp && G().getHp().dead);
+  }
+  function fgClose() { if (fg) { fg.remove(); fg = null; } }
+  function fgChoose(manual) {
+    fgMark(); fgClose();
+    try {
+      const g = G();
+      g.setAuto(!manual);
+      g.state.autoManual = !!manual;
+      try { g.save(); } catch (e) {}
+      if (window.UI && window.UI.syncJoystick) window.UI.syncJoystick();
+    } catch (e) {}
+    try {
+      const pill = document.getElementById('auto-btn');
+      if (pill) { pill.classList.add('ob-pill'); setTimeout(() => pill.classList.remove('ob-pill'), 4500); }
+      const t = document.createElement('div');
+      t.className = 'lvl-toast'; t.style.color = manual ? '#f2c14e' : '#5fd1ff'; t.style.fontSize = '18px';
+      t.textContent = manual ? '\u271c Fly by wire \u2014 drag the stick to steer' : '\u25ce Fly by auto \u2014 sit back, it fights for you';
+      (document.getElementById('toasts') || document.body).appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    } catch (e) {}
+    armed = -1; arm();
+  }
+  function flightGuide() {
+    if (fg) return;
+    try {
+      fg = document.createElement('div');
+      fg.className = 'fg-wrap';
+      fg.setAttribute('role', 'dialog'); fg.setAttribute('aria-modal', 'true'); fg.setAttribute('aria-labelledby', 'fg-h');
+      fg.innerHTML =
+        '<div class="fg-card">' +
+          '<div class="fg-k">First flight</div>' +
+          '<h2 id="fg-h">How do you want to fly?</h2>' +
+          '<p class="fg-sub">Either way your guns aim and fire on their own. This is about who steers.</p>' +
+          '<div class="fg-opts">' +
+            '<button type="button" class="fg-opt fg-auto" data-fg="auto">' +
+              '<span class="fg-ic">\u25ce</span><b>Fly by auto</b><em>The ship steers itself.</em>' +
+              '<ul><li>Keeps fighting while you run the fleet</li><li>Deals <strong>20% less damage</strong></li><li>Best for idle play</li></ul>' +
+            '</button>' +
+            '<button type="button" class="fg-opt fg-wire" data-fg="wire">' +
+              '<span class="fg-ic">\u271c</span><b>Fly by wire</b><em>You steer.</em>' +
+              '<ul><li><strong>Full damage</strong>, no autopilot penalty</li><li>Drag the stick, or WASD / arrow keys</li><li>Dodge boss fire, pick your fights</li></ul>' +
+            '</button>' +
+          '</div>' +
+          '<div class="fg-tips"><div><span>Tip</span>Tap the <b>AUTO</b> pill in the arena to switch any time.</div>' +
+            '<div><span>Tip</span>Each session starts on Auto. Your choice holds until you reload.</div></div>' +
+        '</div>';
+      fg.querySelector('[data-fg="auto"]').addEventListener('click', () => fgChoose(false));
+      fg.querySelector('[data-fg="wire"]').addEventListener('click', () => fgChoose(true));
+      document.body.appendChild(fg);
+      setTimeout(() => { try { fg && fg.querySelector('.fg-auto').focus({ preventScroll: true }); } catch (e) {} }, 60);
+    } catch (e) { fgMark(); fgClose(); }
+  }
+
   // Hide the tutorial's own furniture without ending the sequence.
   function suspend() {
+    fgClose();
     if (bar) { bar.remove(); bar = null; }
     document.querySelectorAll('.ob-ring').forEach((e) => e.classList.remove('ob-ring'));
     document.querySelectorAll('.ob-hide').forEach((e) => e.classList.remove('ob-hide'));
@@ -151,6 +225,7 @@
   // The one function that matters: put the interface back, permanently.
   function release() {
     released = true;
+    fgClose();
     document.querySelectorAll('.ob-hide').forEach((e) => e.classList.remove('ob-hide'));
     document.querySelectorAll('.ob-ring').forEach((e) => e.classList.remove('ob-ring'));
     if (bar) { bar.remove(); bar = null; }
@@ -204,6 +279,8 @@
 
   function arm() {
     const i = step(), s = S();
+    if (fg) return;
+    if (i === 0 && s && !fgDone() && inArena()) { if (bar) { bar.remove(); bar = null; } armed = -1; flightGuide(); return; }
     if (isDone() || !s || armed === i) return;
     armed = i;
     baseline = STEPS[i].read(s);
@@ -266,6 +343,7 @@
       if (isDone()) { release(); return; }
       if (started && Date.now() - started > MAX_MS) { release(); return; }
       tag(); arm();
+      if (fg) return;
       const st = STEPS[step()];
       if (st.done(st.read(s), baseline)) advance();
       else { ring(st.target); applyReveal(); }
@@ -321,7 +399,37 @@
   .ob-ring{outline:2px solid rgba(95,209,255,.85);outline-offset:3px;border-radius:12px;
     animation:obPulse 1.9s ease-in-out infinite}
   @keyframes obPulse{0%,100%{box-shadow:0 0 0 0 rgba(95,209,255,.5)}50%{box-shadow:0 0 0 9px rgba(95,209,255,0)}}
-  @media (prefers-reduced-motion:reduce){.ob-bar,.ob-ring,.ob-arrive{animation:none}}
+  .ob-pill{outline:2px solid rgba(95,209,255,.9);outline-offset:3px;animation:obPulse 1.9s ease-in-out infinite}
+  .fg-wrap{position:fixed;inset:0;z-index:7100;display:grid;place-items:center;padding:16px;
+    background:rgba(5,8,16,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .fg-card{width:100%;max-width:440px;max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;
+    background:linear-gradient(180deg,#141c2c,#0b111c);border:1px solid rgba(95,209,255,.3);border-radius:18px;
+    padding:20px 16px 16px;box-shadow:0 24px 70px rgba(0,0,0,.65);animation:obIn2 .36s cubic-bezier(.22,1,.36,1)}
+  @keyframes obIn2{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .fg-k{font-family:'Orbitron',sans-serif;font-weight:800;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5fd1ff;text-align:center}
+  .fg-card h2{font-family:'Orbitron',sans-serif;font-size:18px;letter-spacing:.04em;color:#eaf5ff;margin:6px 0 4px;text-align:center}
+  .fg-sub{font-size:12px;line-height:1.45;color:#9fb6c9;margin:0 0 14px;text-align:center;text-wrap:pretty}
+  .fg-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .fg-opt{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;cursor:pointer;min-height:44px;
+    padding:13px 12px 12px;border-radius:13px;background:rgba(255,255,255,.03);border:1px solid #2a3a55;color:#eaf5ff;
+    font-family:'Rajdhani',sans-serif;transition:border-color .15s,background .15s,transform .1s}
+  .fg-opt:active{transform:scale(.98)}
+  .fg-auto:hover,.fg-auto:focus-visible{border-color:#5fd1ff;background:rgba(95,209,255,.08);outline:none}
+  .fg-wire:hover,.fg-wire:focus-visible{border-color:#f2c14e;background:rgba(242,193,78,.08);outline:none}
+  .fg-ic{font-size:24px;line-height:1;margin-bottom:4px}
+  .fg-auto .fg-ic{color:#5fd1ff}.fg-wire .fg-ic{color:#f2c14e}
+  .fg-opt b{font-family:'Orbitron',sans-serif;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase}
+  .fg-opt em{font-style:normal;font-size:13px;font-weight:700;color:#cfe0ee}
+  .fg-opt ul{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+  .fg-opt li{font-size:12px;line-height:1.35;color:#9fb6c9;padding-left:10px;position:relative}
+  .fg-opt li::before{content:'';position:absolute;left:0;top:.55em;width:4px;height:4px;border-radius:50%;background:#4a6380}
+  .fg-opt strong{color:#eaf5ff;font-weight:700}
+  .fg-tips{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .fg-tips div{font-size:11.5px;line-height:1.4;color:#9fb6c9;display:flex;gap:8px;align-items:baseline}
+  .fg-tips span{flex:0 0 auto;font-family:'Orbitron',sans-serif;font-weight:800;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#0a1119;background:#5fd1ff;border-radius:5px;padding:2px 5px}
+  .fg-tips b{color:#eaf5ff}
+  @media (max-width:360px){.fg-opts{grid-template-columns:minmax(0,1fr)}}
+  @media (prefers-reduced-motion:reduce){.ob-bar,.ob-ring,.ob-arrive,.ob-pill,.fg-card{animation:none}}
   `;
   document.head.appendChild(css);
 

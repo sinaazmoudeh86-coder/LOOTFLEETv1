@@ -222,11 +222,22 @@
     window.SOCIAL.confirmSheet('Commission the Eternum?',
       'The yard takes ' + claimSummary() + '. It is spent immediately and cannot be refunded.', doCommission);
   }
+  let _commissioning = false;
   function doCommission() {
     const g = G(), c = st();
+    // RE-CHECK AT THE MOMENT OF THE WRITE. The confirm sheet is async: a double
+    // tap, a second tab, or a wallet that changed while the sheet sat open would
+    // otherwise pay the yard twice or pay from a balance that no longer covers it.
+    if (_commissioning) return;
+    const r = eternumReq();
+    if (r.own || !r.fly.ok || claimShort().length) { render(); return; }
+    _commissioning = true;
+    try {
     payClaim();
     g.grantShip(ETERNUM);
-    g.save(); if (window.UI) window.UI.refreshAll();
+    g.save();
+    } finally { _commissioning = false; }
+    if (window.UI) window.UI.refreshAll();
     showCommissioned();
     render();
   }

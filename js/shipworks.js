@@ -58,7 +58,10 @@
   };
   function salvageValue(key) {
     const s = C().SHIP_BY_KEY[key];
-    if (s && s.price) return Math.max(500, Math.round(s.price * 0.02 / 10) * 10);
+    // salvageBase = the hull's price before the 747 ease (config-v2.js), so a
+    // price cut never devalues parts already held. Falls back to price.
+    const base = s && (s.salvageBase || s.price);
+    if (base) return Math.max(500, Math.round(base * 0.02 / 10) * 10);
     return SALVAGE_FLAT[key] || 500;
   }
 

@@ -426,7 +426,7 @@
         // one on the account, hand the starter back rather than deleting the last
         // ship the pilot has — a grant, never a loss.
         if (!target) { target = 'frigate'; st.ownedShips[target] = true; }
-        if (g.switchShip) { try { g.switchShip(target); } catch (e) {} }
+        if (g.switchShip) { try { g.switchShip(target, { quiet: true }); } catch (e) {} }
         if (st.ship === PROG_KEY) st.ship = target;
       }
       delete st.ownedShips[PROG_KEY];

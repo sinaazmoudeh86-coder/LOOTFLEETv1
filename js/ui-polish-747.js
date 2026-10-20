@@ -368,12 +368,18 @@
     if (gal && grid.firstElementChild !== gal) grid.insertBefore(gal, grid.firstChild);
     const hint = document.getElementById('mega-hint');
     if (hint && hint.parentNode === grid && grid.lastElementChild !== hint) grid.appendChild(hint);
+    // An ASCENDED pilot is always below the gate after the reset, but the perk
+    // board is theirs to spend in — never hide it from them (pre-747 the dimmed
+    // tile was their route in). Read raw state; nothing written.
+    const pa = grid.querySelector('#cmd-pasc');
+    if (pa) { let st = 0; try { st = Math.floor(Number(window.GAME.state.pasc.stars) || 0); } catch (e) {}
+      if (pa.classList.contains('p747-keep') !== (st > 0)) pa.classList.toggle('p747-keep', st > 0); }
     let cur = null, vis = 0;
     const flush = () => { if (cur) cur.classList.toggle('p747-empty', vis === 0); };
     for (const k of grid.children) {
       if (k.classList.contains('mega-sec')) { flush(); cur = k; vis = 0; continue; }
       if (k === gal || k === hint) continue;
-      if (k.classList.contains('mega-card') && !k.classList.contains('locked') && k.style.display !== 'none') vis++;
+      if (k.classList.contains('mega-card') && (!k.classList.contains('locked') || k.classList.contains('p747-keep')) && k.style.display !== 'none') vis++;
     }
     flush();
     if (hint && hint.style.display !== 'none') {
@@ -471,6 +477,7 @@
 @media (min-width:700px){#mega .mega-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media (min-width:1024px){#mega .mega-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
 #mega .mega-grid .mega-card.locked{display:none!important}
+#mega .mega-grid .mega-card.locked.p747-keep{display:flex!important;opacity:1!important;filter:none!important}
 #mega .mega-grid .mega-card{grid-column:auto!important;grid-row:auto!important;order:0!important;box-sizing:border-box;
   height:60px!important;min-height:60px!important;max-height:60px!important;padding:0 10px!important;gap:10px!important;
   display:flex;flex-direction:row!important;align-items:center!important;border-radius:12px!important;
